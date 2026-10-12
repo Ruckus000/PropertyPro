@@ -437,7 +437,7 @@ POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
 #              /notification-preferences, /help, /faqs, /search
 # Residents & access — /api/v1/access-requests, /import-residents, /invitations,
 #                       /transparency, /me, /user, /users
-# Auth & onboarding — /api/v1/auth/signup{,/start,/details}, /onboarding/condo, /onboarding/apartment
+# Auth & onboarding — /api/v1/auth/signup{,/start,/details}, /onboarding/checklist
 # Webhooks — /api/v1/webhooks/stripe, /webhooks/twilio
 ```
 

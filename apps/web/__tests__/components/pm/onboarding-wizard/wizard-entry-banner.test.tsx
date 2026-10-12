@@ -5,7 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { WizardEntryBanner } from '@/components/pm/onboarding-wizard/WizardEntryBanner';
 
 // React ships no type for this flag; the rest of apps/web/__tests__ reaches it
-// through the same narrow shape (see components/onboarding/condo-wizard.test.tsx).
+// through the same narrow shape.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 async function renderBanner(communityId: number): Promise<HTMLElement> {

@@ -245,18 +245,15 @@ oversight.
 | `verify-no-mocks-in-integration.ts` `LEGACY_ALLOWLIST` — comment says it "should shrink to zero" | **16 entries** |
 | `it.todo` chaos scenarios, `__tests__/api/revenue-snapshot-chaos.test.ts` | **7** — duplicate same-day snapshot, 3-day cron gap, backdated Stripe webhook, DST fallback, TZ boundary, grace boundary, future-dated `created_at` |
 
-`onboarding-first-run.spec.ts` deserves its own line, because it is not a coverage gap —
-it is a **contradiction between the spec and the product, unresolved since 2026-08-03.**
-Both blocks wait on `data-testid="condo-onboarding-wizard"`. `git log -S condo-onboarding-wizard`
-(re-run 2026-09-07) puts that identifier in three files ever — the spec itself,
-and `docs/audits/2026-08-03-e2e-inventory.md` (a third, `docs/spec-bundle/`, was deleted
-2026-09-09 as a fossil).
-It has never appeared in `apps/web/src`, and `grep -rn condo-onboarding-wizard apps/web/src`
-returns 0 today. The shipped
-`/onboarding/condo` is a different, 2-step wizard. So the spec has never been capable of
-passing, and leaving it `test.fixme` records the disagreement without settling it. Either
-the 4-step wizard is still wanted (then it is a feature, and belongs above this line) or
-it is not (then delete the spec and the phase-2 spec section together).
+**`onboarding-first-run.spec.ts` — RESOLVED 2026-10-12.** It held two `test.fixme` blocks for
+a 4-/5-step wizard that never shipped (the contradiction this line used to record). #1352
+replaced them with the path a founder actually takes — a fresh community, the dashboard
+checklist, unit, roster import, document, invitation, the resident accepting — and put the
+spec on the CI allowlist (2 blocks, `expectedTestCount` 61). The shipped 2-step wizard at
+`/onboarding/condo` / `/onboarding/apartment`, which no route ever sent a founder to, was then
+deleted (onboarding audit F11, `docs/audits/2026-10-05-onboarding/`). The
+`onboarding_wizard_state` table is kept for now; dropping it is a separate contract migration.
+The table row above is a dated snapshot and still counts the 2 old blocks.
 
 ## B3. Open on GitHub
 

@@ -13,8 +13,8 @@
  *    — and on 2026-09-10 that gap put a real `super_admin` row in the production
  *    project, created by a `pnpm dev` in a worktree whose `.env.local` names
  *    prod. The first fix asked only about Supabase, which left
- *    `dev/reset-onboarding` — whose only write is drizzle over `DATABASE_URL` —
- *    gated on a variable it never touches.
+ *    `dev/reset-onboarding` (since deleted with the setup wizard) — whose only
+ *    write was drizzle over `DATABASE_URL` — gated on a variable it never touched.
  *
  * `scripts/with-env-local-demo-db.sh` states the invariant this enforces:
  * "local Postgres implies local Supabase. A half-redirected env is the

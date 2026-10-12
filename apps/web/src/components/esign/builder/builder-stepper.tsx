@@ -3,12 +3,8 @@
 /**
  * The builder's four-step indicator.
  *
- * Local rather than shared: the only step indicator in the app is
- * `components/onboarding/wizard-shell.tsx`, which is hard-wired to a
- * full-screen gradient rail at `min-h-screen` and will not sit inside a page.
- * (It also takes a 1-indexed `activeStep` while every caller stores 0-indexed
- * state — a trap worth knowing if you read it for reference. This component is
- * 1-indexed throughout, matching `BuilderStep`.)
+ * Local rather than shared: the app has no other step indicator inside a page.
+ * This component is 1-indexed throughout, matching `BuilderStep`.
  *
  * A step the author cannot reach yet is disabled rather than hidden, so the
  * shape of the whole task is visible from the first screen.

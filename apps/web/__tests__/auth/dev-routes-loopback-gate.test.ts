@@ -30,7 +30,6 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..'
 const GATED_DEV_ROUTES = [
   'apps/web/src/app/dev/agent-login/route.ts',
   'apps/web/src/app/dev/login/route.ts',
-  'apps/web/src/app/dev/reset-onboarding/route.ts',
   'apps/admin/src/app/dev/agent-login/route.ts',
 ];
 
