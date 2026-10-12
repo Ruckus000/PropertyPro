@@ -35,6 +35,7 @@ const {
   captureExceptionMock,
   assertActorMayAttachExistingUserMock,
   loadActorCommunitiesForLinkingMock,
+  tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -53,6 +54,7 @@ const {
   captureExceptionMock: vi.fn(),
   assertActorMayAttachExistingUserMock: vi.fn(),
   loadActorCommunitiesForLinkingMock: vi.fn(),
+  tryAutoCompleteMock: vi.fn(),
 }));
 
 vi.mock('@sentry/nextjs', async () => ({
@@ -125,6 +127,10 @@ vi.mock('@/lib/services/import-residents-service', () => ({
   loadUserEmailMapForImport: loadUserEmailMapForImportMock,
   loadUsersWithExistingRoleForImport: loadUsersWithExistingRoleForImportMock,
   importResidentRow: importResidentRowMock,
+}));
+
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({
+  tryAutoComplete: tryAutoCompleteMock,
 }));
 
 import { POST } from '../../src/app/api/v1/import-residents/route';
@@ -810,5 +816,43 @@ describe('POST /api/v1/import-residents', () => {
 
     expect(res.status).toBe(403);
     expect(validateResidentCsvMock).not.toHaveBeenCalled();
+  });
+
+  // Onboarding audit F11: importing a roster adds members, so it completes the
+  // founder's "Add a board member or resident" step. Only the single-resident
+  // form used to.
+  describe('setup checklist', () => {
+    const oneRow = () => {
+      validateResidentCsvMock.mockReturnValueOnce({
+        header: ['name', 'email', 'role', 'unit_number'],
+        rows: [{ rowNumber: 2, data: { name: 'Ada', email: 'ada@x.com', role: 'owner', unit_number: '101' } }],
+        errors: [],
+      });
+      loadUnitNumberMapForImportMock.mockResolvedValueOnce(new Map([['101', 7]]));
+    };
+
+    it('completes the add-a-member step once a row is imported', async () => {
+      oneRow();
+      await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+      expect(tryAutoCompleteMock).toHaveBeenCalledTimes(1);
+      expect(tryAutoCompleteMock).toHaveBeenCalledWith(42, 'actor-1', 'invite_first_member');
+    });
+
+    it('leaves it alone when nothing was imported', async () => {
+      oneRow();
+      importResidentRowMock.mockRejectedValueOnce(new Error('row failed'));
+      const res = await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: false }));
+
+      expect(((await res.json()) as { data: { importedCount: number } }).data.importedCount).toBe(0);
+      expect(tryAutoCompleteMock).not.toHaveBeenCalled();
+    });
+
+    it('leaves it alone on a preview', async () => {
+      oneRow();
+      await POST(jsonPost({ communityId: 42, csv: 'c', dryRun: true }));
+
+      expect(tryAutoCompleteMock).not.toHaveBeenCalled();
+    });
   });
 });

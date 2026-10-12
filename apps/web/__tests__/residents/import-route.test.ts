@@ -35,6 +35,10 @@ const {
 // Row writes go through one transaction per row (onboarding audit F2). The op
 // itself is tested in packages/db/__tests__/resident-import-ops.test.ts and on
 // real Postgres in __tests__/integration/import-residents-atomicity.integration.test.ts.
+// The setup-checklist write is fire-and-forget and covered in
+// __tests__/import-residents/import-residents-route.test.ts.
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({ tryAutoComplete: vi.fn() }));
+
 vi.mock('@propertypro/db/unsafe', () => ({
   importResidentRowOp: importResidentRowOpMock,
 }));

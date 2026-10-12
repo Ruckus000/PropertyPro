@@ -1,8 +1,10 @@
 /**
- * Local agent fixture CLI. It is deliberately invoked only through
- * `scripts/agent-env.sh exec`, which supplies PROPERTYPRO_AGENT_SANDBOX and
- * loopback-only Auth/DB endpoints. It never accepts production-shaped email or
- * community namespaces.
+ * Local agent fixture CLI. It is invoked through `scripts/agent-env.sh exec`,
+ * which supplies PROPERTYPRO_AGENT_SANDBOX and loopback-only Auth/DB endpoints,
+ * and by `apps/web/e2e/onboarding-first-run.spec.ts`, which sets the flag itself
+ * against the e2e job's throwaway stack. Either way `assertSandbox` refuses any
+ * non-loopback Supabase or Postgres URL. It never accepts production-shaped
+ * email or community namespaces.
  */
 import {
   communities,

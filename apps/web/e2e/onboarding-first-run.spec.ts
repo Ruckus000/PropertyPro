@@ -1,203 +1,329 @@
 /**
- * First-run onboarding journeys — BOTH BLOCKS ARE `test.fixme`.
+ * First-run onboarding — a fresh community, end to end (onboarding audit F11,
+ * `docs/audits/2026-10-05-onboarding/01-evidence-brief.md`).
  *
- * These tests describe a wizard that was never built. They were authored from a
- * design document (`specs/phase-2-multi-tenancy/39-condo-onboarding-wizard.md`),
- * not from the app, so they have never been capable of passing:
+ * This file used to hold two `test.fixme` blocks written against a 4-/5-step
+ * wizard that never shipped. They are replaced by the path a founder ACTUALLY
+ * takes today, verified against the app rather than a design doc:
  *
- *   - They wait on `data-testid="condo-onboarding-wizard"` /
- *     `"apartment-onboarding-wizard"` with `data-hydrated="true"`. Neither test id
- *     has ever existed in `apps/web/src` (`git log -S` finds only the spec and the
- *     design doc), and `data-hydrated` appears on exactly one unrelated component
- *     app-wide (`components/help/article-feedback.tsx`).
- *   - They drive a 4-/5-step flow (statutory documents → profile → branding →
- *     units → rules → invite). What ships is a **2-step** wizard for BOTH
- *     community types — "Community Profile" → "Compliance Preview"
- *     (`components/onboarding/condo-wizard.tsx:29`,
- *     `components/onboarding/apartment-wizard.tsx:32`). The app contains exactly
- *     two step components: `steps/profile-step.tsx` and `compliance-preview.tsx`.
- *     The API contracts agree — `MAX_STEP_INDEX = 1`
- *     (`app/api/v1/onboarding/condo/contract.ts:12`).
+ *   founder signs in → dashboard setup checklist → adds a unit → imports a
+ *   roster → posts a document → invites a resident → the resident accepts,
+ *   lands signed in, and opens that document.
  *
- * Marking `fixme` rather than deleting keeps the coverage gap visible in the
- * suite. Rewriting these against the shipped 2-step flow is a from-scratch spec,
- * not an edit, and is a product decision about what first-run onboarding should
- * guarantee — deliberately not taken here.
+ * What it deliberately does NOT do:
  *
- * NOT a blocker: the `/dev/reset-onboarding` fixture below is still correct. It
- * writes `onboarding_wizard_state` keyed `(community_id, wizard_type)` with
- * `last_completed_step = NULL`, which is exactly what the shipped
- * `GET /api/v1/onboarding/{condo,apartment}` reads. It needs no change.
+ *   - Open the 2-step wizard (`/onboarding/condo`, `/onboarding/apartment`).
+ *     Nothing in the app routes a founder there — signup, "Add community" and
+ *     the agent login all land on the dashboard — so a spec that opened it by
+ *     URL would prove a page no customer reaches. Whether to route founders
+ *     into it or delete it is an open product decision, not this spec's.
+ *   - Self-serve signup and PM "Add community". Both create the community from
+ *     a Stripe webhook; they are owned by `stripe-e2e.yml` and need its secrets.
+ *     That also rules out the PORTFOLIO branch (a PM adding a second community
+ *     goes through the same Stripe add-to-group checkout), so it has no block
+ *     here.
  *
- * See `docs/audits/2026-08-03-e2e-inventory.md` (eighth addendum).
+ * A FRESH community, not a seeded one. Every seeded community is already set
+ * up (units, documents, members, a completed wizard row), so none can show a
+ * founder's first run, and driving one would mutate data other specs read.
+ * `scripts/agent-fixture.ts community` is the only Stripe-free path that runs
+ * the real `createCommunityForPm` — the same function the provisioning paths
+ * use — so the community gets its real default categories and checklist. It
+ * refuses anything but loopback Supabase/Postgres and `agent-*` slugs. Each
+ * attempt creates its own community, so a retry never sees the first
+ * attempt's leftovers.
+ *
+ * The invitation token is read from the database with the service-role key
+ * (the same way `helpers/stripe-e2e.ts` reads provisioning state). In
+ * development without `RESEND_API_KEY` the email is kept in an in-memory inbox
+ * inside the dev server, so no test process can read the link any other way —
+ * and the API deliberately never returns it.
+ *
+ * Needs: NODE_ENV=development, a local Supabase stack (Auth + Storage),
+ * `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `DATABASE_URL`
+ * in the Playwright process env. `.github/workflows/e2e.yml` exports all
+ * three; locally run it through `scripts/agent-env.sh exec`.
  */
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { loginAs } from './helpers/dev-login';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createClient } from '@supabase/supabase-js';
+import { expect, test, type Page } from '@playwright/test';
+import { clickWhenHydrated, waitForHydrated } from './helpers/hydration';
 
-const HOA_WIZARD_SLUG = 'sunset-condos';
-const APARTMENT_WIZARD_SLUG = 'sunset-ridge-apartments';
-test.describe.configure({ mode: 'serial' });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(__dirname, '../../..');
+const FIXTURE_PDF = path.join(__dirname, 'fixtures', 'sample.pdf');
+// Meets PASSWORD_POLICY: mixed case, a digit and a symbol.
+const RESIDENT_PASSWORD = 'E2e-Passw0rd!';
 
-type WizardType = 'condo' | 'apartment';
-type MutationMethod = 'PATCH' | 'POST';
+type CommunityType = 'condo_718' | 'apartment';
 
-async function resetWizardFixture(
-  request: APIRequestContext,
-  communitySlug: string,
-  wizardType: WizardType,
-): Promise<void> {
-  const response = await request.post('/dev/reset-onboarding', {
-    data: { slug: communitySlug, wizardType },
-    headers: { accept: 'application/json' },
-  });
-  expect(response.ok()).toBe(true);
+interface FreshCommunity {
+  communityId: number;
+  slug: string;
+  name: string;
+  founderEmail: string;
 }
 
-async function waitForOnboardingMutation(
-  page: Page,
-  wizardType: WizardType,
-  method: MutationMethod,
-): Promise<void> {
-  const response = await page.waitForResponse(
-    (candidate) =>
-      candidate.url().includes(`/api/v1/onboarding/${wizardType}`)
-      && candidate.request().method() === method,
-  );
-  expect(response.ok()).toBe(true);
+function runSuffix(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 }
 
-async function fillProfileStep(
-  page: Page,
-  labelSuffix: string,
-  wizardType: WizardType,
-): Promise<void> {
-  await expect(page.getByRole('heading', { name: /community profile/i })).toBeVisible();
-  await page.getByLabel(/community name/i).fill(`E2E ${labelSuffix} Community`);
-  await page.getByLabel(/street address/i).fill('100 Audit Lane');
-  await page.getByLabel(/^city$/i).fill('Miami');
-  await page.getByLabel(/^state$/i).fill('FL');
-  await page.getByLabel(/zip code/i).fill('33101');
-  const patchPromise = waitForOnboardingMutation(page, wizardType, 'PATCH');
-  await page.getByRole('button', { name: /^Next$/i }).click();
-  await patchPromise;
-}
-
-async function waitForWizardHydration(
-  page: Page,
-  testId: 'condo-onboarding-wizard' | 'apartment-onboarding-wizard',
-): Promise<void> {
-  await expect(page.getByTestId(testId)).toHaveAttribute('data-hydrated', 'true');
-}
-
-async function completeBrandingStep(page: Page, wizardType: WizardType): Promise<void> {
-  await expect(page.getByRole('heading', { name: /choose your branding/i })).toBeVisible({
-    timeout: 15_000,
-  });
-  const patchPromise = waitForOnboardingMutation(page, wizardType, 'PATCH');
-  await page.getByRole('button', { name: /^Continue$/i }).click();
-  await patchPromise;
-}
-
-async function completeUnitsStep(
-  page: Page,
-  unitPrefix: string,
-  wizardType: WizardType,
-  options?: { awaitCompletion?: boolean },
-): Promise<void> {
-  await expect(page.getByRole('heading', { name: /add units/i })).toBeVisible({
-    timeout: 15_000,
-  });
-  const uniqueUnitNumber = `${unitPrefix}-${Date.now()}`;
-  await page.locator('tbody tr').first().locator('input[type="text"]').first().fill(uniqueUnitNumber);
-  const patchPromise = waitForOnboardingMutation(page, wizardType, 'PATCH');
-  const completionPromise = options?.awaitCompletion
-    ? waitForOnboardingMutation(page, wizardType, 'POST')
-    : Promise.resolve();
-  await page.getByRole('button', { name: /^Next$/i }).click();
-  await patchPromise;
-  await completionPromise;
-}
-
-async function skipRulesStep(page: Page): Promise<void> {
-  await expect(page.getByRole('heading', { name: /upload rules document/i })).toBeVisible({
-    timeout: 15_000,
-  });
-  const patchPromise = waitForOnboardingMutation(page, 'apartment', 'PATCH');
-  await page.getByRole('button', { name: /^Skip Step$/i }).click();
-  await patchPromise;
-}
-
-async function skipInviteStep(page: Page): Promise<void> {
-  await expect(page.getByRole('heading', { name: /invite your first resident/i })).toBeVisible({
-    timeout: 15_000,
-  });
-  const patchPromise = waitForOnboardingMutation(page, 'apartment', 'PATCH');
-  const completionPromise = waitForOnboardingMutation(page, 'apartment', 'POST');
-  await page.getByRole('button', { name: /^Skip Invite$/i }).click();
-  await patchPromise;
-  await completionPromise;
-}
-
-test.describe('first-run onboarding journeys', () => {
-  test.setTimeout(150_000);
-
-  test.beforeEach(async ({ request }, testInfo) => {
-    if (testInfo.title.includes('condo/HOA')) {
-      await resetWizardFixture(request, HOA_WIZARD_SLUG, 'condo');
-      return;
+/** Create a brand-new community and its founder through the real create path. */
+function createFreshCommunity(type: CommunityType): FreshCommunity {
+  for (const name of ['DATABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
+    if (!process.env[name]) {
+      throw new Error(
+        `${name} is not set. This spec creates its own community against the local stack; `
+          + 'run it through scripts/agent-env.sh exec, or in the e2e workflow, which exports it.',
+      );
     }
+  }
+  const suffix = runSuffix();
+  const slug = `agent-e2e-${type === 'apartment' ? 'apt' : 'condo'}-${suffix}`;
+  const name = `E2E First Run ${type === 'apartment' ? 'Apartments' : 'Condos'} ${suffix}`;
+  const founderEmail = `founder-${suffix}@agent.local`;
 
-    await resetWizardFixture(request, APARTMENT_WIZARD_SLUG, 'apartment');
-  });
+  const stdout = execFileSync(
+    'pnpm',
+    [
+      'exec', 'tsx', '--tsconfig', 'apps/web/tsconfig.json', 'scripts/agent-fixture.ts', 'community',
+      '--slug', slug,
+      '--type', type,
+      '--name', name,
+      '--root-email', founderEmail,
+      '--root-name', 'First Run Founder',
+    ],
+    {
+      cwd: REPO_ROOT,
+      // The fixture CLI refuses to run without this flag; its loopback-only
+      // check on the Supabase and Postgres URLs is what actually keeps it off
+      // any shared database.
+      env: { ...process.env, PROPERTYPRO_AGENT_SANDBOX: '1' },
+      encoding: 'utf8',
+      timeout: 120_000,
+    },
+  );
+  const json = JSON.parse(stdout.slice(stdout.indexOf('{'))) as { ok: boolean; communityId: number };
+  expect(json.ok).toBe(true);
+  return { communityId: json.communityId, slug, name, founderEmail };
+}
 
-  // fixme: drives a 4-step flow; the shipped condo wizard has 2 steps and no
-  // `condo-onboarding-wizard` test id. See the file header.
-  test.fixme('condo/HOA first-run wizard is reachable and completable for a board admin', async ({ page }) => {
-    const { communityId } = await loginAs(page, 'board_president', {
-      communitySlug: HOA_WIZARD_SLUG,
-      skipPortalNav: true,
+/** Sign the page in as a fixture user and open their portal. */
+async function signInAs(page: Page, email: string, communityId: number): Promise<string> {
+  const response = await page.request.get(
+    `/dev/agent-login?email=${encodeURIComponent(email)}&communityId=${communityId}`,
+    { headers: { accept: 'application/json' } },
+  );
+  expect(response.ok(), `agent-login for ${email}: ${response.status()} ${await response.text()}`).toBe(true);
+  const { portal } = (await response.json()) as { portal: string };
+  await page.goto(portal, { waitUntil: 'domcontentloaded' });
+  return portal;
+}
+
+function serviceRoleClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+    process.env.SUPABASE_SERVICE_ROLE_KEY as string,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+}
+
+/** The newest unconsumed invitation for this person in this community. */
+async function readInvitationToken(email: string, communityId: number): Promise<string> {
+  const db = serviceRoleClient();
+  const user = await db.from('users').select('id').eq('email', email).single();
+  expect(user.error, `users lookup for ${email}`).toBeNull();
+  const invitation = await db
+    .from('invitations')
+    .select('token')
+    .eq('user_id', (user.data as { id: string }).id)
+    .eq('community_id', communityId)
+    .is('consumed_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+  expect(invitation.error, `invitation lookup for ${email}`).toBeNull();
+  return (invitation.data as { token: string }).token;
+}
+
+/**
+ * Resolve once React owns the invite form. Its submit button has no click
+ * handler (the form handles submit), so `waitForHydrated` cannot be used, and
+ * typing into the server-rendered inputs before hydration is lost.
+ */
+async function waitForInviteFormHydrated(page: Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.getByTestId('set-password-form').evaluate((el) => {
+          const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+          const props = key ? (el as unknown as Record<string, { onSubmit?: unknown }>)[key] : null;
+          return typeof props?.onSubmit === 'function';
+        }),
+      { timeout: 30_000, message: 'React never attached the invite form submit handler' },
+    )
+    .toBe(true);
+}
+
+/** Poll the founder's checklist until these items report complete. */
+async function expectChecklistComplete(page: Page, communityId: number, keys: string[]): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`/api/v1/onboarding/checklist?communityId=${communityId}`);
+        if (!res.ok()) return `HTTP ${res.status()}`;
+        const { data } = (await res.json()) as { data: Array<{ itemKey: string; completedAt: string | null }> };
+        return keys.filter((key) => !data.some((item) => item.itemKey === key && item.completedAt));
+      },
+      // Completion is a fire-and-forget write after each mutation's response.
+      { timeout: 20_000, message: `checklist items still open for community ${communityId}` },
+    )
+    .toEqual([]);
+}
+
+test.describe('first-run onboarding: a fresh community', () => {
+  test('a founder sets up a condo and their first resident gets in', async ({ page, browser }) => {
+    test.setTimeout(300_000);
+    const community = createFreshCommunity('condo_718');
+    const { communityId } = community;
+    const suffix = community.slug.split('-').pop()!;
+    const residentEmail = `resident-${suffix}@agent.local`;
+    const residentName = `Pat Resident ${suffix}`;
+    const documentTitle = `First Run Declaration ${suffix}`;
+
+    // ── 1. The founder lands on the dashboard with a setup checklist ──────
+    const portal = await signInAs(page, community.founderEmail, communityId);
+    expect(portal).toBe(`/dashboard?communityId=${communityId}`);
+    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
+    await expect(checklist.getByRole('heading', { name: 'Finish setting up your community' })).toBeVisible({
+      timeout: 60_000,
     });
+    await expect(checklist.getByText(/^0 of \d+ complete$/)).toBeVisible();
 
-    await page.goto(`/onboarding/condo?communityId=${communityId}`, {
+    // ── 2. Add a unit, starting from the checklist's own action ───────────
+    const unitsRow = checklist.getByRole('listitem').filter({ hasText: 'Add your units' });
+    await clickWhenHydrated(unitsRow.getByRole('button', { name: 'Add' }));
+    // First visits compile on demand under `next dev`; give navigations room.
+    await expect(page).toHaveURL(/\/dashboard\/directory\?.*tab=units/, { timeout: 60_000 });
+    await clickWhenHydrated(page.getByRole('button', { name: 'Add unit' }).first());
+    const unitDialog = page.getByRole('dialog', { name: 'Add a unit' });
+    await unitDialog.getByLabel(/Unit number/).fill('101');
+    const unitCreated = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/units') && r.request().method() === 'POST',
+    );
+    await unitDialog.getByRole('button', { name: 'Add unit' }).click();
+    expect((await unitCreated).ok()).toBe(true);
+    await expect(unitDialog).toBeHidden();
+
+    // ── 3. Import the roster: preview, then import ─────────────────────────
+    await page.goto(`/dashboard/import-residents?communityId=${communityId}`, { waitUntil: 'domcontentloaded' });
+    // A file set before hydration lands on server markup with no change
+    // handler, and nothing happens. Wait for React to own the page first.
+    await waitForHydrated(page.getByRole('button', { name: 'Download CSV template' }));
+    await page.locator('input[type="file"][accept=".csv"]').setInputFiles({
+      name: 'roster.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(`name,email,role,unit_number\n${residentName},${residentEmail},owner,101\n`),
+    });
+    const importButton = page.getByRole('button', { name: /^Import 1 Residents?$/ });
+    await expect(importButton).toBeVisible({ timeout: 30_000 });
+    await clickWhenHydrated(importButton);
+    await expect(page.getByText(/1 resident(s)? imported successfully/)).toBeVisible({ timeout: 30_000 });
+
+    // ── 4. Post a governing document residents can read ────────────────────
+    await page.goto(`/communities/${communityId}/documents`, { waitUntil: 'domcontentloaded' });
+    await clickWhenHydrated(page.getByRole('button', { name: /^Governing Documents$/i }));
+    await clickWhenHydrated(page.getByRole('button', { name: /Open upload panel/i }));
+    await page.setInputFiles('input[type="file"][accept]', FIXTURE_PDF);
+    await page.getByLabel('Title', { exact: true }).fill(documentTitle);
+    const documentPosted = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/documents') && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: /^Post 1 now$/ }).click();
+    expect((await documentPosted).ok()).toBe(true);
+    await expect(page.getByRole('list', { name: 'Files to upload' })).toBeHidden({ timeout: 30_000 });
+
+    // ── 5. Invite the imported resident from the directory ─────────────────
+    await page.goto(`/dashboard/directory?communityId=${communityId}&tab=residents`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(page).toHaveURL(new RegExp(`/onboarding/condo\\?communityId=${communityId}`));
-    await waitForWizardHydration(page, 'condo-onboarding-wizard');
+    await clickWhenHydrated(page.getByRole('button', { name: residentName }));
+    const inviteSent = page.waitForResponse(
+      (r) => r.url().endsWith('/api/v1/invitations') && r.request().method() === 'POST',
+    );
+    await clickWhenHydrated(page.getByRole('button', { name: 'Send invite' }));
+    expect((await inviteSent).ok()).toBe(true);
+    await expect(page.getByText('Invitation sent.')).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: /statutory documents/i })).toBeVisible();
-    await page.getByRole('button', { name: /continue|skip remaining & continue/i }).click();
+    // The founder's checklist reflects all three: the unit, the roster (which
+    // adds a member) and the document.
+    await expectChecklistComplete(page, communityId, ['add_units', 'invite_first_member', 'upload_first_document']);
 
-    await fillProfileStep(page, 'Condo', 'condo');
-    await completeBrandingStep(page, 'condo');
-    await completeUnitsStep(page, 'C', 'condo', { awaitCompletion: true });
+    // ── 6. The resident accepts in their own browser ───────────────────────
+    const token = await readInvitationToken(residentEmail, communityId);
+    const acceptUrl = `/auth/accept-invite?token=${token}&communityId=${communityId}`;
+    const residentContext = await browser.newContext();
+    try {
+      const resident = await residentContext.newPage();
+      await resident.goto(acceptUrl, { waitUntil: 'domcontentloaded' });
+      await expect(resident.getByRole('heading', { name: `Join ${community.name}` })).toBeVisible();
+      await waitForInviteFormHydrated(resident);
+      await resident.getByLabel('Password', { exact: true }).fill(RESIDENT_PASSWORD);
+      await resident.getByLabel('Confirm password').fill(RESIDENT_PASSWORD);
+      await resident.getByTestId('invite-terms-checkbox').check();
+      await resident.getByRole('button', { name: 'Set password and join' }).click();
+      await expect(resident.getByTestId('invite-success')).toBeVisible({ timeout: 30_000 });
 
-    await expect(page).toHaveURL(new RegExp(`/dashboard\\?communityId=${communityId}`), {
-      timeout: 15_000,
-    });
+      // Signed in: the welcome screen, then the resident's own dashboard.
+      await resident.getByRole('link', { name: 'Continue' }).click();
+      await clickWhenHydrated(resident.getByRole('button', { name: 'Go to your dashboard' }));
+      await expect(resident).toHaveURL(new RegExp(`/dashboard\\?communityId=${communityId}`), { timeout: 30_000 });
+
+      // ── 7. A useful resident action: open the document just posted ──────
+      const residentChecklist = resident.getByRole('region', { name: `Setup checklist for ${community.name}` });
+      const documentsRow = residentChecklist.getByRole('listitem').filter({ hasText: 'Access a community document' });
+      await clickWhenHydrated(documentsRow.getByRole('button', { name: 'Browse' }));
+      await expect(resident).toHaveURL(new RegExp(`/communities/${communityId}/documents`), { timeout: 60_000 });
+      await expect(resident.getByText(documentTitle).first()).toBeVisible({ timeout: 30_000 });
+      await expectChecklistComplete(resident, communityId, ['access_document']);
+
+      // ── 8. The same link cannot be used twice ────────────────────────────
+      const second = await (await browser.newContext()).newPage();
+      await second.goto(acceptUrl, { waitUntil: 'domcontentloaded' });
+      await waitForInviteFormHydrated(second);
+      await second.getByLabel('Password', { exact: true }).fill(RESIDENT_PASSWORD);
+      await second.getByLabel('Confirm password').fill(RESIDENT_PASSWORD);
+      await second.getByTestId('invite-terms-checkbox').check();
+      await second.getByRole('button', { name: 'Set password and join' }).click();
+      await expect(second.getByTestId('set-password-error')).toHaveText(
+        'This invitation link has already been used.',
+      );
+      await second.context().close();
+    } finally {
+      await residentContext.close();
+    }
   });
 
-  // fixme: drives a 5-step flow; the shipped apartment wizard has the same 2
-  // steps as condo and no `apartment-onboarding-wizard` test id. See the header.
-  test.fixme('apartment first-run wizard is reachable and completable for site manager', async ({ page }) => {
-    const { communityId } = await loginAs(page, 'site_manager', {
-      communitySlug: APARTMENT_WIZARD_SLUG,
-      skipPortalNav: true,
-    });
+  test('an apartment founder gets the apartment dashboard and its own checklist', async ({ page }) => {
+    test.setTimeout(180_000);
+    const community = createFreshCommunity('apartment');
 
-    await page.goto(`/onboarding/apartment?communityId=${communityId}`, {
-      waitUntil: 'domcontentloaded',
+    await signInAs(page, community.founderEmail, community.communityId);
+    // The shared dashboard sends apartments to their own; the condo
+    // compliance panel must never appear.
+    await expect(page).toHaveURL(new RegExp(`/dashboard/apartment\\?communityId=${community.communityId}`), {
+      timeout: 60_000,
     });
-    await expect(page).toHaveURL(new RegExp(`/onboarding/apartment\\?communityId=${communityId}`));
-    await waitForWizardHydration(page, 'apartment-onboarding-wizard');
-
-    await fillProfileStep(page, 'Apartment', 'apartment');
-    await completeBrandingStep(page, 'apartment');
-    await completeUnitsStep(page, 'A', 'apartment');
-    await skipRulesStep(page);
-    await skipInviteStep(page);
-
-    await expect(page).toHaveURL(new RegExp(`/dashboard/apartment\\?communityId=${communityId}`), {
-      timeout: 15_000,
+    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
+    await expect(checklist.getByRole('heading', { name: 'Finish setting up your community' })).toBeVisible({
+      timeout: 60_000,
     });
+    await expect(checklist.getByText('Upload your community rules')).toBeVisible();
+    await expect(checklist.getByText('Add your units')).toBeVisible();
+    // Apartments have no compliance feature, so no compliance step.
+    await expect(checklist.getByText('Review your compliance score')).toHaveCount(0);
+    await expect(checklist.getByText('Upload your first compliance document')).toHaveCount(0);
   });
 });

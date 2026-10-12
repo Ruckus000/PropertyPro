@@ -52,6 +52,7 @@ import { resolveEffectiveCommunityId } from "@/lib/api/tenant-context";
 import { assertNotDemoGrace } from "@/lib/middleware/demo-grace-guard";
 import { requireActiveSubscriptionForMutation } from "@/lib/middleware/subscription-guard";
 import { importResidentRow } from "@/lib/services/import-residents-service";
+import { tryAutoComplete } from "@/lib/services/onboarding-checklist-service";
 import { planResidentImport } from "@/lib/services/resident-import-plan";
 import { importResidentsContract } from "./contract";
 
@@ -169,6 +170,12 @@ export const POST = withErrorHandler(
         }
       }
     }
+
+    // Importing a roster adds members, which is what the founder's "Add a
+    // board member or resident" step asks for. Only the single-resident form
+    // (`residents/invite`) used to complete it, so a founder who imported
+    // their whole roster was left with the step open (onboarding audit F11).
+    if (importedCount > 0) void tryAutoComplete(communityId, actorUserId, "invite_first_member");
 
     return {
       importedCount,
