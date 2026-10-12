@@ -41,7 +41,7 @@ import {
   enforceRedactionAttestation,
 } from '@/lib/documents/redaction-attestation';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
-import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
+import { completeDocumentSteps, tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import {
   getDocumentForDeletionAudit,
   getDocumentForPublishAudit,
@@ -158,8 +158,7 @@ export const POST = withErrorHandler(
       draft: body.draft === true,
     });
 
-    void tryAutoComplete(effectiveCommunityId, userId, 'upload_first_document');
-    void tryAutoComplete(effectiveCommunityId, userId, 'upload_community_rules');
+    void completeDocumentSteps(effectiveCommunityId, userId, body.categoryId);
 
     return withEnvelope(result.document, {
       warnings: result.warnings.length > 0 ? result.warnings : undefined,

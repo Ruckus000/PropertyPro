@@ -15,6 +15,7 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import {
   getChecklistItems,
+  getItemKeysForRole,
   markItemComplete,
   createChecklistItems,
   CHECKLIST_DISPLAY,
@@ -31,9 +32,19 @@ export const GET = withErrorHandler(
   runRoute(onboardingChecklistGetContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
     const communityId = resolveEffectiveCommunityId(req, null);
-    await requireCommunityMembership(communityId, userId);
+    const membership = await requireCommunityMembership(communityId, userId);
 
-    const items = await getChecklistItems(communityId, userId);
+    // Rows are created once, so a list chosen earlier persists after the
+    // person's tasks change (old designation-first rows, a new board seat, a
+    // role change). Show only today's tasks, and add any that are missing.
+    // Someone with no rows yet is bootstrapped by the dashboard, as before.
+    const applicable = getItemKeysForRole(membership);
+    let rows = await getChecklistItems(communityId, userId);
+    if (rows.length > 0 && applicable.some((key) => !rows.some((row) => row.itemKey === key))) {
+      await createChecklistItems(communityId, userId, membership);
+      rows = await getChecklistItems(communityId, userId);
+    }
+    const items = rows.filter((item) => (applicable as readonly string[]).includes(item.itemKey));
 
     return items.map((item) => ({
       ...item,
@@ -62,13 +73,7 @@ export const POST = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, body.communityId ?? null);
     const membership = await requireCommunityMembership(communityId, userId);
 
-    await createChecklistItems(
-      communityId,
-      userId,
-      membership.role,
-      membership.designation,
-      membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
-    );
+    await createChecklistItems(communityId, userId, membership);
 
     return { created: true as const };
   }),

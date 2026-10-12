@@ -39,6 +39,7 @@ import {
 } from '@/lib/services/document-draft-service';
 import { markMeetingMinutesPosted } from '@/lib/services/meeting-service';
 import { linkMinutesDocumentToChecklist } from '@/lib/services/compliance-service';
+import { completeDocumentSteps } from '@/lib/services/onboarding-checklist-service';
 
 // Chromium needs a real Node runtime, more memory, and a longer timeout.
 export const runtime = 'nodejs';
@@ -167,6 +168,8 @@ export const POST = withErrorHandler(
     });
 
     const documentId = Number((result.document as Record<string, unknown>)['id']);
+    // A published authored document counts toward the setup checklist like an upload.
+    void completeDocumentSteps(communityId, userId, targetCategoryId);
 
     // 7. Link the published doc to the meeting it was authored from, and
     //    record on the meeting itself that its minutes are on the record.

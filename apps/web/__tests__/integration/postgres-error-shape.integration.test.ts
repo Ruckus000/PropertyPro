@@ -43,6 +43,12 @@ const describeDb = getDescribeDb();
 
 const RUN = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 const EMAIL = `dup-shape-${RUN}@leadtest.invalid`;
+const ROOT_MANAGER = {
+  role: 'root_manager',
+  designation: null,
+  communityType: 'condo_718',
+  isUnitOwner: false,
+} as const;
 
 async function captureRejection(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -107,9 +113,9 @@ describeDb('unique-violation error shape through drizzle (integration)', () => {
     const communityId = requireCommunity(s, 'communityA').id;
     const userId = requireUser(s, 'actorA').id;
 
-    await createChecklistItems(communityId, userId, 'root_manager', null, 'condo_718');
+    await createChecklistItems(communityId, userId, ROOT_MANAGER);
     await expect(
-      createChecklistItems(communityId, userId, 'root_manager', null, 'condo_718'),
+      createChecklistItems(communityId, userId, ROOT_MANAGER),
     ).resolves.toBeUndefined();
   });
 });
