@@ -54,7 +54,7 @@ export { InsuranceAlertEmail } from "./templates/insurance-alert-email";
 export type { InsuranceAlertEmailProps } from "./templates/insurance-alert-email";
 
 export { SignupVerificationEmail } from "./templates/signup-verification-email";
-export type { SignupVerificationEmailProps, SignupRemainingStep } from "./templates/signup-verification-email";
+export type { SignupVerificationEmailProps } from "./templates/signup-verification-email";
 
 export { PaymentFailedEmail } from "./templates/payment-failed";
 export type { PaymentFailedEmailProps, PaymentRetryStep } from "./templates/payment-failed";

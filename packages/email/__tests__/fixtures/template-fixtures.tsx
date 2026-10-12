@@ -32,6 +32,12 @@ export interface TemplateFixture {
 
 const url = (path: string) => `https://example.com/${path}`;
 
+// No optional data: email-first sends this before any names exist, so the
+// minimal and rich renders are the same email.
+const signupVerification = () => (
+  <E.SignupVerificationEmail branding={{ communityName: 'PropertyPro Florida' }} verificationLink={url('verify/abc')} />
+);
+
 export const FIXTURES: Record<string, TemplateFixture> = {
   // ── Association ──────────────────────────────────────────────────────────
   'welcome-email': {
@@ -404,8 +410,8 @@ export const FIXTURES: Record<string, TemplateFixture> = {
   'signup-verification-email': {
     accent: 'coral',
     sender: 'platform',
-    minimal: () => <E.SignupVerificationEmail branding={{ communityName: 'PropertyPro Florida' }} primaryContactName="Dana" communityName="Sunset Palms HOA" verificationLink={url('verify/abc')} />,
-    rich: () => <E.SignupVerificationEmail branding={{ communityName: 'PropertyPro Florida' }} primaryContactName="Dana" communityName="Sunset Palms HOA" verificationLink={url('verify/abc')} remainingSteps={[{ label: 'Association details', value: 'about 4 minutes' }, { label: 'Plan & billing', value: 'after verification' }]} />,
+    minimal: signupVerification,
+    rich: signupVerification,
   },
   'root-claimed-email': {
     accent: 'coral',
