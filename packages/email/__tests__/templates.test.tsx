@@ -9,6 +9,7 @@ import {
   MaintenanceUpdateEmail,
   DocumentPostedEmail,
   NotificationDigestEmail,
+  SignupVerificationEmail,
 } from "../src/index";
 import type { CommunityBranding } from "../src/index";
 
@@ -892,5 +893,56 @@ describe("NotificationDigestEmail", () => {
 
     expect(html).toContain("Weekly");
     expect(html).toContain("digest");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SignupVerificationEmail
+// ---------------------------------------------------------------------------
+
+describe("SignupVerificationEmail", () => {
+  // The one call that sends it (apps/web/src/lib/auth/signup.ts).
+  const sent = (
+    <SignupVerificationEmail
+      branding={{ communityName: "PropertyPro Florida" }}
+      verificationLink="https://getpropertypro.com/auth/verify-signup?token_hash=abc&type=signup&b=def"
+    />
+  );
+
+  /**
+   * The copy this template owns: the paragraphs from its lede through its fine
+   * print, as plain text. The shared masthead and footer are left out, so a
+   * change to the layout cannot fail (or satisfy) these checks.
+   */
+  async function ownCopy(): Promise<string> {
+    const paragraphs = (await render(sent, { plainText: true })).split(/\n\s*\n/);
+    const first = paragraphs.findIndex((p) => p.includes("Thanks for starting"));
+    const last = paragraphs.findIndex((p) => p.includes("The link works once"));
+    expect(first, "lede not found").toBeGreaterThanOrEqual(0);
+    expect(last, "fine print not found").toBeGreaterThanOrEqual(first);
+    return paragraphs.slice(first, last + 1).join("\n\n");
+  }
+
+  it("links to the verification URL", async () => {
+    expect(await render(sent)).toContain(
+      "https://getpropertypro.com/auth/verify-signup?token_hash=abc&amp;type=signup&amp;b=def",
+    );
+  });
+
+  it("tells the founder how to recover from a link that no longer works", async () => {
+    const copy = await ownCopy();
+    expect(copy).toContain("in the browser where you started signup");
+    expect(copy).toContain("enter your email to get a new one");
+  });
+
+  // The link's lifetime is Supabase's email-link expiry, a project setting this
+  // template cannot see. It used to promise 24 hours; the default is 1.
+  it("promises no lifetime for the link", async () => {
+    const copy = await ownCopy();
+    const count =
+      "\\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty-four|forty-eight";
+    expect(copy).not.toMatch(new RegExp(`\\b(${count})\\s+(hours?|minutes?|days?)\\b`, "i"));
+    expect(copy).not.toMatch(/\bexpires?\s+(in|after|within)\b/i);
+    expect(copy).not.toMatch(/\bvalid\s+(for|until)\b/i);
   });
 });

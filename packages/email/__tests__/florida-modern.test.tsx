@@ -264,7 +264,6 @@ describe('optional data slots render only when supplied', () => {
     ['password-reset-email', 'Chrome on macOS'],
     ['payment-failed', 'Final attempt'],
     ['subscription-expiry-warning', 'Stays on'],
-    ['signup-verification-email', 'about 4 minutes'],
   ])('%s: "%s"', async (name, marker) => {
     const fixture = FIXTURES[name]!;
     expect(await render(fixture.rich())).toContain(marker.replace(/&/g, '&amp;'));
