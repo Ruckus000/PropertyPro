@@ -157,11 +157,9 @@ export const KNOWN_DIRECT_TABLE_IMPORTS: ReadonlyMap<string, readonly string[]> 
   ['apps/web/src/app/(authenticated)/settings/page.tsx', ['users']],
   // one column (slug), behind settings:read
   ['apps/web/src/app/(authenticated)/settings/transparency/page.tsx', ['communities']],
-  // announcements via filterVisibleAnnouncements; compliance gated (#1206)
-  [
-    'apps/web/src/app/(authenticated)/welcome/page.tsx',
-    ['announcements', 'complianceChecklistItems', 'units'],
-  ],
+  // announcements via filterVisibleAnnouncements (compliance now comes from
+  // lib/compliance/load-checklist-with-status, audit F8)
+  ['apps/web/src/app/(authenticated)/welcome/page.tsx', ['announcements', 'units']],
   // public demo pages keyed by slug; getDemoInstanceForUpgrade is the service shape
   ['apps/web/src/app/demo/[slug]/converted/page.tsx', ['communities', 'demoInstances']],
   ['apps/web/src/app/demo/[slug]/page.tsx', ['communities', 'demoInstances']],

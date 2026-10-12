@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Upload,
@@ -71,12 +71,15 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
   const [dryRunData, setDryRunData] = useState<DryRunResponse['data'] | null>(null);
   const [importResult, setImportResult] = useState<ImportResponse['data'] | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [dropError, setDropError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const stepRef = useRef<HTMLDivElement>(null);
 
   const dryRunMutation = useDryRunImport(communityId);
   const importMutation = useImportResidents(communityId);
 
   const handleFileRead = useCallback((file: File) => {
+    setDropError(null);
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -101,8 +104,12 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.csv')) {
+    if (!file) return;
+    if (file.name.toLowerCase().endsWith('.csv')) {
       handleFileRead(file);
+    } else {
+      // Dropping anything else used to do nothing at all.
+      setDropError(`${file.name} is not a CSV file. Save the spreadsheet as CSV and try again.`);
     }
   }, [handleFileRead]);
 
@@ -166,19 +173,49 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
   // No response, or a server error: some rows may have been saved.
   const mayHavePartlyImported = importError !== null && (importStatus === null || importStatus >= 500);
 
+  // Each step replaces the last, so focus would fall to the page and a screen
+  // reader would hear nothing. Move focus to the new step and say what
+  // happened in one persistent live region (a region mounted together with its
+  // text is often not announced). Errors announce themselves via AlertBanner.
+  // Keyed on the previous view, not a first-render flag, so React's dev
+  // effect replay cannot steal focus on load. Checking a file counts: the
+  // upload controls unmount while it runs.
+  const view = `${step}:${dryRunMutation.isPending}`;
+  const previousView = useRef(view);
+  useEffect(() => {
+    if (previousView.current === view) return;
+    previousView.current = view;
+    stepRef.current?.focus();
+  }, [view]);
+  const announcement =
+    step === 'upload' && dryRunMutation.isPending
+      ? `Checking ${fileName}.`
+      : step === 'preview' && dryRunData && fileLevelErrors(dryRunData.errors).length > 0
+        ? "This file can't be imported as it is."
+        : step === 'preview' && dryRunData
+        ? `Preview ready: ${dryRunData.preview.length} ready to import, ${countRowsWithErrors(dryRunData.errors)} to fix.`
+        : step === 'importing' && !importError
+          ? 'Importing residents.'
+          : step === 'results' && importResult
+            ? `Import finished: ${importResult.importedCount} imported, ${importResult.skippedCount} skipped.`
+            : '';
+
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Import Residents"
       />
+      <p role="status" className="sr-only">{announcement}</p>
+
+      <div ref={stepRef} tabIndex={-1} role="group" aria-label="Import step" className="space-y-6">
 
       {/* Step 1: Upload */}
       {step === 'upload' && (
         <UploadStep
           dragOver={dragOver}
           isLoading={dryRunMutation.isPending}
-          error={dryRunMutation.error instanceof Error ? dryRunMutation.error.message : null}
+          error={dropError ?? (dryRunMutation.error instanceof Error ? dryRunMutation.error.message : null)}
           fileName={fileName}
           fileInputRef={fileInputRef}
           onFileChange={handleFileChange}
@@ -202,7 +239,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
 
       {/* Step 3: Importing */}
       {step === 'importing' && !importError && (
-        <div className="flex flex-col items-center gap-4 py-16" role="status">
+        <div className="flex flex-col items-center gap-4 py-16">
           <Loader2 size={40} className="animate-spin text-interactive" aria-hidden="true" />
           <p className="text-sm text-content-secondary">Importing residents...</p>
         </div>
@@ -277,6 +314,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
           onImportMore={resetWizard}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -361,7 +399,8 @@ function UploadStep({
               </p>
               <p className="mt-1 text-sm text-content-secondary">or</p>
             </div>
-            <label className="cursor-pointer">
+            {/* The file input is visually hidden; show its keyboard focus on the button it sits in. */}
+            <label className="cursor-pointer rounded-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:focus-visible]:ring-offset-2">
               <span className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]">
                 Browse Files
               </span>
@@ -447,7 +486,7 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
       {showRows && (
         <>
           {/* Summary — counts are rows, not messages */}
-          <div className="flex flex-wrap items-center gap-4" role="status">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
               <span className="text-sm font-medium text-content">

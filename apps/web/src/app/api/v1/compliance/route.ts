@@ -22,7 +22,6 @@ import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
   getComplianceTemplate,
   getFeaturesForCommunity,
-  postingClockApplies,
   type CommunityType,
 } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
@@ -34,18 +33,11 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
-import {
-  calculateComplianceStatus,
-  calculatePostingDeadline,
-} from '@/lib/utils/compliance-calculator';
+import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
+import { loadChecklistWithStatus, withDerivedStatus } from '@/lib/compliance/load-checklist-with-status';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
-import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
-import {
-  getLinkedDocumentStatesByIds,
-  type LinkedDocumentState,
-} from '@/lib/services/documents-service';
 import {
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
@@ -67,54 +59,6 @@ function requireCondoCommunity(communityType: CommunityType): void {
   }
 }
 
-/**
- * Decorate a checklist row with its derived compliance status.
- *
- * `documentStateById` maps a linked document id to whether it is deleted or a
- * draft. Neither may keep the item satisfied, so both are threaded into the
- * calculator.
- *
- * Below the website rule's size threshold (`postingClockApplies` false) the row
- * goes out without its posting clock — no deadline, no rolling window — so it
- * can be posted or not, but never overdue or "due soon" anywhere it is shown.
- */
-function withDerivedStatus(
-  storedRow: Record<string, unknown>,
-  documentStateById: Map<number, LinkedDocumentState> = new Map(),
-  clockApplies = true,
-): Record<string, unknown> {
-  const row = clockApplies ? storedRow : { ...storedRow, deadline: null, rollingWindow: null };
-  const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-  const documentPostedAt = row['documentPostedAt']
-    ? new Date(row['documentPostedAt'] as string)
-    : null;
-
-  const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-  const rollingWindowMonths =
-    typeof rollingWindowRecord?.months === 'number' ? rollingWindowRecord.months : null;
-
-  const documentId = (row['documentId'] as number | null) ?? null;
-  const linked = documentId != null ? documentStateById.get(documentId) : undefined;
-
-  return {
-    ...row,
-    // What the linked file is now, for callers that must tell a saved draft
-    // (open it and post it) from a deleted one (upload again) — `status` alone
-    // reads both as "not linked". `null` = nothing linked, or the row is gone.
-    documentState:
-      linked === undefined ? null : linked.deletedAt != null ? 'deleted' : linked.isDraft ? 'draft' : 'posted',
-    status: calculateComplianceStatus({
-      isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId,
-      documentPostedAt,
-      documentDeletedAt: linked?.deletedAt ?? null,
-      documentIsDraft: linked?.isDraft ?? false,
-      deadline,
-      rollingWindowMonths,
-    }),
-  };
-}
-
 export const GET = withErrorHandler(
   runRoute(complianceGetContract, async ({ query, req }) => {
     const userId = await requireAuthenticatedUserId();
@@ -125,29 +69,7 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
-    const rows = await listComplianceChecklistItems(communityId);
-
-    // Resolve `documents.deleted_at` for the linked documents so a
-    // soft-deleted document does not silently keep its checklist item
-    // satisfied. Targeted inArray lookup over just the linked ids — this is
-    // a hot route, so it must never become a full-table read.
-    const linkedDocumentIds = [
-      ...new Set(
-        rows
-          .map((r) => r['documentId'] as number | null)
-          .filter((v): v is number => typeof v === 'number'),
-      ),
-    ];
-    const documentStateById = await getLinkedDocumentStatesByIds(
-      communityId,
-      linkedDocumentIds,
-    );
-
-    const clockApplies = postingClockApplies({
-      communityType: membership.communityType,
-      unitCount: await getCommunityUnitCount(communityId),
-    });
-    const data = rows.map((row) => withDerivedStatus(row, documentStateById, clockApplies));
+    const data = await loadChecklistWithStatus(communityId, membership.communityType);
 
     if (data.length > 0) {
       void tryAutoComplete(communityId, userId, 'review_compliance');
