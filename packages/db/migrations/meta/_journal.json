@@ -624,6 +624,13 @@
       "when": 1791329617530,
       "tag": "0090_notice_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791828381588,
+      "tag": "0091_drop_onboarding_wizard_state",
+      "breakpoints": true
     }
   ]
 }

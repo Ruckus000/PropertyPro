@@ -274,11 +274,6 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_user_scoped',
     notes: 'All four operations scoped to own rows (user_id = auth.uid()) for non-privileged actors. SELECT and UPDATE (pp_notification_preferences_select/update) were hardened in 0025. INSERT and DELETE (pp_notification_preferences_insert/delete) hardened in 0026 to prevent IDOR. Admin-tier roles retain full access via pp_rls_is_privileged() / pp_rls_can_read_audit_log().',
   },
-  {
-    tableName: 'onboarding_wizard_state',
-    policyFamily: 'tenant_admin_write',
-    notes: 'Community-shared wizard state: a single row per (community, wizardType) shared across all admins. All writes (INSERT/UPDATE/DELETE) restricted to admin-tier roles (pp_rls_can_read_audit_log) at the DB layer, hardened in 0026. SELECT remains open to all community members (pp_tenant_select).',
-  },
   { tableName: 'provisioning_jobs', policyFamily: 'service_only' },
   {
     tableName: 'stripe_connected_accounts',
@@ -610,9 +605,9 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // 80 on main + community_export_jobs + community_export_job_parts (0058) = 82,
 // + site_publish_schedules (0065) = 83, + unit_occupants (0085) = 84,
 // + lease_residents / lease_deposits / lease_renewal_offers = 87,
-// + notice_consent (0090) = 88.
+// + notice_consent (0090) = 88, - onboarding_wizard_state (0091) = 87.
 // RE-DERIVE AT MERGE, same as every bump above.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 88;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 87;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
@@ -651,7 +646,7 @@ export const DATA_API_REVOKED_TENANT_TABLES = [
   'forum_threads', 'help_article_feedback', 'help_article_views',
   'insurance_policies', 'invitations', 'leases', 'ledger_entries',
   'maintenance_comments', 'meeting_documents', 'meetings', 'move_checklists',
-  'onboarding_wizard_state', 'package_log', 'polls', 'rent_obligations',
+  'package_log', 'polls', 'rent_obligations',
   'rent_payments', 'reserve_assets', 'stripe_connected_accounts',
   'support_access_log', 'support_consent_grants', 'units', 'vendors',
   'violation_fines', 'violations', 'visitor_log', 'wind_mitigation_reports',

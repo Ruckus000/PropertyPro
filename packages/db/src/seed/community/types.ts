@@ -34,8 +34,6 @@ export interface SeedCommunityResult {
 
 export type SeedRole = SeedUserConfig['role'];
 
-export type WizardType = 'condo' | 'apartment';
-
 export type DemoDocumentCategoryKey =
   | 'declaration'
   | 'rules'

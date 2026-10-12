@@ -653,7 +653,6 @@ export const INTENTIONALLY_EXCLUDED: Record<string, string> = {
   announcement_delivery_log: 'Per-recipient delivery telemetry; the announcement itself is exported.',
   provisioning_jobs: 'Internal signup-provisioning state machine — PropertyPro operational state.',
   demo_seed_registry: 'Demo-data bookkeeping — tracks seeded fixtures, never present for a real association.',
-  onboarding_wizard_state: 'Transient setup-wizard progress, meaningless once onboarding completes.',
   onboarding_checklist_items: 'Transient setup checklist, meaningless once onboarding completes.',
   conversion_events: 'PropertyPro product analytics about signup funnel behaviour — our data, not theirs.',
 

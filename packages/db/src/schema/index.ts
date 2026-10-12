@@ -71,7 +71,6 @@ export * from './site-publish-snapshots';
 export * from './ledger-entries';
 export * from './demo-seed-registry';
 export * from './demo-instances';
-export * from './onboarding-wizard-state';
 export * from './onboarding-checklist-items';
 export * from './rls-config';
 export * from './site-pages';
@@ -152,7 +151,6 @@ import type { stormDamageReports } from './storm-damage-reports';
 import type { ledgerEntries } from './ledger-entries';
 import type { demoSeedRegistry } from './demo-seed-registry';
 import type { demoInstances } from './demo-instances';
-import type { onboardingWizardState } from './onboarding-wizard-state';
 import type { platformAdminUsers } from './platform-admin-users';
 import type { marketingLeads } from './marketing-leads';
 import type { siteBlocks } from './site-blocks';
@@ -390,10 +388,6 @@ export type NewStormDamageReport = typeof stormDamageReports.$inferInsert;
 // Ledger Entries
 export type LedgerEntry = typeof ledgerEntries.$inferSelect;
 export type NewLedgerEntry = typeof ledgerEntries.$inferInsert;
-
-// Onboarding Wizard State
-export type OnboardingWizardState = typeof onboardingWizardState.$inferSelect;
-export type NewOnboardingWizardState = typeof onboardingWizardState.$inferInsert;
 
 // Onboarding Checklist Items
 import type { onboardingChecklistItems } from './onboarding-checklist-items';
