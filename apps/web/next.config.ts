@@ -66,6 +66,10 @@ const nextConfig: NextConfig = {
     // (lucide-react, date-fns, and recharts are already in Next 15.5's
     // built-in default list — do not re-add them here.)
     optimizePackageImports: ["@propertypro/ui", "@propertypro/shared"],
+    // Reuse a visited page's server payload for 30s on Back/forward and
+    // re-clicks. Next 15 defaults dynamic pages to 0s, so every click paid a
+    // fresh server render. router.refresh() and revalidatePath still clear it.
+    staleTimes: { dynamic: 30 },
   },
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
