@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Infer } from '@propertypro/api-contract';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 import type { documentCategoriesListContract } from
@@ -20,45 +21,36 @@ import {
  * hook stays in lockstep with the route's declared response schema — no
  * duplicated interface.
  *
- * Cancellation: pairs an `AbortController` with the helper's `signal` option.
- * If `communityId` changes mid-walk (or the component unmounts), the in-
- * flight request is cancelled at the network layer rather than discarded
- * client-side.
+ * A React Query query, so the seven components that read the list share one
+ * cached copy. It was a per-component `useEffect` fetch: opening one document
+ * on the Documents page sent four identical walks of this endpoint, each
+ * paying API auth and membership, and every visit refetched from scratch.
+ * React Query passes the walk an abort `signal`, so a `communityId` change or
+ * an unmount still cancels the request at the network layer.
  */
 type CategoryItem =
   Infer<typeof documentCategoriesListContract>['data'][number];
 
+const NO_CATEGORIES: DocumentCategoryOption[] = [];
+
 export function useDocumentCategories(communityId: number) {
-  const [categories, setCategories] = useState<DocumentCategoryOption[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadCategories(): Promise<void> {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const collected = await walkPaginated<CategoryItem>(
-          '/api/v1/document-categories',
-          { communityId: String(communityId) },
-          { signal: controller.signal },
-        );
-        if (!controller.signal.aborted) setCategories(collected);
-      } catch (loadError) {
-        if (controller.signal.aborted) return; // expected on unmount / id change
-        setCategories([]);
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load document categories');
-      } finally {
-        if (!controller.signal.aborted) setIsLoading(false);
-      }
-    }
-
-    void loadCategories();
-
-    return () => controller.abort();
-  }, [communityId]);
+  const query = useQuery<DocumentCategoryOption[]>({
+    queryKey: ['document-categories', communityId],
+    queryFn: ({ signal }) =>
+      walkPaginated<CategoryItem>(
+        '/api/v1/document-categories',
+        { communityId: String(communityId) },
+        { signal },
+      ),
+    // One attempt, as before: consumers show the error straight away.
+    retry: false,
+  });
+  const categories = query.data ?? NO_CATEGORIES;
+  const error = query.error
+    ? query.error instanceof Error
+      ? query.error.message
+      : 'Failed to load document categories'
+    : null;
 
   const resolveCategoryId = useCallback(
     (categoryName: string | null | undefined) => resolveDocumentCategoryId(categories, categoryName),
@@ -67,7 +59,7 @@ export function useDocumentCategories(communityId: number) {
 
   return {
     categories,
-    isLoading,
+    isLoading: query.isPending,
     error,
     resolveCategoryId,
   };
