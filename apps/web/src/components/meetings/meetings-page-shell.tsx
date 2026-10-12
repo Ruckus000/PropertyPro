@@ -130,7 +130,7 @@ export function MeetingsPageShell({
     const params = new URLSearchParams(searchParams.toString());
     params.set('view', coerceMeetingsView(nextValue));
     // `replace`, not `push`: Back should leave the page, not walk every view.
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   return (

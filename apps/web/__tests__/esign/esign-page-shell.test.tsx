@@ -90,8 +90,14 @@ function renderShell(viewer = { id: 'user-manager', email: 'cam@sunset.local' })
     />,
   );
 }
+// Tab switches write the URL with history.replaceState, which Next syncs into
+// useSearchParams without a server render. Asserting router.replace is NOT
+// called is the point: that call re-rendered the force-dynamic page.
+const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+
 
 beforeEach(() => {
+  historyReplace.mockClear();
   vi.clearAllMocks();
   search = new URLSearchParams('communityId=3');
   requests = [request()];
@@ -137,11 +143,11 @@ describe('the view switcher', () => {
     // carry the same value and `replace` is idempotent, so this asserts the
     // navigation rather than the call count — same behaviour the meetings
     // screen has shipped with.
-    expect(routerReplace).toHaveBeenCalled();
-    const [url, opts] = routerReplace.mock.calls.at(-1)!;
+    expect(historyReplace).toHaveBeenCalled();
+    const url = historyReplace.mock.calls.at(-1)![2] as string;
     expect(url).toContain('view=templates');
     expect(url).toContain('communityId=3');
-    expect(opts).toEqual({ scroll: false });
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('mounts only the active view', () => {

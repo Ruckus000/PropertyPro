@@ -239,10 +239,16 @@ describe('DocumentLibrary', () => {
   });
 });
 
+// Tab switches write the URL with history.replaceState, which Next syncs into
+// useSearchParams without a server render. Asserting router.replace is NOT
+// called is the point: that call re-rendered the force-dynamic page.
+const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+
 describe('the view switcher', () => {
   beforeEach(() => {
     searchParams = new URLSearchParams();
     routerReplace.mockClear();
+    historyReplace.mockClear();
   });
 
   it('offers exactly the three readings', () => {
@@ -289,11 +295,11 @@ describe('the view switcher', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Board' }));
 
-    expect(routerReplace).toHaveBeenCalled();
-    const [url, opts] = routerReplace.mock.calls.at(-1)!;
+    expect(historyReplace).toHaveBeenCalled();
+    const url = historyReplace.mock.calls.at(-1)![2] as string;
     expect(url).toContain('view=board');
     expect(url).toContain('q=budget');
-    expect(opts).toEqual({ scroll: false });
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });
 
