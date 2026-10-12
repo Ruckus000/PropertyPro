@@ -272,6 +272,10 @@ export function OperationsHub({
    * Spec §5.2 requires "Back button closes" — opening a drawer must add a
    * history entry so the browser back button pops it off. We push on open,
    * and the close callback calls router.back() to pop the same entry.
+   * The push is history.pushState, not router.push: the server page never
+   * reads `create`, and router.push would re-render this force-dynamic page
+   * on the server before the sheet could appear. Next syncs the new URL into
+   * useSearchParams, and restores the prior entry from its cache on Back.
    * Tab switches continue to use router.replace (unchanged from Phase 1)
    * so they don't bloat history.
    */
@@ -279,7 +283,7 @@ export function OperationsHub({
     if (!CREATE_SHEETS_ENABLED) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set('create', value);
-    router.push(`${pathname}?${params.toString()}`);
+    window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
 
   function closeCreate() {

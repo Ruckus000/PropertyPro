@@ -45,7 +45,12 @@ vi.mock('@/hooks/use-operations', async () => {
 
 vi.mock('../../../src/components/operations/RequestCreateSheet', () => ({
   RequestCreateSheet: (props: { open: boolean; onClose: () => void }) =>
-    props.open ? <div role="heading">Submit Request</div> : null,
+    props.open ? (
+      <div>
+        <div role="heading">Submit Request</div>
+        <button type="button" onClick={props.onClose}>Close sheet</button>
+      </div>
+    ) : null,
 }));
 vi.mock('../../../src/components/operations/WorkOrderCreateSheet', () => ({
   WorkOrderCreateSheet: (props: { open: boolean }) =>
@@ -55,6 +60,11 @@ vi.mock('../../../src/components/operations/ReservationCreateSheet', () => ({
   ReservationCreateSheet: (props: { open: boolean }) =>
     props.open ? <div role="heading">Reserve Amenity</div> : null,
 }));
+
+// Opening a sheet writes the URL with history.pushState, which Next syncs into
+// useSearchParams without re-rendering the force-dynamic page on the server.
+// Stubbed so jsdom's location stays put between tests.
+const historyPush = vi.spyOn(window.history, 'pushState').mockImplementation(() => {});
 
 describe('OperationsHub', () => {
   beforeEach(() => {
@@ -431,9 +441,36 @@ describe('OperationsHub', () => {
     // button; either click should push the same URL. Use the first (header).
     const buttons = screen.getAllByRole('button', { name: 'Submit Request' });
     fireEvent.click(buttons[0]!);
-    // Open uses push (not replace) so the browser Back button can close the drawer.
-    expect(pushMock).toHaveBeenCalledWith(
-      expect.stringContaining('create=request'),
+    // Open adds a history entry (not replace) so the browser Back button can
+    // close the drawer — and does it without a server round trip.
+    expect(historyPush).toHaveBeenCalledTimes(1);
+    expect(historyPush).toHaveBeenCalledWith(
+      null,
+      '',
+      '/communities/42/operations?tab=requests&create=request',
     );
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('closing a sheet pops exactly the one entry that opening pushed', async () => {
+    searchParamsMock.mockReturnValue('tab=requests&create=request');
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Close sheet' }));
+    expect(backMock).toHaveBeenCalledTimes(1);
+    expect(historyPush).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 });
