@@ -5,14 +5,19 @@
  *
  * Handles two runtime events that middleware cannot intercept:
  *  - SIGNED_OUT — cross-tab logout detection (another tab signed out)
- *  - TOKEN_REFRESHED / USER_UPDATED — revalidate server components
+ *  - USER_UPDATED, SIGNED_IN, etc. — revalidate server components
+ *
+ * TOKEN_REFRESHED is ignored: a refresh keeps the same identity, and
+ * middleware refreshes the server's cookies itself. Refreshing the router on
+ * it re-rendered the whole tree about hourly and emptied the client router
+ * cache for nothing.
  *
  * INITIAL_SESSION is explicitly skipped because middleware has already
  * enforced auth on the initial page load. Acting on it here would
  * duplicate enforcement and risk race conditions (e.g. redirect loops
  * when the session cookie hasn't been written yet).
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { usePathname, useRouter } from 'next/navigation';
 import { createBrowserClient } from '@/lib/supabase/client';
@@ -24,6 +29,10 @@ function getReturnTo(pathname: string | null): string {
 export function AuthSessionSync() {
   const router = useRouter();
   const pathname = usePathname();
+  // Read through a ref so a navigation does not tear down and re-create the
+  // auth subscription; only the sign-out redirect needs the current path.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
   useEffect(() => {
     const supabase = createBrowserClient();
@@ -43,18 +52,20 @@ export function AuthSessionSync() {
 
       if (event === 'SIGNED_OUT') {
         // Full page reload to clear all cached state (React Query, context, etc.)
-        window.location.href = `/auth/login?returnTo=${encodeURIComponent(getReturnTo(pathname))}`;
+        window.location.href = `/auth/login?returnTo=${encodeURIComponent(getReturnTo(pathnameRef.current))}`;
         return;
       }
 
-      // TOKEN_REFRESHED, USER_UPDATED, etc. — revalidate server data
+      if (event === 'TOKEN_REFRESHED') return;
+
+      // USER_UPDATED, SIGNED_IN, etc. — revalidate server data
       router.refresh();
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [router]);
 
   return null;
 }
