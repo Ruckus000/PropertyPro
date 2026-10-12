@@ -14,6 +14,7 @@ const {
   getChecklistItemsMock,
   markItemCompleteMock,
   createChecklistItemsMock,
+  getItemKeysForRoleMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -21,6 +22,7 @@ const {
   getChecklistItemsMock: vi.fn(),
   markItemCompleteMock: vi.fn(),
   createChecklistItemsMock: vi.fn(),
+  getItemKeysForRoleMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -39,6 +41,7 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   getChecklistItems: getChecklistItemsMock,
   markItemComplete: markItemCompleteMock,
   createChecklistItems: createChecklistItemsMock,
+  getItemKeysForRole: getItemKeysForRoleMock,
   CHECKLIST_DISPLAY: {
     add_units: 'Add your units',
     upload_first_document: 'Upload your first compliance document',
@@ -74,6 +77,47 @@ describe('GET /api/v1/onboarding/checklist', () => {
     resolveEffectiveCommunityIdMock.mockReturnValue(42);
     requireCommunityMembershipMock.mockResolvedValue(MEMBERSHIP);
     getChecklistItemsMock.mockResolvedValue([CHECKLIST_ITEM]);
+    getItemKeysForRoleMock.mockReturnValue(['add_units', 'upload_first_document']);
+  });
+
+  // Audit F6: rows created under the old designation-first rule must not keep
+  // showing tasks this person cannot do.
+  it('hides rows that are not among the tasks this membership can do', async () => {
+    getChecklistItemsMock.mockResolvedValueOnce([
+      CHECKLIST_ITEM,
+      { ...CHECKLIST_ITEM, id: 2, itemKey: 'post_announcement' },
+    ]);
+    const res = await GET(new NextRequest('http://localhost:3000/api/v1/onboarding/checklist'));
+
+    const json = (await res.json()) as { data: Array<{ itemKey: string }> };
+    expect(json.data.map((item) => item.itemKey)).toEqual(['add_units']);
+    expect(getItemKeysForRoleMock).toHaveBeenCalledWith(MEMBERSHIP);
+  });
+
+  it('adds the applicable tasks a person with existing rows is missing (e.g. a new board seat)', async () => {
+    getChecklistItemsMock
+      .mockResolvedValueOnce([CHECKLIST_ITEM])
+      .mockResolvedValueOnce([
+        CHECKLIST_ITEM,
+        { ...CHECKLIST_ITEM, id: 2, itemKey: 'upload_first_document' },
+      ]);
+    const res = await GET(new NextRequest('http://localhost:3000/api/v1/onboarding/checklist'));
+
+    expect(createChecklistItemsMock).toHaveBeenCalledWith(42, 'user-1', MEMBERSHIP);
+    const json = (await res.json()) as { data: Array<{ itemKey: string }> };
+    expect(json.data.map((item) => item.itemKey)).toEqual(['add_units', 'upload_first_document']);
+  });
+
+  it('creates nothing when every applicable task already exists, or when there are no rows yet', async () => {
+    getChecklistItemsMock.mockResolvedValueOnce([
+      CHECKLIST_ITEM,
+      { ...CHECKLIST_ITEM, id: 2, itemKey: 'upload_first_document' },
+    ]);
+    await GET(new NextRequest('http://localhost:3000/api/v1/onboarding/checklist'));
+    getChecklistItemsMock.mockResolvedValueOnce([]);
+    await GET(new NextRequest('http://localhost:3000/api/v1/onboarding/checklist'));
+
+    expect(createChecklistItemsMock).not.toHaveBeenCalled();
   });
 
   it('returns enriched checklist items', async () => {
@@ -155,6 +199,6 @@ describe('POST /api/v1/onboarding/checklist', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { created: boolean } };
     expect(json.data.created).toBe(true);
-    expect(createChecklistItemsMock).toHaveBeenCalledWith(42, 'user-1', 'cam', null, 'condo_718');
+    expect(createChecklistItemsMock).toHaveBeenCalledWith(42, 'user-1', MEMBERSHIP);
   });
 });

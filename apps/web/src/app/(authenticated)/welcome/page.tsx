@@ -175,11 +175,7 @@ export default async function WelcomePage({ searchParams }: WelcomePageProps) {
     : null;
 
   // Resolve checklist display items for the role (server-side, avoiding client import of service)
-  const itemKeys = getItemKeysForRole(
-    membership.role,
-    membership.designation,
-    membership.communityType,
-  );
+  const itemKeys = getItemKeysForRole(membership);
   const checklistDisplayItems = itemKeys.map((key) => ({
     key,
     displayText: CHECKLIST_DISPLAY[key as ChecklistItemKey] ?? key,

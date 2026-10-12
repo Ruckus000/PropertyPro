@@ -15,6 +15,7 @@ import {
   getUserForInvitation,
   getUserRoleForInvitation,
 } from '@/lib/services/invitations-service';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { getBaseUrl } from '@/lib/utils/url';
 
 /** Shown in the invitation email ("X invited you"); headers set by middleware. */
@@ -97,4 +98,9 @@ export async function sendCommunityInvitation(params: {
     communityId,
     newValues: { userId, expiresAt: expiresAt.toISOString() },
   });
+
+  // Inviting a member is what "Add a board member or resident" asks for. Both
+  // invitation routes come through here; only residents/invite completed it
+  // before, so Directory invites left the step open forever (audit F6).
+  await tryAutoComplete(communityId, actorUserId, 'invite_first_member');
 }

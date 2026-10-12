@@ -20,6 +20,7 @@ const {
   isUnitOwnerInviteeMock,
   giveNoticeConsentMock,
   captureExceptionMock,
+  tryAutoCompleteMock,
 } = vi.hoisted(() => ({
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   sendEmailMock: vi.fn().mockResolvedValue({ id: 'test_1' }),
@@ -38,6 +39,7 @@ const {
   isUnitOwnerInviteeMock: vi.fn(),
   giveNoticeConsentMock: vi.fn(),
   captureExceptionMock: vi.fn(),
+  tryAutoCompleteMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -82,6 +84,7 @@ vi.mock('@/lib/services/notice-consent-service', () => ({
 }));
 
 vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
+vi.mock('@/lib/services/onboarding-checklist-service', () => ({ tryAutoComplete: tryAutoCompleteMock }));
 
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import { PATCH, POST } from '../../src/app/api/v1/invitations/route';
@@ -176,6 +179,8 @@ describe('p1-20 invitation auth flow', () => {
     expect(auditPayload).not.toContain(token);
 
     const json = (await res.json()) as { data: { success: boolean } };
+    // Audit F6: inviting completes the inviter's "Add a board member or resident".
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(99, 'inviter-uuid', 'invite_first_member');
     expect(json.data.success).toBe(true);
   });
 
@@ -206,6 +211,7 @@ describe('p1-20 invitation auth flow', () => {
     // No invitation minted, and above all no email sent to them.
     expect(createInvitationMock).not.toHaveBeenCalled();
     expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
   });
 
   it('POST returns 403 for authenticated non-member', async () => {
