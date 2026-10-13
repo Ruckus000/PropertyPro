@@ -7,7 +7,6 @@
  * loaded — every color and size below must be a literal inline value. Ported
  * from apps/web's global-error.tsx, which carries the same constraint.
  */
-import * as Sentry from '@sentry/nextjs';
 import React, { useEffect } from 'react';
 
 interface GlobalErrorProps {
@@ -17,7 +16,12 @@ interface GlobalErrorProps {
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Loaded on demand, never statically: this boundary ships in every route's
+    // first load, and a static import put the whole Sentry SDK there, defeating
+    // the deferred load in instrumentation-client.ts.
+    void import('@sentry/nextjs')
+      .then((Sentry) => Sentry.captureException(error))
+      .catch((loadError) => console.error('[Sentry] Failed to load the SDK to report an error', loadError));
   }, [error]);
 
   return (
