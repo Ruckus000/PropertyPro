@@ -88,12 +88,14 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
         const paths = [...noMatchRunRef.current];
         // On demand, not a static import: this widget mounts with the shell, so
         // a static import put the whole Sentry SDK in every signed-in first load.
-        void import('@sentry/nextjs').then(({ captureMessage }) => {
-          captureMessage('help_contextual_no_match', {
-            level: 'info',
-            extra: { communityId, paths },
-          });
-        });
+        void import('@sentry/nextjs')
+          .then(({ captureMessage }) => {
+            captureMessage('help_contextual_no_match', {
+              level: 'info',
+              extra: { communityId, paths },
+            });
+          })
+          .catch((loadError) => console.error('[Sentry] Failed to load the SDK', loadError));
         noMatchRunRef.current = [];
       }
     } else if (

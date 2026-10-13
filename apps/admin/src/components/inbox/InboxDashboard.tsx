@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -19,13 +19,6 @@ import { ThreadList } from './ThreadList';
 
 interface InboxDashboardProps {
   overview: InboxOverview;
-  /**
-   * Initial values read from the URL (`?mailbox=&status=`) by the server page.
-   * Unvalidated at this boundary on purpose — `knownOr` below is the one place
-   * that decides what an unrecognised value means.
-   */
-  initialMailbox: string;
-  initialStatus: string;
   /** The thread rendered by `detail`, so its row can be highlighted in the list. */
   activeThreadId?: number;
   /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
@@ -50,21 +43,33 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * Filtering happens entirely client-side, over the ONE unfiltered load
  * `getInboxOverview` already did (up to `PLATFORM_LIST_LIMIT`) — no fetch, no
  * loading spinner. The selection is mirrored into the URL (`?mailbox=&status=`)
- * with `router.replace` so it survives a reload, a bookmark, and a thread
- * navigation (`ThreadList` links carry the current query forward).
+ * so it survives a reload, a bookmark, and a thread navigation (`ThreadList`
+ * links carry the current query forward).
+ *
+ * Written with `window.history.replaceState`, not `router.replace`: both inbox
+ * pages are force-dynamic and read these params only to seed the initial state,
+ * so a router navigation re-ran the whole page on the server on every click to
+ * produce what was already on screen. Next syncs `replaceState` into its router
+ * state, so Back and a later navigation still see the current URL.
+ *
+ * Which is why the filters are seeded from that URL (`useSearchParams`), not
+ * from a value the server page read. Back restores the page from the router
+ * cache — the payload rendered BEFORE any tab click — so a server-passed seed
+ * came back stale: the address bar said `?status=closed` while Open was the
+ * highlighted tab. `ClientWorkspace` reads `?tab=` the same way.
  */
-export function InboxDashboard({
-  overview,
-  initialMailbox,
-  initialStatus,
-  activeThreadId,
-  detail,
-}: InboxDashboardProps) {
-  const router = useRouter();
+export function InboxDashboard({ overview, activeThreadId, detail }: InboxDashboardProps) {
   const pathname = usePathname();
-  const [mailbox, setMailbox] = useState(() => knownOr(initialMailbox, SUPPORT_MAILBOXES));
+  const searchParams = useSearchParams();
+  const [mailbox, setMailbox] = useState(() =>
+    knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES),
+  );
   const [status, setStatus] = useState(() =>
-    knownOr(initialStatus, [...SUPPORT_THREAD_STATUSES, 'all'], INBOX_DEFAULT_STATUS),
+    knownOr(
+      searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
+      [...SUPPORT_THREAD_STATUSES, 'all'],
+      INBOX_DEFAULT_STATUS,
+    ),
   );
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
@@ -81,7 +86,7 @@ export function InboxDashboard({
     if (nextMailbox !== 'all') params.set('mailbox', nextMailbox);
     if (nextStatus !== INBOX_DEFAULT_STATUS) params.set('status', nextStatus);
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
   const filtered = useMemo(

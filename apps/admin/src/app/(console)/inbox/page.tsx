@@ -1,19 +1,14 @@
 import { PageBody } from '@propertypro/ui';
 import { InboxDashboard } from '@/components/inbox/InboxDashboard';
-import { INBOX_DEFAULT_STATUS } from '@/components/inbox/inbox-filters';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview } from '@/lib/server/inbox';
 
 export const dynamic = 'force-dynamic';
 
-interface InboxPageProps {
-  searchParams: Promise<{ mailbox?: string; status?: string }>;
-}
-
-export default async function InboxPage({ searchParams }: InboxPageProps) {
+export default async function InboxPage() {
   await requireAdminPageSession();
-  const { mailbox, status } = await searchParams;
+  // `?mailbox=` / `?status=` are read by `InboxDashboard` from the URL itself.
   const overview = await getInboxOverview();
 
   return (
@@ -22,11 +17,7 @@ export default async function InboxPage({ searchParams }: InboxPageProps) {
         title="Inbox"
         description="Three shared mailboxes, one queue. Each mailbox has its own next step."
       />
-      <InboxDashboard
-        overview={overview}
-        initialMailbox={mailbox ?? 'all'}
-        initialStatus={status ?? INBOX_DEFAULT_STATUS}
-      />
+      <InboxDashboard overview={overview} />
     </PageBody>
   );
 }

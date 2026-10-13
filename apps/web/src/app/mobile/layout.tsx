@@ -67,9 +67,12 @@ export default async function MobileLayout({ children }: MobileLayoutProps) {
     redirect('/auth/login');
   }
 
-  const demoInfo = await detectDemoInfo(isDemo, userId, communityId);
-
-  const branding = await getBrandingForCommunity(communityId);
+  // Independent reads, so one round trip instead of two. `/mobile` traffic is
+  // mostly demo sessions, for which `detectDemoInfo` is a real query.
+  const [demoInfo, branding] = await Promise.all([
+    detectDemoInfo(isDemo, userId, communityId),
+    getBrandingForCommunity(communityId),
+  ]);
   const theme = resolveTheme(branding, communityName, communityType);
   const cssVars = toCssVars(theme);
   const fontLinks = toFontLinks(theme);

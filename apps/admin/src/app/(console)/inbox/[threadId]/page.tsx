@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
 
 import { InboxDashboard } from '@/components/inbox/InboxDashboard';
-import { INBOX_DEFAULT_STATUS } from '@/components/inbox/inbox-filters';
 import { ThreadView } from '@/components/inbox/ThreadView';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview, getReplyParent, getThreadDetail } from '@/lib/server/inbox';
@@ -12,27 +11,25 @@ export const dynamic = 'force-dynamic';
 
 interface ThreadPageProps {
   params: Promise<{ threadId: string }>;
-  searchParams: Promise<{ mailbox?: string; status?: string }>;
 }
 
-export default async function ThreadPage({ params, searchParams }: ThreadPageProps) {
+export default async function ThreadPage({ params }: ThreadPageProps) {
   await requireAdminPageSession();
 
   const { threadId: raw } = await params;
   const threadId = Number(raw);
   if (!Number.isInteger(threadId) || threadId <= 0) notFound();
 
-  const detail = await getThreadDetail(threadId);
-  if (!detail) notFound();
-
   // The split view needs the same unfiltered load as `/inbox` so the list next
   // to this thread reflects the same mailbox/status filters the operator was
-  // browsing under — see `InboxDashboard`'s docblock.
-  const [{ mailbox, status }, overview, parent] = await Promise.all([
-    searchParams,
+  // browsing under — see `InboxDashboard`'s docblock. All three in one round:
+  // none needs another, and a missing thread costs only wasted reads.
+  const [detail, overview, parent] = await Promise.all([
+    getThreadDetail(threadId),
     getInboxOverview(),
     getReplyParent(threadId),
   ]);
+  if (!detail) notFound();
 
   // Sanitize on the SERVER and hand the result down, so no client component
   // ever holds a raw html_body. Nothing downstream can accidentally render it.
@@ -47,8 +44,6 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
   return (
     <InboxDashboard
       overview={overview}
-      initialMailbox={mailbox ?? 'all'}
-      initialStatus={status ?? INBOX_DEFAULT_STATUS}
       activeThreadId={threadId}
       detail={
         <ThreadView
