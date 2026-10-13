@@ -257,4 +257,17 @@ describe('BillingList ?status=', () => {
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
     expect(replaceState).toHaveBeenLastCalledWith(null, '', '/');
   });
+
+  it('keeps the rest of the query string when it writes the status', () => {
+    window.history.replaceState(null, '', '/billing?ref=dashboard');
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    renderAt('ref=dashboard');
+
+    fireEvent.click(screen.getByRole('button', { name: /Trialing/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard&status=trialing');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard');
+    window.history.replaceState(null, '', '/');
+  });
 });
