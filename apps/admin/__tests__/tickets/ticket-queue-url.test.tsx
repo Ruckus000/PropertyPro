@@ -180,3 +180,17 @@ describe('TicketQueue freshness', () => {
     expect(routerRefresh).not.toHaveBeenCalled();
   });
 });
+
+/** See inbox-dashboard.test.tsx: the rail's Tickets link does not remount the queue. */
+describe('TicketQueue same-route navigation', () => {
+  it('follows the URL when it changes under a mounted queue', () => {
+    url.search = 'status=waiting';
+    const { rerender } = render(<TicketQueue result={RESULT} />);
+    expect(screen.getByRole('button', { name: /^Waiting/ }).getAttribute('aria-pressed')).toBe('true');
+
+    url.search = '';
+    rerender(<TicketQueue result={RESULT} />);
+
+    expect(screen.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
