@@ -12,6 +12,7 @@ import {
 
 import type { InboxOverview } from '@/lib/server/inbox';
 
+import { INBOX_DEFAULT_STATUS } from './inbox-filters';
 import { InboxSplit } from './InboxSplit';
 import { MailboxSwitcher } from './MailboxSwitcher';
 import { ThreadList } from './ThreadList';
@@ -23,21 +24,6 @@ interface InboxDashboardProps {
   /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
   detail?: ReactNode;
 }
-
-/**
- * The status the inbox opens on when the URL does not say otherwise.
- *
- * NOT 'all'. `StatusControl` describes `spam` as "a shelf" whose threads
- * "leave the default list", and with an 'all' default that was simply untrue —
- * shelving a thread changed a chip and nothing else, so an inbox whose entire
- * history had been triaged as spam still rendered as a wall of spam. Opening on
- * the work queue is what makes the shelf a shelf.
- *
- * Exported because `ThreadList` must not spell it independently: its row
- * links omit `status` exactly when it equals this value, so the two must agree
- * or opening a thread silently changes the filter.
- */
-export const INBOX_DEFAULT_STATUS = 'open';
 
 /**
  * `?mailbox=` / `?status=` are untrusted input — a bookmark, a shared link, a

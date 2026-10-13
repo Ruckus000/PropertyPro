@@ -71,7 +71,7 @@ describe('InboxDashboard URL filter validation', () => {
     renderAt('status=banana');
 
     // The fallback is `INBOX_DEFAULT_STATUS` ('open'), not 'all' — the same
-    // value the server page uses when `?status=` is absent, because a garbage
+    // value `InboxDashboard` uses when `?status=` is absent, because a garbage
     // value and a missing one mean the same thing.
     //
     // The defect this whole describe block exists for was never "a thread got

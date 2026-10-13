@@ -9,13 +9,16 @@ import { SUPPORT_THREAD_STATUS_LABELS, type SupportThreadStatus } from '@propert
 
 import type { InboxThread } from '@/lib/server/inbox';
 
+import { INBOX_DEFAULT_STATUS } from './inbox-filters';
+
 interface ThreadListProps {
   threads: InboxThread[];
   /** Highlights the open thread when this list sits next to a detail pane. */
   activeThreadId?: number;
   truncated: boolean;
   /** Current `?mailbox=&status=` filters, appended to each thread link so the
-   *  detail page reopens with the same filters instead of resetting to All/All. */
+   *  detail page reopens with the same filters instead of resetting to the
+   *  defaults (All mailboxes, `INBOX_DEFAULT_STATUS`). */
   mailbox: string;
   status: string;
 }
@@ -35,7 +38,11 @@ const STATUS_STYLES: Record<SupportThreadStatus, { className: string; icon: type
 export function ThreadList({ threads, activeThreadId, truncated, mailbox, status }: ThreadListProps) {
   const params = new URLSearchParams();
   if (mailbox !== 'all') params.set('mailbox', mailbox);
-  if (status !== 'all') params.set('status', status);
+  // Omit `status` only when it is what the detail page falls back to anyway —
+  // `INBOX_DEFAULT_STATUS`, not 'all'. Dropping 'all' sent the All tab to a
+  // bare `/inbox/7` that reopened on Open, and a pending or closed thread
+  // vanished from the very list it had just been opened from.
+  if (status !== INBOX_DEFAULT_STATUS) params.set('status', status);
   const query = params.toString();
 
   if (threads.length === 0) {

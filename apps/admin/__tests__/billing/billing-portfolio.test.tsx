@@ -18,9 +18,17 @@
  * no `communities` row — must link into Stripe, because there is no console
  * page to link to and the row is the single most valuable finding this screen
  * produces.
+ *
+ * Plus the `?status=` round-trip: the dashboard's Subscriptions card links into
+ * `/billing?status=past_due`, which the list used to ignore.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const navigation = vi.hoisted(() => ({ searchParams: new URLSearchParams() }));
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => navigation.searchParams,
+}));
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -190,5 +198,76 @@ describe('BillingList', () => {
     );
 
     expect(screen.getByRole('alert').textContent).toContain('truncated');
+  });
+});
+
+describe('BillingList ?status=', () => {
+  const base = 'https://dashboard.stripe.com/test/';
+  const rows = [
+    row({ stripeSubscriptionId: 'sub_1' }),
+    row({ stripeSubscriptionId: 'sub_2', status: 'past_due', communityName: 'Palm Shores' }),
+  ];
+
+  function renderAt(search: string) {
+    navigation.searchParams = new URLSearchParams(search);
+    return render(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+  }
+
+  function pressed(name: RegExp) {
+    return screen.getByRole('button', { name }).getAttribute('aria-pressed');
+  }
+
+  afterEach(() => {
+    navigation.searchParams = new URLSearchParams();
+    vi.restoreAllMocks();
+  });
+
+  it('opens on the tab the URL names, so a dashboard link keeps its filter', () => {
+    renderAt('status=past_due');
+
+    expect(pressed(/Past due/)).toBe('true');
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+    expect(screen.queryByText('Sunset Condos')).toBeNull();
+  });
+
+  it('falls back to All for a status the list has no tab for (control)', () => {
+    // `active` is a real subscription status, but not a tab here — it must not
+    // render an empty table with nothing highlighted.
+    renderAt('status=active');
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+  });
+
+  it('opens on All when the URL names no status (control)', () => {
+    renderAt('');
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+  });
+
+  it('mirrors a tab click into the URL, and drops it again for All', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    renderAt('');
+
+    fireEvent.click(screen.getByRole('button', { name: /Canceled/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/?status=canceled');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/');
+  });
+
+  it('keeps the rest of the query string when it writes the status', () => {
+    window.history.replaceState(null, '', '/billing?ref=dashboard');
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    renderAt('ref=dashboard');
+
+    fireEvent.click(screen.getByRole('button', { name: /Trialing/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard&status=trialing');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard');
+    window.history.replaceState(null, '', '/');
   });
 });
