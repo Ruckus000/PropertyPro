@@ -83,7 +83,7 @@ const h = vi.hoisted(() => {
   }
 
   const subscriptionsRetrieve = vi.fn(
-    async (_id?: string): Promise<FakeSubscription> => ({
+    async (_id?: string, _params?: { expand: string[] }): Promise<FakeSubscription> => ({
       id: 'sub_1',
       status: 'active',
       trial_end: 1_760_000_000,
@@ -531,6 +531,35 @@ describe('applyCoupon', () => {
     const result = await applyCoupon(1, { coupon: 'SUMMER' });
     expect(result.before).toEqual({ coupon: 'SPRING' });
     expect(result.after).toEqual({ coupon: 'SUMMER' });
+  });
+
+  it('retrieves with discounts expanded, so the audit row never records a di_ id', async () => {
+    await applyCoupon(1, { coupon: 'SUMMER' });
+
+    expect(h.subscriptionsRetrieve).toHaveBeenCalledWith('sub_1', { expand: ['discounts'] });
+  });
+
+  it("keeps the billing group's volume discount when an operator applies a coupon", async () => {
+    h.subscriptionsRetrieve.mockResolvedValueOnce({
+      id: 'sub_1',
+      status: 'active',
+      trial_end: null,
+      cancel_at_period_end: false,
+      pause_collection: null,
+      discounts: [
+        { id: 'di_vol', source: { coupon: 'volume_15pct', type: 'coupon' } },
+        { id: 'di_old', source: { coupon: 'SPRING', type: 'coupon' } },
+      ],
+      items: { data: [{ id: 'si_1', price: { id: 'price_ess_m', recurring: { interval: 'month' } } }] },
+    });
+
+    await applyCoupon(1, { coupon: 'SUMMER' });
+
+    expect(h.subscriptionsUpdate).toHaveBeenCalledWith(
+      'sub_1',
+      { discounts: [{ discount: 'di_vol' }, { coupon: 'SUMMER' }] },
+      { idempotencyKey: `admin:apply-coupon:sub_1:SUMMER:${idempotencyWindow()}` },
+    );
   });
 });
 

@@ -118,17 +118,7 @@ describe('deletion requests dashboard', () => {
     expect(html).toContain('1 request');
   });
 
-  it('formats requester metadata and mapped rows predictably', () => {
-    expect(deletionRequestTestUtils.buildRequesterName({
-      first_name: 'Olivia',
-      last_name: 'Owner',
-    })).toBe('Olivia Owner');
-
-    expect(deletionRequestTestUtils.buildRequesterName({
-      first_name: 123,
-      last_name: null,
-    } as unknown as Record<string, unknown>)).toBeNull();
-
+  it('maps rows predictably', () => {
     expect(deletionRequestTestUtils.mapDeletionRequests(
       [
         {

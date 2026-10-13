@@ -8,7 +8,7 @@ import {
   users,
 } from '@propertypro/db';
 import { and, eq, inArray } from '@propertypro/db/filters';
-import { AnnouncementEmail, sendEmail } from '@propertypro/email';
+import { AnnouncementEmail, sendBulkEmail, type SendEmailOptions } from '@propertypro/email';
 import { hasBoardDesignation, isBoardPresident } from '@propertypro/shared';
 import {
   isDigestFrequency,
@@ -272,52 +272,61 @@ async function deliverImmediateAnnouncementEmails(
   const branding = await loadEmailBranding(params.communityId);
   const portalUrl = `${getBaseUrl()}/dashboard?communityId=${params.communityId}`;
 
-  for (const batch of chunk(recipients, 100)) {
-    await Promise.all(
-      batch.map(async (recipient) => {
-        try {
-          // Per-recipient and no-login: the previous `/settings?communityId=`
-          // URL was behind an auth wall, which defeats Gmail's one-click
-          // List-Unsubscribe POST and CAN-SPAM's no-account expectation.
-          const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
-            baseUrl: getBaseUrl(),
-            communityId: params.communityId,
-            userId: recipient.userId,
-            topic: 'announcements',
-          });
+  const payloads: SendEmailOptions[] = recipients.map((recipient) => {
+    // Per-recipient and no-login: the previous `/settings?communityId=`
+    // URL was behind an auth wall, which defeats Gmail's one-click
+    // List-Unsubscribe POST and CAN-SPAM's no-account expectation.
+    const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+      baseUrl: getBaseUrl(),
+      communityId: params.communityId,
+      userId: recipient.userId,
+      topic: 'announcements',
+    });
 
-          const result = await sendEmail({
-            to: recipient.email,
-            subject: `${params.isPinned ? '[Important] ' : ''}${params.title}`,
-            category: 'non-transactional',
-            unsubscribeUrl,
-            react: createElement(AnnouncementEmail, {
-              branding: {
-                ...branding,
-                unsubscribeUrl,
-                unsubscribeLabel: 'Unsubscribe from announcements',
-              },
-              recipientName: recipient.fullName,
-              announcementTitle: params.title,
-              announcementBody: params.body,
-              authorName: params.authorName,
-              authorRole: authorTitle,
-              portalUrl,
-              isPinned: params.isPinned,
-            }),
-          });
-
-          await markStatus(params.communityId, params.announcementId, recipient.userId, {
-            status: 'sent',
-            providerMessageId: result.id,
-          });
-        } catch (error) {
-          await markStatus(params.communityId, params.announcementId, recipient.userId, {
-            status: 'failed',
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
-        }
+    return {
+      to: recipient.email,
+      subject: `${params.isPinned ? '[Important] ' : ''}${params.title}`,
+      category: 'non-transactional',
+      unsubscribeUrl,
+      react: createElement(AnnouncementEmail, {
+        branding: {
+          ...branding,
+          unsubscribeUrl,
+          unsubscribeLabel: 'Unsubscribe from announcements',
+        },
+        recipientName: recipient.fullName,
+        announcementTitle: params.title,
+        announcementBody: params.body,
+        authorName: params.authorName,
+        authorRole: authorTitle,
+        portalUrl,
+        isPinned: params.isPinned,
       }),
+    };
+  });
+
+  // One batch request per 100 recipients. One sendEmail per recipient, all at
+  // once, hit Resend's per-second rate limit and failed all but a couple.
+  let results: Array<{ success: boolean; id?: string; error?: string }>;
+  try {
+    ({ results } = await sendBulkEmail(payloads));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    results = recipients.map(() => ({ success: false, error: message }));
+  }
+
+  for (const batch of chunk(recipients.map((recipient, i) => ({ recipient, result: results[i] })), 100)) {
+    await Promise.all(
+      batch.map(({ recipient, result }) =>
+        markStatus(
+          params.communityId,
+          params.announcementId,
+          recipient.userId,
+          result?.success
+            ? { status: 'sent', providerMessageId: result.id }
+            : { status: 'failed', errorMessage: result?.error ?? 'No result from email provider' },
+        ),
+      ),
     );
   }
 

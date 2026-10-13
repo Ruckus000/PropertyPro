@@ -76,6 +76,26 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
         { status: 500 },
       );
     }
+
+    // The lifecycle cron banned the login at soft delete (876600h). Without
+    // this the user is "recovered" but still cannot sign in.
+    const { error: unbanError } = await db.auth.admin.updateUserById(requestRow.user_id, {
+      ban_duration: 'none',
+      user_metadata: { soft_deleted: null },
+    });
+
+    if (unbanError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'USER_UNBAN_FAILED',
+            message: 'Request marked recovered, but lifting the sign-in ban failed. Retry or unban the user in Supabase Auth.',
+          },
+          request: data,
+        },
+        { status: 500 },
+      );
+    }
   } else if (requestRow.request_type === 'community' && requestRow.community_id) {
     const { error: restoreError } = await (db
       .from('communities'))
