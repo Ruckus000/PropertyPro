@@ -27,18 +27,14 @@ import { listTickets } from '@/lib/server/tickets';
 
 export const dynamic = 'force-dynamic';
 
-interface TicketsPageProps {
-  searchParams: Promise<{ status?: string }>;
-}
-
-export default async function TicketsPage({ searchParams }: TicketsPageProps) {
+export default async function TicketsPage() {
   await requireAdminPageSession();
 
   // Loaded UNFILTERED: `TicketQueue` filters by status client-side over this one
   // read, and `counts` (which ignores the status filter by design) is what the
   // tabs render. Passing the status through would make every unselected tab
-  // read zero.
-  const [{ status }, result] = await Promise.all([searchParams, listTickets()]);
+  // read zero. `?status=` is read by `TicketQueue` from the URL itself.
+  const result = await listTickets();
 
   return (
     <PageBody>
@@ -51,7 +47,7 @@ export default async function TicketsPage({ searchParams }: TicketsPageProps) {
           </Button>
         }
       />
-      <TicketQueue result={result} initialStatus={status ?? 'all'} />
+      <TicketQueue result={result} />
     </PageBody>
   );
 }

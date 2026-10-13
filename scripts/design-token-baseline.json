@@ -57,14 +57,6 @@
     "raw-palette": 27,
     "arbitrary-font": 3
   },
-  "apps/web/src/components/mobile/MobileFaqManageContent.tsx": {
-    "raw-palette": 32,
-    "arbitrary-font": 11
-  },
-  "apps/web/src/components/mobile/MobileHelpContent.tsx": {
-    "raw-palette": 32,
-    "arbitrary-font": 11
-  },
   "apps/web/src/components/mobile/MobileHomeContent.tsx": {
     "raw-palette": 6,
     "arbitrary-font": 1

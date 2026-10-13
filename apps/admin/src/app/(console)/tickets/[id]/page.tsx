@@ -21,10 +21,9 @@ export const dynamic = 'force-dynamic';
 
 interface TicketPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ status?: string }>;
 }
 
-export default async function TicketPage({ params, searchParams }: TicketPageProps) {
+export default async function TicketPage({ params }: TicketPageProps) {
   await requireAdminPageSession();
 
   const { id: raw } = await params;
@@ -33,15 +32,14 @@ export default async function TicketPage({ params, searchParams }: TicketPagePro
   // `.eq('id', …)` is a PostgREST error rather than a miss.
   if (!Number.isInteger(id) || id <= 0) notFound();
 
-  const detail = await getTicket(id);
+  // Together, not ticket-then-queue: neither needs the other, and each is
+  // several reads in a row. A missing ticket costs one wasted queue read.
+  const [detail, result] = await Promise.all([getTicket(id), listTickets()]);
   if (!detail) notFound();
-
-  const [{ status }, result] = await Promise.all([searchParams, listTickets()]);
 
   return (
     <TicketQueue
       result={result}
-      initialStatus={status ?? 'all'}
       activeTicketId={id}
       detail={<TicketDetail ticket={detail.ticket} events={detail.events} />}
     />

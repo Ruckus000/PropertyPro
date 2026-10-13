@@ -19,7 +19,9 @@ export default function RootError({ error, reset }: RootErrorProps) {
     // Loaded on demand, never statically: this module ships in every route's
     // first load, and a static import put the whole Sentry SDK there, defeating
     // the deferred load in instrumentation-client.ts.
-    void import('@sentry/nextjs').then((Sentry) => Sentry.captureException(error));
+    void import('@sentry/nextjs')
+      .then((Sentry) => Sentry.captureException(error))
+      .catch((loadError) => console.error('[Sentry] Failed to load the SDK to report an error', loadError));
   }, [error]);
 
   useEffect(() => {

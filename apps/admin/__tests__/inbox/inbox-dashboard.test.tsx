@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { routerReplace, url } = vi.hoisted(() => ({
+  routerReplace: vi.fn(),
+  url: { search: '' },
+}));
 
 vi.mock('next/link', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,9 +16,16 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace }),
   usePathname: () => '/inbox',
+  useSearchParams: () => new URLSearchParams(url.search),
 }));
+
+/** Render as if the address bar carried `search`; the dashboard reads it. */
+function renderAt(search: string) {
+  url.search = search;
+  return render(<InboxDashboard overview={OVERVIEW} />);
+}
 
 import { InboxDashboard } from '@/components/inbox/InboxDashboard';
 import type { InboxOverview } from '@/lib/server/inbox';
@@ -49,14 +61,14 @@ const OVERVIEW = {
  */
 describe('InboxDashboard URL filter validation', () => {
   it('falls back to All for a mailbox that is not a real mailbox', () => {
-    render(<InboxDashboard overview={OVERVIEW} initialMailbox="foo" initialStatus="all" />);
+    renderAt('mailbox=foo&status=all');
 
     // The thread is still listed, i.e. the bogus filter was not applied.
     expect(screen.getByRole('link', { name: /please delete my account/i })).toBeTruthy();
   });
 
   it('falls back to the DEFAULT status for one that is not a real status', () => {
-    render(<InboxDashboard overview={OVERVIEW} initialMailbox="all" initialStatus="banana" />);
+    renderAt('status=banana');
 
     // The fallback is `INBOX_DEFAULT_STATUS` ('open'), not 'all' — the same
     // value the server page uses when `?status=` is absent, because a garbage
@@ -77,17 +89,65 @@ describe('InboxDashboard URL filter validation', () => {
     // `?status=all` explicitly precisely because omitting it would now mean
     // 'open'. If this regresses, clicking All appears to work and then silently
     // un-picks itself on the next load.
-    render(<InboxDashboard overview={OVERVIEW} initialMailbox="all" initialStatus="all" />);
+    renderAt('status=all');
 
     expect(screen.getByRole('link', { name: /please delete my account/i })).toBeTruthy();
   });
 
   it('still honours a real filter — an unmatched one hides the thread (control)', () => {
-    render(<InboxDashboard overview={OVERVIEW} initialMailbox="support" initialStatus="all" />);
+    renderAt('mailbox=support&status=all');
 
     // `support` IS a known mailbox, and this thread is in `privacy`, so an empty
     // list here is correct. Without this case the two above would pass even if
     // `knownOr` returned 'all' for everything.
     expect(screen.queryByRole('link', { name: /please delete my account/i })).toBeNull();
+  });
+});
+
+/**
+ * Switching a filter tab must not re-render the page on the server. Both inbox
+ * pages are force-dynamic and read `?mailbox=` / `?status=` only to seed the
+ * initial state; the filtering itself happens here, over the one unfiltered
+ * load. `router.replace` re-ran the whole page (middleware read, overview, and
+ * on `/inbox/[id]` the thread) on every click, to produce what was already on
+ * screen. `history.replaceState` keeps the URL in step without that round trip.
+ */
+describe('InboxDashboard filter tabs', () => {
+  afterEach(() => {
+    routerReplace.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('writes the filter into the URL without a server round trip', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    renderAt('status=all');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Closed/ }));
+
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/inbox?status=closed');
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Back restores `/inbox` from the router cache: the payload rendered BEFORE the
+ * tab click, which `history.replaceState` never refreshed. When the filter was
+ * seeded from a value the server page read, that payload carried the old one,
+ * so the address bar said `?status=closed` while Open was highlighted (seen in
+ * the browser). Seeding from the URL makes the restored page agree with it.
+ */
+describe('InboxDashboard filter seed', () => {
+  it('opens on the filter in the current URL', () => {
+    renderAt('status=closed');
+    expect(
+      screen.getByRole('button', { name: /^Closed/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('opens on the default when the URL names none (control)', () => {
+    renderAt('');
+    expect(
+      screen.getByRole('button', { name: /^Open/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
   });
 });

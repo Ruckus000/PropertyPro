@@ -11,7 +11,6 @@
  * Unlike global-error.tsx this renders inside the root layout, so Tailwind is
  * available.
  */
-import * as Sentry from '@sentry/nextjs';
 import { useEffect } from 'react';
 
 interface ErrorProps {
@@ -21,7 +20,12 @@ interface ErrorProps {
 
 export default function Error({ error, reset }: ErrorProps) {
   useEffect(() => {
-    Sentry.captureException(error);
+    // Loaded on demand, never statically: this boundary ships in every route's
+    // first load, and a static import put the whole Sentry SDK there, defeating
+    // the deferred load in instrumentation-client.ts.
+    void import('@sentry/nextjs')
+      .then((Sentry) => Sentry.captureException(error))
+      .catch((loadError) => console.error('[Sentry] Failed to load the SDK to report an error', loadError));
   }, [error]);
 
   return (
