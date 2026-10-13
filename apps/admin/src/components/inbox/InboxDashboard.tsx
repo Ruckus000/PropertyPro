@@ -1,7 +1,12 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
-import { usePathname, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  useSelectedLayoutSegment,
+} from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -62,12 +67,29 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * It lives in the layout so a row click renders only the thread: the list, its
  * load and its filters stay put, and `(split)/loading.tsx` fills only the
  * detail pane. The open thread is the layout's selected segment.
+ *
+ * The price of a layout is that Next never re-renders it on a navigation
+ * between its own children, so the list would otherwise stay as it was when the
+ * inbox was entered. It is re-read when a thread CLOSES (see the effect below),
+ * on `router.refresh()` — which every inbox mutation calls — and on any entry
+ * from outside the inbox. Moving from one thread to the next stays free.
  */
 export function InboxDashboard({ overview, header, children }: InboxDashboardProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   // `null` on `/inbox` itself; the `[threadId]` value on a thread.
   const segment = useSelectedLayoutSegment();
+
+  // Back to the list ("Back to inbox", the rail, Back): re-read it once. Before
+  // the list moved into a layout, that navigation re-rendered the list page and
+  // so re-read it; without this, mail that arrived while a thread was open
+  // never appeared, and a thread deleted elsewhere stayed listed.
+  const previousSegment = useRef(segment);
+  useEffect(() => {
+    if (previousSegment.current !== null && segment === null) router.refresh();
+    previousSegment.current = segment;
+  }, [segment, router]);
   const activeThreadId = segment === null ? undefined : Number(segment);
   const detail = segment === null ? null : children;
   const mailbox = knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES);
@@ -113,7 +135,9 @@ export function InboxDashboard({ overview, header, children }: InboxDashboardPro
 
   return (
     <div className="space-y-4">
-      {detail ? null : header}
+      {/* pb-2: with this column's space-y-4, the 24px gap PageBody gave the
+          header when it sat outside. */}
+      {detail ? null : <div className="pb-2">{header}</div>}
       {/* Hidden on mobile once a thread is open, so a small screen shows the
           thread and its Back link only — the switcher and tabs would otherwise
           push the open thread below the fold on a phone. */}

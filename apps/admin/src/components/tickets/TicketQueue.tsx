@@ -1,7 +1,12 @@
 'use client';
 
-import { useMemo, type ReactNode } from 'react';
-import { usePathname, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  useSelectedLayoutSegment,
+} from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -47,7 +52,8 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * payload rendered before the click, and this component lives in
  * `(split)/layout.tsx`, which stays mounted across ticket clicks, so state
  * seeded once would drift from the URL. The open ticket is the layout's
- * selected segment; a row click renders only the ticket.
+ * selected segment; a row click renders only the ticket, and the queue is
+ * re-read when a ticket closes, as `InboxDashboard` explains.
  *
  * ## Why there is an "All" tab the plan did not ask for
  *
@@ -61,9 +67,17 @@ function knownOr(value: string, allowed: readonly string[]): string {
  */
 export function TicketQueue({ result, header, children }: TicketQueueProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   // `null` on `/tickets` itself; the `[id]` value on a ticket.
   const segment = useSelectedLayoutSegment();
+
+  // Back to the queue: re-read it once — see `InboxDashboard`.
+  const previousSegment = useRef(segment);
+  useEffect(() => {
+    if (previousSegment.current !== null && segment === null) router.refresh();
+    previousSegment.current = segment;
+  }, [segment, router]);
   const activeTicketId = segment === null ? undefined : Number(segment);
   const detail = segment === null ? null : children;
   const status = knownOr(searchParams.get('status') ?? 'all', SUPPORT_TICKET_STATUSES);
@@ -93,7 +107,8 @@ export function TicketQueue({ result, header, children }: TicketQueueProps) {
 
   return (
     <div className="space-y-4">
-      {detail ? null : header}
+      {/* pb-2: the 24px header gap PageBody gave it outside — see InboxDashboard. */}
+      {detail ? null : <div className="pb-2">{header}</div>}
       {/* Hidden on mobile once a ticket is open: on a phone the tabs would push
           the ticket below the fold. Same rule as `InboxDashboard`. */}
       <div className={detail ? 'hidden md:block' : ''}>

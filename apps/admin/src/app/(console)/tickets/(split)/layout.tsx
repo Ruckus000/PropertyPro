@@ -8,10 +8,12 @@
  * `listTickets()` (four reads, then names, subjects and possibly the paged auth
  * walk) and the whole master-detail was swapped for a full-page skeleton.
  *
- * The queue is re-read by `router.refresh()` — which every ticket mutation
- * calls — and on any navigation into the queue (`TicketForm` lands on
- * `/tickets/<id>` from `/tickets/new`, outside this group, so the new ticket is
- * listed), but not on a row click.
+ * Next never re-renders a layout on a navigation between its own children, so
+ * the queue is re-read only: when a ticket closes (`TicketQueue` refreshes once
+ * on the way back to the queue), on `router.refresh()` — which every ticket
+ * mutation calls — and on entry from outside the group (`TicketForm` lands on
+ * `/tickets/<id>` from `/tickets/new`, so the new ticket is listed). Ticket to
+ * ticket is free.
  *
  * Inside the `(split)` group for two reasons: `/tickets/new` must not get the
  * queue beside its form, and `tickets/loading.tsx` must sit ABOVE this layout —

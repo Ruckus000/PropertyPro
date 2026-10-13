@@ -7,8 +7,10 @@
  * thread page re-ran `getInboxOverview()` and the whole master-detail was
  * swapped for a full-page skeleton until it landed.
  *
- * The list is re-read by `router.refresh()` — which every inbox mutation calls —
- * and on any navigation into the inbox, but not on a row click.
+ * Next never re-renders a layout on a navigation between its own children, so
+ * the list is re-read only: when a thread closes (`InboxDashboard` refreshes once
+ * on the way back to the list), on `router.refresh()` — which every inbox
+ * mutation calls — and on entry from outside the inbox. Thread to thread is free.
  *
  * Inside the `(split)` group so `inbox/loading.tsx` sits ABOVE this layout:
  * Next prefetches a dynamic route down to its first loading boundary, and the

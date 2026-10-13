@@ -71,7 +71,7 @@ const STATIC_PREFIXES = ['/_next/static/', '/fonts/', '/icons/'];
  * Documents that must never be written to disk, however briefly.
  *
  * `/inbox/<threadId>` server-renders the SANITIZED HTML BODY of every message on
- * a support thread (`app/(console)/inbox/[threadId]/page.tsx`) — the full text
+ * a support thread (`app/(console)/inbox/(split)/[threadId]/page.tsx`) — the full text
  * of somebody's correspondence with us, and the one thing in this console that
  * no freshness window makes acceptable to leave on a shared device. The inbox
  * LIST is not matched: it carries subjects and participants, which the tray on

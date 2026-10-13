@@ -11,8 +11,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { routerReplace, url } = vi.hoisted(() => ({
+const { routerReplace, routerRefresh, url } = vi.hoisted(() => ({
   routerReplace: vi.fn(),
+  routerRefresh: vi.fn(),
   url: { search: '', segment: null as string | null },
 }));
 
@@ -25,7 +26,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: routerReplace, push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn(), refresh: routerRefresh }),
   usePathname: () => '/tickets/42',
   useSearchParams: () => new URLSearchParams(url.search),
   useSelectedLayoutSegment: () => url.segment,
@@ -149,5 +150,33 @@ describe('TicketQueue in the split layout', () => {
     expect(
       screen.getByRole('link', { name: /budget pdf/i }).getAttribute('aria-current'),
     ).toBeNull();
+  });
+});
+
+/** See inbox-dashboard.test.tsx: the queue is a layout, re-read when a ticket closes. */
+describe('TicketQueue freshness', () => {
+  function mountAt(segment: string | null) {
+    url.search = '';
+    url.segment = segment;
+    const view = render(<TicketQueue result={RESULT}>{<article>Ticket body</article>}</TicketQueue>);
+    return (next: string | null) => {
+      url.segment = next;
+      view.rerender(<TicketQueue result={RESULT}>{<article>Ticket body</article>}</TicketQueue>);
+    };
+  }
+
+  afterEach(() => routerRefresh.mockReset());
+
+  it('re-reads the queue once when a ticket closes', () => {
+    const goTo = mountAt('118');
+    goTo(null);
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-read it moving ticket to ticket, or on first mount (control)', () => {
+    const goTo = mountAt(null);
+    goTo('118');
+    goTo('9');
+    expect(routerRefresh).not.toHaveBeenCalled();
   });
 });

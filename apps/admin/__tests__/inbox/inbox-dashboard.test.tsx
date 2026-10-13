@@ -2,8 +2,9 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { routerReplace, url } = vi.hoisted(() => ({
+const { routerReplace, routerRefresh, url } = vi.hoisted(() => ({
   routerReplace: vi.fn(),
+  routerRefresh: vi.fn(),
   url: { search: '', segment: null as string | null },
 }));
 
@@ -16,7 +17,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: routerReplace }),
+  useRouter: () => ({ replace: routerReplace, refresh: routerRefresh }),
   usePathname: () => '/inbox',
   useSearchParams: () => new URLSearchParams(url.search),
   useSelectedLayoutSegment: () => url.segment,
@@ -194,5 +195,47 @@ describe('InboxDashboard in the split layout', () => {
     expect(
       screen.getByRole('link', { name: /please delete my account/i }).getAttribute('aria-current'),
     ).toBeNull();
+  });
+});
+
+/**
+ * The list is a layout, which Next never re-renders on a navigation between its
+ * own children. Going back from a thread to the list used to re-render the list
+ * page — and so re-read the list — and must still re-read it: otherwise new mail
+ * never appears and a thread deleted elsewhere stays listed. Moving thread to
+ * thread must NOT, or the layout bought nothing.
+ */
+describe('InboxDashboard list freshness', () => {
+  function mountAt(segment: string | null) {
+    url.search = 'status=all';
+    url.segment = segment;
+    const view = render(
+      <InboxDashboard overview={OVERVIEW}>
+        <article>Thread body</article>
+      </InboxDashboard>,
+    );
+    return (next: string | null) => {
+      url.segment = next;
+      view.rerender(
+        <InboxDashboard overview={OVERVIEW}>
+          <article>Thread body</article>
+        </InboxDashboard>,
+      );
+    };
+  }
+
+  afterEach(() => routerRefresh.mockReset());
+
+  it('re-reads the list once when a thread closes', () => {
+    const goTo = mountAt('7');
+    goTo(null);
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-read it moving thread to thread, or on first mount (control)', () => {
+    const goTo = mountAt(null);
+    goTo('7');
+    goTo('5');
+    expect(routerRefresh).not.toHaveBeenCalled();
   });
 });
