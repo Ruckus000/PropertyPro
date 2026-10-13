@@ -11,8 +11,8 @@ interface InboxSplitProps {
  * Master-detail layout for the inbox: a fixed-width thread list on the left,
  * the open thread (or a "select a thread" placeholder) on the right.
  *
- * No `mobile` boolean prop (the brief's original shape) — every page that
- * renders this is `dynamic = 'force-dynamic'`, so there is no server-side
+ * No `mobile` boolean prop (the brief's original shape) — the `(split)` layout
+ * that renders this is `dynamic = 'force-dynamic'`, so there is no server-side
  * source for a viewport read; that would mean UA sniffing or a client hook
  * with a hydration mismatch. The grid below already expresses the rule in
  * CSS: below `md`, exactly one column shows — `detail` when present,
