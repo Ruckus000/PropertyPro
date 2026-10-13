@@ -154,7 +154,7 @@
     "unscoped": 1
   },
   "apps/web/src/lib/services/faq-service.ts": {
-    "fullTableRead": 4
+    "fullTableRead": 3
   },
   "apps/web/src/lib/services/import-residents-service.ts": {
     "fullTableRead": 2
