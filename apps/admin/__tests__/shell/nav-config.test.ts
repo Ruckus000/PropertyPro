@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -45,6 +45,12 @@ describe('nav-config', () => {
    *
    * `join`, not `resolve`: every href starts with '/', and `resolve` would
    * treat that as an absolute path and discard the console root.
+   *
+   * One extension, and only one: the page may sit in a route group DIRECTLY
+   * under its href's folder — `(console)/inbox/(split)/page.tsx`. That keeps
+   * the property this pins (the search is still rooted at `(console)`, so a
+   * page outside the shell still fails); it just lets a section put a layout
+   * around some of its children and not others, as inbox and tickets do.
    */
   it('every nav href resolves to a page inside (console)', () => {
     expect(existsSync(CONSOLE_ROOT), `missing search root: ${CONSOLE_ROOT}`).toBe(true);
@@ -62,9 +68,17 @@ describe('nav-config', () => {
     // reddens that test, and deleting a DIFFERENT entry reddens this one.
     expect(NAV_PAGES.length).toBeGreaterThanOrEqual(12);
 
-    const missing = NAV_PAGES.filter(
-      (page) => !existsSync(join(CONSOLE_ROOT, page.href, 'page.tsx')),
-    ).map((page) => page.href);
+    const resolvesInConsole = (href: string): boolean => {
+      const dir = join(CONSOLE_ROOT, href);
+      if (existsSync(join(dir, 'page.tsx'))) return true;
+      if (!existsSync(dir)) return false;
+      return readdirSync(dir).some(
+        (entry) => /^\(.+\)$/.test(entry) && existsSync(join(dir, entry, 'page.tsx')),
+      );
+    };
+    const missing = NAV_PAGES.filter((page) => !resolvesInConsole(page.href)).map(
+      (page) => page.href,
+    );
 
     expect(missing).toEqual([]);
   });

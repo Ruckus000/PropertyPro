@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useMemo, type ReactNode } from 'react';
+import { usePathname, useSearchParams, useSelectedLayoutSegment } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -19,10 +19,10 @@ import { ThreadList } from './ThreadList';
 
 interface InboxDashboardProps {
   overview: InboxOverview;
-  /** The thread rendered by `detail`, so its row can be highlighted in the list. */
-  activeThreadId?: number;
-  /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
-  detail?: ReactNode;
+  /** The page header, shown only while no thread is open (`ThreadView` owns that `<h1>`). */
+  header?: ReactNode;
+  /** The layout's `children`: the open thread on `/inbox/[threadId]`, nothing on `/inbox`. */
+  children?: ReactNode;
 }
 
 /**
@@ -52,31 +52,34 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * produce what was already on screen. Next syncs `replaceState` into its router
  * state, so Back and a later navigation still see the current URL.
  *
- * Which is why the filters are seeded from that URL (`useSearchParams`), not
- * from a value the server page read. Back restores the page from the router
- * cache — the payload rendered BEFORE any tab click — so a server-passed seed
- * came back stale: the address bar said `?status=closed` while Open was the
- * highlighted tab. `ClientWorkspace` reads `?tab=` the same way.
+ * Which is why the filters are READ from that URL (`useSearchParams`) on every
+ * render, with no state of their own. Two things depend on it. Back restores a
+ * page from the router cache, rendered BEFORE any tab click, so a server-read
+ * seed came back stale. And this component lives in `(split)/layout.tsx`, which
+ * stays mounted from `/inbox` to `/inbox/7` and back: state seeded once would
+ * drift from the URL (ThreadView's "Back to inbox" link is a bare `/inbox`).
+ *
+ * It lives in the layout so a row click renders only the thread: the list, its
+ * load and its filters stay put, and `(split)/loading.tsx` fills only the
+ * detail pane. The open thread is the layout's selected segment.
  */
-export function InboxDashboard({ overview, activeThreadId, detail }: InboxDashboardProps) {
+export function InboxDashboard({ overview, header, children }: InboxDashboardProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [mailbox, setMailbox] = useState(() =>
-    knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES),
-  );
-  const [status, setStatus] = useState(() =>
-    knownOr(
-      searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
-      [...SUPPORT_THREAD_STATUSES, 'all'],
-      INBOX_DEFAULT_STATUS,
-    ),
+  // `null` on `/inbox` itself; the `[threadId]` value on a thread.
+  const segment = useSelectedLayoutSegment();
+  const activeThreadId = segment === null ? undefined : Number(segment);
+  const detail = segment === null ? null : children;
+  const mailbox = knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES);
+  const status = knownOr(
+    searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
+    [...SUPPORT_THREAD_STATUSES, 'all'],
+    INBOX_DEFAULT_STATUS,
   );
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
     const nextMailbox = next.mailbox ?? mailbox;
     const nextStatus = next.status ?? status;
-    setMailbox(nextMailbox);
-    setStatus(nextStatus);
 
     // Omit a param only when it equals what the SERVER will default to on the
     // next load. 'all' is no longer that value for status, so it must be
@@ -110,6 +113,7 @@ export function InboxDashboard({ overview, activeThreadId, detail }: InboxDashbo
 
   return (
     <div className="space-y-4">
+      {detail ? null : header}
       {/* Hidden on mobile once a thread is open, so a small screen shows the
           thread and its Back link only — the switcher and tabs would otherwise
           push the open thread below the fold on a phone. */}

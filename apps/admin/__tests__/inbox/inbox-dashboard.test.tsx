@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { routerReplace, url } = vi.hoisted(() => ({
   routerReplace: vi.fn(),
-  url: { search: '' },
+  url: { search: '', segment: null as string | null },
 }));
 
 vi.mock('next/link', () => ({
@@ -19,12 +19,30 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: routerReplace }),
   usePathname: () => '/inbox',
   useSearchParams: () => new URLSearchParams(url.search),
+  useSelectedLayoutSegment: () => url.segment,
 }));
 
 /** Render as if the address bar carried `search`; the dashboard reads it. */
 function renderAt(search: string) {
   url.search = search;
+  url.segment = null;
   return render(<InboxDashboard overview={OVERVIEW} />);
+}
+
+/**
+ * Render as the `(split)` layout does: `segment` is the open thread's id (or
+ * null on `/inbox`). `children` is ALWAYS an element, as in Next — on `/inbox`
+ * it is the router subtree for a page that renders nothing — so the dashboard
+ * must decide from the segment, not from whether children exist.
+ */
+function renderInLayout(segment: string | null, search = 'status=all') {
+  url.search = search;
+  url.segment = segment;
+  return render(
+    <InboxDashboard overview={OVERVIEW} header={<h1>Inbox</h1>}>
+      <article>Thread body</article>
+    </InboxDashboard>,
+  );
 }
 
 import { InboxDashboard } from '@/components/inbox/InboxDashboard';
@@ -149,5 +167,32 @@ describe('InboxDashboard filter seed', () => {
     expect(
       screen.getByRole('button', { name: /^Open/ }).getAttribute('aria-pressed'),
     ).toBe('true');
+  });
+});
+
+/**
+ * The dashboard lives in `inbox/(split)/layout.tsx` so a row click renders only
+ * the thread. It learns which thread is open from the layout's selected
+ * segment, and shows the layout's `children` only when one is.
+ */
+describe('InboxDashboard in the split layout', () => {
+  it('highlights the open thread and shows it, without the page header', () => {
+    renderInLayout('7');
+    expect(
+      screen.getByRole('link', { name: /please delete my account/i }).getAttribute('aria-current'),
+    ).toBe('page');
+    expect(screen.getByText('Thread body')).toBeTruthy();
+    // ThreadView owns the <h1> on a thread; a second one would be wrong.
+    expect(screen.queryByRole('heading', { name: 'Inbox' })).toBeNull();
+  });
+
+  it('shows the header and the placeholder when no thread is open (control)', () => {
+    renderInLayout(null);
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeTruthy();
+    expect(screen.getByText('Select a thread')).toBeTruthy();
+    expect(screen.queryByText('Thread body')).toBeNull();
+    expect(
+      screen.getByRole('link', { name: /please delete my account/i }).getAttribute('aria-current'),
+    ).toBeNull();
   });
 });
