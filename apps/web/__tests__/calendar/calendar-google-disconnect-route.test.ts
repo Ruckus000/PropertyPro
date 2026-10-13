@@ -61,6 +61,8 @@ vi.mock('@/lib/services/calendar-sync-service', () => ({
   disconnectGoogleCalendar: disconnectGoogleCalendarMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { DELETE } from '../../src/app/api/v1/calendar/google/disconnect/route';
 
 const ADMIN_MEMBERSHIP = {

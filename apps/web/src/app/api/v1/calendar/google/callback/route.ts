@@ -34,6 +34,7 @@ import {
   requireCalendarSyncEnabledForMembership,
   requireCalendarSyncWritePermission,
 } from '@/lib/calendar/common';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   completeGoogleCalendarConnect,
   validateOAuthState,
@@ -47,6 +48,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCalendarSyncEnabledForMembership(membership);
+    await requirePlanFeature(membership.communityId, 'hasCalendarSync');
     requireCalendarSyncWritePermission(membership);
 
     const { searchParams } = new URL(req.url);

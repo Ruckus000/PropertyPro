@@ -40,6 +40,7 @@ import {
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   createForumReplyForCommunity,
   deleteForumReplyForCommunity,
@@ -57,6 +58,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasCommunityBoard');
     requirePollWritePermission(membership);
 
     return createForumReplyForCommunity(
@@ -77,6 +79,7 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasCommunityBoard');
     requirePollWritePermission(membership);
 
     const canModerateReplies =

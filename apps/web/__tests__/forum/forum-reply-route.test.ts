@@ -71,6 +71,8 @@ vi.mock('@/lib/services/polls-service', () => ({
   deleteForumReplyForCommunity: deleteForumReplyForCommunityMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { POST, DELETE } from '../../src/app/api/v1/forum/threads/[id]/reply/route';
 
 const ADMIN_MEMBERSHIP = {

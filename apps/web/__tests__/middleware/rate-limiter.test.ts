@@ -182,13 +182,15 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/access-requests/verify', 'POST')).toBe('auth');
   });
 
-  it('leaves the other access-request routes on the write tier', () => {
-    // The reason only `/verify` is listed: classifyRoute matches by PREFIX, so
-    // a bare '/api/v1/access-requests' entry would drop the authenticated admin
-    // approve/deny routes to 10/min, and approving a new community's residents
-    // is a legitimate burst. If this test ever goes red, that regression is
-    // what happened.
-    expect(classifyRoute('/api/v1/access-requests', 'POST')).toBe('write');
+  it('puts access-request SUBMIT on the Redis-backed auth tier but leaves approve/deny on write', () => {
+    // Security audit 2026-10-13 (#3): the OTP-sending SUBMIT (POST to the bare
+    // path) must be Redis-backed (auth tier), or it can be fanned out across
+    // Edge isolates to bomb arbitrary inboxes with branded mail. It is matched
+    // by EXACT path + POST precisely so it does NOT also catch the authenticated
+    // admin approve/deny routes (longer paths), which stay on write — approving
+    // a new community's residents is a legitimate burst. The approve/deny
+    // assertions below guard that the exact match does not over-reach.
+    expect(classifyRoute('/api/v1/access-requests', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/access-requests/10/approve', 'POST')).toBe('write');
     expect(classifyRoute('/api/v1/access-requests/10/deny', 'POST')).toBe('write');
   });

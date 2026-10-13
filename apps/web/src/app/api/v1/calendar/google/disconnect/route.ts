@@ -37,6 +37,7 @@ import {
   requireCalendarSyncWritePermission,
 } from '@/lib/calendar/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { disconnectGoogleCalendar } from '@/lib/services/calendar-sync-service';
 import { calendarGoogleDisconnectContract } from './contract';
 
@@ -48,6 +49,7 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCalendarSyncEnabledForMembership(membership);
+    await requirePlanFeature(membership.communityId, 'hasCalendarSync');
     requireCalendarSyncWritePermission(membership);
 
     return disconnectGoogleCalendar(

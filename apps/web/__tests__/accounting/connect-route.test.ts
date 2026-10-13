@@ -59,6 +59,8 @@ vi.mock('@/lib/services/accounting-connectors-service', () => ({
   initiateAccountingConnect: initiateAccountingConnectMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { POST } from '../../src/app/api/v1/accounting/connect/route';
 
 const ADMIN_MEMBERSHIP = {

@@ -57,6 +57,8 @@ vi.mock('@/lib/services/accounting-connectors-service', () => ({
   validateAccountingOAuthState: validateAccountingOAuthStateMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { GET } from '../../src/app/api/v1/accounting/callback/route';
 
 const ADMIN_MEMBERSHIP = {
