@@ -124,12 +124,12 @@ describe('InboxDashboard URL filter validation', () => {
 });
 
 /**
- * Switching a filter tab must not re-render the page on the server. Both inbox
- * pages are force-dynamic and read `?mailbox=` / `?status=` only to seed the
- * initial state; the filtering itself happens here, over the one unfiltered
- * load. `router.replace` re-ran the whole page (middleware read, overview, and
- * on `/inbox/[id]` the thread) on every click, to produce what was already on
- * screen. `history.replaceState` keeps the URL in step without that round trip.
+ * Switching a filter tab must not re-render the page on the server. The inbox
+ * routes are force-dynamic, and the filtering happens in the dashboard over the
+ * one unfiltered load. `router.replace` re-ran the server render (middleware
+ * read, overview, and on `/inbox/[id]` the thread) on every click, to produce
+ * what was already on screen. `history.replaceState` keeps the URL in step
+ * without that round trip; the dashboard reads the filter back from the URL.
  */
 describe('InboxDashboard filter tabs', () => {
   afterEach(() => {
@@ -155,7 +155,7 @@ describe('InboxDashboard filter tabs', () => {
  * so the address bar said `?status=closed` while Open was highlighted (seen in
  * the browser). Seeding from the URL makes the restored page agree with it.
  */
-describe('InboxDashboard filter seed', () => {
+describe('InboxDashboard filter read from the URL', () => {
   it('opens on the filter in the current URL', () => {
     renderAt('status=closed');
     expect(

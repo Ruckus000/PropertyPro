@@ -51,11 +51,11 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * so it survives a reload, a bookmark, and a thread navigation (`ThreadList`
  * links carry the current query forward).
  *
- * Written with `window.history.replaceState`, not `router.replace`: both inbox
- * pages are force-dynamic and read these params only to seed the initial state,
- * so a router navigation re-ran the whole page on the server on every click to
- * produce what was already on screen. Next syncs `replaceState` into its router
- * state, so Back and a later navigation still see the current URL.
+ * Written with `window.history.replaceState`, not `router.replace`: the inbox
+ * routes are force-dynamic and the filtering happens here, so a router
+ * navigation re-ran the server render on every click to produce what was
+ * already on screen. Next syncs `replaceState` into its router state and into
+ * `useSearchParams`, which is what re-renders the tabs and the list.
  *
  * Which is why the filters are READ from that URL (`useSearchParams`) on every
  * render, with no state of their own. Two things depend on it. Back restores a

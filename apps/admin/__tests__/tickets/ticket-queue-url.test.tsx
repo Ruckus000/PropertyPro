@@ -2,9 +2,9 @@
 /**
  * Switching a status tab must not re-render the page on the server.
  *
- * `/tickets` and `/tickets/[id]` are force-dynamic and read `?status=` only to
- * seed `TicketQueue`'s initial state; the queue filters client-side over the
- * one unfiltered `listTickets()` load. `router.replace` re-ran the page on every
+ * `/tickets` and `/tickets/[id]` are force-dynamic, and `TicketQueue` filters
+ * client-side over the one unfiltered `listTickets()` load, reading `?status=`
+ * from the URL. `router.replace` re-ran the page on every
  * click — on `/tickets/42` that was the middleware read, `getTicket`'s four
  * serial reads and `listTickets` again — to produce what was already on screen.
  */
@@ -71,7 +71,7 @@ describe('TicketQueue status tabs', () => {
 });
 
 /** See inbox-dashboard.test.tsx: Back restores a payload rendered before the click. */
-describe('TicketQueue filter seed', () => {
+describe('TicketQueue filter read from the URL', () => {
   it('opens on the status in the current URL', () => {
     url.search = 'status=resolved';
     render(<TicketQueue result={RESULT} />);
