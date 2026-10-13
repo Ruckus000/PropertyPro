@@ -33,10 +33,14 @@ export default async function TicketPage({ params, searchParams }: TicketPagePro
   // `.eq('id', …)` is a PostgREST error rather than a miss.
   if (!Number.isInteger(id) || id <= 0) notFound();
 
-  const detail = await getTicket(id);
+  // Together, not ticket-then-queue: neither needs the other, and each is
+  // several reads in a row. A missing ticket costs one wasted queue read.
+  const [detail, { status }, result] = await Promise.all([
+    getTicket(id),
+    searchParams,
+    listTickets(),
+  ]);
   if (!detail) notFound();
-
-  const [{ status }, result] = await Promise.all([searchParams, listTickets()]);
 
   return (
     <TicketQueue

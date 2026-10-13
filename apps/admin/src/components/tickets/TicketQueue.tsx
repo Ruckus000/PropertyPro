@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -44,8 +44,10 @@ function knownOr(value: string, allowed: readonly string[]): string {
  *
  * Filtering happens client-side over the ONE unfiltered load `listTickets()`
  * already did (up to `PLATFORM_LIST_LIMIT`), so switching tabs costs no fetch
- * and no spinner. The selection is mirrored into the URL with `router.replace`
- * so it survives a reload and a navigation into a ticket.
+ * and no spinner. The selection is mirrored into the URL so it survives a reload
+ * and a navigation into a ticket — with `window.history.replaceState`, for the
+ * reason `InboxDashboard` gives: `router.replace` re-ran the force-dynamic page
+ * (on `/tickets/[id]`, the ticket and the whole queue) on every tab click.
  *
  * ## Why there is an "All" tab the plan did not ask for
  *
@@ -58,14 +60,13 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * opens on exactly what a three-tab default would have shown.
  */
 export function TicketQueue({ result, initialStatus, activeTicketId, detail }: TicketQueueProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const [status, setStatus] = useState(() => knownOr(initialStatus, SUPPORT_TICKET_STATUSES));
 
   function changeStatus(next: string) {
     setStatus(next);
     const query = next === 'all' ? '' : `status=${next}`;
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
   const filtered = useMemo(

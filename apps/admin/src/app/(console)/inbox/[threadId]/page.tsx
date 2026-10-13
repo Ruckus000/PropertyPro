@@ -21,17 +21,17 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
   const threadId = Number(raw);
   if (!Number.isInteger(threadId) || threadId <= 0) notFound();
 
-  const detail = await getThreadDetail(threadId);
-  if (!detail) notFound();
-
   // The split view needs the same unfiltered load as `/inbox` so the list next
   // to this thread reflects the same mailbox/status filters the operator was
-  // browsing under — see `InboxDashboard`'s docblock.
-  const [{ mailbox, status }, overview, parent] = await Promise.all([
+  // browsing under — see `InboxDashboard`'s docblock. All four in one round:
+  // none needs another, and a missing thread costs only wasted reads.
+  const [detail, { mailbox, status }, overview, parent] = await Promise.all([
+    getThreadDetail(threadId),
     searchParams,
     getInboxOverview(),
     getReplyParent(threadId),
   ]);
+  if (!detail) notFound();
 
   // Sanitize on the SERVER and hand the result down, so no client component
   // ever holds a raw html_body. Nothing downstream can accidentally render it.

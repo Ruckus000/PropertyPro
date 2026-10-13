@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
 
 vi.mock('next/link', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11,7 +13,7 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace }),
   usePathname: () => '/inbox',
 }));
 
@@ -89,5 +91,30 @@ describe('InboxDashboard URL filter validation', () => {
     // list here is correct. Without this case the two above would pass even if
     // `knownOr` returned 'all' for everything.
     expect(screen.queryByRole('link', { name: /please delete my account/i })).toBeNull();
+  });
+});
+
+/**
+ * Switching a filter tab must not re-render the page on the server. Both inbox
+ * pages are force-dynamic and read `?mailbox=` / `?status=` only to seed the
+ * initial state; the filtering itself happens here, over the one unfiltered
+ * load. `router.replace` re-ran the whole page (middleware read, overview, and
+ * on `/inbox/[id]` the thread) on every click, to produce what was already on
+ * screen. `history.replaceState` keeps the URL in step without that round trip.
+ */
+describe('InboxDashboard filter tabs', () => {
+  afterEach(() => {
+    routerReplace.mockReset();
+    vi.restoreAllMocks();
+  });
+
+  it('writes the filter into the URL without a server round trip', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    render(<InboxDashboard overview={OVERVIEW} initialMailbox="all" initialStatus="all" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Closed/ }));
+
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/inbox?status=closed');
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });
