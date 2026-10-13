@@ -28,10 +28,9 @@ Tenant isolation is enforced at four layers — not by convention alone:
 Drizzle Kit does not auto-increment migration numbers. The pipeline has known fragility:
 
 - **Before creating a migration:** Use `pnpm db:migration:new <snake_case_name>` for hand-authored migrations (RLS policies, grants, triggers, functions, backfills) — it picks the next index, stamps `when` with wall-clock `Date.now()`, and chains the snapshot. Use `pnpm --filter @propertypro/db db:generate` when a drizzle-tracked TABLE changes. Editing `meta/_journal.json` by hand is what produces collisions from parallel branches, the most common failure mode.
-- **Journal sync:** The migration directory may have more files than `meta/_journal.json` entries (drift exists on main). The CI job `migration-ordering` catches ordering violations but not file/journal count mismatches.
 - **Timestamp ordering — a correctness rule, not bookkeeping:** drizzle records `created_at = journal when` and applies a migration only when `lastApplied.created_at < folderMillis`. A `when` that does not exceed the newest applied value is **silently skipped** — no error, no output. So: stamp `when` with `Date.now()` at authoring time and **never derive it from the previous entry** (PRs #852 and #853 both computed `1784511314576` that way, from the same parent commit). If you rebase onto migrations that merged ahead of you, **re-stamp** — `migration-ordering` rejects a `when` at or below the baseline's newest.
 - **Connection discipline:** Pooled connection string for app queries; direct connection string for migrations only.
-- **After any migration change:** Run `pnpm --filter @propertypro/db db:migrate` against the target DB before integration tests. Never trust "tests pass locally" as evidence of shared DB health.
+- **Applying migrations:** production is applied **manually** (see `.claude/rules/migration-safety.md`). Never run `db:migrate` from a shell that loads `.env.local`: its `DATABASE_URL` is PRODUCTION. For tests, `pnpm db:test-local:setup` migrates a disposable local DB.
 
 ---
 
@@ -40,7 +39,7 @@ Drizzle Kit does not auto-increment migration numbers. The pipeline has known fr
 The compliance engine tracks Florida statutory obligations for condos (§718, 17 items) and HOAs (§720, 10 items). Templates live in `packages/shared/src/compliance/templates.ts`. Apartments are excluded via feature gating.
 
 - **Status is computed at query time**, not stored — prevents stale data. Statuses: `satisfied`, `unsatisfied`, `overdue`, `not_applicable`.
-- **30-day posting rule:** Documents must be posted within 30 days of creation. Deadline math uses `date-fns` with weekend rollover (Saturday/Sunday → Monday).
+- **30-day posting rule:** Documents must be posted within 30 days of creation. The deadline is exact elapsed milliseconds with **no** weekend adjustment (`packages/shared/src/compliance/posting-deadline.ts` explains why); do not reintroduce a weekend roll or `date-fns` `addDays`.
 - **Rolling 12-month windows:** Meeting minutes, video recordings, and bids use rolling retention windows checked at query time.
 - **Florida timezone split:** Florida spans Eastern and Central zones. Timezone is per-community (`communities.timezone` column), not per-application. All dates stored UTC, displayed in community-local timezone.
 - **Append-only audit log:** `compliance_audit_log` is excluded from soft-delete filtering and has DB-native delete protection. Never attempt to delete audit rows. Integration test teardown must be best-effort and tolerate FK-restricted cleanup.
@@ -64,9 +63,9 @@ The compliance engine tracks Florida statutory obligations for condos (§718, 17
 | **no-mock-guard** | `vi.mock()` / `jest.mock()` in integration tests | `scripts/verify-no-mocks-in-integration.ts` |
 | **migration-ordering** | Timestamp ordering, duplicate indices, and an index or `when` already claimed on `origin/main` | `scripts/verify-migration-ordering.ts` — GitHub's PR merge ref catches cross-branch collisions |
 | **perf-check** | Bundle size budget violations | `pnpm perf:check` |
-| **build** | Build failures (depends on all 6 above) | `pnpm build` |
+| **build** | Asserts perf-check's production build succeeded (`needs: [perf-check]`) | `pnpm build` |
 
-Integration tests require a live DB: `scripts/with-env-local.sh pnpm exec vitest run --config apps/web/vitest.integration.config.ts`
+Integration tests need a database: run `pnpm test:integration:local` (a disposable localhost Postgres). **Never** run them through `scripts/with-env-local.sh` — `.env.local`'s `DATABASE_URL` is PRODUCTION, and that is how test communities leaked into prod.
 
 ---
 
@@ -84,11 +83,11 @@ Integration tests require a live DB: `scripts/with-env-local.sh pnpm exec vitest
 
 Synthesized from recurring incidents — these are the root causes, not the symptoms:
 
-1. **Schema drift:** After any migration, run `pnpm --filter @propertypro/db db:migrate` against the target DB before integration tests. Shared DBs can have migration-history drift where newer tables are absent while older objects exist.
+1. **Schema drift:** Test against a freshly migrated local DB (`pnpm db:test-local:reset`), never a shared one. Prod migrations are applied manually, so prod can be ahead of or behind `main`.
 2. **Build cache:** After editing workspace package source (`@propertypro/shared`, `@propertypro/db`, `@propertypro/email`), rebuild before evaluating test results. Stale `dist/` outputs cause misleading behavior.
 3. **Env loading:** `scripts/with-env-local.sh` uses `set -u`. If `.env.local` has `$` expansions referencing unset vars, sourcing aborts. Use `set +u` before sourcing if needed.
 4. **Append-only tables:** `compliance_audit_log` has DB-native delete protection. Integration teardown must tolerate FK-restricted cleanup failures.
-5. **PDF parsing:** `pdf-parse` loads entire files into memory. Run asynchronously outside the upload handler to avoid blocking.
+5. **PDF parsing:** text extraction (`apps/web/src/lib/workers/pdf-extraction.ts`) runs fire-and-forget after the upload handler responds. Keep it out of the request path.
 6. **The jsdom pin is load-bearing (Sentry PROPERTY-PRO-7):** root `package.json` has `pnpm.overrides["isomorphic-dompurify>jsdom"] = "25.0.1"`. jsdom >= 26 pulls the **ESM-only `@exodus/bytes`**, which the externalized sanitizer packages `require()` at runtime — 500ing every HTML-sanitizing route (public tenant sites, announcements, violations, document drafts, help API) on Vercel's **Node 24**. It shipped because CI and local ran Node 20 while Vercel ran 24, so CI-green + local-green meant nothing; all three now run 24 (`.nvmrc` + `engines.node`), but keep the override and the guard. Do not drop or raise that override when bumping `isomorphic-dompurify`; `pnpm guard:sanitizer-deps` enforces it. Pinning `html-encoding-sniffer` alone is a known dead end — three separate edges reach `@exodus/bytes`.
 
 ---
@@ -103,7 +102,7 @@ Synthesized from recurring incidents — these are the root causes, not the symp
 
 ## 8. Platform Admin App (`apps/admin/`)
 
-The admin app is a separate Next.js application for platform administrators (PM company admins). It communicates with the web app via HTTP API routes under `/api/v1/admin/`.
+The admin app is a separate Next.js application for platform operators (`super_admin`), not PM companies. It has its own API routes under `apps/admin/src/app/api/admin/`; see the admin block in `CLAUDE.md`.
 
 **Key features:**
 - Community management (demo lifecycle, subscription status, branding)
@@ -111,7 +110,7 @@ The admin app is a separate Next.js application for platform administrators (PM 
 - Deletion request dashboard (intervene, recover)
 - Platform dashboard with KPI stats
 
-**Auth:** Admin routes use `requirePlatformAdmin()`, which reads the Supabase session and then requires a `platform_admin_users` row parsing as `z.enum(['super_admin'])` (`apps/admin/src/lib/auth/platform-admin.ts:19`). `super_admin` is **system-scoped** and stored outside `user_roles`; no community-scoped role grants it. (This line previously said `pm_admin` — wrong role, and a name ADR-006 retired.) CORS is handled per-route with `corsHeaders()` from `@/lib/api/admin-cors`.
+**Auth:** Admin routes use `requirePlatformAdmin()`, which reads the Supabase session and then requires a `platform_admin_users` row parsing as `z.enum(['super_admin'])` (`apps/admin/src/lib/auth/platform-admin.ts:19`). `super_admin` is **system-scoped** and stored outside `user_roles`; no community-scoped role grants it.
 
 **DB access:** The admin app uses Supabase admin client (`createAdminClient()`) for direct queries — it is NOT in the scoped client allowlist and does NOT use `createScopedClient()`.
 

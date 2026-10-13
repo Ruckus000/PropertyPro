@@ -32,7 +32,7 @@ import {
 import type { AccessPlan } from '@propertypro/db';
 // AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-// AUTHZ: GoTrue admin updateUserById to ban/unban accounts in the deletion lifecycle; called by the gated account routes and the lifecycle cron
+// AUTHZ: GoTrue admin updateUserById to ban/unban/scrub accounts in the deletion lifecycle; called by the gated account routes and the lifecycle cron
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
@@ -40,6 +40,9 @@ import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
 } from '@/lib/account-lifecycle/root-offboarding';
+
+/** GoTrue ban duration for a deleted account (~100 years). 'none' lifts a ban. */
+const PERMANENT_BAN = '876600h';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -674,10 +677,13 @@ export async function executeUserSoftDelete(requestIds: number[]) {
     await Promise.allSettled(
       chunk.map(async (result) => {
         try {
-          await admin.auth.admin.updateUserById(result.userId, {
-            ban_duration: 'none',
+          // GoTrue reads 'none' as LIFT the ban. 876600h (~100y) is the
+          // permanent ban demo-conversion uses; recoverUser lifts it.
+          const { error } = await admin.auth.admin.updateUserById(result.userId, {
+            ban_duration: PERMANENT_BAN,
             user_metadata: { soft_deleted: true },
           });
+          if (error) throw new Error(error.message);
         } catch (err) {
           console.warn(
             `[account-lifecycle] Failed to ban user ${result.userId} in Supabase auth:`,
@@ -691,7 +697,7 @@ export async function executeUserSoftDelete(requestIds: number[]) {
   return results;
 }
 
-/** Recovers a soft-deleted user: clears deletedAt and sets status to recovered. */
+/** Recovers a soft-deleted user: clears deletedAt, sets status to recovered, lifts the auth ban. */
 export async function recoverUser(requestId: number, recoveredBy: string) {
   const now = new Date();
   const db = createUnscopedClient();
@@ -712,6 +718,16 @@ export async function recoverUser(requestId: number, recoveredBy: string) {
 
     return request;
   });
+
+  // Soft delete banned the login. Throw rather than warn: a "recovered" user
+  // who still cannot sign in is the failure the operator must see.
+  const { error: unbanError } = await createAdminClient().auth.admin.updateUserById(
+    result.userId,
+    { ban_duration: 'none', user_metadata: { soft_deleted: null } },
+  );
+  if (unbanError) {
+    throw new Error(`Recovered user ${result.userId}, but lifting the auth ban failed: ${unbanError.message}`);
+  }
 
   // NOT audited, and `communityId: 0` was never a way to do it.
   //
@@ -761,6 +777,18 @@ export async function purgeUserPII(requestId: number) {
       avatarUrl: null,
     })
     .where(eq(users.id, request.userId));
+
+  // auth.users keeps its own copy of the email and name. Scrub it before the
+  // status flip, so a failure leaves purgedAt NULL and the next run retries.
+  // A null user_metadata value deletes that key; `.invalid` is a reserved TLD.
+  const { error: authError } = await createAdminClient().auth.admin.updateUserById(request.userId, {
+    email: `deleted-${request.userId}@redacted.invalid`,
+    email_confirm: true,
+    user_metadata: { full_name: null, fullName: null, external_user_id: null, soft_deleted: true },
+  });
+  if (authError) {
+    throw new Error(`Failed to scrub auth user ${request.userId}: ${authError.message}`);
+  }
 
   const [updated] = await db
     .update(accountDeletionRequests)

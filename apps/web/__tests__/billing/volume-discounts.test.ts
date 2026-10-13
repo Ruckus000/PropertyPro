@@ -36,72 +36,87 @@ beforeEach(() => {
   mockDeleteDiscount.mockReset();
 });
 
+/** An expanded Discount as the 2026-01-28.clover API returns it: the coupon is
+ *  under `source.coupon`, and there is no top-level `coupon`. */
+function discount(id: string, couponId: string) {
+  return { id, object: 'discount', source: { type: 'coupon', coupon: couponId } };
+}
+
 describe('applyVolumeDiscountToSubscriptions', () => {
+  it('lists subscriptions with discounts expanded (unexpanded they are bare di_ ids)', async () => {
+    mockListSubs.mockReturnValue(fakeList([]));
+
+    await applyVolumeDiscountToSubscriptions('cus_123', 'tier_10');
+
+    expect(mockListSubs).toHaveBeenCalledWith(
+      expect.objectContaining({ customer: 'cus_123', expand: ['data.discounts'] }),
+    );
+  });
+
   it('applies new coupon when no existing volume discount', async () => {
     mockListSubs.mockReturnValue(fakeList([{ id: 'sub_1', discounts: [] }]));
     mockUpdateSub.mockResolvedValue({ id: 'sub_1' });
 
     await applyVolumeDiscountToSubscriptions('cus_123', 'tier_10');
 
-    expect(mockDeleteDiscount).not.toHaveBeenCalled();
     expect(mockUpdateSub).toHaveBeenCalledWith('sub_1', {
       discounts: [{ coupon: 'volume_10pct' }],
     });
   });
 
-  it('removes existing volume discount before applying new one', async () => {
-    mockListSubs.mockReturnValue(fakeList([{
-      id: 'sub_1',
-      discounts: [{
-        id: 'di_abc',
-        coupon: { id: 'volume_10pct', metadata: { origin: 'volume_discount' } },
-      }],
-    }]));
+  it('replaces the previous volume tier', async () => {
+    mockListSubs.mockReturnValue(fakeList([{ id: 'sub_1', discounts: [discount('di_abc', 'volume_10pct')] }]));
     mockUpdateSub.mockResolvedValue({ id: 'sub_1' });
-    mockDeleteDiscount.mockResolvedValue({ deleted: true });
 
     await applyVolumeDiscountToSubscriptions('cus_123', 'tier_15');
 
-    expect(mockDeleteDiscount).toHaveBeenCalledWith('sub_1', 'di_abc');
+    expect(mockDeleteDiscount).not.toHaveBeenCalled();
     expect(mockUpdateSub).toHaveBeenCalledWith('sub_1', {
       discounts: [{ coupon: 'volume_15pct' }],
     });
   });
 
-  it('removes volume discount when tier becomes none', async () => {
-    mockListSubs.mockReturnValue(fakeList([{
-      id: 'sub_1',
-      discounts: [{
-        id: 'di_abc',
-        coupon: { id: 'volume_10pct', metadata: { origin: 'volume_discount' } },
-      }],
-    }]));
-    mockDeleteDiscount.mockResolvedValue({ deleted: true });
+  it('removes the volume discount when tier becomes none', async () => {
+    mockListSubs.mockReturnValue(fakeList([{ id: 'sub_1', discounts: [discount('di_abc', 'volume_10pct')] }]));
     mockUpdateSub.mockResolvedValue({ id: 'sub_1' });
 
     await applyVolumeDiscountToSubscriptions('cus_123', 'none');
 
-    expect(mockDeleteDiscount).toHaveBeenCalledWith('sub_1', 'di_abc');
-    // With tier=none there is no new volume coupon, so discounts is just
-    // the preserved (empty) set of non-volume coupons.
     expect(mockUpdateSub).toHaveBeenCalledWith('sub_1', { discounts: [] });
   });
 
-  it('preserves non-volume discounts when applying a new volume coupon', async () => {
+  it('keeps every non-volume discount, by its existing discount id', async () => {
     mockListSubs.mockReturnValue(fakeList([{
       id: 'sub_1',
-      discounts: [{
-        id: 'di_promo',
-        coupon: { id: 'PROMO50', metadata: { origin: 'marketing' } },
-      }],
+      discounts: [discount('di_promo', 'PROMO50'), discount('di_vol', 'volume_10pct'), discount('di_admin', 'SUMMER')],
+    }]));
+    mockUpdateSub.mockResolvedValue({ id: 'sub_1' });
+
+    await applyVolumeDiscountToSubscriptions('cus_123', 'tier_20');
+
+    expect(mockUpdateSub).toHaveBeenCalledWith('sub_1', {
+      discounts: [{ discount: 'di_promo' }, { discount: 'di_admin' }, { coupon: 'volume_20pct' }],
+    });
+  });
+
+  it('reuses the volume discount already at the target tier rather than re-creating it', async () => {
+    mockListSubs.mockReturnValue(fakeList([{
+      id: 'sub_1',
+      discounts: [discount('di_vol', 'volume_10pct'), discount('di_promo', 'PROMO50')],
     }]));
     mockUpdateSub.mockResolvedValue({ id: 'sub_1' });
 
     await applyVolumeDiscountToSubscriptions('cus_123', 'tier_10');
 
-    expect(mockDeleteDiscount).not.toHaveBeenCalled();
     expect(mockUpdateSub).toHaveBeenCalledWith('sub_1', {
-      discounts: [{ coupon: 'PROMO50' }, { coupon: 'volume_10pct' }],
+      discounts: [{ discount: 'di_vol' }, { discount: 'di_promo' }],
     });
+  });
+
+  it('refuses to write when discounts come back unexpanded', async () => {
+    mockListSubs.mockReturnValue(fakeList([{ id: 'sub_1', discounts: ['di_promo'] }]));
+
+    await expect(applyVolumeDiscountToSubscriptions('cus_123', 'tier_10')).rejects.toThrow(/not expanded/);
+    expect(mockUpdateSub).not.toHaveBeenCalled();
   });
 });

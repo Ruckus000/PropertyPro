@@ -59,12 +59,32 @@ vi.mock('@propertypro/db/filters', () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ _type: 'sql', strings, values }),
 }));
 
+// The services hand every message to sendBulkEmail in one call. Route each
+// payload through sendEmailMock so per-message assertions still read naturally;
+// the "one bulk call" case pins that no per-recipient send comes back.
+const { sendBulkEmailMock } = vi.hoisted(() => ({
+  sendBulkEmailMock: vi.fn(async (requests: unknown[]) => {
+    const results: Array<{ success: boolean; id?: string; error?: string }> = [];
+    for (const request of requests) {
+      try {
+        const sent = (await sendEmailMock(request)) as { id?: string } | undefined;
+        results.push({ success: true, id: sent?.id });
+      } catch (error) {
+        results.push({ success: false, error: (error as Error).message });
+      }
+    }
+    const successCount = results.filter((r) => r.success).length;
+    return { results, successCount, failureCount: results.length - successCount };
+  }),
+}));
+
 vi.mock('@propertypro/email', () => ({
   MeetingNoticeEmail: (props: unknown) => ({ type: 'MeetingNoticeEmail', props }),
   MaintenanceUpdateEmail: (props: unknown) => ({ type: 'MaintenanceUpdateEmail', props }),
   ComplianceAlertEmail: (props: unknown) => ({ type: 'ComplianceAlertEmail', props }),
   DocumentPostedEmail: (props: unknown) => ({ type: 'DocumentPostedEmail', props }),
   sendEmail: sendEmailMock,
+  sendBulkEmail: sendBulkEmailMock,
 }));
 
 vi.mock('@/lib/services/notification-digest-queue', () => ({
@@ -725,6 +745,10 @@ describe('notification-service', () => {
       // One succeeded, one failed
       expect(count).toBe(1);
       expect(sendEmailMock).toHaveBeenCalledTimes(2);
+      // Both went out in ONE batch request: a per-recipient Promise.all ran
+      // into Resend's rate limit and failed all but ~2 of a community.
+      expect(sendBulkEmailMock).toHaveBeenCalledTimes(1);
+      expect(sendBulkEmailMock.mock.calls[0]![0]).toHaveLength(2);
     });
   });
 

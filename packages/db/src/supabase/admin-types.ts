@@ -123,7 +123,6 @@ export type AdminUserRow = {
   id: string;
   email: string;
   full_name: string;
-  raw_user_meta_data: Record<string, unknown> | null;
   deleted_at: string | null;
 };
 

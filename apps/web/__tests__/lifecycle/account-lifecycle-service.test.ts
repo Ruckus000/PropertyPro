@@ -734,10 +734,33 @@ describe('executeUserSoftDelete', () => {
     const result = await executeUserSoftDelete([1]);
 
     expect(result).toEqual([request]);
+    // 'none' LIFTS a ban in GoTrue; 876600h (~100y) is the repo's permanent
+    // ban, as in demo-conversion. Pinning 'none' here kept a deleted user able
+    // to sign in with every role they held.
     expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
-      ban_duration: 'none',
+      ban_duration: '876600h',
       user_metadata: { soft_deleted: true },
     });
+  });
+
+  it('warns when the auth ban returns an error instead of throwing', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'User not found' } }),
+        },
+      },
+    });
+
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await executeUserSoftDelete([1]);
+
+    expect(result).toEqual([request]);
+    expect(consoleWarnSpy).toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
   });
 
   it('succeeds even if auth ban fails (non-fatal)', async () => {
@@ -782,10 +805,34 @@ describe('recoverUser', () => {
       updateReturning: [[request], [{}]], // request update + user update
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: updateUserByIdMock } },
+    });
 
     const result = await recoverUser(1, 'admin-001');
 
     expect(result).toEqual(request);
+    // Soft delete banned the login; recovery must lift it or the user stays locked out.
+    expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
+      ban_duration: 'none',
+      user_metadata: { soft_deleted: null },
+    });
+  });
+
+  it('throws when lifting the auth ban fails, so the operator sees it', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
+    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'GoTrue down' } }),
+        },
+      },
+    });
+
+    await expect(recoverUser(1, 'admin-001')).rejects.toThrow(/GoTrue down/);
   });
 
   it('writes no audit entry — there is no community to attribute it to', async () => {
@@ -803,6 +850,9 @@ describe('recoverUser', () => {
     const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
     const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+    });
 
     await recoverUser(1, 'admin-001');
 
@@ -828,10 +878,21 @@ describe('purgeUserPII', () => {
       updateReturning: [[updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: updateUserByIdMock } },
+    });
 
     const result = await purgeUserPII(1);
 
     expect(result).toEqual(updatedRequest);
+    // auth.users holds the real email and name too; scrubbing only public.users
+    // left them there forever.
+    expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
+      email: 'deleted-user-uuid-001@redacted.invalid',
+      email_confirm: true,
+      user_metadata: { full_name: null, fullName: null, external_user_id: null, soft_deleted: true },
+    });
     // Verify user PII was scrubbed
     const updateCalls = dbMock._calls.filter((c) => c.op === 'update');
     expect(updateCalls).toHaveLength(2);
@@ -850,6 +911,25 @@ describe('purgeUserPII', () => {
 
     const result = await purgeUserPII(1);
     expect(result).toBeNull();
+  });
+
+  it('does not mark the request purged when the auth scrub fails, so the next run retries', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [[{}]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'GoTrue down' } }),
+        },
+      },
+    });
+
+    await expect(purgeUserPII(1)).rejects.toThrow(/GoTrue down/);
+    const statusUpdates = dbMock._calls.filter(
+      (c) => c.op === 'update' && (c.values as Record<string, unknown>).status === 'purged',
+    );
+    expect(statusUpdates).toHaveLength(0);
   });
 });
 

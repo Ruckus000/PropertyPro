@@ -49,8 +49,11 @@ export const POST = withErrorHandler(
       );
     }
 
-    const results = await Promise.allSettled(
-      communityIds.map(async (communityId): Promise<BulkResult> => {
+    // One community at a time: each delivery is its own Resend batch request,
+    // and firing them all at once exceeds the provider's per-second limit.
+    const results: PromiseSettledResult<BulkResult>[] = [];
+    for (const communityId of communityIds) {
+      try {
         await assertNotDemoGrace(communityId);
         const communityName = managedMap.get(communityId) ?? `Community ${communityId}`;
 
@@ -64,9 +67,11 @@ export const POST = withErrorHandler(
           isPinned,
         });
 
-        return { communityId, communityName, status: 'sent' };
-      }),
-    );
+        results.push({ status: 'fulfilled', value: { communityId, communityName, status: 'sent' } });
+      } catch (reason) {
+        results.push({ status: 'rejected', reason });
+      }
+    }
 
     const mapped: BulkResult[] = results.map((result, idx) => {
       const communityId = communityIds[idx]!;
