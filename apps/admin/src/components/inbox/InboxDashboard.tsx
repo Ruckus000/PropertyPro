@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
@@ -11,6 +11,7 @@ import {
 } from '@propertypro/shared';
 
 import type { InboxOverview } from '@/lib/server/inbox';
+import { useUrlFilterState } from '@/lib/use-url-filter-state';
 
 import { INBOX_DEFAULT_STATUS } from './inbox-filters';
 import { InboxSplit } from './InboxSplit';
@@ -56,15 +57,17 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * from a value the server page read. Back restores the page from the router
  * cache — the payload rendered BEFORE any tab click — so a server-passed seed
  * came back stale: the address bar said `?status=closed` while Open was the
- * highlighted tab. `ClientWorkspace` reads `?tab=` the same way.
+ * highlighted tab. `ClientWorkspace` reads `?tab=` the same way. And they keep
+ * following that URL (`useUrlFilterState`): the rail's Inbox link from a
+ * filtered `/inbox` does not remount this, but must still reset the filters.
  */
 export function InboxDashboard({ overview, activeThreadId, detail }: InboxDashboardProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [mailbox, setMailbox] = useState(() =>
+  const [mailbox, setMailbox] = useUrlFilterState(
     knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES),
   );
-  const [status, setStatus] = useState(() =>
+  const [status, setStatus] = useUrlFilterState(
     knownOr(
       searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
       [...SUPPORT_THREAD_STATUSES, 'all'],

@@ -24,7 +24,9 @@
  * tab disagreeing. `ClientWorkspace` reads `?tab=` the same way. A click writes
  * the URL with `window.history.replaceState`, because the page is
  * force-dynamic and a router navigation would re-run it on the server to
- * re-render what is already on screen.
+ * re-render what is already on screen. The tab also keeps following the URL
+ * (`useUrlFilterState`): the rail's Billing link from a filtered `/billing`
+ * does not remount this list, but must still put it back on All.
  *
  * ## Orphans are the point of this screen
  *
@@ -34,7 +36,7 @@
  * console (there is nothing to link to), so it links into Stripe instead, and
  * it is never hidden by a filter tab.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { CreditCard, ExternalLink } from 'lucide-react';
@@ -44,6 +46,7 @@ import type { BillingRow } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
 import { BILLING_LIST_FILTERS, isBillingListFilter, type BillingListFilter } from '@/lib/billing/list-filters';
 import { BILLING_STATUS_LABELS, BILLING_STATUS_VARIANTS } from '@/lib/billing/status-display';
+import { useUrlFilterState } from '@/lib/use-url-filter-state';
 
 interface BillingListProps {
   rows: BillingRow[];
@@ -70,10 +73,10 @@ function formatDate(iso: string | null): string {
 
 export function BillingList({ rows, truncated, stripeDashboardBase }: BillingListProps) {
   const searchParams = useSearchParams();
-  const [filter, setFilter] = useState<BillingListFilter>(() => {
-    const requested = searchParams.get('status');
-    return isBillingListFilter(requested) ? requested : 'all';
-  });
+  const requested = searchParams.get('status');
+  const [filter, setFilter] = useUrlFilterState<BillingListFilter>(
+    isBillingListFilter(requested) ? requested : 'all',
+  );
 
   function changeFilter(next: BillingListFilter) {
     setFilter(next);

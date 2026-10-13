@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const { routerReplace, url } = vi.hoisted(() => ({
@@ -149,5 +149,40 @@ describe('InboxDashboard filter seed', () => {
     expect(
       screen.getByRole('button', { name: /^Open/ }).getAttribute('aria-pressed'),
     ).toBe('true');
+  });
+});
+
+/**
+ * A client navigation to the SAME route does not remount the dashboard: the
+ * rail's Inbox link from `/inbox?mailbox=privacy&status=closed` lands on bare
+ * `/inbox` with this instance still mounted. Seeding alone left both filters on
+ * their old values under a reset address bar. Simulated here as a new URL plus
+ * a `rerender` of the same instance.
+ */
+describe('InboxDashboard same-route navigation', () => {
+  function pressed(button: HTMLElement) {
+    return button.getAttribute('aria-pressed');
+  }
+  const mailboxAll = () =>
+    within(screen.getByRole('group', { name: 'Mailbox' })).getByRole('button', { name: /^All/ });
+
+  it('follows the URL when it changes under a mounted dashboard', () => {
+    const { rerender } = renderAt('mailbox=privacy&status=closed');
+    expect(pressed(screen.getByRole('button', { name: /^Closed/ }))).toBe('true');
+
+    url.search = '';
+    rerender(<InboxDashboard overview={OVERVIEW} />);
+
+    expect(pressed(screen.getByRole('button', { name: /^Open/ }))).toBe('true');
+    expect(pressed(mailboxAll())).toBe('true');
+  });
+
+  it('keeps a tab click when the URL did not move (control)', () => {
+    const { rerender } = renderAt('');
+    fireEvent.click(screen.getByRole('button', { name: /^Closed/ }));
+
+    rerender(<InboxDashboard overview={OVERVIEW} />);
+
+    expect(pressed(screen.getByRole('button', { name: /^Closed/ }))).toBe('true');
   });
 });

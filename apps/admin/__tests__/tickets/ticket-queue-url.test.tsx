@@ -83,3 +83,31 @@ describe('TicketQueue filter seed', () => {
     expect(screen.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true');
   });
 });
+
+/** See inbox-dashboard.test.tsx: the rail's Tickets link does not remount the queue. */
+describe('TicketQueue same-route navigation', () => {
+  function pressed(name: RegExp) {
+    return screen.getByRole('button', { name }).getAttribute('aria-pressed');
+  }
+
+  it('follows the URL when it changes under a mounted queue', () => {
+    url.search = 'status=waiting';
+    const { rerender } = render(<TicketQueue result={RESULT} />);
+    expect(pressed(/^Waiting/)).toBe('true');
+
+    url.search = '';
+    rerender(<TicketQueue result={RESULT} />);
+
+    expect(pressed(/^All/)).toBe('true');
+  });
+
+  it('keeps a tab click when the URL did not move (control)', () => {
+    url.search = '';
+    const { rerender } = render(<TicketQueue result={RESULT} />);
+    fireEvent.click(screen.getByRole('button', { name: /^Resolved/ }));
+
+    rerender(<TicketQueue result={RESULT} />);
+
+    expect(pressed(/^Resolved/)).toBe('true');
+  });
+});

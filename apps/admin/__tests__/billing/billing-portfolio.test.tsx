@@ -270,4 +270,54 @@ describe('BillingList ?status=', () => {
     expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard');
     window.history.replaceState(null, '', '/');
   });
+
+  // A client navigation to the SAME route does not remount the list: the rail's
+  // Billing link from `/billing?status=canceled` lands on bare `/billing` with
+  // this instance still mounted. Simulated as a new URL plus a `rerender`.
+  it('follows the URL back to All when it changes under a mounted list', () => {
+    const { rerender } = renderAt('status=canceled');
+    expect(pressed(/Canceled/)).toBe('true');
+
+    navigation.searchParams = new URLSearchParams();
+    rerender(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+  });
+
+  it('follows the URL onto a filter when it changes under a mounted list', () => {
+    const { rerender } = renderAt('');
+
+    navigation.searchParams = new URLSearchParams('status=past_due');
+    rerender(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+
+    expect(pressed(/Past due/)).toBe('true');
+    expect(screen.queryByText('Sunset Condos')).toBeNull();
+  });
+
+  it('follows a later navigation after the URL caught up to a click', () => {
+    // The production order: a click sets the tab, Next syncs the replaceState
+    // into useSearchParams (the URL now says canceled too), and only then does
+    // the rail's Billing link navigate to a bare /billing.
+    const { rerender } = renderAt('');
+    fireEvent.click(screen.getByRole('button', { name: /Canceled/ }));
+
+    navigation.searchParams = new URLSearchParams('status=canceled');
+    rerender(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+    expect(pressed(/Canceled/)).toBe('true');
+
+    navigation.searchParams = new URLSearchParams();
+    rerender(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+    expect(pressed(/^All/)).toBe('true');
+  });
+
+  it('keeps a tab click when the URL did not move (control)', () => {
+    const { rerender } = renderAt('');
+    fireEvent.click(screen.getByRole('button', { name: /Canceled/ }));
+
+    rerender(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+
+    expect(pressed(/Canceled/)).toBe('true');
+  });
 });

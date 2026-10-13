@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
@@ -10,6 +10,7 @@ import {
 } from '@propertypro/shared';
 
 import type { TicketsResult } from '@/lib/server/tickets';
+import { useUrlFilterState } from '@/lib/use-url-filter-state';
 
 import { TicketList } from './TicketList';
 import { TicketSplit } from './TicketSplit';
@@ -44,6 +45,8 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * (on `/tickets/[id]`, the ticket and the whole queue) on every tab click. The
  * filter is seeded from the current URL, not a server-passed value, for the
  * same reason too: Back restores a cached payload rendered before the click.
+ * And it keeps following the URL (`useUrlFilterState`): the rail's Tickets link
+ * from a filtered `/tickets` does not remount this, but must still reset to All.
  *
  * ## Why there is an "All" tab the plan did not ask for
  *
@@ -58,7 +61,7 @@ function knownOr(value: string, allowed: readonly string[]): string {
 export function TicketQueue({ result, activeTicketId, detail }: TicketQueueProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState(() =>
+  const [status, setStatus] = useUrlFilterState(
     knownOr(searchParams.get('status') ?? 'all', SUPPORT_TICKET_STATUSES),
   );
 
