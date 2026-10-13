@@ -77,11 +77,11 @@ const APPS: readonly AppSpec[] = [
         '/(authenticated)/dashboard/apartment/page',
         '/(authenticated)/dashboard/page',
       ],
-      mobile: [
-        '/mobile/page',
-        '/(mobile)/page',
-        '/(authenticated)/dashboard/page',
-      ],
+      // Measured 2026-10-13: only `/mobile/page` exists. `/(mobile)/page` was a
+      // stale form, and the dashboard fallback is the hazard the `pm` group
+      // above already removed — had `/mobile` moved, this group would have
+      // reported the resident dashboard under the mobile name.
+      mobile: ['/mobile/page'],
       // PR #1b: public site render path (server component, layout-registry
       // dispatch via Tidewater for condo_718). Budgets the JS payload — this
       // is a Florida statutory-transparency entry point so the slug-subdomain
