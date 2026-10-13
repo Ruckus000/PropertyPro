@@ -2,9 +2,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { routerReplace, url } = vi.hoisted(() => ({
+const { routerReplace, routerRefresh, url } = vi.hoisted(() => ({
   routerReplace: vi.fn(),
-  url: { search: '' },
+  routerRefresh: vi.fn(),
+  url: { search: '', segment: null as string | null },
 }));
 
 vi.mock('next/link', () => ({
@@ -16,15 +17,33 @@ vi.mock('next/link', () => ({
   ),
 }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: routerReplace }),
+  useRouter: () => ({ replace: routerReplace, refresh: routerRefresh }),
   usePathname: () => '/inbox',
   useSearchParams: () => new URLSearchParams(url.search),
+  useSelectedLayoutSegment: () => url.segment,
 }));
 
 /** Render as if the address bar carried `search`; the dashboard reads it. */
 function renderAt(search: string) {
   url.search = search;
+  url.segment = null;
   return render(<InboxDashboard overview={OVERVIEW} />);
+}
+
+/**
+ * Render as the `(split)` layout does: `segment` is the open thread's id (or
+ * null on `/inbox`). `children` is ALWAYS an element, as in Next — on `/inbox`
+ * it is the router subtree for a page that renders nothing — so the dashboard
+ * must decide from the segment, not from whether children exist.
+ */
+function renderInLayout(segment: string | null, search = 'status=all') {
+  url.search = search;
+  url.segment = segment;
+  return render(
+    <InboxDashboard overview={OVERVIEW} header={<h1>Inbox</h1>}>
+      <article>Thread body</article>
+    </InboxDashboard>,
+  );
 }
 
 import { InboxDashboard } from '@/components/inbox/InboxDashboard';
@@ -105,12 +124,12 @@ describe('InboxDashboard URL filter validation', () => {
 });
 
 /**
- * Switching a filter tab must not re-render the page on the server. Both inbox
- * pages are force-dynamic and read `?mailbox=` / `?status=` only to seed the
- * initial state; the filtering itself happens here, over the one unfiltered
- * load. `router.replace` re-ran the whole page (middleware read, overview, and
- * on `/inbox/[id]` the thread) on every click, to produce what was already on
- * screen. `history.replaceState` keeps the URL in step without that round trip.
+ * Switching a filter tab must not re-render the page on the server. The inbox
+ * routes are force-dynamic, and the filtering happens in the dashboard over the
+ * one unfiltered load. `router.replace` re-ran the server render (middleware
+ * read, overview, and on `/inbox/[id]` the thread) on every click, to produce
+ * what was already on screen. `history.replaceState` keeps the URL in step
+ * without that round trip; the dashboard reads the filter back from the URL.
  */
 describe('InboxDashboard filter tabs', () => {
   afterEach(() => {
@@ -136,7 +155,7 @@ describe('InboxDashboard filter tabs', () => {
  * so the address bar said `?status=closed` while Open was highlighted (seen in
  * the browser). Seeding from the URL makes the restored page agree with it.
  */
-describe('InboxDashboard filter seed', () => {
+describe('InboxDashboard filter read from the URL', () => {
   it('opens on the filter in the current URL', () => {
     renderAt('status=closed');
     expect(
@@ -153,36 +172,95 @@ describe('InboxDashboard filter seed', () => {
 });
 
 /**
+ * The dashboard lives in `inbox/(split)/layout.tsx` so a row click renders only
+ * the thread. It learns which thread is open from the layout's selected
+ * segment, and shows the layout's `children` only when one is.
+ */
+describe('InboxDashboard in the split layout', () => {
+  it('highlights the open thread and shows it, without the page header', () => {
+    renderInLayout('7');
+    expect(
+      screen.getByRole('link', { name: /please delete my account/i }).getAttribute('aria-current'),
+    ).toBe('page');
+    expect(screen.getByText('Thread body')).toBeTruthy();
+    // ThreadView owns the <h1> on a thread; a second one would be wrong.
+    expect(screen.queryByRole('heading', { name: 'Inbox' })).toBeNull();
+  });
+
+  it('shows the header and the placeholder when no thread is open (control)', () => {
+    renderInLayout(null);
+    expect(screen.getByRole('heading', { name: 'Inbox' })).toBeTruthy();
+    expect(screen.getByText('Select a thread')).toBeTruthy();
+    expect(screen.queryByText('Thread body')).toBeNull();
+    expect(
+      screen.getByRole('link', { name: /please delete my account/i }).getAttribute('aria-current'),
+    ).toBeNull();
+  });
+});
+
+/**
+ * The list is a layout, which Next never re-renders on a navigation between its
+ * own children. Going back from a thread to the list used to re-render the list
+ * page — and so re-read the list — and must still re-read it: otherwise new mail
+ * never appears and a thread deleted elsewhere stays listed. Moving thread to
+ * thread must NOT, or the layout bought nothing.
+ */
+describe('InboxDashboard list freshness', () => {
+  function mountAt(segment: string | null) {
+    url.search = 'status=all';
+    url.segment = segment;
+    const view = render(
+      <InboxDashboard overview={OVERVIEW}>
+        <article>Thread body</article>
+      </InboxDashboard>,
+    );
+    return (next: string | null) => {
+      url.segment = next;
+      view.rerender(
+        <InboxDashboard overview={OVERVIEW}>
+          <article>Thread body</article>
+        </InboxDashboard>,
+      );
+    };
+  }
+
+  afterEach(() => routerRefresh.mockReset());
+
+  it('re-reads the list once when a thread closes', () => {
+    const goTo = mountAt('7');
+    goTo(null);
+    expect(routerRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-read it moving thread to thread, or on first mount (control)', () => {
+    const goTo = mountAt(null);
+    goTo('7');
+    goTo('5');
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * A client navigation to the SAME route does not remount the dashboard: the
  * rail's Inbox link from `/inbox?mailbox=privacy&status=closed` lands on bare
- * `/inbox` with this instance still mounted. Seeding alone left both filters on
- * their old values under a reset address bar. Simulated here as a new URL plus
- * a `rerender` of the same instance.
+ * `/inbox` with this instance still mounted. Filters held in state seeded once
+ * stayed on their old values under a reset address bar. Simulated here as a
+ * new URL plus a `rerender` of the same instance.
  */
 describe('InboxDashboard same-route navigation', () => {
-  function pressed(button: HTMLElement) {
-    return button.getAttribute('aria-pressed');
-  }
-  const mailboxAll = () =>
-    within(screen.getByRole('group', { name: 'Mailbox' })).getByRole('button', { name: /^All/ });
-
   it('follows the URL when it changes under a mounted dashboard', () => {
     const { rerender } = renderAt('mailbox=privacy&status=closed');
-    expect(pressed(screen.getByRole('button', { name: /^Closed/ }))).toBe('true');
+    expect(
+      screen.getByRole('button', { name: /^Closed/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
 
     url.search = '';
     rerender(<InboxDashboard overview={OVERVIEW} />);
 
-    expect(pressed(screen.getByRole('button', { name: /^Open/ }))).toBe('true');
-    expect(pressed(mailboxAll())).toBe('true');
-  });
-
-  it('keeps a tab click when the URL did not move (control)', () => {
-    const { rerender } = renderAt('');
-    fireEvent.click(screen.getByRole('button', { name: /^Closed/ }));
-
-    rerender(<InboxDashboard overview={OVERVIEW} />);
-
-    expect(pressed(screen.getByRole('button', { name: /^Closed/ }))).toBe('true');
+    expect(screen.getByRole('button', { name: /^Open/ }).getAttribute('aria-pressed')).toBe('true');
+    const mailboxAll = within(screen.getByRole('group', { name: 'Mailbox' })).getByRole('button', {
+      name: /^All/,
+    });
+    expect(mailboxAll.getAttribute('aria-pressed')).toBe('true');
   });
 });

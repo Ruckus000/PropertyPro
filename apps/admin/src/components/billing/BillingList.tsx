@@ -13,20 +13,25 @@
  * an MRR headline that changed when you clicked "Past due" would be a different
  * number presented as the same one.
  *
- * ## The tab is seeded from `?status=`, and mirrored back into it
+ * ## The tab IS `?status=`
  *
  * The dashboard's Subscriptions card links "Past due 3" to
  * `/billing?status=past_due`, and this list used to start on All regardless, so
- * the link silently dropped the filter it named. The value is read from the URL
- * here (`useSearchParams`), not passed down by the page: Back restores a page
- * from the router cache — the payload rendered before any tab click — so a
- * server-read seed comes back stale, with the address bar and the highlighted
- * tab disagreeing. `ClientWorkspace` reads `?tab=` the same way. A click writes
- * the URL with `window.history.replaceState`, because the page is
- * force-dynamic and a router navigation would re-run it on the server to
- * re-render what is already on screen. The tab also keeps following the URL
- * (`useUrlFilterState`): the rail's Billing link from a filtered `/billing`
- * does not remount this list, but must still put it back on All.
+ * the link silently dropped the filter it named. The tab is read from the URL
+ * (`useSearchParams`) on every render, with no state of its own — the pattern
+ * `InboxDashboard` and `TicketQueue` use, for the same reasons:
+ *
+ * - Back restores a page from the router cache, rendered before any tab click,
+ *   so a value passed down by the page would come back stale.
+ * - A client navigation to the SAME route does not remount this list. When the
+ *   tab lived in state seeded once, the rail's Billing link from a filtered
+ *   `/billing` reset the address bar and left the old tab highlighted over a
+ *   still-filtered table.
+ *
+ * A click writes the URL with `window.history.replaceState`, because the page
+ * is force-dynamic and a router navigation would re-run it on the server to
+ * re-render what is already on screen. Next syncs `replaceState` into
+ * `useSearchParams`, which is what re-renders the tab and the table.
  *
  * ## Orphans are the point of this screen
  *
@@ -46,7 +51,6 @@ import type { BillingRow } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
 import { BILLING_LIST_FILTERS, isBillingListFilter, type BillingListFilter } from '@/lib/billing/list-filters';
 import { BILLING_STATUS_LABELS, BILLING_STATUS_VARIANTS } from '@/lib/billing/status-display';
-import { useUrlFilterState } from '@/lib/use-url-filter-state';
 
 interface BillingListProps {
   rows: BillingRow[];
@@ -74,12 +78,9 @@ function formatDate(iso: string | null): string {
 export function BillingList({ rows, truncated, stripeDashboardBase }: BillingListProps) {
   const searchParams = useSearchParams();
   const requested = searchParams.get('status');
-  const [filter, setFilter] = useUrlFilterState<BillingListFilter>(
-    isBillingListFilter(requested) ? requested : 'all',
-  );
+  const filter: BillingListFilter = isBillingListFilter(requested) ? requested : 'all';
 
   function changeFilter(next: BillingListFilter) {
-    setFilter(next);
     const params = new URLSearchParams(window.location.search);
     if (next === 'all') params.delete('status');
     else params.set('status', next);

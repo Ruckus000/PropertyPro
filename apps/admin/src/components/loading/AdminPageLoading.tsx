@@ -42,3 +42,26 @@ export function AdminPageLoading({ label = 'Loading admin page' }: AdminPageLoad
     </section>
   );
 }
+
+/**
+ * Detail-pane skeleton for the master-detail screens (inbox, tickets). Their
+ * list lives in a `(split)/layout.tsx` that stays mounted across row clicks, so
+ * the `loading.tsx` beside it renders inside the detail column only — a
+ * full-page skeleton there would draw a page header and KPI cards in a pane.
+ */
+export function AdminDetailLoading({ label = 'Loading' }: AdminPageLoadingProps) {
+  return (
+    <section
+      aria-busy="true"
+      aria-label={label}
+      role="status"
+      className="space-y-4 rounded-lg border border-edge bg-surface-card p-4"
+    >
+      <AdminSkeleton className="h-4 w-28" />
+      <AdminSkeleton className="h-7 w-full max-w-md" />
+      <AdminSkeleton className="h-4 w-48" />
+      <AdminSkeleton className="h-32 w-full rounded-xl" />
+      <AdminSkeleton className="h-32 w-full rounded-xl" />
+    </section>
+  );
+}

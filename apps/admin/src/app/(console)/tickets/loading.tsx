@@ -1,9 +1,10 @@
 import { AdminPageLoading } from '@/components/loading/AdminPageLoading';
 
 /**
- * Covers `/tickets`, `/tickets/[id]` and `/tickets/new` — a `loading.tsx`
- * creates a Suspense boundary for its whole segment subtree, and none of the
- * three needs a different skeleton.
+ * Full-page skeleton for ARRIVING at `/tickets`, `/tickets/[id]` or
+ * `/tickets/new`. Clicks inside the queue never reach it: those swap only the
+ * detail pane, under `(split)/loading.tsx`. Kept above the `(split)` layout on
+ * purpose — see that layout's docblock.
  */
 export default function TicketsLoading() {
   return <AdminPageLoading label="Loading tickets" />;

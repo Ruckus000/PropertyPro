@@ -75,12 +75,12 @@ import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 import type { DirectoryTab } from '@/lib/directory/directory-href';
 
-// ponytail: this route sits ~40 KiB under the 1210 KiB hard per-route budget
-// (perf:check, measured 2026-10-12; enforced on this unbudgeted route since
-// then). Lazy-loading the dialogs below via next/dynamic was measured and made
-// things WORSE: it reshuffled shared chunks and pushed the web aggregate budget
-// (1480 KiB now, routes this page is not even in) over. Re-measure both numbers
-// before adding weight here.
+// ponytail: this route sits ~35 KiB under the 1160 KiB hard per-route budget
+// (perf:check on a local production build, 2026-10-13; enforced on this
+// unbudgeted route since 2026-10-12). Lazy-loading the dialogs below via
+// next/dynamic was measured and made things WORSE: it reshuffled shared chunks
+// and pushed the web aggregate budget (1435 KiB now, routes this page is not
+// even in) over. Re-measure both numbers before adding weight here.
 
 export type { DirectoryTab };
 
