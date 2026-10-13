@@ -22,6 +22,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   requirePollCreatorRole,
   requirePollReadPermission,
@@ -50,6 +51,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requirePollsEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasPolls');
     requirePollReadPermission(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
@@ -80,6 +82,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requirePollsEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasPolls');
     requirePollWritePermission(membership);
     requirePollCreatorRole(membership);
 

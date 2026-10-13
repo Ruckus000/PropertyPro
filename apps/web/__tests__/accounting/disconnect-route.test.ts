@@ -59,6 +59,8 @@ vi.mock('@/lib/services/accounting-connectors-service', () => ({
   disconnectAccounting: disconnectAccountingMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { DELETE } from '../../src/app/api/v1/accounting/disconnect/route';
 
 const ADMIN_MEMBERSHIP = {

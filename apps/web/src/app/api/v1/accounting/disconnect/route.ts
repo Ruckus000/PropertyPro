@@ -36,6 +36,7 @@ import {
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { disconnectAccounting } from '@/lib/services/accounting-connectors-service';
 import { accountingDisconnectContract } from './contract';
 
@@ -47,6 +48,7 @@ export const DELETE = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingWritePermission(membership);
 
     const requestId = req.headers.get('x-request-id');

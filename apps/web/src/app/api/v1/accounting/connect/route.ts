@@ -35,6 +35,7 @@ import {
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { initiateAccountingConnect } from '@/lib/services/accounting-connectors-service';
 import { accountingConnectContract } from './contract';
 
@@ -46,6 +47,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingWritePermission(membership);
 
     return initiateAccountingConnect(communityId, actorUserId, body.provider);

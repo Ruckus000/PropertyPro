@@ -28,7 +28,8 @@ import {
 } from '@propertypro/email';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { createAuthUserBoundTo, findAuthAccount, rollBackAuthUser } from '@/lib/services/auth-user-binding';
-import { ValidationError, NotFoundError } from '@/lib/api/errors';
+import { ValidationError, NotFoundError, RateLimitError } from '@/lib/api/errors';
+import { consumeKeyedRateLimit } from '@/lib/api/keyed-rate-limit';
 import { assertUnitInCommunity } from '@/lib/services/scoped-fk-validators';
 import { getBaseUrl } from '@/lib/utils/url';
 import { directoryHref } from '@/lib/directory/directory-href';
@@ -61,6 +62,15 @@ function generateOtp(): string {
   return crypto.randomInt(100000, 999999).toString();
 }
 
+/**
+ * Per-destination-address cap on OTP sends. Global (not community-scoped) so a
+ * single inbox cannot be bombed with branded verification mail by rotating the
+ * communityId or source IP. The per-IP auth tier bounds one caller; this bounds
+ * one victim. Redis-backed when configured; degrades to per-isolate otherwise.
+ */
+const ACCESS_REQUEST_OTP_PER_WINDOW = 5;
+const ACCESS_REQUEST_OTP_WINDOW_MS = 15 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // submitAccessRequest
 // ---------------------------------------------------------------------------
@@ -78,6 +88,19 @@ export async function submitAccessRequest(params: {
   const { communityId, email, fullName, phone, claimedUnitNumber, isUnitOwner, refCode } = params;
   const normalizedEmail = email.toLowerCase();
   const scoped = createScopedClient(communityId);
+
+  // Cap OTP sends per destination address BEFORE any email goes out, so neither
+  // the resend branch nor a fresh insert can be used to bomb an inbox.
+  const otpBudget = await consumeKeyedRateLimit(
+    `rl:access-request-otp:email:${normalizedEmail}`,
+    ACCESS_REQUEST_OTP_PER_WINDOW,
+    ACCESS_REQUEST_OTP_WINDOW_MS,
+  );
+  if (!otpBudget.allowed) {
+    throw new RateLimitError(
+      `Too many verification emails for this address. Try again in ${otpBudget.retryAfter} seconds.`,
+    );
+  }
 
   // Check for existing pending_verification request (same email + community).
   // Case-insensitive on the stored side, as the JS `.find` this replaced was

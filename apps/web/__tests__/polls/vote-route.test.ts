@@ -59,6 +59,8 @@ vi.mock('@/lib/services/polls-service', () => ({
   castPollVoteForCommunity: castPollVoteForCommunityMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { POST } from '../../src/app/api/v1/polls/[id]/vote/route';
 
 const RESIDENT_MEMBERSHIP = {

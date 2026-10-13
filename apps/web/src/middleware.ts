@@ -240,7 +240,9 @@ function buildReturnTo(request: NextRequest): string {
 
 /** Reject returnTo values that could cause open-redirect or path-traversal. */
 function safeReturnTo(value: string | null, fallback: string): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+  // Reject protocol-relative targets in BOTH forms the WHATWG URL parser treats
+  // as cross-origin ('//host' and '/\host'), plus any control characters.
+  if (!value || !/^\/(?![/\\])/.test(value) || /[\u0000-\u001f]/.test(value)) {
     return fallback;
   }
   return value;

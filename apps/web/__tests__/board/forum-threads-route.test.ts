@@ -49,6 +49,8 @@ vi.mock('@/lib/services/polls-service', () => ({
   paginateForumThreadsForCommunity: paginateForumThreadsForCommunityMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { GET } from '../../src/app/api/v1/forum/threads/route';
 
 const membership = {

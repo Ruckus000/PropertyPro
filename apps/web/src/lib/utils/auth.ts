@@ -16,6 +16,11 @@ export function resolveReturnTo(
   hasTenantContext: boolean = false,
 ): string {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  // Accept only a path beginning with a single '/' NOT followed by '/' or '\'.
+  // The WHATWG URL parser (Next's router / <a> resolution) treats both
+  // '//evil.com' and '/\evil.com' as protocol-relative → a cross-origin
+  // redirect, so a bare `!startsWith('//')` check misses the backslash form.
+  // Reject control characters as well.
+  if (raw && /^\/(?![/\\])/.test(raw) && !/[\u0000-\u001f]/.test(raw)) return raw;
   return hasTenantContext ? '/dashboard' : '/select-community';
 }

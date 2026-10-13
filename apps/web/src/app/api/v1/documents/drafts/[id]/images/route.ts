@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
+import { fileTypeFromBuffer } from 'file-type';
 import { createPresignedDownloadUrl } from '@propertypro/db';
 // AUTHZ: storage write to documents/authored-assets/<communityId>/<draftId>/ only, after documents:write + draft-author checks
 import { createAdminClient } from '@propertypro/db/supabase/admin';
@@ -74,18 +75,35 @@ export const POST = withErrorHandler(
       }
     }
     if (!file) throw new ValidationError('Multipart "file" field required');
-    if (!ALLOWED_MIMES.has(file.type)) {
-      throw new ValidationError('Unsupported image type. Use PNG, JPEG, WebP, or GIF.');
-    }
     if (file.size > MAX_BYTES) {
       throw new ValidationError(`Image exceeds ${MAX_BYTES} bytes`);
     }
 
     const inputBytes = new Uint8Array(await file.arrayBuffer());
 
+    // Validate the ACTUAL bytes, never the client-declared Content-Type. A file
+    // labeled `image/png` but whose bytes are AVIF/HEIF/SVG/TIFF would otherwise
+    // reach sharp's native (libvips/libheif/librsvg) decoders — the attack
+    // surface behind the sharp advisories. Drive the encode branch off the
+    // sniffed type so only genuine PNG/JPEG/WebP/GIF ever reach sharp.
+    let sniffedMime: string | undefined;
+    try {
+      sniffedMime = (await fileTypeFromBuffer(inputBytes))?.mime;
+    } catch {
+      // file-type can throw (e.g. EndOfStreamError) on truncated input; treat
+      // an unreadable header as undetectable → 400, never an unhandled 500.
+      sniffedMime = undefined;
+    }
+    // Animated PNG sniffs as image/apng; re-encode it as PNG like any still PNG
+    // (sharp flattens to the first frame) so previously-accepted uploads keep working.
+    const detectedMime = sniffedMime === 'image/apng' ? 'image/png' : sniffedMime;
+    if (!detectedMime || !ALLOWED_MIMES.has(detectedMime)) {
+      throw new ValidationError('Unsupported image type. Use PNG, JPEG, WebP, or GIF.');
+    }
+
     // sharp: re-encode (strips EXIF) and clamp max dimension. We preserve
     // the original format for PNG/JPEG/WebP; GIFs are passed through.
-    const isGif = file.type === 'image/gif';
+    const isGif = detectedMime === 'image/gif';
     let outputBytes: Uint8Array;
     let outputMime: string;
     let outputExt: string;
@@ -101,11 +119,11 @@ export const POST = withErrorHandler(
         withoutEnlargement: true,
       });
       let buffer: Buffer;
-      if (file.type === 'image/png') {
+      if (detectedMime === 'image/png') {
         buffer = await pipeline.png({ compressionLevel: 9 }).toBuffer();
         outputMime = 'image/png';
         outputExt = 'png';
-      } else if (file.type === 'image/webp') {
+      } else if (detectedMime === 'image/webp') {
         buffer = await pipeline.webp({ quality: 88 }).toBuffer();
         outputMime = 'image/webp';
         outputExt = 'webp';

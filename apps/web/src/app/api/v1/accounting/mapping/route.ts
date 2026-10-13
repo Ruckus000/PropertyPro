@@ -44,6 +44,7 @@ import {
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
   getAccountingMapping,
@@ -61,6 +62,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingReadPermission(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
@@ -77,6 +79,7 @@ export const PUT = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingWritePermission(membership);
 
     return updateAccountingMapping(

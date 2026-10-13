@@ -34,6 +34,7 @@ import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   completeAccountingConnect,
   validateAccountingOAuthState,
@@ -47,6 +48,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingWritePermission(membership);
 
     validateAccountingOAuthState(

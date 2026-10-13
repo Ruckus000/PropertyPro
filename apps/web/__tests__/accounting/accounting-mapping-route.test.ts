@@ -71,6 +71,8 @@ vi.mock('@/lib/services/accounting-connectors-service', () => ({
   updateAccountingMapping: updateAccountingMappingMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { GET, PUT } from '../../src/app/api/v1/accounting/mapping/route';
 
 const ADMIN_MEMBERSHIP = {

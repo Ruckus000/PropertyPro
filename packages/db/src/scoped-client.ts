@@ -343,6 +343,7 @@ export function createScopedClient(
     },
 
     async queryById(table, id, options = {}) {
+      assertScopedRead('queryById', table);
       const columns = getTableColumns(table) as ColumnRecord;
       if (!hasIdColumn(columns)) {
         const tableName = getTableName(table as unknown as Table);
