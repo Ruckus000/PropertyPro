@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 
-import { INBOX_DEFAULT_STATUS, InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { INBOX_DEFAULT_STATUS } from '@/components/inbox/inbox-filters';
 import { ThreadView } from '@/components/inbox/ThreadView';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview, getReplyParent, getThreadDetail } from '@/lib/server/inbox';

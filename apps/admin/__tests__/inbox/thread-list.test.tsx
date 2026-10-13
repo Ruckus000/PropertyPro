@@ -8,6 +8,7 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
+import { INBOX_DEFAULT_STATUS } from '@/components/inbox/inbox-filters';
 import { ThreadList } from '@/components/inbox/ThreadList';
 import type { InboxThread } from '@/lib/server/inbox';
 
@@ -32,7 +33,7 @@ function threadLinkHref() {
  * `InboxDashboard`'s docblock claims "`ThreadList` links carry the current
  * query forward" — this pins that claim. Without the mailbox/status query
  * string, an operator filtered to Privacy/Pending who clicks a thread lands
- * back on the detail page with the switcher reset to All/All.
+ * back on the detail page with the filters reset to their defaults.
  */
 describe('ThreadList', () => {
   it('carries the active mailbox and status filters into the thread link', () => {
@@ -40,8 +41,18 @@ describe('ThreadList', () => {
     expect(threadLinkHref()).toBe('/inbox/7?mailbox=privacy&status=pending');
   });
 
-  it('omits the query string when both filters are All (control)', () => {
+  it('keeps an explicit status=all, because All is not the default status', () => {
+    // The inbox opens on `INBOX_DEFAULT_STATUS` ('open'). A link that dropped
+    // 'all' reopened the thread with the Open tab active, so this `pending`
+    // thread disappeared from the list it had just been clicked in.
     render(<ThreadList threads={[thread]} truncated={false} mailbox="all" status="all" />);
+    expect(threadLinkHref()).toBe('/inbox/7?status=all');
+  });
+
+  it('omits the query string when both filters are at their defaults (control)', () => {
+    render(
+      <ThreadList threads={[thread]} truncated={false} mailbox="all" status={INBOX_DEFAULT_STATUS} />,
+    );
     expect(threadLinkHref()).toBe('/inbox/7');
   });
 });

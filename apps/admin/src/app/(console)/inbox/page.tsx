@@ -1,5 +1,6 @@
 import { PageBody } from '@propertypro/ui';
-import { INBOX_DEFAULT_STATUS, InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { INBOX_DEFAULT_STATUS } from '@/components/inbox/inbox-filters';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview } from '@/lib/server/inbox';
