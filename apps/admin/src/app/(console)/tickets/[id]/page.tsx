@@ -21,10 +21,9 @@ export const dynamic = 'force-dynamic';
 
 interface TicketPageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ status?: string }>;
 }
 
-export default async function TicketPage({ params, searchParams }: TicketPageProps) {
+export default async function TicketPage({ params }: TicketPageProps) {
   await requireAdminPageSession();
 
   const { id: raw } = await params;
@@ -35,17 +34,12 @@ export default async function TicketPage({ params, searchParams }: TicketPagePro
 
   // Together, not ticket-then-queue: neither needs the other, and each is
   // several reads in a row. A missing ticket costs one wasted queue read.
-  const [detail, { status }, result] = await Promise.all([
-    getTicket(id),
-    searchParams,
-    listTickets(),
-  ]);
+  const [detail, result] = await Promise.all([getTicket(id), listTickets()]);
   if (!detail) notFound();
 
   return (
     <TicketQueue
       result={result}
-      initialStatus={status ?? 'all'}
       activeTicketId={id}
       detail={<TicketDetail ticket={detail.ticket} events={detail.events} />}
     />

@@ -11,7 +11,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { routerReplace } = vi.hoisted(() => ({ routerReplace: vi.fn() }));
+const { routerReplace, url } = vi.hoisted(() => ({
+  routerReplace: vi.fn(),
+  url: { search: '' },
+}));
 
 vi.mock('next/link', () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +27,7 @@ vi.mock('next/link', () => ({
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: routerReplace, push: vi.fn(), refresh: vi.fn() }),
   usePathname: () => '/tickets/42',
+  useSearchParams: () => new URLSearchParams(url.search),
 }));
 
 import { TicketQueue } from '@/components/tickets/TicketQueue';
@@ -43,7 +47,8 @@ afterEach(() => {
 describe('TicketQueue status tabs', () => {
   it('writes the filter into the URL without a server round trip', () => {
     const replaceState = vi.spyOn(window.history, 'replaceState');
-    render(<TicketQueue result={RESULT} initialStatus="all" />);
+    url.search = '';
+    render(<TicketQueue result={RESULT} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^Waiting/ }));
 
@@ -53,10 +58,28 @@ describe('TicketQueue status tabs', () => {
 
   it('drops the param for All, the value the server defaults to', () => {
     const replaceState = vi.spyOn(window.history, 'replaceState');
-    render(<TicketQueue result={RESULT} initialStatus="waiting" />);
+    url.search = 'status=waiting';
+    render(<TicketQueue result={RESULT} />);
 
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
 
     expect(replaceState).toHaveBeenCalledWith(null, '', '/tickets/42');
+  });
+});
+
+/** See inbox-dashboard.test.tsx: Back restores a payload rendered before the click. */
+describe('TicketQueue filter seed', () => {
+  it('opens on the status in the current URL', () => {
+    url.search = 'status=resolved';
+    render(<TicketQueue result={RESULT} />);
+    expect(
+      screen.getByRole('button', { name: /^Resolved/ }).getAttribute('aria-pressed'),
+    ).toBe('true');
+  });
+
+  it('opens on All when the URL names none (control)', () => {
+    url.search = '';
+    render(<TicketQueue result={RESULT} />);
+    expect(screen.getByRole('button', { name: /^All/ }).getAttribute('aria-pressed')).toBe('true');
   });
 });

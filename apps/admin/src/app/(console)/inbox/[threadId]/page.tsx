@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { INBOX_DEFAULT_STATUS, InboxDashboard } from '@/components/inbox/InboxDashboard';
+import { InboxDashboard } from '@/components/inbox/InboxDashboard';
 import { ThreadView } from '@/components/inbox/ThreadView';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getInboxOverview, getReplyParent, getThreadDetail } from '@/lib/server/inbox';
@@ -11,10 +11,9 @@ export const dynamic = 'force-dynamic';
 
 interface ThreadPageProps {
   params: Promise<{ threadId: string }>;
-  searchParams: Promise<{ mailbox?: string; status?: string }>;
 }
 
-export default async function ThreadPage({ params, searchParams }: ThreadPageProps) {
+export default async function ThreadPage({ params }: ThreadPageProps) {
   await requireAdminPageSession();
 
   const { threadId: raw } = await params;
@@ -23,11 +22,10 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
 
   // The split view needs the same unfiltered load as `/inbox` so the list next
   // to this thread reflects the same mailbox/status filters the operator was
-  // browsing under — see `InboxDashboard`'s docblock. All four in one round:
+  // browsing under — see `InboxDashboard`'s docblock. All three in one round:
   // none needs another, and a missing thread costs only wasted reads.
-  const [detail, { mailbox, status }, overview, parent] = await Promise.all([
+  const [detail, overview, parent] = await Promise.all([
     getThreadDetail(threadId),
-    searchParams,
     getInboxOverview(),
     getReplyParent(threadId),
   ]);
@@ -46,8 +44,6 @@ export default async function ThreadPage({ params, searchParams }: ThreadPagePro
   return (
     <InboxDashboard
       overview={overview}
-      initialMailbox={mailbox ?? 'all'}
-      initialStatus={status ?? INBOX_DEFAULT_STATUS}
       activeThreadId={threadId}
       detail={
         <ThreadView

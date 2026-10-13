@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -16,12 +16,6 @@ import { TicketSplit } from './TicketSplit';
 
 interface TicketQueueProps {
   result: TicketsResult;
-  /**
-   * The `?status=` value read from the URL by the server page. Unvalidated at
-   * this boundary on purpose — `knownOr` below is the one place that decides
-   * what an unrecognised value means.
-   */
-  initialStatus: string;
   /** The ticket rendered by `detail`, so its row can be highlighted. */
   activeTicketId?: number;
   /** `/tickets/[id]` passes the `TicketDetail`; `/tickets` passes nothing. */
@@ -47,7 +41,9 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * and no spinner. The selection is mirrored into the URL so it survives a reload
  * and a navigation into a ticket — with `window.history.replaceState`, for the
  * reason `InboxDashboard` gives: `router.replace` re-ran the force-dynamic page
- * (on `/tickets/[id]`, the ticket and the whole queue) on every tab click.
+ * (on `/tickets/[id]`, the ticket and the whole queue) on every tab click. The
+ * filter is seeded from the current URL, not a server-passed value, for the
+ * same reason too: Back restores a cached payload rendered before the click.
  *
  * ## Why there is an "All" tab the plan did not ask for
  *
@@ -59,9 +55,12 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * already orders open work first, most urgent first, so the unfiltered queue
  * opens on exactly what a three-tab default would have shown.
  */
-export function TicketQueue({ result, initialStatus, activeTicketId, detail }: TicketQueueProps) {
+export function TicketQueue({ result, activeTicketId, detail }: TicketQueueProps) {
   const pathname = usePathname();
-  const [status, setStatus] = useState(() => knownOr(initialStatus, SUPPORT_TICKET_STATUSES));
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState(() =>
+    knownOr(searchParams.get('status') ?? 'all', SUPPORT_TICKET_STATUSES),
+  );
 
   function changeStatus(next: string) {
     setStatus(next);

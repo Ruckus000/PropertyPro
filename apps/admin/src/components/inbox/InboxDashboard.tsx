@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -18,13 +18,6 @@ import { ThreadList } from './ThreadList';
 
 interface InboxDashboardProps {
   overview: InboxOverview;
-  /**
-   * Initial values read from the URL (`?mailbox=&status=`) by the server page.
-   * Unvalidated at this boundary on purpose — `knownOr` below is the one place
-   * that decides what an unrecognised value means.
-   */
-  initialMailbox: string;
-  initialStatus: string;
   /** The thread rendered by `detail`, so its row can be highlighted in the list. */
   activeThreadId?: number;
   /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
@@ -40,9 +33,9 @@ interface InboxDashboardProps {
  * history had been triaged as spam still rendered as a wall of spam. Opening on
  * the work queue is what makes the shelf a shelf.
  *
- * Exported because `page.tsx` must not spell it independently: the server's
- * fallback and the client's must be the same value or the URL round-trip below
- * is wrong in one direction.
+ * Exported because `ThreadList` must not spell it independently: its row
+ * links omit `status` exactly when it equals this value, so the two must agree
+ * or opening a thread silently changes the filter.
  */
 export const INBOX_DEFAULT_STATUS = 'open';
 
@@ -72,18 +65,25 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * so a router navigation re-ran the whole page on the server on every click to
  * produce what was already on screen. Next syncs `replaceState` into its router
  * state, so Back and a later navigation still see the current URL.
+ *
+ * Which is why the filters are seeded from that URL (`useSearchParams`), not
+ * from a value the server page read. Back restores the page from the router
+ * cache — the payload rendered BEFORE any tab click — so a server-passed seed
+ * came back stale: the address bar said `?status=closed` while Open was the
+ * highlighted tab. `ClientWorkspace` reads `?tab=` the same way.
  */
-export function InboxDashboard({
-  overview,
-  initialMailbox,
-  initialStatus,
-  activeThreadId,
-  detail,
-}: InboxDashboardProps) {
+export function InboxDashboard({ overview, activeThreadId, detail }: InboxDashboardProps) {
   const pathname = usePathname();
-  const [mailbox, setMailbox] = useState(() => knownOr(initialMailbox, SUPPORT_MAILBOXES));
+  const searchParams = useSearchParams();
+  const [mailbox, setMailbox] = useState(() =>
+    knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES),
+  );
   const [status, setStatus] = useState(() =>
-    knownOr(initialStatus, [...SUPPORT_THREAD_STATUSES, 'all'], INBOX_DEFAULT_STATUS),
+    knownOr(
+      searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
+      [...SUPPORT_THREAD_STATUSES, 'all'],
+      INBOX_DEFAULT_STATUS,
+    ),
   );
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
