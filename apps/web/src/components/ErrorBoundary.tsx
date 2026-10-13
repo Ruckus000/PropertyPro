@@ -41,13 +41,17 @@ export class ErrorBoundary extends React.Component<
     // Report to Sentry. The SDK is loaded on demand, never statically, so
     // pages that merely wrap content in this boundary don't ship it in their
     // first load (instrumentation-client.ts defers it the same way).
-    void import('@sentry/nextjs').then((Sentry) =>
-      Sentry.captureException(error, {
-        contexts: {
-          react: { componentStack: errorInfo.componentStack ?? undefined },
-        },
-      }),
-    );
+    void import('@sentry/nextjs')
+      .then((Sentry) =>
+        Sentry.captureException(error, {
+          contexts: {
+            react: { componentStack: errorInfo.componentStack ?? undefined },
+          },
+        }),
+      )
+      .catch((loadError) =>
+        console.error('[Sentry] Failed to load the SDK to report an error', loadError),
+      );
   }
 
   private handleRetry = (): void => {
