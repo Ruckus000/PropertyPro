@@ -17,6 +17,9 @@
  * is an `Error` with the same `message` this used to throw.
  */
 
+/** For a JSON request body. No route requires it; sent for parity with what callers always sent. */
+export const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
 /** One field-level reason from a server `ValidationError`. */
 export interface ApiErrorField {
   field: string;

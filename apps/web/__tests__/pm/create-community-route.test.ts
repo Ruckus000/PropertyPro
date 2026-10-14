@@ -90,6 +90,21 @@ describe('POST /api/v1/pm/communities', () => {
     );
   });
 
+  it("returns the PM to the host they are signed in on, never localhost", async () => {
+    const req = new NextRequest('https://pm.getpropertypro.com/api/v1/pm/communities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', host: 'pm.getpropertypro.com' },
+      body: JSON.stringify(validBody),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(createAddCommunityCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({ returnBaseUrl: 'https://pm.getpropertypro.com' }),
+    );
+  });
+
   // `createAddCommunityCheckout` has always returned a sessionId and this route
   // discarded it, so `payload.stripeCheckoutSessionId` was never written. That
   // is the only key `reconcileLostCheckoutSignups` can look a signup up by, so a

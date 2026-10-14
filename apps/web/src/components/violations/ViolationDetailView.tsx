@@ -12,6 +12,7 @@ import { ViolationStatusTransition } from './ViolationStatusTransition';
 import { FinesSummary } from './FinesSummary';
 import type { ViolationItem, ViolationFineItem } from '@/lib/api/violations';
 import { PageHeader } from '@/components/shared/page-header';
+import { formatDeadlineStamp } from '@/lib/meetings/meeting-status';
 
 const STATUS_STYLES: Record<string, string> = {
   reported: 'bg-status-warning-bg text-status-warning',
@@ -97,6 +98,8 @@ const VARIANT_STYLES: Record<string, string> = {
 };
 
 interface ViolationDetailViewProps {
+  /** IANA zone hearing times are shown and entered in (`membership.timezone`). */
+  communityTimezone: string;
   violation: ViolationRecord;
   communityId: number;
   userId: string;
@@ -108,6 +111,7 @@ interface ViolationDetailViewProps {
 }
 
 export function ViolationDetailView({
+  communityTimezone,
   violation,
   communityId,
   userId,
@@ -181,7 +185,7 @@ export function ViolationDetailView({
           {violation.hearingDate && (
             <div>
               <span className="text-content-tertiary">Hearing Date:</span>{' '}
-              <span className="text-content-secondary">{new Date(violation.hearingDate).toLocaleString()}</span>
+              <span className="text-content-secondary">{formatDeadlineStamp(violation.hearingDate, communityTimezone)}</span>
             </div>
           )}
           {violation.hearingLocation && (
@@ -254,6 +258,7 @@ export function ViolationDetailView({
           <ViolationStatusTransition
             violation={violationItem}
             communityId={communityId}
+            communityTimezone={communityTimezone}
             actorUserId={userId}
             action={activeAction}
             onComplete={() => window.location.reload()}

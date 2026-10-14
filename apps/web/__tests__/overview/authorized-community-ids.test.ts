@@ -17,7 +17,6 @@ vi.mock('@propertypro/db', () => ({
   buildAccessibleDocumentsFilter: vi.fn(),
   createScopedClient: createScopedClientMock,
   communities: { id: 'id', name: 'name', slug: 'slug', communityType: 'communityType' },
-  complianceChecklistItems: {},
   documents: {},
   meetings: {},
 }));
@@ -32,6 +31,7 @@ vi.mock('@propertypro/db/filters', () => ({
 vi.mock('@/lib/db/access-control', () => ({ checkPermissionV2: vi.fn(() => true) }));
 vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: vi.fn() }));
 vi.mock('@/lib/announcements/read-visibility', () => ({ listVisibleAnnouncements: vi.fn() }));
+vi.mock('@/lib/compliance/load-checklist-with-status', () => ({ loadChecklistWithStatus: vi.fn() }));
 
 import { getAuthorizedCommunityIds, getCommunityCards } from '@/lib/queries/cross-community';
 

@@ -53,13 +53,18 @@ export function sanitizeDemoRow<T extends { auth_token_secret?: unknown }>(
 // Queries
 // ---------------------------------------------------------------------------
 
-/** List all demo instances with community conversion status, ordered by created_at DESC. */
+/**
+ * List live demo instances with community conversion status, ordered by
+ * created_at DESC. Retired demos (soft-deleted by the expire-demos cron or by
+ * DELETE) are excluded, as the onboarding pipeline already excludes them.
+ */
 export async function listDemos(): Promise<{
   data: DemoInstanceRow[] | null;
   error: { message: string } | null;
 }> {
   const { data, error } = await from('demo_instances')
     .select('*, communities:seeded_community_id(is_demo)')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(PLATFORM_LIST_LIMIT);
 
@@ -135,16 +140,35 @@ export async function insertDemo(row: {
   return from('demo_instances').insert(row).select().single();
 }
 
-/** Hard-delete a demo instance by ID. */
-export async function deleteDemo(id: number): Promise<{
-  data: DemoInstanceRow | null;
-  error: { message: string } | null;
-}> {
-  return from('demo_instances')
-    .delete()
+/**
+ * Retire a demo the way the expire-demos cron does: soft-delete its community
+ * and its demo row. A hard delete cannot work here: conversion_events
+ * references both with NO ACTION foreign keys, so the delete failed after the
+ * auth users were already gone, leaving a live, undeletable demo. Soft
+ * deletion also keeps that funnel data.
+ *
+ * Idempotent (each write requires `deleted_at is null`), so a retried DELETE
+ * is safe. `is_demo = true` is re-asserted so a community converted since the
+ * caller read it is never touched.
+ */
+export async function softDeleteDemo(
+  id: number,
+  communityId: number | null,
+  now: string,
+): Promise<{ error: { message: string } | null }> {
+  if (communityId !== null) {
+    const { error } = await from('communities')
+      .update({ deleted_at: now })
+      .eq('id', communityId)
+      .eq('is_demo', true)
+      .is('deleted_at', null);
+    if (error) return { error };
+  }
+  const { error } = await from('demo_instances')
+    .update({ deleted_at: now })
     .eq('id', id)
-    .select()
-    .single();
+    .is('deleted_at', null);
+  return { error };
 }
 
 /**
@@ -189,13 +213,4 @@ export async function getDemoCommunityId(demoId: number): Promise<number | null>
     .eq('id', demoId)
     .single();
   return (data as { seeded_community_id: number | null } | null)?.seeded_community_id ?? null;
-}
-
-/** Delete a community by ID (cascades demo data). */
-export async function deleteCommunity(communityId: number): Promise<{
-  error: { message: string } | null;
-}> {
-  return from('communities')
-    .delete()
-    .eq('id', communityId);
 }

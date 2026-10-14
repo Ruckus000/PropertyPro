@@ -70,6 +70,8 @@ const LIMIT = 20;
 
 interface ViolationsAdminInboxProps {
   communityId: number;
+  /** IANA zone hearing times are shown and entered in (`membership.timezone`). */
+  communityTimezone: string;
   userId: string;
   userRole: CommunityRole;
   /** Per-community `violationFinesEnabled` legal gate. */
@@ -80,6 +82,7 @@ interface ViolationsAdminInboxProps {
 
 export function ViolationsAdminInbox({
   communityId,
+  communityTimezone,
   userId,
   userRole,
   finesEnabled,
@@ -290,6 +293,7 @@ export function ViolationsAdminInbox({
                 <ViolationDetailPanel
                   violation={v}
                   communityId={communityId}
+                  communityTimezone={communityTimezone}
                   userId={userId}
                   userRole={userRole}
                   finesEnabled={finesEnabled}

@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
 import { communities } from '../src/schema/communities';
+import { documents } from '../src/schema/documents';
 import { complianceChecklistItems } from '../src/schema/compliance-checklist-items';
 import { leases } from '../src/schema/leases';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
@@ -588,5 +589,56 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     const rowA = rows.find((row) => row.communityId === communityAId);
 
     expect(rowA!.hasUnpublishedSiteDrafts).toBe(false);
+  });
+  it('scores only applicable checklist items, as the community page does (audit S-02)', async () => {
+    // A board marks an item not applicable. The community's own compliance
+    // page drops it (calculateComplianceStatus -> not_applicable); the PM
+    // portfolio counted it as missing, overdue and in the denominator, so the
+    // two views made contradictory claims about the same association.
+    const [doc] = await db
+      .insert(documents)
+      .values({
+        communityId: communityAId,
+        title: 'Declaration',
+        filePath: `communities/${communityAId}/documents/declaration.pdf`,
+        fileName: 'declaration.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      })
+      .returning({ id: documents.id });
+    await db.insert(complianceChecklistItems).values([
+      {
+        communityId: communityAId,
+        templateKey: 'test_pm_portfolio_posted',
+        title: 'Posted',
+        category: 'governing_documents',
+        documentId: doc!.id,
+      },
+      {
+        communityId: communityAId,
+        templateKey: 'test_pm_portfolio_not_applicable',
+        title: 'Not applicable',
+        category: 'governing_documents',
+        documentId: null,
+        isApplicable: false,
+        deadline: new Date('2020-01-01T00:00:00.000Z'),
+      },
+    ]);
+
+    const { findManagedCommunitiesPortfolioUnscoped, getComplianceStatusReport, getPortfolioDashboard } =
+      await import('../src/unsafe');
+
+    const rowA = (await findManagedCommunitiesPortfolioUnscoped(pmUserId)).find(
+      (row) => row.communityId === communityAId,
+    );
+    expect(rowA!.unsatisfiedComplianceItems).toBe(0);
+
+    const report = await getComplianceStatusReport(pmUserId, [communityAId]);
+    expect(report.tableData).toEqual([
+      expect.objectContaining({ score: 100, satisfied: 1, overdue: 0, missing: 0 }),
+    ]);
+
+    const dashboard = await getPortfolioDashboard(pmUserId, { communityType: 'condo_718' });
+    expect(dashboard.kpis.complianceScore).toBe(100);
   });
 });

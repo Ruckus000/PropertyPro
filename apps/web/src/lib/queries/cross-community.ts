@@ -19,10 +19,10 @@ import type { RbacResource } from '@propertypro/shared';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requireCommunityMembership, type CommunityMembership } from '@/lib/api/community-membership';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
+import { loadChecklistWithStatus } from '@/lib/compliance/load-checklist-with-status';
 import { narrowToSupportScope, type SupportScope } from '@/lib/support/support-scope';
 import {
   communities,
-  complianceChecklistItems,
   documents,
   meetings,
 } from '@propertypro/db';
@@ -146,24 +146,24 @@ export async function getCommunityCards(
           criticalItemCount: 0,
         };
       }
-      const items = (await scoped.selectFrom<Row>(
-        complianceChecklistItems,
-        {
-          documentId: complianceChecklistItems.documentId,
-          isApplicable: complianceChecklistItems.isApplicable,
-          deadline: complianceChecklistItems.deadline,
-        },
-      )) as Array<{ documentId: number | null; isApplicable: boolean; deadline: Date | null }>;
-      const applicable = items.filter((i) => i.isApplicable);
-      const satisfied = applicable.filter((i) => i.documentId != null).length;
+      // The compliance page's own loader, so this card's score and counts
+      // match that page: not-applicable items drop out, a draft or deleted
+      // document does not satisfy, and below the website-rule size threshold
+      // no posting clock runs, so nothing is overdue (postingClockApplies).
+      const items = await loadChecklistWithStatus(cId, meta.communityType);
+      const applicable = items.filter((i) => i['status'] !== 'not_applicable');
+      const satisfied = applicable.filter((i) => i['status'] === 'satisfied').length;
       const score = applicable.length > 0 ? Math.round((satisfied / applicable.length) * 100) : null;
       let urgentCount = 0;
       let criticalCount = 0;
       for (const item of applicable) {
-        if (item.documentId != null) continue;
-        const tier = classifyComplianceEscalation(item.deadline, now);
-        if (tier === 'urgent') urgentCount++;
-        if (tier === 'critical') criticalCount++;
+        if (item['status'] === 'satisfied') continue;
+        if (item['status'] === 'overdue') {
+          criticalCount++;
+          continue;
+        }
+        const deadline = item['deadline'] ? new Date(item['deadline'] as string) : null;
+        if (classifyComplianceEscalation(deadline, now) === 'urgent') urgentCount++;
       }
       return {
         communityId: cId,

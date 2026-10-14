@@ -70,7 +70,8 @@ export default async function SettingsPage() {
           .is('deleted_at', null),
         db
           .from('demo_instances')
-          .select('*', { count: 'exact', head: true }),
+          .select('*', { count: 'exact', head: true })
+          .is('deleted_at', null),
       ]),
       integrations,
     ]);

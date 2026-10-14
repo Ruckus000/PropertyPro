@@ -30,6 +30,7 @@ import { compileSnowbirdDigest, isDigestEmpty } from './snowbird-digest-service'
 import { resolveEffectiveCadence } from './snowbird-digest-subscription-service';
 import { signSnowbirdUnsubscribeToken } from './snowbird-digest-token';
 import { getBaseUrl } from '@/lib/utils/url';
+import { dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
 
 const DEFAULT_TIMEZONE = 'America/New_York';
 const DEFAULT_EMAILS_PER_TICK = 500;
@@ -39,6 +40,12 @@ export interface SnowbirdDigestRunResult {
   communitiesProcessed: number;
   emailsSent: number;
   emailsSkippedEmpty: number;
+  /**
+   * Sends that threw. The watermark stays put, so the next cycle's window still
+   * covers this one. Named `failed` because withCronJob's FAILURE_KEYS reads
+   * that key: a count under any other name would never reach the cron monitor.
+   */
+  failed: number;
 }
 
 export interface LocalParts {
@@ -145,12 +152,18 @@ export async function processSnowbirdDigests(
     communitiesProcessed: 0,
     emailsSent: 0,
     emailsSkippedEmpty: 0,
+    failed: 0,
   };
 
-  for (const community of enabled) {
-    if (result.emailsSent >= budget) break;
+  // Failed sends spend the budget too: during a provider outage every attempt
+  // fails, and an unbudgeted loop would run into the route's time limit.
+  const spent = () => result.emailsSent + result.failed;
 
-    const parts = toLocalParts(now, community.timezone ?? DEFAULT_TIMEZONE);
+  for (const community of enabled) {
+    if (spent() >= budget) break;
+
+    const timezone = community.timezone ?? DEFAULT_TIMEZONE;
+    const parts = toLocalParts(now, timezone);
     if (parts.hour !== SEND_HOUR_LOCAL) continue;
     const due = dueCadences(parts);
     if (due.size === 0) continue;
@@ -169,7 +182,7 @@ export async function processSnowbirdDigests(
     const recipients = await resolveOwnerRecipients(communityId);
 
     for (const recipient of recipients) {
-      if (result.emailsSent >= budget) break;
+      if (spent() >= budget) break;
 
       const subRow = subByUser.get(recipient.userId) ?? null;
       const cadence = resolveEffectiveCadence(subRow);
@@ -194,23 +207,40 @@ export async function processSnowbirdDigests(
       const token = signSnowbirdUnsubscribeToken({ communityId, userId: recipient.userId });
       const unsubscribeUrl = `${baseUrl}/api/v1/snowbird-digest/unsubscribe?token=${encodeURIComponent(token)}`;
 
-      await sendEmail({
-        to: recipient.email,
-        subject: `${community.name} — your ${cadence} in review`,
-        react: createElement(SnowbirdDigestEmail, {
-          branding: { communityName: community.name },
-          recipientName: recipient.fullName,
-          cadenceLabel: cadence,
-          boardDecisions: sections.boardDecisions,
-          newDocuments: sections.newDocuments,
-          upcoming: sections.upcoming,
-          complianceNote: sections.complianceNote,
-          portalUrl: `${baseUrl}/communities/${communityId}/dashboard`,
+      // One failed send must not end the tick: the 8 AM gate means the next
+      // hourly tick skips this community, so everyone after the failure would
+      // lose the whole cycle. (`sendEmail` throws on a provider error.)
+      try {
+        await sendEmail({
+          to: recipient.email,
+          subject: `${community.name} — your ${cadence} in review`,
+          react: createElement(SnowbirdDigestEmail, {
+            branding: { communityName: community.name },
+            recipientName: recipient.fullName,
+            cadenceLabel: cadence,
+            boardDecisions: sections.boardDecisions,
+            newDocuments: sections.newDocuments,
+            upcoming: sections.upcoming,
+            complianceNote: sections.complianceNote,
+            portalUrl: `${baseUrl}/communities/${communityId}/dashboard`,
+            unsubscribeUrl,
+          }),
+          category: 'non-transactional',
           unsubscribeUrl,
-        }),
-        category: 'non-transactional',
-        unsubscribeUrl,
-      });
+          // Stable per recipient and community-local day, so a retried tick
+          // cannot send the same digest twice while the provider's 24-hour key
+          // window lasts (insurance-alert-processor precedent).
+          idempotencyKey: `snowbird/${communityId}/${recipient.userId}/${dateOnlyInTimeZone(now, timezone)}`,
+        });
+      } catch (error) {
+        result.failed += 1;
+        console.warn('[snowbird-digest] send failed', {
+          communityId,
+          userId: recipient.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
       result.emailsSent += 1;
 
       // Advance the watermark, lazily creating the row on first send.

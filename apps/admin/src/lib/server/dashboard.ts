@@ -187,7 +187,8 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     communities30dResult,
     members30dResult,
   ] = await Promise.all([
-    db.from('demo_instances').select('*', { count: 'exact', head: true }),
+    // Live demos only, matching the Demos list (listDemos); retired ones are soft-deleted.
+    db.from('demo_instances').select('*', { count: 'exact', head: true }).is('deleted_at', null),
     realIds.length > 0
       ? db.from('user_roles').select('*', { count: 'exact', head: true }).in('community_id', realIds)
       : Promise.resolve({ count: 0, error: null }),

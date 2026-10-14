@@ -75,6 +75,7 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
       <ViolationDetailView
         violation={violation}
         communityId={communityId}
+        communityTimezone={membership.timezone}
         userId={userId}
         canManage={canActAsBoard(membership)}
         finesEnabled={membership.violationFinesEnabled}

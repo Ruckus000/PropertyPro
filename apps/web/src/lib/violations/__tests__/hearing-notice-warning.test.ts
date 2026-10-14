@@ -8,7 +8,7 @@ import {
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-/** Mid-afternoon deliberately — midnight would hide the date-only tolerance. */
+/** Mid-afternoon, so a midnight-anchored value could not pass by accident. */
 const NOW = new Date('2026-03-15T14:00:00.000Z');
 
 function hearingDaysOut(days: number): Date {
@@ -26,27 +26,22 @@ describe('buildHearingNoticeWarning', () => {
       .toBeNull();
   });
 
-  it('does not warn on the form default — exactly 14 days out at midnight', () => {
-    // The regression this tolerance exists for. `ViolationStatusTransition`
-    // defaults the field to `addDays(now, 14)` rendered as a date, which is
-    // re-read as MIDNIGHT — up to 24 hours earlier than "14 days from this
-    // instant". Without the day of slack the field would warn about its own
-    // default value, and every reviewer would learn to ignore the warning.
-    const midnightFourteenDaysOut = new Date('2026-03-29T00:00:00.000Z');
-    expect(
-      buildHearingNoticeWarning({ hearingDate: midnightFourteenDaysOut, now: NOW }),
-    ).toBeNull();
+  it('compares exact instants — 14 days is enough, one minute less is not', () => {
+    // No day of slack any more: the hearing is a real instant in the
+    // community's clock, so "14 days" means 14 days of elapsed time (#931).
+    expect(buildHearingNoticeWarning({ hearingDate: hearingDaysOut(14), now: NOW })).toBeNull();
+    const oneMinuteShort = new Date(hearingDaysOut(14).getTime() - 60_000);
+    expect(buildHearingNoticeWarning({ hearingDate: oneMinuteShort, now: NOW })?.message)
+      .toContain('1 hour inside');
   });
 
   it('warns about a genuinely short-noticed hearing', () => {
     const warning = buildHearingNoticeWarning({ hearingDate: hearingDaysOut(7), now: NOW });
     expect(warning?.code).toBe(HEARING_NOTICE_WARNING_CODE);
     expect(warning?.message).toContain(`${HEARING_NOTICE_DAYS}-day notice window`);
-    // 7 days of notice against a 14-day expectation is a 7-day shortfall, and
-    // the warning says 6 — the date-only tolerance, spent. That understatement
-    // is the deliberate direction: it can only ever make the app warn less than
-    // the truth, never claim a shortfall that is not there.
-    expect(warning?.message).toContain('6 days inside');
+    // 7 days of notice against a 14-day expectation: a 7-day shortfall, stated
+    // exactly. (It read "6" while a day of date-only slack was spent here.)
+    expect(warning?.message).toContain('7 days inside');
   });
 
   it('warns about a hearing scheduled for tomorrow', () => {

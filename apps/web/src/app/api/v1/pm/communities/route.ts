@@ -50,6 +50,13 @@ export const POST = withErrorHandler(
       input: { ...body, subdomain: slugCheck.normalizedSubdomain },
     });
 
+    // Stripe sends the PM back to the host they are signed in on, derived the
+    // way the signup checkout derives it (lib/actions/checkout.ts). This read
+    // an undocumented NEXT_PUBLIC_BASE_URL that fell back to localhost, so an
+    // unset var returned a PM who had just PAID to localhost:3000.
+    const host = req.headers.get('host') ?? req.nextUrl.host;
+    const returnBaseUrl = `${host.includes('localhost') ? 'http' : 'https'}://${host}`;
+
     const { clientSecret, sessionId } = await createAddCommunityCheckout({
       billingGroupId,
       stripeCustomerId,
@@ -57,7 +64,7 @@ export const POST = withErrorHandler(
       communityType: body.communityType,
       planId: body.planId,
       candidateSlug: slugCheck.normalizedSubdomain,
-      returnBaseUrl: process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000',
+      returnBaseUrl,
     });
 
     // `sessionId` was returned here all along and thrown away. It is what

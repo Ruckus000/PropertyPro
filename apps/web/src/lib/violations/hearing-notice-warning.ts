@@ -48,21 +48,11 @@ export function buildHearingNoticeWarning(params: {
     return null;
   }
 
-  // A whole day of slack, and not arbitrarily: `hearingDate` originates in a
-  // date-only `<input type="date">` and is persisted as midnight, so it carries
-  // no meaningful time of day. Comparing it to a real instant makes "14 days
-  // from today" — the field's own default — read as up to 24 hours short,
-  // purely because the deadline lands at midnight and `now` does not. Warning
-  // on the default value would train every reviewer to ignore the warning.
-  //
-  // The alternative was to floor both sides to a calendar day, which means
-  // reading a timezone; the process's zone is UTC on Vercel and Eastern on a
-  // dev Mac, and re-introducing that host-dependence is exactly what #931
-  // removed from the deadline math. Elapsed milliseconds plus a day of
-  // tolerance is host-independent and errs toward silence.
-  const noticeDeadline = new Date(
-    hearing.getTime() - HEARING_NOTICE_DAYS * DAY_MS + DAY_MS,
-  );
+  // Exact elapsed milliseconds, no slack (#931). The hearing is a real instant
+  // in the community's clock; it used to be a date-only value stored as UTC
+  // midnight, and a day of tolerance hid that 8 PM-the-day-before offset — and
+  // with it up to 24 hours of genuine shortfall.
+  const noticeDeadline = new Date(hearing.getTime() - HEARING_NOTICE_DAYS * DAY_MS);
   const shortfall = noticeShortfall(noticeDeadline, now);
   if (!shortfall) {
     return null;

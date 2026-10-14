@@ -6,6 +6,7 @@
  * requested `page` window. Same pattern as #228 violations, #236 work-orders.
  */
 import type { MaintenanceRequestItem } from './maintenance-requests';
+import { JSON_HEADERS, requestJsonEnvelope } from './request-json';
 import { walkAndSlice } from './walk-paginated';
 
 export type { MaintenanceRequestItem };
@@ -22,21 +23,6 @@ export interface ListAllRequestsParams {
 export interface ListAllRequestsResponse {
   data: MaintenanceRequestItem[];
   meta: { total: number; page: number; limit: number };
-}
-
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error((err as Record<string, unknown>)['message'] as string ?? res.statusText);
-  }
-  return res.json() as Promise<T>;
 }
 
 export async function listAllRequests(
@@ -71,8 +57,9 @@ export async function updateRequestStatus(
     priority?: string;
   },
 ): Promise<{ data: MaintenanceRequestItem }> {
-  return apiFetch<{ data: MaintenanceRequestItem }>(`/api/v1/maintenance-requests/${id}`, {
+  return requestJsonEnvelope<MaintenanceRequestItem>(`/api/v1/maintenance-requests/${id}`, {
     method: 'PATCH',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ communityId, ...updates }),
   });
 }

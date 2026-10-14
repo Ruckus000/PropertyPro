@@ -9,6 +9,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import type { CommunityRole } from '@propertypro/shared';
 import type { ViolationItem } from '@/lib/api/violations';
 import { ViolationStatusTransition } from './ViolationStatusTransition';
+import { formatDeadlineStamp } from '@/lib/meetings/meeting-status';
 
 const CATEGORY_LABELS: Record<string, string> = {
   noise: 'Noise',
@@ -70,6 +71,8 @@ const VARIANT_STYLES: Record<string, string> = {
 };
 
 interface ViolationDetailPanelProps {
+  /** IANA zone hearing times are shown and entered in (`membership.timezone`). */
+  communityTimezone: string;
   violation: ViolationItem;
   communityId: number;
   userId: string;
@@ -80,6 +83,7 @@ interface ViolationDetailPanelProps {
 }
 
 export function ViolationDetailPanel({
+  communityTimezone,
   violation,
   communityId,
   userId,
@@ -118,7 +122,7 @@ export function ViolationDetailPanel({
         {violation.hearingDate && (
           <div>
             <span className="text-xs font-medium uppercase tracking-wide text-content-tertiary">Hearing Date</span>
-            <p className="text-content-secondary">{new Date(violation.hearingDate).toLocaleDateString()}</p>
+            <p className="text-content-secondary">{formatDeadlineStamp(violation.hearingDate, communityTimezone)}</p>
           </div>
         )}
         {violation.hearingLocation && (
@@ -168,6 +172,7 @@ export function ViolationDetailPanel({
         <ViolationStatusTransition
           violation={violation}
           communityId={communityId}
+          communityTimezone={communityTimezone}
           actorUserId={userId}
           action={activeAction}
           onComplete={onActionComplete}

@@ -59,6 +59,7 @@ function renderHearingForm() {
     <ViolationStatusTransition
       violation={VIOLATION}
       communityId={42}
+      communityTimezone="America/New_York"
       actorUserId="user-cam"
       action="hearing"
       onComplete={vi.fn()}
@@ -80,9 +81,12 @@ describe('ViolationStatusTransition — hearing notice window', () => {
   });
 
   it('does not warn about its own default date', () => {
-    // The form defaults to exactly 14 days out. If this ever warns, every
-    // reviewer learns to dismiss the warning and it stops meaning anything.
+    // The form defaults to 6 PM fifteen community days out. If this ever warns,
+    // every reviewer learns to dismiss the warning and it stops meaning anything.
     renderHearingForm();
+    expect(screen.getByLabelText('Hearing date and time (America/New_York)')).toHaveValue(
+      '2026-04-16T18:00',
+    );
 
     expect(screen.queryByTestId('hearing-notice-window-warning')).toBeNull();
     expect(screen.getByText(/Most Florida condo bylaws require/)).toBeVisible();
@@ -90,8 +94,8 @@ describe('ViolationStatusTransition — hearing notice window', () => {
 
   it('warns once a short-noticed date is chosen', () => {
     renderHearingForm();
-    fireEvent.change(screen.getByLabelText('Hearing Date'), {
-      target: { value: '2026-04-05' },
+    fireEvent.change(screen.getByLabelText('Hearing date and time (America/New_York)'), {
+      target: { value: '2026-04-05T18:00' },
     });
 
     const warning = screen.getByTestId('hearing-notice-window-warning');
@@ -103,10 +107,10 @@ describe('ViolationStatusTransition — hearing notice window', () => {
     // The whole point of the change: warn, never block. The date input no
     // longer carries `min`, and nothing in the submit path rejects the value.
     renderHearingForm();
-    const input = screen.getByLabelText('Hearing Date');
+    const input = screen.getByLabelText('Hearing date and time (America/New_York)');
     expect(input).not.toHaveAttribute('min');
 
-    fireEvent.change(input, { target: { value: '2026-04-03' } });
+    fireEvent.change(input, { target: { value: '2026-04-03T18:00' } });
     // The location is saved with the hearing (it prints on the hearing notice).
     fireEvent.change(screen.getByLabelText('Hearing Location (optional)'), {
       target: { value: '  Clubhouse, Room 101 ' },
@@ -119,9 +123,38 @@ describe('ViolationStatusTransition — hearing notice window', () => {
         expect.objectContaining({
           communityId: 42,
           status: 'hearing_scheduled',
-          hearingDate: '2026-04-03T00:00:00.000Z',
+          // 6 PM in Florida (EDT, UTC-4) — not UTC midnight, which Florida
+          // viewers read as 8 PM the evening before.
+          hearingDate: '2026-04-03T22:00:00.000Z',
           hearingLocation: 'Clubhouse, Room 101',
         }),
+      ),
+    );
+  });
+
+  it("reads the entered time in the community's zone, not the browser's", async () => {
+    // Chicago, deliberately not the zone a dev Mac or CI runner is in: a
+    // browser-local parse (`new Date(value)`) would send a different instant.
+    render(
+      <ViolationStatusTransition
+        violation={VIOLATION}
+        communityId={42}
+        communityTimezone="America/Chicago"
+        actorUserId="user-cam"
+        action="hearing"
+        onComplete={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Hearing date and time (America/Chicago)'), {
+      target: { value: '2026-04-20T18:00' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Schedule Hearing/i }));
+
+    await waitFor(() =>
+      expect(updateViolationMock).toHaveBeenCalledWith(
+        12,
+        expect.objectContaining({ hearingDate: '2026-04-20T23:00:00.000Z' }),
       ),
     );
   });
@@ -137,8 +170,8 @@ describe('ViolationStatusTransition — hearing notice window', () => {
     });
 
     renderHearingForm();
-    fireEvent.change(screen.getByLabelText('Hearing Date'), {
-      target: { value: '2026-04-03' },
+    fireEvent.change(screen.getByLabelText('Hearing date and time (America/New_York)'), {
+      target: { value: '2026-04-03T18:00' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Schedule Hearing/i }));
 
@@ -176,6 +209,7 @@ describe('ViolationStatusTransition — fining committee', () => {
       <ViolationStatusTransition
         violation={VIOLATION}
         communityId={42}
+        communityTimezone="America/New_York"
         actorUserId="user-cam"
         action="fine"
         onComplete={vi.fn()}

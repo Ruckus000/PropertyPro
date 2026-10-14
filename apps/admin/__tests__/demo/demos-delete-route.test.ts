@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requirePlatformAdmin = vi.fn();
 const getDemoByIdWithConversionState = vi.fn();
-const deleteDemo = vi.fn();
-const deleteCommunity = vi.fn();
-const deleteUser = vi.fn();
+const softDeleteDemo = vi.fn();
+const updateUserById = vi.fn();
 
 vi.mock('@/lib/auth/platform-admin', () => ({
   requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
@@ -14,15 +13,14 @@ vi.mock('@/lib/db/demo-queries', () => ({
   getDemoById: vi.fn(),
   getDemoByIdWithConversionState: (...args: unknown[]) =>
     getDemoByIdWithConversionState(...args),
-  deleteDemo: (...args: unknown[]) => deleteDemo(...args),
-  deleteCommunity: (...args: unknown[]) => deleteCommunity(...args),
+  softDeleteDemo: (...args: unknown[]) => softDeleteDemo(...args),
   updateDemo: vi.fn(),
   sanitizeDemoRow: <T,>(row: T) => row,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminClient: () => ({
-    auth: { admin: { deleteUser: (...args: unknown[]) => deleteUser(...args) } },
+    auth: { admin: { updateUserById: (...args: unknown[]) => updateUserById(...args) } },
   }),
 }));
 
@@ -74,13 +72,11 @@ describe('DELETE /api/admin/demos/[id]', () => {
     logAdminAction.mockReset();
     requirePlatformAdmin.mockReset();
     getDemoByIdWithConversionState.mockReset();
-    deleteDemo.mockReset();
-    deleteCommunity.mockReset();
-    deleteUser.mockReset();
+    softDeleteDemo.mockReset();
+    updateUserById.mockReset();
     requirePlatformAdmin.mockResolvedValue(undefined);
-    deleteUser.mockResolvedValue(undefined);
-    deleteDemo.mockResolvedValue({ data: baseDemo, error: null });
-    deleteCommunity.mockResolvedValue({ error: null });
+    updateUserById.mockResolvedValue({ data: {}, error: null });
+    softDeleteDemo.mockResolvedValue({ error: null });
   });
 
   afterEach(() => {
@@ -98,12 +94,11 @@ describe('DELETE /api/admin/demos/[id]', () => {
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.error.code).toBe('DEMO_ALREADY_CONVERTED');
-    expect(deleteCommunity).not.toHaveBeenCalled();
-    expect(deleteUser).not.toHaveBeenCalled();
-    expect(deleteDemo).not.toHaveBeenCalled();
+    expect(softDeleteDemo).not.toHaveBeenCalled();
+    expect(updateUserById).not.toHaveBeenCalled();
   });
 
-  it('cascades community + user + demo deletion when the demo is still a demo', async () => {
+  it('retires a live demo: soft-deletes it and its community, then bans its logins', async () => {
     getDemoByIdWithConversionState.mockResolvedValue({
       data: { ...baseDemo, is_converted: false },
       error: null,
@@ -112,21 +107,69 @@ describe('DELETE /api/admin/demos/[id]', () => {
     const response = await callDelete(42);
 
     expect(response.status).toBe(200);
-    expect(deleteUser).toHaveBeenCalledWith('resident-uuid');
-    expect(deleteUser).toHaveBeenCalledWith('board-uuid');
-    expect(deleteCommunity).toHaveBeenCalledWith(99);
-    expect(deleteDemo).toHaveBeenCalledWith(42);
+    // Soft, like the expire-demos cron: conversion_events' NO ACTION FKs made
+    // the hard delete fail after the logins were already destroyed.
+    expect(softDeleteDemo).toHaveBeenCalledWith(42, 99, expect.any(String));
+    expect(updateUserById).toHaveBeenCalledWith('resident-uuid', { ban_duration: '876600h' });
+    expect(updateUserById).toHaveBeenCalledWith('board-uuid', { ban_duration: '876600h' });
+    expect(softDeleteDemo.mock.invocationCallOrder[0]).toBeLessThan(
+      updateUserById.mock.invocationCallOrder[0]!,
+    );
 
-    // Hard-deleting a tenant must leave a record naming who did it. The
-    // community row itself is gone by this point, which is why the audit
-    // table's community_id is nullable with ON DELETE SET NULL.
     expect(logAdminAction).toHaveBeenCalledTimes(1);
     expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
       action: 'demo_deleted',
       resourceType: 'demo_instance',
       resourceId: 42,
       communityId: 99,
+      metadata: { soft_deleted: true, banned_auth_user_count: 2, ban_failed_user_ids: [] },
     });
+  });
+
+  it('fails loudly, and bans nobody, when the soft delete fails', async () => {
+    getDemoByIdWithConversionState.mockResolvedValue({
+      data: { ...baseDemo, is_converted: false },
+      error: null,
+    });
+    softDeleteDemo.mockResolvedValue({ error: { message: 'update on table "communities" violates …' } });
+
+    const response = await callDelete(42);
+
+    expect(response.status).toBe(500);
+    expect(updateUserById).not.toHaveBeenCalled();
+    expect(logAdminAction).not.toHaveBeenCalled();
+  });
+
+  it('reports a ban it could not apply instead of claiming success', async () => {
+    getDemoByIdWithConversionState.mockResolvedValue({
+      data: { ...baseDemo, is_converted: false },
+      error: null,
+    });
+    updateUserById.mockImplementation(async (userId: string) =>
+      userId === 'board-uuid'
+        ? { data: null, error: { status: 500, message: 'GoTrue down' } }
+        : { data: {}, error: null },
+    );
+
+    const response = await callDelete(42);
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.code).toBe('DEMO_USER_BAN_FAILED');
+    expect(logAdminAction.mock.calls[0]![0]).toMatchObject({
+      metadata: { banned_auth_user_count: 1, ban_failed_user_ids: ['board-uuid'] },
+    });
+  });
+
+  it('treats an already-deleted login as banned', async () => {
+    getDemoByIdWithConversionState.mockResolvedValue({
+      data: { ...baseDemo, is_converted: false },
+      error: null,
+    });
+    updateUserById.mockResolvedValue({ data: null, error: { status: 404, message: 'User not found' } });
+
+    const response = await callDelete(42);
+
+    expect(response.status).toBe(200);
   });
 
   it('does not write an audit entry when the demo is already converted', async () => {
@@ -138,7 +181,7 @@ describe('DELETE /api/admin/demos/[id]', () => {
     const response = await callDelete(42);
 
     expect(response.status).toBe(409);
-    expect(deleteCommunity).not.toHaveBeenCalled();
+    expect(softDeleteDemo).not.toHaveBeenCalled();
     // Nothing happened, so nothing should be recorded as having happened.
     expect(logAdminAction).not.toHaveBeenCalled();
   });
@@ -149,6 +192,6 @@ describe('DELETE /api/admin/demos/[id]', () => {
     const response = await callDelete(42);
 
     expect(response.status).toBe(404);
-    expect(deleteCommunity).not.toHaveBeenCalled();
+    expect(softDeleteDemo).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,7 @@
  */
 
 import type { ViolationSeverity, ViolationStatus } from '@propertypro/db';
-import type { ApiWarning } from '@/lib/api/request-json';
+import { JSON_HEADERS, requestJsonEnvelope, type ApiWarning } from '@/lib/api/request-json';
 import { walkAndSlice } from '@/lib/api/walk-paginated';
 
 export interface ViolationItem {
@@ -93,21 +93,6 @@ export interface ImposeFinePayload {
   smallCommitteeAcknowledged?: true;
 }
 
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error((err as Record<string, unknown>)['message'] as string ?? res.statusText);
-  }
-  return res.json() as Promise<T>;
-}
-
 export async function listViolations(
   communityId: number,
   params?: {
@@ -151,7 +136,7 @@ export async function getViolation(
 ): Promise<ViolationDetailResponse> {
   const sp = new URLSearchParams({ communityId: String(communityId) });
   if (options?.includeFines) sp.set('include', 'fines');
-  return apiFetch<ViolationDetailResponse>(
+  return requestJsonEnvelope<ViolationDetailResponse['data']>(
     `/api/v1/violations/${id}?${sp.toString()}`,
   );
 }
@@ -159,8 +144,9 @@ export async function getViolation(
 export async function createViolation(
   payload: CreateViolationPayload,
 ): Promise<{ data: ViolationItem }> {
-  return apiFetch<{ data: ViolationItem }>('/api/v1/violations', {
+  return requestJsonEnvelope<ViolationItem>('/api/v1/violations', {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify(payload),
   });
 }
@@ -176,10 +162,11 @@ export async function updateViolation(
   id: number,
   payload: UpdateViolationPayload,
 ): Promise<{ data: ViolationItem & { warnings?: ApiWarning[] } }> {
-  return apiFetch<{ data: ViolationItem & { warnings?: ApiWarning[] } }>(
+  return requestJsonEnvelope<ViolationItem & { warnings?: ApiWarning[] }>(
     `/api/v1/violations/${id}`,
     {
       method: 'PATCH',
+      headers: JSON_HEADERS,
       body: JSON.stringify(payload),
     },
   );
@@ -189,8 +176,9 @@ export async function imposeFine(
   violationId: number,
   payload: ImposeFinePayload,
 ): Promise<{ data: { fine: ViolationFineItem; ledgerEntryId: number; lineItemId: number } }> {
-  return apiFetch(`/api/v1/violations/${violationId}/fine`, {
+  return requestJsonEnvelope<{ fine: ViolationFineItem; ledgerEntryId: number; lineItemId: number }>(`/api/v1/violations/${violationId}/fine`, {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify(payload),
   });
 }
@@ -200,8 +188,9 @@ export async function resolveViolation(
   communityId: number,
   resolutionNotes?: string,
 ): Promise<{ data: ViolationItem }> {
-  return apiFetch<{ data: ViolationItem }>(`/api/v1/violations/${id}/resolve`, {
+  return requestJsonEnvelope<ViolationItem>(`/api/v1/violations/${id}/resolve`, {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ communityId, resolutionNotes }),
   });
 }
@@ -211,8 +200,9 @@ export async function dismissViolation(
   communityId: number,
   resolutionNotes?: string,
 ): Promise<{ data: ViolationItem }> {
-  return apiFetch<{ data: ViolationItem }>(`/api/v1/violations/${id}/dismiss`, {
+  return requestJsonEnvelope<ViolationItem>(`/api/v1/violations/${id}/dismiss`, {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ communityId, resolutionNotes }),
   });
 }

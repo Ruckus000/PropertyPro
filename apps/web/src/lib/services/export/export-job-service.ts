@@ -21,6 +21,21 @@ import { redactParams } from '@propertypro/shared/observability';
 // AUTHZ: export-job queue — cross-tenant cron claim scan; job tables only, no tenant data.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
+/**
+ * The worker's writes only land on a job that is still live. `cancelExportJob`
+ * is status-guarded, but these writes once matched on `id` alone, so a tick
+ * already in flight when the requester cancelled set the job back to `running`
+ * (or to `ready`, and emailed the archive). Re-asserted in each WHERE for the
+ * same reason the claim re-asserts its lease: a check before the write is a
+ * TOCTOU.
+ */
+function stillLive(jobId: number) {
+  return and(
+    eq(communityExportJobs.id, jobId),
+    inArray(communityExportJobs.status, ['queued', 'running']),
+  );
+}
+
 /** How long a worker holds a claim before another tick may reclaim the job. */
 const LEASE_DURATION_MS = 10 * 60 * 1000;
 
@@ -286,7 +301,7 @@ export async function saveJobProgress(
       status: 'running',
       updatedAt: now,
     })
-    .where(eq(communityExportJobs.id, jobId));
+    .where(stillLive(jobId));
 }
 
 /** Record a completed zip volume. Idempotent on (jobId, partIndex). */
@@ -342,6 +357,9 @@ export async function listJobParts(jobId: number) {
  * `notifiedAt` is stamped in the SAME statement that flips to `ready`, so the
  * completion email can be sent afterwards without risking a double-send if the
  * worker is re-invoked between the two.
+ *
+ * Returns false when the job was cancelled under the worker: nothing was
+ * written, and the caller must not announce it.
  */
 export async function markJobReady(params: {
   jobId: number;
@@ -350,10 +368,10 @@ export async function markJobReady(params: {
   partCount: number;
   expiresAt: Date;
   now?: Date;
-}): Promise<void> {
+}): Promise<boolean> {
   const now = params.now ?? new Date();
   const db = createUnscopedClient();
-  await db
+  const marked = await db
     .update(communityExportJobs)
     .set({
       status: 'ready',
@@ -367,7 +385,9 @@ export async function markJobReady(params: {
       leaseExpiresAt: null,
       updatedAt: now,
     })
-    .where(eq(communityExportJobs.id, params.jobId));
+    .where(stillLive(params.jobId))
+    .returning({ id: communityExportJobs.id });
+  return marked.length > 0;
 }
 
 /**
@@ -403,7 +423,7 @@ export async function markJobFailed(params: {
       completedAt: willRetry ? null : now,
       updatedAt: now,
     })
-    .where(eq(communityExportJobs.id, params.jobId));
+    .where(stillLive(params.jobId));
 
   return { willRetry };
 }
