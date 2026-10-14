@@ -12,6 +12,13 @@
  * it re-rendered the whole tree about hourly and emptied the client router
  * cache for nothing.
  *
+ * SIGNED_IN refreshes only when the user id differs from the last one seen.
+ * supabase-js re-emits SIGNED_IN with the SAME session every time the tab
+ * becomes visible (`_recoverAndRefresh`, called from its visibilitychange
+ * handler), so refreshing on every SIGNED_IN re-rendered the page on the
+ * server and emptied the router cache each time a user came back to the tab.
+ * A different id is a real cross-tab sign-in as someone else.
+ *
  * INITIAL_SESSION is explicitly skipped because middleware has already
  * enforced auth on the initial page load. Acting on it here would
  * duplicate enforcement and risk race conditions (e.g. redirect loops
@@ -37,10 +44,14 @@ export function AuthSessionSync() {
   useEffect(() => {
     const supabase = createBrowserClient();
     let initialSessionHandled = false;
+    let lastUserId: string | null = null;
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, _session: Session | null) => {
+    } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      const previousUserId = lastUserId;
+      lastUserId = session?.user.id ?? null;
+
       // Skip the initial session event — middleware already handled auth
       if (event === 'INITIAL_SESSION') {
         initialSessionHandled = true;
@@ -58,7 +69,10 @@ export function AuthSessionSync() {
 
       if (event === 'TOKEN_REFRESHED') return;
 
-      // USER_UPDATED, SIGNED_IN, etc. — revalidate server data
+      // Same-user SIGNED_IN is supabase-js re-announcing on tab focus.
+      if (event === 'SIGNED_IN' && session?.user.id === previousUserId) return;
+
+      // USER_UPDATED, a different user's SIGNED_IN, etc. — revalidate server data
       router.refresh();
     });
 
