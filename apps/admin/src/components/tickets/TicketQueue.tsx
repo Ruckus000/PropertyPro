@@ -1,7 +1,12 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  useSelectedLayoutSegment,
+} from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -16,16 +21,10 @@ import { TicketSplit } from './TicketSplit';
 
 interface TicketQueueProps {
   result: TicketsResult;
-  /**
-   * The `?status=` value read from the URL by the server page. Unvalidated at
-   * this boundary on purpose — `knownOr` below is the one place that decides
-   * what an unrecognised value means.
-   */
-  initialStatus: string;
-  /** The ticket rendered by `detail`, so its row can be highlighted. */
-  activeTicketId?: number;
-  /** `/tickets/[id]` passes the `TicketDetail`; `/tickets` passes nothing. */
-  detail?: ReactNode;
+  /** The page header, shown only while no ticket is open (`TicketDetail` owns that `<h1>`). */
+  header?: ReactNode;
+  /** The layout's `children`: the open ticket on `/tickets/[id]`, nothing on `/tickets`. */
+  children?: ReactNode;
 }
 
 /**
@@ -44,8 +43,17 @@ function knownOr(value: string, allowed: readonly string[]): string {
  *
  * Filtering happens client-side over the ONE unfiltered load `listTickets()`
  * already did (up to `PLATFORM_LIST_LIMIT`), so switching tabs costs no fetch
- * and no spinner. The selection is mirrored into the URL with `router.replace`
- * so it survives a reload and a navigation into a ticket.
+ * and no spinner. The selection is mirrored into the URL so it survives a reload
+ * and a navigation into a ticket — with `window.history.replaceState`, for the
+ * reason `InboxDashboard` gives: `router.replace` re-ran the force-dynamic page
+ * (on `/tickets/[id]`, the ticket and the whole queue) on every tab click. The
+ * filter is read from the current URL on every render, with no state of its
+ * own, for the reasons `InboxDashboard` gives too: Back restores a cached
+ * payload rendered before the click, and this component lives in
+ * `(split)/layout.tsx`, which stays mounted across ticket clicks, so state
+ * seeded once would drift from the URL. The open ticket is the layout's
+ * selected segment; a row click renders only the ticket, and the queue is
+ * re-read when a ticket closes, as `InboxDashboard` explains.
  *
  * ## Why there is an "All" tab the plan did not ask for
  *
@@ -57,15 +65,26 @@ function knownOr(value: string, allowed: readonly string[]): string {
  * already orders open work first, most urgent first, so the unfiltered queue
  * opens on exactly what a three-tab default would have shown.
  */
-export function TicketQueue({ result, initialStatus, activeTicketId, detail }: TicketQueueProps) {
-  const router = useRouter();
+export function TicketQueue({ result, header, children }: TicketQueueProps) {
   const pathname = usePathname();
-  const [status, setStatus] = useState(() => knownOr(initialStatus, SUPPORT_TICKET_STATUSES));
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // `null` on `/tickets` itself; the `[id]` value on a ticket.
+  const segment = useSelectedLayoutSegment();
+
+  // Back to the queue: re-read it once — see `InboxDashboard`.
+  const previousSegment = useRef(segment);
+  useEffect(() => {
+    if (previousSegment.current !== null && segment === null) router.refresh();
+    previousSegment.current = segment;
+  }, [segment, router]);
+  const activeTicketId = segment === null ? undefined : Number(segment);
+  const detail = segment === null ? null : children;
+  const status = knownOr(searchParams.get('status') ?? 'all', SUPPORT_TICKET_STATUSES);
 
   function changeStatus(next: string) {
-    setStatus(next);
     const query = next === 'all' ? '' : `status=${next}`;
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
   const filtered = useMemo(
@@ -88,6 +107,8 @@ export function TicketQueue({ result, initialStatus, activeTicketId, detail }: T
 
   return (
     <div className="space-y-4">
+      {/* pb-2: the 24px header gap PageBody gave it outside — see InboxDashboard. */}
+      {detail ? null : <div className="pb-2">{header}</div>}
       {/* Hidden on mobile once a ticket is open: on a phone the tabs would push
           the ticket below the fold. Same rule as `InboxDashboard`. */}
       <div className={detail ? 'hidden md:block' : ''}>

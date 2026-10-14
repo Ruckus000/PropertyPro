@@ -12,7 +12,7 @@
  * exact head-count leaks.
  */
 import { communities } from '@propertypro/db';
-import { and, ilike, isNull, sql } from '@propertypro/db/filters';
+import { and, eq, ilike, isNull, sql } from '@propertypro/db/filters';
 // AUTHZ: Public community search: discovery endpoint intentionally queries across all communities, returns only minimal non-sensitive metadata. Caller MUST rate-limit per IP before invoking.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 
@@ -48,6 +48,8 @@ export async function searchPublicCommunities(params: {
   const conditions = [
     ilike(communities.name, `%${escapeLike(params.q)}%`),
     isNull(communities.deletedAt),
+    // Never surface demo/seed communities in public discovery.
+    eq(communities.isDemo, false),
   ];
   if (params.city) {
     conditions.push(ilike(communities.city, `%${escapeLike(params.city)}%`));

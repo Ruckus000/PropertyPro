@@ -18,16 +18,20 @@
  *     user to `/select-community`;
  *   - `replace`, not `push`, so Back leaves the page instead of walking every
  *     view the user glanced at.
+ *
+ * `window.history.replaceState`, not `router.replace`: Next syncs native
+ * history calls into `useSearchParams`, and the router call re-rendered the
+ * whole force-dynamic page on the server for a switch only the client reads.
+ * Use this only where the server page does not render from the param.
  */
 
 import { useCallback } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 
 export function useUrlView<T extends string>(
   param: string,
   coerce: (raw: string | null) => T,
 ): { view: T; setView: (next: string) => void } {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -37,9 +41,9 @@ export function useUrlView<T extends string>(
     (next: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set(param, coerce(next));
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
     },
-    [coerce, param, pathname, router, searchParams],
+    [coerce, param, pathname, searchParams],
   );
 
   return { view, setView };

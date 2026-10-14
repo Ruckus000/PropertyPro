@@ -212,6 +212,17 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
     return 'roster-imports';
   }
 
+  // Access-request SUBMIT sends a branded OTP email to a caller-supplied
+  // address. Matched by exact path + POST so it does NOT also catch
+  // [id]/approve and [id]/deny (admin, authenticated) the way a bare prefix
+  // would. The generic write tier is in-memory per isolate; the auth tier is
+  // Redis-backed (DISTRIBUTED_CATEGORIES), so it actually bounds an attacker
+  // fanning OTP mail across isolates. (The /verify guess surface is already
+  // auth-tiered above.)
+  if (method === 'POST' && pathname === '/api/v1/access-requests') {
+    return 'auth';
+  }
+
   // Public unauthenticated API endpoints
   // - transparency: tenant opt-in gated at handler level
   // - provisioning-status: polled at 2s intervals during signup provisioning

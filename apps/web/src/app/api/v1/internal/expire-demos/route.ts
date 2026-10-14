@@ -41,11 +41,17 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   let count = 0;
 
   for (const row of expired) {
-    await softDeleteExpiredDemo({
+    const deleted = await softDeleteExpiredDemo({
       communityId: row.communityId,
       demoInstanceId: row.demoInstanceId,
       now,
     });
+    // Converted since it was found: a paying customer now. No ban, no
+    // demo_soft_deleted event (one-time by dedupe key), not counted.
+    if (!deleted) {
+      console.info(`[expire-demos] skipped community ${row.communityId}: converted after it was found`);
+      continue;
+    }
 
     // Ban demo auth users
     const userIds = [row.demoResidentUserId, row.demoBoardUserId].filter(Boolean);

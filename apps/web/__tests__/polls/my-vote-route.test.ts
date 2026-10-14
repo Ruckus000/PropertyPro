@@ -43,6 +43,8 @@ vi.mock('@/lib/services/polls-service', () => ({
   getMyPollVoteForCommunity: getMyPollVoteForCommunityMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { GET } from '../../src/app/api/v1/polls/[id]/my-vote/route';
 
 const MEMBERSHIP = {

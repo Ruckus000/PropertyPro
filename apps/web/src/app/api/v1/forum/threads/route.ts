@@ -12,6 +12,7 @@ import {
   requirePollWritePermission,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { createForumThreadForCommunity, paginateForumThreadsForCommunity } from '@/lib/services/polls-service';
 import { forumThreadsCreateContract, forumThreadsListContract } from './contract';
@@ -34,6 +35,7 @@ export const GET = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasCommunityBoard');
     requirePollReadPermission(membership);
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
@@ -78,6 +80,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireCommunityBoardEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasCommunityBoard');
     requirePollWritePermission(membership);
 
     const requestId = req.headers.get('x-request-id');

@@ -26,7 +26,8 @@ import {
   DocumentPostedEmail,
   MeetingNoticeEmail,
   MaintenanceUpdateEmail,
-  sendEmail,
+  sendBulkEmail,
+  type SendEmailOptions,
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import { operationsHubHref } from '@/lib/operations/routes';
@@ -270,14 +271,6 @@ async function resolveDocumentReaderKeys(
     if (readable) allowed.add(key);
   }
   return allowed;
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const groups: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    groups.push(items.slice(index, index + size));
-  }
-  return groups;
 }
 
 function resolveDigestSource(event: NotificationEvent): {
@@ -667,52 +660,63 @@ async function dispatchNotification(
     const branding = await loadEmailBranding(communityId);
     const baseUrl = getBaseUrl();
 
-    for (const batch of chunk(immediateRecipients, 100)) {
-      await Promise.all(
-        batch.map(async (recipient) => {
-          try {
-            // Per-recipient and reachable with no session — the previous
-            // `/settings?communityId=` URL was login-walled, which defeats
-            // one-click List-Unsubscribe (F-11).
-            const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
-              baseUrl,
-              communityId,
-              userId: recipient.userId,
-              topic: 'notifications',
-            });
+    const logFailure = (userId: string, error: unknown) => {
+      failedCount += 1;
+      // eslint-disable-next-line no-console
+      console.error('[notification-service] email send failed', {
+        communityId,
+        userId,
+        eventType: event.type,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    };
 
-            const { subject, react } = renderEmailForEvent(
-              event,
-              recipient,
-              {
-                ...branding,
-                unsubscribeUrl,
-                unsubscribeLabel: 'Unsubscribe from these emails',
-              },
-              communityId,
-            );
+    const outgoing: Array<{ userId: string; payload: SendEmailOptions }> = [];
+    for (const recipient of immediateRecipients) {
+      try {
+        // Per-recipient and reachable with no session — the previous
+        // `/settings?communityId=` URL was login-walled, which defeats
+        // one-click List-Unsubscribe (F-11).
+        const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+          baseUrl,
+          communityId,
+          userId: recipient.userId,
+          topic: 'notifications',
+        });
 
-            await sendEmail({
-              to: recipient.email,
-              subject,
-              category: 'non-transactional',
-              unsubscribeUrl,
-              react,
-            });
+        const { subject, react } = renderEmailForEvent(
+          event,
+          recipient,
+          {
+            ...branding,
+            unsubscribeUrl,
+            unsubscribeLabel: 'Unsubscribe from these emails',
+          },
+          communityId,
+        );
 
-            sentCount += 1;
-          } catch (error) {
-            failedCount += 1;
-            // eslint-disable-next-line no-console
-            console.error('[notification-service] email send failed', {
-              communityId,
-              userId: recipient.userId,
-              eventType: event.type,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        }),
-      );
+        outgoing.push({
+          userId: recipient.userId,
+          payload: { to: recipient.email, subject, category: 'non-transactional', unsubscribeUrl, react },
+        });
+      } catch (error) {
+        logFailure(recipient.userId, error);
+      }
+    }
+
+    // One batch request per 100 recipients. One sendEmail per recipient, all at
+    // once, hit Resend's per-second rate limit and failed all but a couple.
+    if (outgoing.length > 0) {
+      try {
+        const { results } = await sendBulkEmail(outgoing.map((o) => o.payload));
+        outgoing.forEach((o, i) => {
+          const result = results[i];
+          if (result?.success) sentCount += 1;
+          else logFailure(o.userId, result?.error ?? 'No result from email provider');
+        });
+      } catch (error) {
+        for (const o of outgoing) logFailure(o.userId, error);
+      }
     }
   }
 

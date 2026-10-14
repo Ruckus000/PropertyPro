@@ -22,6 +22,7 @@ const {
   assertNotDemoGraceMock,
   paginatePollsForCommunityMock,
   createPollForCommunityMock,
+  requirePlanFeatureMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -33,6 +34,7 @@ const {
   assertNotDemoGraceMock: vi.fn(),
   paginatePollsForCommunityMock: vi.fn(),
   createPollForCommunityMock: vi.fn(),
+  requirePlanFeatureMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -66,6 +68,8 @@ vi.mock('@/lib/services/polls-service', () => ({
   paginatePollsForCommunity: paginatePollsForCommunityMock,
   createPollForCommunity: createPollForCommunityMock,
 }));
+
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: requirePlanFeatureMock }));
 
 import { GET, POST } from '../../src/app/api/v1/polls/route';
 
@@ -268,6 +272,29 @@ describe('POST /api/v1/polls', () => {
     requirePollCreatorRoleMock.mockImplementationOnce(() => {
       throw new ForbiddenError('Only community leaders can create polls');
     });
+
+    const res = await POST(
+      jsonPost({
+        communityId: 42,
+        title: 'Pool hours',
+        pollType: 'single_choice',
+        options: ['A', 'B'],
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(createPollForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  // Plan-gate (security audit 2026-10-13, finding #2). The sync
+  // requirePollsEnabled checks the community TYPE; requirePlanFeature checks the
+  // subscription PLAN, so a lower-plan community can no longer reach polls via a
+  // direct API call. Revert-check: delete the `await requirePlanFeature(...)`
+  // line from the POST handler in polls/route.ts and this case creates a poll
+  // and returns 200 instead of 403.
+  it('returns 403 when the plan does not include polls, and creates nothing', async () => {
+    requirePlanFeatureMock.mockRejectedValueOnce(
+      new ForbiddenError('This feature requires a higher plan.'),
+    );
 
     const res = await POST(
       jsonPost({

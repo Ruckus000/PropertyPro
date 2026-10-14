@@ -37,6 +37,7 @@ import {
   requirePollsEnabled,
 } from '@/lib/polls/common';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { castPollVoteForCommunity } from '@/lib/services/polls-service';
 import { pollsVoteContract } from './contract';
 
@@ -48,6 +49,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requirePollsEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasPolls');
     requirePollWritePermission(membership);
 
     return castPollVoteForCommunity(

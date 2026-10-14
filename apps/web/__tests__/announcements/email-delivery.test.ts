@@ -33,9 +33,29 @@ vi.mock('@propertypro/db/filters', () => ({
   inArray: (col: unknown, vals: unknown[]) => ({ _type: 'inArray', col, vals }),
 }));
 
+// The services hand every message to sendBulkEmail in one call. Route each
+// payload through sendEmailMock so per-message assertions still read naturally;
+// the "one bulk call" case pins that no per-recipient send comes back.
+const { sendBulkEmailMock } = vi.hoisted(() => ({
+  sendBulkEmailMock: vi.fn(async (requests: unknown[]) => {
+    const results: Array<{ success: boolean; id?: string; error?: string }> = [];
+    for (const request of requests) {
+      try {
+        const sent = (await sendEmailMock(request)) as { id?: string } | undefined;
+        results.push({ success: true, id: sent?.id });
+      } catch (error) {
+        results.push({ success: false, error: (error as Error).message });
+      }
+    }
+    const successCount = results.filter((r) => r.success).length;
+    return { results, successCount, failureCount: results.length - successCount };
+  }),
+}));
+
 vi.mock('@propertypro/email', () => ({
   AnnouncementEmail: (props: unknown) => ({ type: 'AnnouncementEmail', props }),
   sendEmail: sendEmailMock,
+  sendBulkEmail: sendBulkEmailMock,
 }));
 
 vi.mock('@/lib/services/notification-digest-queue', () => ({
@@ -224,7 +244,58 @@ describe('announcement email delivery', () => {
 
     expect(count).toBe(recipientCount);
     expect(sendEmailMock).toHaveBeenCalledTimes(recipientCount);
+    // One batch request, not one request per recipient: a per-recipient
+    // Promise.all ran into Resend's rate limit and failed all but ~2.
+    expect(sendBulkEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendBulkEmailMock.mock.calls[0]![0]).toHaveLength(recipientCount);
     expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+  });
+
+  it('marks each recipient sent or failed from its own bulk result', async () => {
+    const roleRows = ['u-ok', 'u-bad'].map((userId) => ({
+      userId, role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner',
+    }));
+    const userRows = [
+      { id: 'u-ok', email: 'ok@example.com', fullName: 'Ok' },
+      { id: 'u-bad', email: 'bad@example.com', fullName: 'Bad' },
+    ];
+    const updates: Array<Record<string, unknown>> = [];
+    createScopedClientMock.mockReturnValue({
+      query: vi.fn(async (table: unknown) => {
+        if (table === tables.userRoles) return roleRows;
+        refuseUsersTable(table);
+        if (table === tables.communities) return [{ id: 5, name: 'Sunset Condos' }];
+        return [];
+      }),
+      queryWhere: vi.fn(async () => [{ id: 1, attemptCount: 0 }]),
+      selectFrom: selectUsersFrom(userRows),
+      insert: vi.fn(async (_table: unknown, data: Record<string, unknown>) => [{ id: 1, ...data }]),
+      update: vi.fn(async (_table: unknown, values: Record<string, unknown>) => {
+        updates.push(values);
+        return [];
+      }),
+    });
+    sendEmailMock.mockImplementation(async (request: { to: string }) => {
+      if (request.to === 'bad@example.com') throw new Error('Resend rate limit');
+      return { id: 'msg-ok' };
+    });
+
+    await queueAnnouncementDelivery({
+      communityId: 5,
+      announcementId: 12,
+      audience: 'all',
+      title: 'Water shutoff',
+      body: 'Body',
+      isPinned: false,
+      authorName: 'Admin',
+    });
+
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ status: 'sent', providerMessageId: 'msg-ok' }),
+        expect.objectContaining({ status: 'failed', errorMessage: 'Resend rate limit' }),
+      ]),
+    );
   });
 
   it('board_only targets designation, not presetKey (role-independent)', async () => {

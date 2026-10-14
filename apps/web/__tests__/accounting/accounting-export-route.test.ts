@@ -47,6 +47,8 @@ vi.mock('@/lib/services/accounting-connectors-service', () => ({
   exportLedgerToAccounting: exportLedgerToAccountingMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { POST } from '../../src/app/api/v1/accounting/export/route';
 
 const ADMIN_MEMBERSHIP = {

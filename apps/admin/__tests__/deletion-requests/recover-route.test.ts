@@ -4,6 +4,7 @@ const requirePlatformAdmin = vi.fn();
 const requestUpdate = vi.fn();
 const usersUpdate = vi.fn();
 const communitiesUpdate = vi.fn();
+const updateUserById = vi.fn();
 
 function makeFromMock(table: string) {
   switch (table) {
@@ -43,6 +44,7 @@ vi.mock('@/lib/auth/platform-admin', () => ({
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
     from: (table: string) => makeFromMock(table),
+    auth: { admin: { updateUserById: (...args: unknown[]) => updateUserById(...args) } },
   }),
 }));
 
@@ -72,7 +74,9 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     requestUpdate.mockReset();
     usersUpdate.mockReset();
     communitiesUpdate.mockReset();
+    updateUserById.mockReset();
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
+    updateUserById.mockResolvedValue({ data: {}, error: null });
     usersUpdate.mockResolvedValue({ error: null });
     communitiesUpdate.mockResolvedValue({ error: null });
   });
@@ -91,6 +95,11 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
 
     expect(response.status).toBe(200);
     expect(usersUpdate).toHaveBeenCalledWith({ deleted_at: null }, 'user-uuid');
+    // The lifecycle cron banned the login at soft delete; recovery must lift it.
+    expect(updateUserById).toHaveBeenCalledWith('user-uuid', {
+      ban_duration: 'none',
+      user_metadata: { soft_deleted: null },
+    });
     expect(communitiesUpdate).not.toHaveBeenCalled();
   });
 
@@ -105,6 +114,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(response.status).toBe(200);
     expect(communitiesUpdate).toHaveBeenCalledWith({ deleted_at: null }, 99);
     expect(usersUpdate).not.toHaveBeenCalled();
+    expect(updateUserById).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the request is not in soft_deleted status', async () => {
@@ -129,5 +139,19 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error.code).toBe('USER_RESTORE_FAILED');
+  });
+
+  it('returns 500 with USER_UNBAN_FAILED when lifting the auth ban fails', async () => {
+    requestUpdate.mockResolvedValue({
+      data: { request_type: 'user', user_id: 'user-uuid', community_id: null },
+      error: null,
+    });
+    updateUserById.mockResolvedValue({ data: null, error: { message: 'GoTrue down' } });
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error.code).toBe('USER_UNBAN_FAILED');
   });
 });

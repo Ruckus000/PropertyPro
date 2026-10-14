@@ -2,7 +2,7 @@
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, DollarSign, Download, MoreHorizontal, Plus, Upload } from 'lucide-react';
@@ -75,11 +75,12 @@ import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 import type { DirectoryTab } from '@/lib/directory/directory-href';
 
-// ponytail: this route sits ~14 KiB under the 1220 KiB hard per-route budget
-// (perf:check). Lazy-loading the dialogs below via next/dynamic was measured
-// and made things WORSE: it reshuffled shared chunks and pushed the web
-// aggregate budget (1490 KiB, routes this page is not even in) over. Re-measure
-// both numbers before adding weight here.
+// ponytail: this route sits ~35 KiB under the 1160 KiB hard per-route budget
+// (perf:check on a local production build, 2026-10-13; enforced on this
+// unbudgeted route since 2026-10-12). Lazy-loading the dialogs below via
+// next/dynamic was measured and made things WORSE: it reshuffled shared chunks
+// and pushed the web aggregate budget (1435 KiB now, routes this page is not
+// even in) over. Re-measure both numbers before adding weight here.
 
 export type { DirectoryTab };
 
@@ -161,7 +162,6 @@ export function DirectoryPageClient({
   canSendDocuments,
   initialTab,
 }: DirectoryPageClientProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -231,9 +231,9 @@ export function DirectoryPageClient({
       params.delete('q');
       setSelection(new Set());
       // `replace`, not `push`: Back should leave the page, not walk the tabs.
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   /* ── Data ── */

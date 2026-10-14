@@ -29,6 +29,7 @@ import {
   requireAccountingEnabled,
   requireAccountingWritePermission,
 } from '@/lib/accounting/common';
+import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { exportLedgerToAccounting } from '@/lib/services/accounting-connectors-service';
 import { accountingExportContract } from './contract';
 
@@ -39,6 +40,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
     requireAccountingEnabled(membership);
+    await requirePlanFeature(membership.communityId, 'hasAccountingConnectors');
     requireAccountingWritePermission(membership);
 
     const requestId = req.headers.get('x-request-id');

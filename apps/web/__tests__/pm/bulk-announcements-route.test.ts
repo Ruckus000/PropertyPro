@@ -168,4 +168,26 @@ describe('POST /api/v1/pm/bulk/announcements', () => {
       },
     ]);
   });
+
+  it('delivers one community at a time, so batch sends never overlap', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    broadcastBulkAnnouncementToCommunityMock.mockImplementation(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+    });
+
+    await POST(
+      new NextRequest(URL, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(validBody),
+      }),
+    );
+
+    expect(broadcastBulkAnnouncementToCommunityMock).toHaveBeenCalledTimes(2);
+    expect(maxInFlight).toBe(1);
+  });
 });

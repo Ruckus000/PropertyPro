@@ -18,9 +18,46 @@
  * no `communities` row — must link into Stripe, because there is no console
  * page to link to and the row is the single most valuable finding this screen
  * produces.
+ *
+ * Plus the `?status=` round-trip: the dashboard's Subscriptions card links into
+ * `/billing?status=past_due`, which the list used to ignore.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * `useSearchParams` reads jsdom's real address bar, and re-renders its readers
+ * whenever `history.replaceState` changes it — which is what Next does (it
+ * syncs `replaceState` into `useSearchParams`). `BillingList` keeps no tab
+ * state of its own, so without this a tab click could never re-render it.
+ */
+const navigation = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  const replaceState = window.history.replaceState.bind(window.history);
+  window.history.replaceState = (...args: Parameters<History['replaceState']>) => {
+    replaceState(...args);
+    listeners.forEach((listener) => listener());
+  };
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    /** A client navigation: a new URL under any still-mounted list. */
+    navigate(url: string) {
+      act(() => window.history.replaceState(null, '', url));
+    },
+  };
+});
+vi.mock('next/navigation', async () => {
+  const { useSyncExternalStore } = await import('react');
+  return {
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(navigation.subscribe, () => window.location.search)),
+  };
+});
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
@@ -104,6 +141,10 @@ describe('BillingKpis', () => {
     );
     expect(up.querySelector('.text-status-success')).not.toBeNull();
   });
+});
+
+afterEach(() => {
+  navigation.navigate('/');
 });
 
 describe('BillingList', () => {
@@ -190,5 +231,111 @@ describe('BillingList', () => {
     );
 
     expect(screen.getByRole('alert').textContent).toContain('truncated');
+  });
+});
+
+describe('BillingList ?status=', () => {
+  const base = 'https://dashboard.stripe.com/test/';
+  const rows = [
+    row({ stripeSubscriptionId: 'sub_1' }),
+    row({ stripeSubscriptionId: 'sub_2', status: 'past_due', communityName: 'Palm Shores' }),
+  ];
+
+  function renderAt(search: string) {
+    navigation.navigate(search ? `/billing?${search}` : '/billing');
+    return render(<BillingList rows={rows} truncated={false} stripeDashboardBase={base} />);
+  }
+
+  function pressed(name: RegExp) {
+    return screen.getByRole('button', { name }).getAttribute('aria-pressed');
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens on the tab the URL names, so a dashboard link keeps its filter', () => {
+    renderAt('status=past_due');
+
+    expect(pressed(/Past due/)).toBe('true');
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+    expect(screen.queryByText('Sunset Condos')).toBeNull();
+  });
+
+  it('falls back to All for a status the list has no tab for (control)', () => {
+    // `active` is a real subscription status, but not a tab here — it must not
+    // render an empty table with nothing highlighted.
+    renderAt('status=active');
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+  });
+
+  it('opens on All when the URL names no status (control)', () => {
+    renderAt('');
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+  });
+
+  it('mirrors a tab click into the URL, and drops it again for All', () => {
+    renderAt('');
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+
+    fireEvent.click(screen.getByRole('button', { name: /Canceled/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?status=canceled');
+    expect(pressed(/Canceled/)).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing');
+    expect(pressed(/^All/)).toBe('true');
+  });
+
+  it('keeps the rest of the query string when it writes the status', () => {
+    renderAt('ref=dashboard');
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+
+    fireEvent.click(screen.getByRole('button', { name: /Trialing/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard&status=trialing');
+
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(replaceState).toHaveBeenLastCalledWith(null, '', '/billing?ref=dashboard');
+  });
+
+  // A client navigation to the SAME route does not remount the list: the rail's
+  // Billing link from `/billing?status=canceled` lands on bare `/billing` with
+  // this instance still mounted. When the tab lived in state seeded once, it
+  // stayed on Canceled under the reset address bar.
+  it('follows the URL back to All when it changes under a mounted list', () => {
+    renderAt('status=canceled');
+    expect(pressed(/Canceled/)).toBe('true');
+
+    navigation.navigate('/billing');
+
+    expect(pressed(/^All/)).toBe('true');
+    expect(screen.getByText('Sunset Condos')).toBeTruthy();
+    expect(screen.getByText('Palm Shores')).toBeTruthy();
+  });
+
+  it('follows the URL onto a filter when it changes under a mounted list', () => {
+    renderAt('');
+
+    navigation.navigate('/billing?status=past_due');
+
+    expect(pressed(/Past due/)).toBe('true');
+    expect(screen.queryByText('Sunset Condos')).toBeNull();
+  });
+
+  it('follows a navigation that comes after a tab click', () => {
+    // The production order: a click writes `?status=canceled`, then the rail's
+    // Billing link navigates to a bare `/billing`.
+    renderAt('');
+    fireEvent.click(screen.getByRole('button', { name: /Canceled/ }));
+    expect(pressed(/Canceled/)).toBe('true');
+
+    navigation.navigate('/billing');
+
+    expect(pressed(/^All/)).toBe('true');
   });
 });

@@ -196,8 +196,8 @@ export interface CreatedFaqRecord {
  * NOTE: the max-sort calculation is a read-then-write in app code, so two
  * concurrent inserts in the same community could race to the same sortOrder.
  * Acceptable per the original route's behavior — admin-driven, very low
- * concurrency, and ties just produce a stable but arbitrary order until the
- * next reorder. Not changed here.
+ * concurrency, and a tie is harmless: the list orders by `sortOrder, id`, so
+ * tied rows fall back to creation order. Not changed here.
  */
 export async function createFaq(
   communityId: number,
@@ -258,36 +258,6 @@ export async function softDeleteFaq(
     eq(faqs.id, id),
   );
   return deleted.length > 0;
-}
-
-/**
- * Reorder a community's FAQs by mapping `ids` → 0..N. Validates that every
- * id exists in the active set; throws via the supplied `onUnknownId` when an
- * id is missing (so the route can map to a ValidationError with the same
- * message the prior route produced).
- *
- * Caller is responsible for de-duping `ids` before calling.
- */
-export async function reorderFaqs(
-  communityId: number,
-  ids: readonly number[],
-  onUnknownId: (id: number) => never,
-): Promise<void> {
-  const scoped = createScopedClient(communityId);
-  const activeFaqs = await scoped.query(faqs);
-  const activeIds = new Set(activeFaqs.map((f) => f['id'] as number));
-
-  for (const id of ids) {
-    if (!activeIds.has(id)) onUnknownId(id);
-  }
-
-  for (let i = 0; i < ids.length; i++) {
-    await scoped.update(
-      faqs,
-      { sortOrder: i, updatedAt: new Date() },
-      eq(faqs.id, ids[i]!),
-    );
-  }
 }
 
 export interface FaqSearchHit {

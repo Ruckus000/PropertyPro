@@ -70,8 +70,17 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   let requiresExplicitUnitSelection = false;
 
   const scoped = createScopedClient(communityId);
-  const actorUnitIds = await listActorUnitIds(scoped, userId);
-  const unitRows = await scoped.query(units);
+  /*
+   * Independent reads, run together. The contact is only read when the
+   * guidance banner can actually render: `PaymentPortal` shows it solely for a
+   * resident who owes money in a payments-disabled community, so fetching it
+   * for the enabled case would be a query whose result is discarded.
+   */
+  const [actorUnitIds, unitRows, managementContact] = await Promise.all([
+    listActorUnitIds(scoped, userId),
+    scoped.query(units),
+    membership.assessmentPaymentsEnabled ? null : getCommunityContact(communityId),
+  ]);
   const visibleUnitIdSet = new Set(actorUnitIds);
 
   actorUnits = (unitRows as Array<{ id: number; unitNumber: string }>)
@@ -88,16 +97,6 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
       unitId = undefined;
     }
   }
-
-  /*
-   * Only read when the guidance banner can actually render. `PaymentPortal`
-   * shows it solely for a resident who owes money in a payments-disabled
-   * community, so fetching contact details for the enabled case would be a
-   * query whose result is discarded on every request.
-   */
-  const managementContact = membership.assessmentPaymentsEnabled
-    ? null
-    : await getCommunityContact(communityId);
 
   return (
     <FeatureGate feature="hasFinance" communityId={communityId}>

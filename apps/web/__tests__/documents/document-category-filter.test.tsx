@@ -1,94 +1,76 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
-import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DocumentCategoryFilter } from '../../src/components/documents/document-category-filter';
 
-async function flushEffects(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+function categoriesResponse(rows: Array<{ id: number; name: string; description: null }>) {
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      data: { data: rows, pagination: { nextCursor: null, hasMore: false, pageSize: 50 } },
+    }),
+  });
 }
 
+function renderWithQuery(node: React.ReactNode) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={queryClient}>{node}</QueryClientProvider>);
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('document category filter', () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    // Needed for React act() assertions in Vitest/jsdom.
-    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-  });
-
-  afterEach(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    container.remove();
-    vi.unstubAllGlobals();
-  });
-
   it('renders empty-state message when no categories are configured', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: { data: [], pagination: { nextCursor: null, hasMore: false, pageSize: 50 } },
-      }),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', categoriesResponse([]));
 
-    await act(async () => {
-      root.render(
-        <DocumentCategoryFilter
-          communityId={42}
-          selectedCategoryId={null}
-          onCategoryChange={vi.fn()}
-        />,
-      );
-      await flushEffects();
-    });
+    renderWithQuery(
+      <DocumentCategoryFilter communityId={42} selectedCategoryId={null} onCategoryChange={vi.fn()} />,
+    );
 
-    expect(container.textContent).toContain('No categories configured yet.');
-    expect(container.textContent).toContain('All');
+    expect(await screen.findByText('No categories configured yet.')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'All' })).toBeDefined();
   });
 
   it('renders category chips when categories are available', async () => {
     const onCategoryChange = vi.fn();
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: {
-          data: [
-            { id: 1, name: 'Rules', description: null },
-            { id: 2, name: 'Meeting Minutes', description: null },
-          ],
-          pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
-        },
-      }),
-    });
+    vi.stubGlobal(
+      'fetch',
+      categoriesResponse([
+        { id: 1, name: 'Rules', description: null },
+        { id: 2, name: 'Meeting Minutes', description: null },
+      ]),
+    );
+
+    renderWithQuery(
+      <DocumentCategoryFilter
+        communityId={42}
+        selectedCategoryId={null}
+        onCategoryChange={onCategoryChange}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Rules' }));
+    expect(screen.getByRole('button', { name: 'Meeting Minutes' })).toBeDefined();
+    expect(onCategoryChange).toHaveBeenCalledWith(1);
+  });
+
+  it('components on one page share a single categories request', async () => {
+    // Opening one document on the Documents page mounted four readers of this
+    // list, and each sent its own walk of the endpoint.
+    const fetchMock = categoriesResponse([{ id: 1, name: 'Rules', description: null }]);
     vi.stubGlobal('fetch', fetchMock);
 
-    await act(async () => {
-      root.render(
-        <DocumentCategoryFilter
-          communityId={42}
-          selectedCategoryId={null}
-          onCategoryChange={onCategoryChange}
-        />,
-      );
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain('Rules');
-    expect(container.textContent).toContain('Meeting Minutes');
-
-    const rulesButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Rules',
+    renderWithQuery(
+      <>
+        <DocumentCategoryFilter communityId={42} selectedCategoryId={null} onCategoryChange={vi.fn()} />
+        <DocumentCategoryFilter communityId={42} selectedCategoryId={null} onCategoryChange={vi.fn()} />
+      </>,
     );
-    expect(rulesButton).toBeDefined();
 
-    rulesButton?.click();
-    expect(onCategoryChange).toHaveBeenCalledWith(1);
+    expect(await screen.findAllByRole('button', { name: 'Rules' })).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

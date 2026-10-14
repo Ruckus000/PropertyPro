@@ -1,7 +1,12 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  usePathname,
+  useRouter,
+  useSearchParams,
+  useSelectedLayoutSegment,
+} from 'next/navigation';
 import { QuickFilterTabs } from '@propertypro/ui';
 
 import {
@@ -12,39 +17,18 @@ import {
 
 import type { InboxOverview } from '@/lib/server/inbox';
 
+import { INBOX_DEFAULT_STATUS } from './inbox-filters';
 import { InboxSplit } from './InboxSplit';
 import { MailboxSwitcher } from './MailboxSwitcher';
 import { ThreadList } from './ThreadList';
 
 interface InboxDashboardProps {
   overview: InboxOverview;
-  /**
-   * Initial values read from the URL (`?mailbox=&status=`) by the server page.
-   * Unvalidated at this boundary on purpose — `knownOr` below is the one place
-   * that decides what an unrecognised value means.
-   */
-  initialMailbox: string;
-  initialStatus: string;
-  /** The thread rendered by `detail`, so its row can be highlighted in the list. */
-  activeThreadId?: number;
-  /** `/inbox/[threadId]` passes the sanitized `ThreadView`; `/inbox` passes nothing. */
-  detail?: ReactNode;
+  /** The page header, shown only while no thread is open (`ThreadView` owns that `<h1>`). */
+  header?: ReactNode;
+  /** The layout's `children`: the open thread on `/inbox/[threadId]`, nothing on `/inbox`. */
+  children?: ReactNode;
 }
-
-/**
- * The status the inbox opens on when the URL does not say otherwise.
- *
- * NOT 'all'. `StatusControl` describes `spam` as "a shelf" whose threads
- * "leave the default list", and with an 'all' default that was simply untrue —
- * shelving a thread changed a chip and nothing else, so an inbox whose entire
- * history had been triaged as spam still rendered as a wall of spam. Opening on
- * the work queue is what makes the shelf a shelf.
- *
- * Exported because `page.tsx` must not spell it independently: the server's
- * fallback and the client's must be the same value or the URL round-trip below
- * is wrong in one direction.
- */
-export const INBOX_DEFAULT_STATUS = 'open';
 
 /**
  * `?mailbox=` / `?status=` are untrusted input — a bookmark, a shared link, a
@@ -64,28 +48,60 @@ function knownOr(value: string, allowed: readonly string[], fallback = 'all'): s
  * Filtering happens entirely client-side, over the ONE unfiltered load
  * `getInboxOverview` already did (up to `PLATFORM_LIST_LIMIT`) — no fetch, no
  * loading spinner. The selection is mirrored into the URL (`?mailbox=&status=`)
- * with `router.replace` so it survives a reload, a bookmark, and a thread
- * navigation (`ThreadList` links carry the current query forward).
+ * so it survives a reload, a bookmark, and a thread navigation (`ThreadList`
+ * links carry the current query forward).
+ *
+ * Written with `window.history.replaceState`, not `router.replace`: the inbox
+ * routes are force-dynamic and the filtering happens here, so a router
+ * navigation re-ran the server render on every click to produce what was
+ * already on screen. Next syncs `replaceState` into its router state and into
+ * `useSearchParams`, which is what re-renders the tabs and the list.
+ *
+ * Which is why the filters are READ from that URL (`useSearchParams`) on every
+ * render, with no state of their own. Two things depend on it. Back restores a
+ * page from the router cache, rendered BEFORE any tab click, so a server-read
+ * seed came back stale. And this component lives in `(split)/layout.tsx`, which
+ * stays mounted from `/inbox` to `/inbox/7` and back: state seeded once would
+ * drift from the URL (ThreadView's "Back to inbox" link is a bare `/inbox`).
+ *
+ * It lives in the layout so a row click renders only the thread: the list, its
+ * load and its filters stay put, and `(split)/loading.tsx` fills only the
+ * detail pane. The open thread is the layout's selected segment.
+ *
+ * The price of a layout is that Next never re-renders it on a navigation
+ * between its own children, so the list would otherwise stay as it was when the
+ * inbox was entered. It is re-read when a thread CLOSES (see the effect below),
+ * on `router.refresh()` — which every inbox mutation calls — and on any entry
+ * from outside the inbox. Moving from one thread to the next stays free.
  */
-export function InboxDashboard({
-  overview,
-  initialMailbox,
-  initialStatus,
-  activeThreadId,
-  detail,
-}: InboxDashboardProps) {
-  const router = useRouter();
+export function InboxDashboard({ overview, header, children }: InboxDashboardProps) {
   const pathname = usePathname();
-  const [mailbox, setMailbox] = useState(() => knownOr(initialMailbox, SUPPORT_MAILBOXES));
-  const [status, setStatus] = useState(() =>
-    knownOr(initialStatus, [...SUPPORT_THREAD_STATUSES, 'all'], INBOX_DEFAULT_STATUS),
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // `null` on `/inbox` itself; the `[threadId]` value on a thread.
+  const segment = useSelectedLayoutSegment();
+
+  // Back to the list ("Back to inbox", the rail, Back): re-read it once. Before
+  // the list moved into a layout, that navigation re-rendered the list page and
+  // so re-read it; without this, mail that arrived while a thread was open
+  // never appeared, and a thread deleted elsewhere stayed listed.
+  const previousSegment = useRef(segment);
+  useEffect(() => {
+    if (previousSegment.current !== null && segment === null) router.refresh();
+    previousSegment.current = segment;
+  }, [segment, router]);
+  const activeThreadId = segment === null ? undefined : Number(segment);
+  const detail = segment === null ? null : children;
+  const mailbox = knownOr(searchParams.get('mailbox') ?? 'all', SUPPORT_MAILBOXES);
+  const status = knownOr(
+    searchParams.get('status') ?? INBOX_DEFAULT_STATUS,
+    [...SUPPORT_THREAD_STATUSES, 'all'],
+    INBOX_DEFAULT_STATUS,
   );
 
   function updateFilters(next: { mailbox?: string; status?: string }) {
     const nextMailbox = next.mailbox ?? mailbox;
     const nextStatus = next.status ?? status;
-    setMailbox(nextMailbox);
-    setStatus(nextStatus);
 
     // Omit a param only when it equals what the SERVER will default to on the
     // next load. 'all' is no longer that value for status, so it must be
@@ -95,7 +111,7 @@ export function InboxDashboard({
     if (nextMailbox !== 'all') params.set('mailbox', nextMailbox);
     if (nextStatus !== INBOX_DEFAULT_STATUS) params.set('status', nextStatus);
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
   const filtered = useMemo(
@@ -119,6 +135,9 @@ export function InboxDashboard({
 
   return (
     <div className="space-y-4">
+      {/* pb-2: with this column's space-y-4, the 24px gap PageBody gave the
+          header when it sat outside. */}
+      {detail ? null : <div className="pb-2">{header}</div>}
       {/* Hidden on mobile once a thread is open, so a small screen shows the
           thread and its Back link only — the switcher and tabs would otherwise
           push the open thread below the fold on a phone. */}

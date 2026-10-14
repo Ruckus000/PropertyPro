@@ -82,6 +82,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 // AUTHZ: test — the module is vi.mock()ed above; this import only reaches the mock to program it
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { bulkEmitConversionEvents, emitConversionEvent } from '@/lib/services/conversion-events';
+import { communities } from '@propertypro/db';
 import { POST } from '../../src/app/api/v1/internal/expire-demos/route';
 
 const URL = 'http://localhost:3000/api/v1/internal/expire-demos';
@@ -117,6 +118,8 @@ function buildMocks(
   expiredAccessRequests: object[] = [],
   banBehavior: 'success' | 'fail' = 'success',
   graceDemos: object[] = [],
+  /** The community converted between the cron's find and its delete. */
+  convertedMeanwhile = false,
 ) {
   resetDbMocks();
 
@@ -132,16 +135,30 @@ function buildMocks(
     return Promise.resolve(expiredDemos);
   });
 
-  // Update chains: community/demo soft-deletes and access request expiry
+  // Update chains: community/demo soft-deletes and access request expiry. The
+  // community delete is guarded by is_demo and reports what it deleted.
   mockDbReturning.mockResolvedValue(expiredAccessRequests);
-  mockUpdateWhere.mockReturnValue({ returning: mockDbReturning });
+  let updatedTable: unknown = null;
+  mockUpdateWhere.mockImplementation(() => ({
+    returning: (...args: unknown[]) =>
+      updatedTable === communities
+        ? Promise.resolve(convertedMeanwhile ? [] : [{ id: 1 }])
+        : mockDbReturning(...args),
+  }));
 
   mockDbInnerJoin.mockReturnValue({ where: mockSelectWhere });
-  mockDbFrom.mockReturnValue({ innerJoin: mockDbInnerJoin });
+  // `where` without a join: softDeleteExpiredDemo's re-read of is_demo.
+  mockDbFrom.mockReturnValue({
+    innerJoin: mockDbInnerJoin,
+    where: () => ({ limit: () => Promise.resolve([{ isDemo: !convertedMeanwhile }]) }),
+  });
   mockDbSelect.mockReturnValue({ from: mockDbFrom });
 
   mockDbSet.mockReturnValue({ where: mockUpdateWhere });
-  mockDbUpdate.mockReturnValue({ set: mockDbSet });
+  mockDbUpdate.mockImplementation((table: unknown) => {
+    updatedTable = table;
+    return { set: mockDbSet };
+  });
 
   const db = {
     select: mockDbSelect,
@@ -272,6 +289,27 @@ describe('expire-demos cron route', () => {
     expect(mockUpdateUserById).toHaveBeenCalledWith('user-bbb', { ban_duration: '876600h' });
   });
 
+  // Onboarding audit F9: a demo that converted after the cron found it is a
+  // paying customer's community — no ban, no demo_soft_deleted, not counted.
+  it('leaves a community that converted after it was found entirely alone', async () => {
+    buildMocks(
+      [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
+      [],
+      'success',
+      [],
+      true,
+    );
+
+    const res = await POST(makeRequest('test-demo-secret'));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { expired: number } };
+    expect(json.data.expired).toBe(0);
+    expect(mockUpdateUserById).not.toHaveBeenCalled();
+    expect(emitConversionEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'demo_soft_deleted' }),
+    );
+  });
+
   it('continues processing if banning a user fails (non-fatal)', async () => {
     const expiredDemo = {
       communityId: 77,
@@ -291,7 +329,8 @@ describe('expire-demos cron route', () => {
       return Promise.resolve([expiredDemo]); // expired query
     });
 
-    mockDbReturning.mockResolvedValue([]);
+    // The guarded community delete reports one row; nothing else returns rows.
+    mockDbReturning.mockResolvedValueOnce([{ id: 77 }]).mockResolvedValue([]);
     localUpdateWhere.mockReturnValue({ returning: mockDbReturning });
 
     mockDbInnerJoin.mockReturnValue({ where: localSelectWhere });

@@ -1,6 +1,6 @@
 /**
- * Tests for `scripts/perf-check.ts` — specifically the report-only sweep over
- * routes that sit in no budgeted group.
+ * Tests for `scripts/perf-check.ts` — specifically the sweep over routes that
+ * sit in no budgeted group.
  *
  * The guard's logic had been changed twice with no test, on the reasoning that
  * it calls `main()` at import and so cannot be unit-tested. That was wrong, and
@@ -11,9 +11,11 @@
  * `verify-shared-side-effects.test.ts`.
  *
  * The property under test is narrow and worth stating: a route over the hard
- * budget that nobody budgeted must be REPORTED and must not FAIL the run —
- * seven such routes existed when the sweep was added, and failing on them would
- * have blocked every push until unrelated screens were fixed.
+ * budget that nobody budgeted must FAIL the run. Until 2026-10-12 it had to be
+ * reported and NOT fail — seven such routes existed when the sweep was added,
+ * and failing on them would have blocked every push until unrelated screens were
+ * fixed. It was promoted once the largest one cleared the ceiling by the ~30 KiB
+ * ratchet margin (see the sweep's docblock).
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -101,16 +103,14 @@ describe('perf-check — the unbudgeted sweep', () => {
     expect(status).toBe(0);
   });
 
-  it('REPORTS an unbudgeted route over the hard budget without failing the run', () => {
+  it('FAILS on an unbudgeted route over the hard budget', () => {
     const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100, '/(authenticated)/settings/page': 900 });
 
     const { status, output } = runGuard(root);
 
-    expect(output).toContain('UNBUDGETED route /(authenticated)/settings/page');
-    expect(output).toContain('reported, not enforced');
-    // The whole point: visible, but not a red build.
-    expect(status).toBe(0);
-    expect(output).toContain('Performance budget check passed.');
+    expect(output).toContain('Performance budget check failed');
+    expect(output).toContain('UNBUDGETED route /(authenticated)/settings/page exceeds the hard budget');
+    expect(status).toBe(1);
   });
 
   it('still FAILS when a budgeted route is over the hard budget', () => {
@@ -185,8 +185,7 @@ describe('perf-check — the unbudgeted sweep', () => {
     expect(output).toContain('largest unbudgeted route: /(authenticated)/settings/page');
     expect(output).toContain('50.0 KiB OVER');
     expect(output).not.toContain('below the hard budget');
-    // Still reported, still not enforced.
-    expect(status).toBe(0);
+    expect(status).toBe(1);
   });
 
   it('warns when a group falls back past its first candidate', () => {
@@ -228,6 +227,7 @@ describe('perf-check — first-load measurement', () => {
     // double-counting the shared chunk would be 1001.
     expect(output).toContain(`UNBUDGETED route ${settings} exceeds the hard budget (701.0 KiB`);
     expect(output).not.toContain('UNBUDGETED route /(public)/about/page');
-    expect(status).toBe(0);
+    // 701 > the pinned 700 ceiling, and the sweep is enforced.
+    expect(status).toBe(1);
   });
 });

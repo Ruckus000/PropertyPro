@@ -21,12 +21,14 @@ export default async function DashboardPage() {
   // keys on it, so a literal here (or no argument at all) would give this page
   // its own cache entry and run all seven providers a second time on every
   // dashboard render. `getPreferences` is itself `cache()`d, so resolving it in
-  // both places is one query per request.
-  const preferences = await getPreferences(session.id);
+  // both places is one query per request. Only the signals need it, so it is
+  // chained there rather than awaited ahead of the stats and series.
   const [stats, series, signals] = await Promise.all([
     getPlatformDashboardStats(),
     getDashboardSeries(),
-    getShellSignals(preferences.alertPrefs.errorSpikeThreshold),
+    getPreferences(session.id).then((preferences) =>
+      getShellSignals(preferences.alertPrefs.errorSpikeThreshold),
+    ),
   ]);
 
   // Both values are on the PLATFORM clock, not the server's. This page renders

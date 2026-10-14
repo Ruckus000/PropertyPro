@@ -18,6 +18,7 @@ const {
   welcomeScreenMock,
   selectFromMock,
   listActorUnitIdsMock,
+  loadChecklistWithStatusMock,
 } = vi.hoisted(() => ({
   requirePageAuthenticatedUserMock: vi.fn(),
   requirePageCommunityMembershipMock: vi.fn(),
@@ -27,6 +28,11 @@ const {
   welcomeScreenMock: vi.fn(() => null),
   selectFromMock: vi.fn(async (_table?: unknown, ..._rest: unknown[]): Promise<unknown[]> => []),
   listActorUnitIdsMock: vi.fn(async (): Promise<number[]> => []),
+  loadChecklistWithStatusMock: vi.fn(async (): Promise<unknown[]> => []),
+}));
+
+vi.mock('@/lib/compliance/load-checklist-with-status', () => ({
+  loadChecklistWithStatus: loadChecklistWithStatusMock,
 }));
 
 class RedirectError extends Error {
@@ -236,9 +242,10 @@ describe('WelcomePage role/designation prop passing', () => {
  * in their payload, even though TenantCards never renders it.
  */
 describe('WelcomePage compliance snapshot gate', () => {
+  // Rows as the shared loader returns them: status already derived.
   const CHECKLIST = [
-    { documentId: 1, isApplicable: true },
-    { documentId: null, isApplicable: true },
+    { documentId: 1, isApplicable: true, status: 'satisfied' },
+    { documentId: null, isApplicable: true, status: 'unsatisfied' },
   ];
 
   beforeEach(() => {
@@ -246,9 +253,7 @@ describe('WelcomePage compliance snapshot gate', () => {
     resolveCommunityContextMock.mockReturnValue({ communityId: 42 });
     requirePageAuthenticatedUserMock.mockResolvedValue({ id: 'user-1', fullName: 'Test User' });
     hasChecklistItemsMock.mockResolvedValue(false);
-    selectFromMock.mockImplementation(async (table: unknown) =>
-      table === complianceChecklistItems ? CHECKLIST : [],
-    );
+    loadChecklistWithStatusMock.mockResolvedValue(CHECKLIST);
   });
 
   async function complianceFor(membership: Record<string, unknown>) {
@@ -267,8 +272,7 @@ describe('WelcomePage compliance snapshot gate', () => {
     return element.props.compliance;
   }
 
-  const readCompliance = () =>
-    selectFromMock.mock.calls.some(([table]) => table === complianceChecklistItems);
+  const readCompliance = () => loadChecklistWithStatusMock.mock.calls.length > 0;
 
   it('never reads or sends the score for a tenant', async () => {
     const compliance = await complianceFor({
@@ -283,7 +287,21 @@ describe('WelcomePage compliance snapshot gate', () => {
       role: 'resident', isUnitOwner: true, communityType: 'condo_718',
     });
     expect(compliance).toEqual({ score: 50, totalItems: 2, satisfiedItems: 1 });
-    expect(readCompliance()).toBe(true);
+    expect(loadChecklistWithStatusMock).toHaveBeenCalledWith(42, 'condo_718');
+  });
+
+  // Audit F8: the page counted any linked document as satisfied, so a draft
+  // (or deleted) document scored here while the compliance page said "not yet".
+  it('scores by derived status, so a draft-linked item does not count', async () => {
+    loadChecklistWithStatusMock.mockResolvedValue([
+      { documentId: 1, isApplicable: true, status: 'satisfied' },
+      { documentId: 2, isApplicable: true, status: 'unsatisfied', documentState: 'draft' },
+      { documentId: null, isApplicable: false, status: 'not_applicable' },
+    ]);
+    const compliance = await complianceFor({
+      role: 'resident', isUnitOwner: true, communityType: 'condo_718',
+    });
+    expect(compliance).toEqual({ score: 50, totalItems: 2, satisfiedItems: 1 });
   });
 });
 

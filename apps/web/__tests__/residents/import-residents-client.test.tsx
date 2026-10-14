@@ -11,6 +11,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { StrictMode } from 'react';
 
 interface MockMutation {
   mutate: ReturnType<typeof vi.fn>;
@@ -347,8 +348,9 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     const rows = bodyRows();
     // The blank line 4 is skipped; nothing is renumbered and nothing is hidden.
     expect(rows.map((r) => r[0])).toEqual(['2', '3', '5', '6']);
-    expect(rows[1]).toEqual(['3', 'Fix', '-', 'bad', 'owner', '102', 'Name is required; Invalid email address']);
-    expect(rows[2]![6]).toBe("Unit '999' not found");
+    // Each problem names its column (audit F10), so the reader knows which field to fix.
+    expect(rows[1]).toEqual(['3', 'Fix', '-', 'bad', 'owner', '102', 'name: Name is required; email: Invalid email address']);
+    expect(rows[2]![6]).toBe("unit_number: Unit '999' not found");
     expect(rows[3]![6]).toBe('Existing account — will be added to this community');
   });
 
@@ -390,8 +392,8 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     expect(filename).toBe('residents-rows-to-fix.csv');
     expect((csv as string).split('\r\n')).toEqual([
       'name,email,role,unit_number,line,error',
-      ',bad,owner,102,3,Name is required; Invalid email address',
-      "Cal,cal@x.com,tenant,999,5,Unit '999' not found",
+      ',bad,owner,102,3,name: Name is required; email: Invalid email address',
+      "Cal,cal@x.com,tenant,999,5,unit_number: Unit '999' not found",
     ]);
   });
 
@@ -411,7 +413,7 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
 
     fireEvent.click(screen.getByRole('button', { name: 'Download rows to fix' }));
     const [csv] = saveCsvFileMock.mock.calls[0]!;
-    expect((csv as string).split('\r\n')[1]).toBe('"Lee, Al",bad,owner,102,3,Invalid email address');
+    expect((csv as string).split('\r\n')[1]).toBe('"Lee, Al",bad,owner,102,3,email: Invalid email address');
   });
 
   it('keeps an already-member row out of the fix count and the download, beside real problems', async () => {
@@ -455,3 +457,94 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     expect(screen.queryByRole('button', { name: 'Download rows to fix' })).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Onboarding audit F10: the import screen for keyboard and screen-reader users.
+// ---------------------------------------------------------------------------
+describe('ImportResidentsClient — accessibility (audit F10)', () => {
+  const RESPONSE = {
+    data: {
+      preview: [{ name: 'Ann', email: 'ann@x.com', role: 'owner', unit_number: '101', rowNumber: 2, existingAccount: false }],
+      errors: [{ rowNumber: 3, column: 'email', message: 'Invalid email address' }],
+      header: ['name', 'email', 'role', 'unit_number'],
+    },
+  };
+
+  async function toPreview() {
+    renderClient();
+    uploadCsv('name,email,role,unit_number\nAnn,ann@x.com,owner,101\nBo,bad,owner,102');
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    const [, opts] = dryRunMutation.mutate.mock.calls[0]!;
+    (opts as { onSuccess: (d: unknown) => void }).onSuccess(RESPONSE);
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+  }
+
+  it('announces the preview in one persistent live region', async () => {
+    renderClient();
+    const live = screen.getByRole('status');
+    expect(live).toHaveTextContent('');
+    uploadCsv('name,email,role,unit_number\nAnn,ann@x.com,owner,101\nBo,bad,owner,102');
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    const [, opts] = dryRunMutation.mutate.mock.calls[0]!;
+    (opts as { onSuccess: (d: unknown) => void }).onSuccess(RESPONSE);
+
+    // Same element, new text: a region mounted together with its text is often not read.
+    await waitFor(() => expect(live).toHaveTextContent('Preview ready: 1 ready to import, 1 to fix.'));
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+
+  it('moves focus to the new step instead of leaving it on the page', async () => {
+    await toPreview();
+    await waitFor(() => expect(document.activeElement).toHaveAttribute('aria-label', 'Import step'));
+  });
+
+  it('does not take focus on first render, even under StrictMode effect replay', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <StrictMode>
+        <QueryClientProvider client={qc}>
+          <ImportResidentsClient communityId={42} />
+        </QueryClientProvider>
+      </StrictMode>,
+    );
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it('moves focus to the step while a file is checked (the upload controls unmount)', () => {
+    const { rerender } = renderClient();
+    dryRunMutation.isPending = true;
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ImportResidentsClient communityId={42} />
+      </QueryClientProvider>,
+    );
+    expect(document.activeElement).toHaveAttribute('aria-label', 'Import step');
+  });
+
+  it('announces a file the preview refuses as a whole, not "0 to fix"', async () => {
+    renderClient();
+    const live = screen.getByRole('status');
+    uploadCsv('name,email\nAnn,ann@x.com');
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    const [, opts] = dryRunMutation.mutate.mock.calls[0]!;
+    (opts as { onSuccess: (d: unknown) => void }).onSuccess({
+      data: {
+        preview: [],
+        errors: [{ rowNumber: 1, column: 'role', message: "Missing required column 'role'" }],
+        header: ['name', 'email'],
+      },
+    });
+    await waitFor(() => expect(live).toHaveTextContent("This file can't be imported as it is."));
+  });
+
+  it('says so when a dropped file is not a CSV, instead of doing nothing', () => {
+    renderClient();
+    const dropZone = screen.getByText('Drag and drop your CSV file here').closest('div')!.parentElement!;
+    const file = new File(['x'], 'residents.xlsx', { type: 'application/vnd.ms-excel' });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    expect(screen.getByText(/residents\.xlsx is not a CSV file/)).toBeInTheDocument();
+    expect(dryRunMutation.mutate).not.toHaveBeenCalled();
+  });
+});
+

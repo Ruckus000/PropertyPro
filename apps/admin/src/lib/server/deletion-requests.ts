@@ -43,16 +43,6 @@ export interface DeletionRequestFilters {
   type?: string | null;
 }
 
-function buildRequesterName(rawMeta: Record<string, unknown> | null): string | null {
-  if (!rawMeta) {
-    return null;
-  }
-
-  const firstName = typeof rawMeta.first_name === 'string' ? rawMeta.first_name : '';
-  const lastName = typeof rawMeta.last_name === 'string' ? rawMeta.last_name : '';
-  return `${firstName} ${lastName}`.trim() || null;
-}
-
 function throwIfError(error: { message: string } | null, context: string): void {
   if (error) {
     throw new Error(`${context}: ${error.message}`);
@@ -118,20 +108,13 @@ export async function getDeletionRequestsData(
   if (userIds.length > 0) {
     const { data: users, error: usersError } = await (db
       .from('users')
-      .select('id, email, raw_user_meta_data')
+      .select('id, email, full_name')
       .in('id', userIds));
 
     throwIfError(usersError, 'Failed to load requester profiles');
 
-    for (const user of (users ?? []) as {
-      id: string;
-      email: string;
-      raw_user_meta_data: Record<string, unknown> | null;
-    }[]) {
-      userMap.set(user.id, {
-        email: user.email,
-        name: buildRequesterName(user.raw_user_meta_data),
-      });
+    for (const user of (users ?? []) as { id: string; email: string; full_name: string | null }[]) {
+      userMap.set(user.id, { email: user.email, name: user.full_name || null });
     }
   }
 
@@ -164,6 +147,5 @@ export async function getDeletionRequestsData(
 }
 
 export const deletionRequestTestUtils = {
-  buildRequesterName,
   mapDeletionRequests,
 };

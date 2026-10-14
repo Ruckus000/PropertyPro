@@ -3,6 +3,7 @@
  * with each row linking to the matching Billing filter.
  */
 import Link from 'next/link';
+import { isBillingListFilter } from '@/lib/billing/list-filters';
 import { cn } from '@/lib/utils';
 import type { PlatformDashboardStats } from '@/lib/server/dashboard';
 
@@ -14,9 +15,10 @@ type BillingKey = keyof PlatformDashboardStats['billing'];
 
 interface StatusRow {
   /**
-   * Doubles as the Billing filter value in the row's href — there used to be a
-   * separate `status` field holding a byte-identical copy in all five rows, i.e.
-   * two places to change one fact.
+   * Doubles as the Billing filter value in the row's href when `/billing` has a
+   * tab for it — there used to be a separate `status` field holding a
+   * byte-identical copy in all five rows, i.e. two places to change one fact.
+   * `active` and `none` have no tab, so those rows link to the unfiltered list.
    */
   key: BillingKey;
   label: string;
@@ -32,6 +34,15 @@ const STATUS_ROWS: StatusRow[] = [
   { key: 'canceled', label: 'Canceled', barClass: 'bg-status-neutral', textClass: 'text-status-neutral' },
   { key: 'none', label: 'No subscription', barClass: 'bg-surface-muted', textClass: 'text-content-tertiary' },
 ];
+
+/**
+ * `?status=` only for a key `/billing` actually filters on. An unknown value
+ * would fall back to All there anyway; omitting it keeps the link from
+ * claiming a filter the page will not apply.
+ */
+function billingHref(key: BillingKey): string {
+  return isBillingListFilter(key) ? `/billing?status=${key}` : '/billing';
+}
 
 export function SubscriptionsCard({ billing }: SubscriptionsCardProps) {
   const rows = STATUS_ROWS.filter((row) => billing[row.key] > 0);
@@ -60,7 +71,7 @@ export function SubscriptionsCard({ billing }: SubscriptionsCardProps) {
           {rows.map((row) => (
             <li key={row.key}>
               <Link
-                href={`/billing?status=${row.key}`}
+                href={billingHref(row.key)}
                 className="flex min-h-[44px] items-center justify-between py-2 hover:bg-surface-hover md:min-h-[36px]"
               >
                 <span className="flex items-center gap-2 text-sm text-content-secondary">

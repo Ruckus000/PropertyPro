@@ -1,17 +1,19 @@
 import type { NextRequest } from 'next/server';
 
 /**
- * Best-effort client IP for rate-limit keying on unauthenticated routes.
+ * Best-effort client IP for rate-limit keying and consent/audit IP evidence on
+ * unauthenticated routes.
  *
- * Trusts `x-forwarded-for`'s first entry, which is correct behind Vercel's
- * proxy and spoofable anywhere it is not. That is acceptable for throttling —
- * it must never be used for authorization.
+ * Prefers `x-real-ip`: on Vercel the platform sets it to the true client IP and
+ * a client cannot forge it, whereas `x-forwarded-for`'s FIRST entry is
+ * client-supplied (Vercel appends the real IP after any client value). Only
+ * fall back to the XFF head when `x-real-ip` is absent. Still best-effort —
+ * never use for authorization — but this keeps a persisted consent IP from
+ * being trivially spoofable by the consenting party.
  */
 export function resolveClientIp(req: NextRequest): string {
-  const xff = req.headers.get('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return req.headers.get('x-real-ip') ?? 'unknown';
+  const realIp = req.headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
+  const first = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  return first || 'unknown';
 }

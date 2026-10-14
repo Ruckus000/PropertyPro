@@ -48,6 +48,8 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { POST } from '../../src/app/api/v1/calendar/google/connect/route';
 
 describe('POST /api/v1/calendar/google/connect', () => {

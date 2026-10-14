@@ -23,7 +23,6 @@
  * an `AbortController`. In a TanStack Query `queryFn`, forward the signal
  * the framework provides.
  */
-import { captureMessage } from '@sentry/nextjs';
 import { requestJson } from './request-json';
 
 /**
@@ -110,12 +109,21 @@ export async function walkPaginated<T>(
     });
     // One Sentry issue PER ENDPOINT (fingerprint + tag), so the first
     // truncation of each endpoint is its own visible trigger.
-    captureMessage('walk_paginated_truncated', {
-      level: 'warning',
-      fingerprint: ['walk_paginated_truncated', baseUrl],
-      tags: { baseUrl },
-      extra: { rows: collected.length, maxPages },
-    });
+    //
+    // The SDK is imported here, on this rare path, not at the top: the shell's
+    // hooks import this module, so a static import put the whole Sentry SDK in
+    // every signed-in first load. Reporting must never fail the list itself.
+    try {
+      const { captureMessage } = await import('@sentry/nextjs');
+      captureMessage('walk_paginated_truncated', {
+        level: 'warning',
+        fingerprint: ['walk_paginated_truncated', baseUrl],
+        tags: { baseUrl },
+        extra: { rows: collected.length, maxPages },
+      });
+    } catch {
+      // The console.warn above still records it.
+    }
   }
 
   return collected;

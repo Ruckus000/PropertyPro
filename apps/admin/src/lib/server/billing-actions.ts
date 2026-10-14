@@ -307,19 +307,27 @@ interface SubscriptionState {
    * value in the audit row that reads like a coupon code and is not one.
    */
   couponId: string | null;
+  /** Every attached discount with its coupon id, so a write can keep some. */
+  discounts: Array<{ id: string; couponId: string | null }>;
 }
+
+/**
+ * The automatic group-volume coupons (apps/web `tierToCouponId`). The billing
+ * group sync owns them; an operator's coupon must never displace them, or the
+ * group silently loses its tier price.
+ */
+const VOLUME_COUPON_IDS = new Set(['volume_10pct', 'volume_15pct', 'volume_20pct']);
 
 /**
  * A subscription's attached coupon id, from a `discounts[]` entry.
  *
- * The entry may be an unexpanded `di_…` string (we do not expand), or a
- * `Discount` whose `source.coupon` is itself either a coupon id or an expanded
- * `Coupon`. All three are handled; anything else yields `null` rather than a
- * guess, because this value goes into an append-only audit row.
+ * Discounts are expanded on retrieve, so an entry is a `Discount` whose
+ * `source.coupon` is a coupon id or an expanded `Coupon`. A bare `di_…` string
+ * (unexpanded) yields `null`, never the `di_…` id: that is the DISCOUNT's id, and
+ * this value goes into an append-only audit row where it would read like a coupon.
  */
 function couponIdOf(discount: string | Stripe.Discount | undefined): string | null {
-  if (discount === undefined) return null;
-  if (typeof discount === 'string') return discount;
+  if (discount === undefined || typeof discount === 'string') return null;
   const coupon = discount.source?.coupon;
   if (typeof coupon === 'string') return coupon;
   if (coupon && typeof coupon.id === 'string') return coupon.id;
@@ -328,7 +336,7 @@ function couponIdOf(discount: string | Stripe.Discount | undefined): string | nu
 
 async function retrieveSubscriptionState(subscriptionId: string): Promise<SubscriptionState> {
   const stripe = getStripeClient();
-  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  const sub = await stripe.subscriptions.retrieve(subscriptionId, { expand: ['discounts'] });
   const item = sub.items?.data?.[0];
   if (!item) {
     throw new AppError(
@@ -353,6 +361,9 @@ async function retrieveSubscriptionState(subscriptionId: string): Promise<Subscr
     cancelAtPeriodEnd: Boolean(sub.cancel_at_period_end),
     status: sub.status,
     couponId: couponIdOf(firstDiscount),
+    discounts: (sub.discounts ?? []).flatMap((d) =>
+      typeof d === 'string' ? [] : [{ id: d.id, couponId: couponIdOf(d) }],
+    ),
   };
 }
 
@@ -509,9 +520,15 @@ export async function applyCoupon(
     throw new ValidationError(`No Stripe coupon exists with the id "${input.coupon}".`);
   }
 
+  // `discounts` REPLACES the list: the operator's coupon replaces any earlier
+  // operator coupon, but the group's volume discount is carried over by id.
+  const keptVolume = state.discounts
+    .filter((d) => d.couponId !== null && VOLUME_COUPON_IDS.has(d.couponId))
+    .map((d) => ({ discount: d.id }));
+
   await stripe.subscriptions.update(
     subscriptionId,
-    { discounts: [{ coupon: input.coupon }] },
+    { discounts: [...keptVolume, { coupon: input.coupon }] },
     { idempotencyKey: `admin:apply-coupon:${subscriptionId}:${input.coupon}:${idempotencyWindow()}` },
   );
 

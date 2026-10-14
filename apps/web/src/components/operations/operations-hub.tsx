@@ -243,7 +243,7 @@ export function OperationsHub({
   function setTab(nextTab: OperationsTab) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', nextTab);
-    router.replace(`${pathname}?${params.toString()}`);
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   interface CtaConfig { label: string; createValue: CreateValue; }
@@ -276,8 +276,8 @@ export function OperationsHub({
    * reads `create`, and router.push would re-render this force-dynamic page
    * on the server before the sheet could appear. Next syncs the new URL into
    * useSearchParams, and restores the prior entry from its cache on Back.
-   * Tab switches continue to use router.replace (unchanged from Phase 1)
-   * so they don't bloat history.
+   * Tab switches use history.replaceState instead, so they neither bloat
+   * history nor re-render this force-dynamic page on the server.
    */
   function openCreate(value: CreateValue) {
     if (!CREATE_SHEETS_ENABLED) return;
@@ -434,7 +434,7 @@ export function OperationsHub({
               onClick={() => {
                 const params = new URLSearchParams(searchParams.toString());
                 if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
-                router.replace(`${pathname}?${params.toString()}`);
+                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
               }}
             />
           </div>
@@ -464,7 +464,7 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                router.replace(`${pathname}?${params.toString()}`);
+                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
               }}
             />
           </div>
@@ -496,7 +496,7 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                router.replace(`${pathname}?${params.toString()}`);
+                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
               }}
             />
           </div>
@@ -530,7 +530,7 @@ export function OperationsHub({
                 const nextPage = filters.page + 1;
                 const params = new URLSearchParams(searchParams.toString());
                 params.set('page', String(nextPage));
-                router.replace(`${pathname}?${params.toString()}`);
+                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
               }}
             />
           </div>

@@ -25,58 +25,6 @@ export default async function SettingsPage() {
   const preferences = await getPreferences(currentAdmin.id);
   const db = createAdminClient();
 
-  // Fetch platform admins with emails
-  const { data, error } = await db
-    .from('platform_admin_users')
-    .select('user_id, role, invited_by, created_at')
-    .order('created_at')
-    .limit(PLATFORM_LIST_LIMIT);
-
-  // `error` was not even destructured here. A failed read rendered an EMPTY
-  // admin list on the page whose whole purpose is managing platform admins —
-  // which reads as "there are no other admins" and invites exactly the wrong
-  // action. Fail loudly instead.
-  if (error) {
-    throw new Error(`Failed to load platform admins: ${error.message}`);
-  }
-
-  const rows = (data ?? []) as unknown as PlatformAdminRow[];
-
-  // Batch fetch all auth users to avoid N+1 queries. Paged — see
-  // list-all-auth-users.ts for why a bare listUsers() truncates at 50.
-  const authUserMap = await buildAuthUserMap(db);
-
-  const admins = rows.map((row) => {
-    const user = authUserMap.get(row.user_id);
-    return {
-      userId: row.user_id,
-      email: user?.email ?? 'unknown',
-      role: row.role,
-      invitedBy: row.invited_by,
-      createdAt: row.created_at,
-    };
-  });
-
-  // Fetch platform stats
-  const [communityResult, demoResult] = await Promise.all([
-    db
-      .from('communities')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_demo', false)
-      .is('deleted_at', null),
-    db
-      .from('demo_instances')
-      .select('*', { count: 'exact', head: true }),
-  ]);
-
-  // Headline counts: a failed count rendering as 0 is a plausible-looking lie.
-  if (communityResult.error) {
-    throw new Error(`Failed to count communities: ${communityResult.error.message}`);
-  }
-  if (demoResult.error) {
-    throw new Error(`Failed to count demo instances: ${demoResult.error.message}`);
-  }
-
   // Integrations (task 32). Read through `withHealthCache`, NOT a second
   // uncached `getHealthReport()` — that call is six outbound probes plus three
   // privileged reads, and the `(console)` layout's health signal has already
@@ -90,15 +38,70 @@ export default async function SettingsPage() {
   // `getHealthReport` catches every probe internally, so this only fires if the
   // module itself blows up — in which case the section reports `Not reported`
   // (unknown) for all four rows, which is the honest reading.
-  let healthServices: Awaited<ReturnType<typeof getHealthReport>>['services'] = [];
-  let sentryAnswered = false;
-  try {
-    const report = await withHealthCache(() => getHealthReport());
-    healthServices = report.services;
-    sentryAnswered = report.errors !== null;
-  } catch {
-    healthServices = [];
-    sentryAnswered = false;
+  const integrations = (async (): Promise<{
+    services: Awaited<ReturnType<typeof getHealthReport>>['services'];
+    sentryAnswered: boolean;
+  }> => {
+    try {
+      const report = await withHealthCache(() => getHealthReport());
+      return { services: report.services, sentryAnswered: report.errors !== null };
+    } catch {
+      return { services: [], sentryAnswered: false };
+    }
+  })();
+
+  // The admin list, the auth users that name them, the platform counts and the
+  // integrations report are independent, so they load in one round instead of
+  // four in a row. Batch-fetching every auth user avoids an N+1; it is paged —
+  // see list-all-auth-users.ts for why a bare listUsers() truncates at 50.
+  const [adminsResult, authUserMap, [communityResult, demoResult], { services: healthServices, sentryAnswered }] =
+    await Promise.all([
+      db
+        .from('platform_admin_users')
+        .select('user_id, role, invited_by, created_at')
+        .order('created_at')
+        .limit(PLATFORM_LIST_LIMIT),
+      buildAuthUserMap(db),
+      Promise.all([
+        db
+          .from('communities')
+          .select('*', { count: 'exact', head: true })
+          .eq('is_demo', false)
+          .is('deleted_at', null),
+        db
+          .from('demo_instances')
+          .select('*', { count: 'exact', head: true }),
+      ]),
+      integrations,
+    ]);
+
+  // `error` was not even destructured here once. A failed read rendered an
+  // EMPTY admin list on the page whose whole purpose is managing platform
+  // admins — which reads as "there are no other admins" and invites exactly the
+  // wrong action. Fail loudly instead.
+  if (adminsResult.error) {
+    throw new Error(`Failed to load platform admins: ${adminsResult.error.message}`);
+  }
+
+  const rows = (adminsResult.data ?? []) as unknown as PlatformAdminRow[];
+
+  const admins = rows.map((row) => {
+    const user = authUserMap.get(row.user_id);
+    return {
+      userId: row.user_id,
+      email: user?.email ?? 'unknown',
+      role: row.role,
+      invitedBy: row.invited_by,
+      createdAt: row.created_at,
+    };
+  });
+
+  // Headline counts: a failed count rendering as 0 is a plausible-looking lie.
+  if (communityResult.error) {
+    throw new Error(`Failed to count communities: ${communityResult.error.message}`);
+  }
+  if (demoResult.error) {
+    throw new Error(`Failed to count demo instances: ${demoResult.error.message}`);
   }
 
   // `PlatformSettings` renders its own `AdminPageHeader` (it's a client

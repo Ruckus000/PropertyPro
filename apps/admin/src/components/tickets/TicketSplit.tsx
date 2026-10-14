@@ -13,8 +13,8 @@ interface TicketSplitProps {
  *
  * Deliberately the same shape as `InboxSplit`, down to the CSS, because it is
  * the same rule: below `md` exactly one column shows — `detail` when there is
- * one, otherwise `list`. There is no `mobile` prop because both pages that
- * render this are `dynamic = 'force-dynamic'`, so a server-side viewport read
+ * one, otherwise `list`. There is no `mobile` prop because the `(split)` layout
+ * that renders this is `dynamic = 'force-dynamic'`, so a server-side viewport read
  * would mean UA sniffing or a hydration mismatch.
  *
  * The placeholder lives HERE rather than in the caller for the reason

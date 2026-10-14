@@ -172,8 +172,14 @@ function renderClient(props: Partial<Parameters<typeof DirectoryPageClient>[0]> 
     { wrapper },
   );
 }
+// Tab switches write the URL with history.replaceState, which Next syncs into
+// useSearchParams without a server render. Asserting router.replace is NOT
+// called is the point: that call re-rendered the force-dynamic page.
+const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+
 
 beforeEach(() => {
+  historyReplace.mockClear();
   vi.clearAllMocks();
   searchState.value = '';
   isDesktopMock.mockReturnValue(true);
@@ -342,7 +348,8 @@ describe('DirectoryPageClient — residents', () => {
     const user = userEvent.setup();
     renderClient();
     await user.click(screen.getByRole('tab', { name: /residents/i }));
-    expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=residents', { scroll: false });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/dashboard/directory?tab=residents');
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it('?q= seeds the search of the tab it opens (command palette, search results)', () => {
@@ -373,7 +380,7 @@ describe('DirectoryPageClient — residents', () => {
     const user = userEvent.setup();
     renderClient();
     await user.click(screen.getByRole('button', { name: /using the portal/i }));
-    expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=residents', { scroll: false });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/dashboard/directory?tab=residents');
   });
 });
 
@@ -559,7 +566,7 @@ describe('DirectoryPageClient — access requests tab', () => {
     const user = userEvent.setup();
     renderClient();
     await user.click(await screen.findByRole('button', { name: /access requests/i }));
-    expect(replaceMock).toHaveBeenCalledWith('/dashboard/directory?tab=requests', { scroll: false });
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/dashboard/directory?tab=requests');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 

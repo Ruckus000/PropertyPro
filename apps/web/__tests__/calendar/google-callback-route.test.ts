@@ -58,6 +58,8 @@ vi.mock('@/lib/services/calendar-sync-service', () => ({
   completeGoogleCalendarConnect: completeGoogleCalendarConnectMock,
 }));
 
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+
 import { GET } from '../../src/app/api/v1/calendar/google/callback/route';
 
 const MEMBERSHIP = {

@@ -13,6 +13,26 @@
  * an MRR headline that changed when you clicked "Past due" would be a different
  * number presented as the same one.
  *
+ * ## The tab IS `?status=`
+ *
+ * The dashboard's Subscriptions card links "Past due 3" to
+ * `/billing?status=past_due`, and this list used to start on All regardless, so
+ * the link silently dropped the filter it named. The tab is read from the URL
+ * (`useSearchParams`) on every render, with no state of its own — the pattern
+ * `InboxDashboard` and `TicketQueue` use, for the same reasons:
+ *
+ * - Back restores a page from the router cache, rendered before any tab click,
+ *   so a value passed down by the page would come back stale.
+ * - A client navigation to the SAME route does not remount this list. When the
+ *   tab lived in state seeded once, the rail's Billing link from a filtered
+ *   `/billing` reset the address bar and left the old tab highlighted over a
+ *   still-filtered table.
+ *
+ * A click writes the URL with `window.history.replaceState`, because the page
+ * is force-dynamic and a router navigation would re-run it on the server to
+ * re-render what is already on screen. Next syncs `replaceState` into
+ * `useSearchParams`, which is what re-renders the tab and the table.
+ *
  * ## Orphans are the point of this screen
  *
  * A row with `communityId === null` is a live Stripe subscription that no
@@ -21,13 +41,15 @@
  * console (there is nothing to link to), so it links into Stripe instead, and
  * it is never hidden by a filter tab.
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { CreditCard, ExternalLink } from 'lucide-react';
 import { planLabel } from '@propertypro/shared';
 import { AlertBanner, Badge, EmptyState, QuickFilterTabs } from '@propertypro/ui';
 import type { BillingRow } from '@/lib/server/billing';
 import { formatCentsAsCurrency } from '@/lib/billing/format';
+import { BILLING_LIST_FILTERS, isBillingListFilter, type BillingListFilter } from '@/lib/billing/list-filters';
 import { BILLING_STATUS_LABELS, BILLING_STATUS_VARIANTS } from '@/lib/billing/status-display';
 
 interface BillingListProps {
@@ -40,15 +62,6 @@ interface BillingListProps {
    */
   stripeDashboardBase: string;
 }
-
-type StatusFilter = 'all' | BillingRow['status'];
-
-const FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'past_due', label: 'Past due' },
-  { value: 'trialing', label: 'Trialing' },
-  { value: 'canceled', label: 'Canceled' },
-];
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -63,7 +76,18 @@ function formatDate(iso: string | null): string {
 }
 
 export function BillingList({ rows, truncated, stripeDashboardBase }: BillingListProps) {
-  const [filter, setFilter] = useState<StatusFilter>('all');
+  const searchParams = useSearchParams();
+  const requested = searchParams.get('status');
+  const filter: BillingListFilter = isBillingListFilter(requested) ? requested : 'all';
+
+  function changeFilter(next: BillingListFilter) {
+    const params = new URLSearchParams(window.location.search);
+    if (next === 'all') params.delete('status');
+    else params.set('status', next);
+    const query = params.toString();
+    const path = window.location.pathname;
+    window.history.replaceState(null, '', query ? `${path}?${query}` : path);
+  }
 
   const counts = useMemo(
     () => ({
@@ -94,9 +118,11 @@ export function BillingList({ rows, truncated, stripeDashboardBase }: BillingLis
       )}
 
       <QuickFilterTabs
-        tabs={FILTERS.map((tab) => ({ ...tab, count: counts[tab.value] }))}
+        tabs={BILLING_LIST_FILTERS.map((tab) => ({ ...tab, count: counts[tab.value] }))}
         active={filter}
-        onChange={(value) => setFilter(value as StatusFilter)}
+        onChange={(value) => {
+          if (isBillingListFilter(value)) changeFilter(value);
+        }}
       />
 
       {visible.length === 0 ? (
