@@ -5,18 +5,13 @@
  *
  * Coverage:
  * - computeAccessPlanStatus: all 5 status branches (revoked, converted, active, in_grace, expired)
- * - grantFreeAccess: transaction, plan creation, community update, audit log
- * - revokeFreeAccess: revokedAt set, community column cleared when no other plans
- * - extendFreeAccess: old plan revoked + new plan created atomically
  * - requestUserDeletion: request created with correct cooling_ends_at
  * - cancelUserDeletion: status set to cancelled
  * - executeUserSoftDelete: users.deletedAt set, auth ban called (non-fatal)
- * - recoverUser: deletedAt cleared, status recovered
  * - purgeUserPII: PII scrubbed, idempotent on second call
  * - requestCommunityDeletion: request created with cooling period
  * - interveneCommunityDeletion: admin cancels community deletion
  * - executeCommunitySoftDelete: communities.deletedAt set
- * - recoverCommunity: deletedAt cleared, status recovered
  * - purgeCommunityData: idempotent guard
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -155,19 +150,14 @@ vi.mock('@/lib/account-lifecycle/root-offboarding', () => ({
 // Service import must come after all vi.mock calls
 import {
   computeAccessPlanStatus,
-  grantFreeAccess,
-  revokeFreeAccess,
-  extendFreeAccess,
   requestUserDeletion,
   RootOffboardingAckRequiredError,
   cancelUserDeletion,
   executeUserSoftDelete,
-  recoverUser,
   purgeUserPII,
   requestCommunityDeletion,
   interveneCommunityDeletion,
   executeCommunitySoftDelete,
-  recoverCommunity,
   purgeCommunityData,
 } from '../../src/lib/services/account-lifecycle-service';
 
@@ -334,193 +324,6 @@ describe('computeAccessPlanStatus', () => {
       graceEndsAt: new Date('2025-02-01'),
     };
     expect(computeAccessPlanStatus(plan)).toBe('revoked');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// grantFreeAccess
-// ---------------------------------------------------------------------------
-
-describe('grantFreeAccess', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('creates a plan and updates community in a transaction', async () => {
-    const fakePlan = {
-      id: 42,
-      communityId: 100,
-      expiresAt: new Date(),
-      graceEndsAt: new Date(),
-      durationMonths: 6,
-      gracePeriodDays: 30,
-      grantedBy: 'user-uuid-001',
-    };
-
-    const dbMock = buildDbMock({
-      insertReturning: [[fakePlan]],
-      updateReturning: [[{}]],
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    const result = await grantFreeAccess(100, {
-      durationMonths: 6,
-      gracePeriodDays: 30,
-      grantedBy: 'user-uuid-001',
-    });
-
-    expect(result).toEqual(fakePlan);
-    // Verify insert and update were both called (inside transaction)
-    expect(dbMock._calls).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ op: 'insert' }),
-        expect.objectContaining({ op: 'update' }),
-      ]),
-    );
-    // Verify audit log was called
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'create',
-        resourceType: 'access_plan',
-        communityId: 100,
-      }),
-    );
-  });
-
-  it('passes notes through to the plan', async () => {
-    const fakePlan = { id: 43, communityId: 100 };
-    const dbMock = buildDbMock({
-      insertReturning: [[fakePlan]],
-      updateReturning: [[{}]],
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    await grantFreeAccess(100, {
-      durationMonths: 3,
-      gracePeriodDays: 14,
-      grantedBy: 'user-uuid-002',
-      notes: 'Beta partner discount',
-    });
-
-    const insertCall = dbMock._calls.find((c) => c.op === 'insert');
-    expect((insertCall?.values as Record<string, unknown>)?.notes).toBe('Beta partner discount');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// revokeFreeAccess
-// ---------------------------------------------------------------------------
-
-describe('revokeFreeAccess', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('sets revokedAt and clears community column when no other plans exist', async () => {
-    const revokedPlan = { id: 42, communityId: 100, revokedAt: new Date(), revokedBy: 'admin-001' };
-    const dbMock = buildDbMock({
-      updateReturning: [[revokedPlan], [{}]], // first update = revoke plan, second = clear community
-      selectResults: [[]], // no other active plans
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    const result = await revokeFreeAccess(42, { revokedBy: 'admin-001', reason: 'Contract ended' });
-
-    expect(result).toEqual(revokedPlan);
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'update',
-        resourceType: 'access_plan',
-        resourceId: '42',
-      }),
-    );
-  });
-
-  it('does not clear community column when other active plans exist', async () => {
-    const revokedPlan = { id: 42, communityId: 100, revokedAt: new Date() };
-    const otherPlan = { id: 43, communityId: 100 };
-    const dbMock = buildDbMock({
-      updateReturning: [[revokedPlan]],
-      selectResults: [[otherPlan]], // another active plan exists
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    await revokeFreeAccess(42, { revokedBy: 'admin-001' });
-
-    // Should only have 1 update (revoke plan), not 2 (no community clear)
-    const updateCalls = dbMock._calls.filter((c) => c.op === 'update');
-    expect(updateCalls).toHaveLength(1);
-  });
-
-  it('throws when plan is not found', async () => {
-    const dbMock = buildDbMock({
-      updateReturning: [[]], // empty — plan not found
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    await expect(revokeFreeAccess(999, { revokedBy: 'admin-001' })).rejects.toThrow(
-      'Access plan 999 not found',
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// extendFreeAccess
-// ---------------------------------------------------------------------------
-
-describe('extendFreeAccess', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('revokes old plan and creates new plan atomically', async () => {
-    const oldPlan = {
-      id: 42,
-      communityId: 100,
-      expiresAt: new Date('2025-06-01'),
-      graceEndsAt: new Date('2025-07-01'),
-      durationMonths: 6,
-      gracePeriodDays: 30,
-    };
-    const newPlan = {
-      id: 43,
-      communityId: 100,
-      expiresAt: new Date('2025-09-01'),
-      graceEndsAt: new Date('2025-10-01'),
-      durationMonths: 9,
-      gracePeriodDays: 30,
-    };
-    const dbMock = buildDbMock({
-      updateReturning: [[oldPlan], [{}]], // revoke plan, community update
-      insertReturning: [[newPlan]],
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    const result = await extendFreeAccess(42, {
-      additionalMonths: 3,
-      grantedBy: 'admin-001',
-      notes: 'Extended for good behavior',
-    });
-
-    expect(result).toEqual(newPlan);
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'update',
-        resourceType: 'access_plan',
-        communityId: 100,
-      }),
-    );
-  });
-
-  it('throws when plan is not found', async () => {
-    const dbMock = buildDbMock({
-      updateReturning: [[]],
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    await expect(
-      extendFreeAccess(999, { additionalMonths: 3, grantedBy: 'admin-001' }),
-    ).rejects.toThrow('Access plan 999 not found');
   });
 });
 
@@ -787,76 +590,6 @@ describe('executeUserSoftDelete', () => {
 
     const result = await executeUserSoftDelete([999]);
     expect(result).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// recoverUser
-// ---------------------------------------------------------------------------
-
-describe('recoverUser', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('clears deletedAt and sets status to recovered', async () => {
-    const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
-    const dbMock = buildDbMock({
-      updateReturning: [[request], [{}]], // request update + user update
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
-    createAdminClientMock.mockReturnValue({
-      auth: { admin: { updateUserById: updateUserByIdMock } },
-    });
-
-    const result = await recoverUser(1, 'admin-001');
-
-    expect(result).toEqual(request);
-    // Soft delete banned the login; recovery must lift it or the user stays locked out.
-    expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
-      ban_duration: 'none',
-      user_metadata: { soft_deleted: null },
-    });
-  });
-
-  it('throws when lifting the auth ban fails, so the operator sees it', async () => {
-    const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
-    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-    createAdminClientMock.mockReturnValue({
-      auth: {
-        admin: {
-          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'GoTrue down' } }),
-        },
-      },
-    });
-
-    await expect(recoverUser(1, 'admin-001')).rejects.toThrow(/GoTrue down/);
-  });
-
-  it('writes no audit entry — there is no community to attribute it to', async () => {
-    // This case used to assert the OPPOSITE, and the assertion was wrong: it
-    // pinned a call passing `communityId: 0, // platform-level, no community`.
-    // compliance_audit_log.community_id is NOT NULL with an ON DELETE RESTRICT
-    // FK to communities.id, and communities.id is a bigserial whose lowest value
-    // in production is 1 — so that insert did not record a platform-level
-    // event, it threw. And because logAuditEvent runs AFTER the transaction
-    // commits, the recovery succeeded and then the admin route returned 500 on
-    // an operation that had actually worked.
-    //
-    // The mock accepted `0` happily, which is why a green test coexisted with a
-    // live 500 for as long as it did.
-    const request = { id: 1, userId: 'user-uuid-001', status: 'recovered' };
-    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-    createAdminClientMock.mockReturnValue({
-      auth: { admin: { updateUserById: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
-    });
-
-    await recoverUser(1, 'admin-001');
-
-    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 });
 
@@ -1134,36 +867,6 @@ describe('executeCommunitySoftDelete', () => {
 });
 
 // ---------------------------------------------------------------------------
-// recoverCommunity
-// ---------------------------------------------------------------------------
-
-describe('recoverCommunity', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('clears communities.deletedAt and sets status to recovered', async () => {
-    const request = { id: 1, communityId: 100, status: 'recovered' };
-    const dbMock = buildDbMock({
-      updateReturning: [[request], [{}]],
-    });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    const result = await recoverCommunity(1, 'admin-001');
-
-    expect(result).toEqual(request);
-    expect(logAuditEventMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'update',
-        resourceType: 'account_deletion_request',
-        communityId: 100,
-        newValues: expect.objectContaining({ status: 'recovered' }),
-      }),
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
 // purgeCommunityData
 // ---------------------------------------------------------------------------
 
@@ -1259,7 +962,7 @@ describe('purgeCommunityData', () => {
 
   it('audits the purge, carrying no PII in the payload', async () => {
     // The destructive step had no trail at all, while the REVERSIBLE
-    // recoverCommunity/recoverUser both logged one. Worse, the route that makes
+    // recover paths (now only in the admin console) both logged one. Worse, the route that makes
     // cancelling root-exclusive justifies itself by citing intervention as
     // "a break-glass that leaves an audit trail" — a promise this service did
     // not keep.

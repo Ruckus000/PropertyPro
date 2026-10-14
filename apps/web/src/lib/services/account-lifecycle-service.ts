@@ -50,24 +50,6 @@ const PERMANENT_BAN = '876600h';
 
 export type AccessPlanStatus = 'revoked' | 'converted' | 'active' | 'in_grace' | 'expired';
 
-export interface GrantFreeAccessParams {
-  durationMonths: number;
-  gracePeriodDays: number;
-  notes?: string;
-  grantedBy: string;
-}
-
-export interface RevokeFreeAccessParams {
-  revokedBy: string;
-  reason?: string;
-}
-
-export interface ExtendFreeAccessParams {
-  additionalMonths: number;
-  grantedBy: string;
-  notes?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Free Access — Status Computation
 // ---------------------------------------------------------------------------
@@ -91,75 +73,8 @@ export function computeAccessPlanStatus(plan: {
 }
 
 // ---------------------------------------------------------------------------
-// Free Access — Listing (admin)
+// Deletion Requests — Lookup
 // ---------------------------------------------------------------------------
-
-/**
- * List access plans, optionally filtered by community. Returns each row with
- * a computed `status` field — callers should not re-derive status separately.
- *
- * Admin/platform-scoped read: uses the unscoped client because access_plans
- * is a platform-level table. Callers MUST authorize via `requirePlatformAdmin`
- * before invoking.
- */
-export async function listAccessPlansWithStatus(
-  options: { communityId?: number } = {},
-): Promise<Array<AccessPlan & { status: AccessPlanStatus }>> {
-  const db = createUnscopedClient();
-  const rows = options.communityId !== undefined
-    ? await db
-        .select()
-        .from(accessPlans)
-        .where(eq(accessPlans.communityId, options.communityId))
-    : await db.select().from(accessPlans);
-  return rows.map((plan) => ({ ...plan, status: computeAccessPlanStatus(plan) }));
-}
-
-// ---------------------------------------------------------------------------
-// Deletion Requests — Listing + Lookup (admin)
-// ---------------------------------------------------------------------------
-
-export type DeletionRequestStatus =
-  | 'cooling'
-  | 'soft_deleted'
-  | 'purged'
-  | 'cancelled'
-  | 'recovered';
-
-export type DeletionRequestType = 'user' | 'community';
-
-export interface ListDeletionRequestsOptions {
-  status?: DeletionRequestStatus;
-  requestType?: DeletionRequestType;
-}
-
-/**
- * List account-deletion requests, optionally filtered by status and/or type.
- *
- * Admin/platform-scoped read: uses the unscoped client because
- * `account_deletion_requests` is a platform-level table. Callers MUST
- * authorize via `requirePlatformAdmin` before invoking.
- */
-export async function listDeletionRequests(
-  options: ListDeletionRequestsOptions = {},
-) {
-  const db = createUnscopedClient();
-  const conditions = [];
-  if (options.status !== undefined) {
-    conditions.push(eq(accountDeletionRequests.status, options.status));
-  }
-  if (options.requestType !== undefined) {
-    conditions.push(eq(accountDeletionRequests.requestType, options.requestType));
-  }
-
-  if (conditions.length === 0) {
-    return await db.select().from(accountDeletionRequests);
-  }
-  if (conditions.length === 1) {
-    return await db.select().from(accountDeletionRequests).where(conditions[0]!);
-  }
-  return await db.select().from(accountDeletionRequests).where(and(...conditions));
-}
 
 export interface UserActiveDeletionRequest {
   id: number;
@@ -254,26 +169,6 @@ export async function findCoolingDeletionRequestForUser(
 }
 
 /**
- * Look up the `requestType` of a single deletion request. Returns `null`
- * when the id doesn't match a row (so the caller can throw NotFoundError).
- *
- * Admin/platform read: uses the unscoped client. Callers MUST authorize via
- * `requirePlatformAdmin` before invoking.
- */
-export async function getDeletionRequestType(
-  requestId: number,
-): Promise<DeletionRequestType | null> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({ requestType: accountDeletionRequests.requestType })
-    .from(accountDeletionRequests)
-    .where(eq(accountDeletionRequests.id, requestId))
-    .limit(1);
-  if (!row) return null;
-  return row.requestType as DeletionRequestType;
-}
-
-/**
  * Find the active access plan id for a community, if any.
  * "Active" = not revoked AND not yet converted (status 'active' or 'in_grace'
  * — used by the subscribe flow to attach the plan id to the Stripe checkout
@@ -301,212 +196,6 @@ export async function findActiveAccessPlanIdForCommunity(
     )
     .limit(1);
   return row?.id ?? null;
-}
-
-/**
- * Existence check on the platform-level `communities` table. Returns true
- * when a row matches `id`, false otherwise.
- *
- * Admin/platform read: uses the unscoped client. Callers MUST authorize via
- * `requirePlatformAdmin` before invoking.
- */
-export async function communityExistsAdmin(communityId: number): Promise<boolean> {
-  const db = createUnscopedClient();
-  const [row] = await db
-    .select({ id: communities.id })
-    .from(communities)
-    .where(eq(communities.id, communityId))
-    .limit(1);
-  return Boolean(row);
-}
-
-// ---------------------------------------------------------------------------
-// Free Access — Grant
-// ---------------------------------------------------------------------------
-
-/**
- * Creates an access plan for a community and denormalizes the expiry date
- * onto the communities table for fast subscription guard checks.
- *
- * Runs in a transaction: plan insert + community update are atomic.
- */
-export async function grantFreeAccess(
-  communityId: number,
-  params: GrantFreeAccessParams,
-) {
-  const now = new Date();
-  const expiresAt = addMonths(now, params.durationMonths);
-  const graceEndsAt = addDays(expiresAt, params.gracePeriodDays);
-
-  const db = createUnscopedClient();
-
-  const [plan] = await db.transaction(async (tx) => {
-    const inserted = await tx
-      .insert(accessPlans)
-      .values({
-        communityId,
-        expiresAt,
-        graceEndsAt,
-        durationMonths: params.durationMonths,
-        gracePeriodDays: params.gracePeriodDays,
-        grantedBy: params.grantedBy,
-        notes: params.notes ?? null,
-      })
-      .returning();
-
-    await tx
-      .update(communities)
-      .set({ freeAccessExpiresAt: graceEndsAt })
-      .where(eq(communities.id, communityId));
-
-    return inserted;
-  });
-
-  await logAuditEvent({
-    userId: params.grantedBy,
-    action: 'create',
-    resourceType: 'access_plan',
-    resourceId: String(plan!.id),
-    communityId,
-    newValues: {
-      durationMonths: params.durationMonths,
-      gracePeriodDays: params.gracePeriodDays,
-      expiresAt: expiresAt.toISOString(),
-      graceEndsAt: graceEndsAt.toISOString(),
-    },
-  });
-
-  return plan!;
-}
-
-// ---------------------------------------------------------------------------
-// Free Access — Revoke
-// ---------------------------------------------------------------------------
-
-/**
- * Revokes an active access plan. If no other active plans remain for the
- * community, clears the denormalized free_access_expires_at column.
- */
-export async function revokeFreeAccess(
-  planId: number,
-  params: RevokeFreeAccessParams,
-) {
-  const now = new Date();
-  const db = createUnscopedClient();
-
-  const result = await db.transaction(async (tx) => {
-    // Mark plan as revoked
-    const [revoked] = await tx
-      .update(accessPlans)
-      .set({ revokedAt: now, revokedBy: params.revokedBy })
-      .where(eq(accessPlans.id, planId))
-      .returning();
-
-    if (!revoked) throw new Error(`Access plan ${planId} not found`);
-
-    // Check for other active (non-revoked, non-converted) plans for this community
-    const otherPlans = await tx
-      .select()
-      .from(accessPlans)
-      .where(
-        and(
-          eq(accessPlans.communityId, revoked.communityId),
-          isNull(accessPlans.revokedAt),
-          isNull(accessPlans.convertedAt),
-          ne(accessPlans.id, planId),
-        ),
-      );
-
-    if (otherPlans.length === 0) {
-      // No other active plans — clear denormalized column
-      await tx
-        .update(communities)
-        .set({ freeAccessExpiresAt: null })
-        .where(eq(communities.id, revoked.communityId));
-    }
-
-    return revoked;
-  });
-
-  await logAuditEvent({
-    userId: params.revokedBy,
-    action: 'update',
-    resourceType: 'access_plan',
-    resourceId: String(planId),
-    communityId: result.communityId,
-    newValues: { revokedAt: now.toISOString(), reason: params.reason ?? null },
-  });
-
-  return result;
-}
-
-// ---------------------------------------------------------------------------
-// Free Access — Extend
-// ---------------------------------------------------------------------------
-
-/**
- * Extends free access by revoking the current plan and creating a new one
- * with extended dates. Both operations happen in a single transaction.
- */
-export async function extendFreeAccess(
-  planId: number,
-  params: ExtendFreeAccessParams,
-) {
-  const now = new Date();
-  const db = createUnscopedClient();
-
-  const { oldPlan, newPlan } = await db.transaction(async (tx) => {
-    // Revoke old plan
-    const [revoked] = await tx
-      .update(accessPlans)
-      .set({ revokedAt: now, revokedBy: params.grantedBy })
-      .where(eq(accessPlans.id, planId))
-      .returning();
-
-    if (!revoked) throw new Error(`Access plan ${planId} not found`);
-
-    // Compute extended dates from the original expiry (not from now)
-    const newExpiresAt = addMonths(revoked.expiresAt, params.additionalMonths);
-    const newGraceEndsAt = addDays(newExpiresAt, revoked.gracePeriodDays);
-
-    const [created] = await tx
-      .insert(accessPlans)
-      .values({
-        communityId: revoked.communityId,
-        expiresAt: newExpiresAt,
-        graceEndsAt: newGraceEndsAt,
-        durationMonths: revoked.durationMonths + params.additionalMonths,
-        gracePeriodDays: revoked.gracePeriodDays,
-        grantedBy: params.grantedBy,
-        notes: params.notes ?? null,
-      })
-      .returning();
-
-    // Update denormalized column with new grace end
-    await tx
-      .update(communities)
-      .set({ freeAccessExpiresAt: newGraceEndsAt })
-      .where(eq(communities.id, revoked.communityId));
-
-    return { oldPlan: revoked, newPlan: created! };
-  });
-
-  await logAuditEvent({
-    userId: params.grantedBy,
-    action: 'update',
-    resourceType: 'access_plan',
-    resourceId: String(newPlan.id),
-    communityId: oldPlan.communityId,
-    oldValues: { planId: oldPlan.id, expiresAt: oldPlan.expiresAt.toISOString() },
-    newValues: {
-      planId: newPlan.id,
-      additionalMonths: params.additionalMonths,
-      expiresAt: newPlan.expiresAt.toISOString(),
-      graceEndsAt: newPlan.graceEndsAt.toISOString(),
-    },
-  });
-
-  return newPlan;
 }
 
 // ---------------------------------------------------------------------------
@@ -678,7 +367,8 @@ export async function executeUserSoftDelete(requestIds: number[]) {
       chunk.map(async (result) => {
         try {
           // GoTrue reads 'none' as LIFT the ban. 876600h (~100y) is the
-          // permanent ban demo-conversion uses; recoverUser lifts it.
+          // permanent ban demo-conversion uses; the admin console's recover
+          // route (apps/admin …/deletion-requests/[id]/recover) lifts it.
           const { error } = await admin.auth.admin.updateUserById(result.userId, {
             ban_duration: PERMANENT_BAN,
             user_metadata: { soft_deleted: true },
@@ -698,55 +388,6 @@ export async function executeUserSoftDelete(requestIds: number[]) {
 }
 
 /** Recovers a soft-deleted user: clears deletedAt, sets status to recovered, lifts the auth ban. */
-export async function recoverUser(requestId: number, recoveredBy: string) {
-  const now = new Date();
-  const db = createUnscopedClient();
-
-  const result = await db.transaction(async (tx) => {
-    const [request] = await tx
-      .update(accountDeletionRequests)
-      .set({ status: 'recovered', recoveredAt: now })
-      .where(eq(accountDeletionRequests.id, requestId))
-      .returning();
-
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
-
-    await tx
-      .update(users)
-      .set({ deletedAt: null })
-      .where(eq(users.id, request.userId));
-
-    return request;
-  });
-
-  // Soft delete banned the login. Throw rather than warn: a "recovered" user
-  // who still cannot sign in is the failure the operator must see.
-  const { error: unbanError } = await createAdminClient().auth.admin.updateUserById(
-    result.userId,
-    { ban_duration: 'none', user_metadata: { soft_deleted: null } },
-  );
-  if (unbanError) {
-    throw new Error(`Recovered user ${result.userId}, but lifting the auth ban failed: ${unbanError.message}`);
-  }
-
-  // NOT audited, and `communityId: 0` was never a way to do it.
-  //
-  // This is a USER recovery, so there is no community — but
-  // compliance_audit_log.community_id is NOT NULL with an ON DELETE RESTRICT FK
-  // to communities.id, and communities.id is a bigserial whose lowest value in
-  // production is 1. So the previous `communityId: 0, // platform-level, no
-  // community` did not record a platform-level event: it threw. And because it
-  // ran AFTER the transaction committed, the recovery succeeded and then
-  // POST /api/v1/admin/deletion-requests/[id]/recover returned 500 — an
-  // operation that worked, reported as broken.
-  //
-  // There is no other home for it either: platform_admin_audit_log permits a
-  // null community but requires a non-null admin_user_id, which fits a platform
-  // admin but not the cron paths that share this shape. Recording nothing is
-  // honest; recording it against an arbitrary community would not be.
-  return result;
-}
-
 /**
  * Scrubs PII from a user record after the purge window.
  * Idempotent: guarded by purgedAt IS NULL on the deletion request.
@@ -962,39 +603,6 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
 }
 
 /** Recovers a soft-deleted community. */
-export async function recoverCommunity(requestId: number, adminUserId: string) {
-  const now = new Date();
-  const db = createUnscopedClient();
-
-  const result = await db.transaction(async (tx) => {
-    const [request] = await tx
-      .update(accountDeletionRequests)
-      .set({ status: 'recovered', recoveredAt: now })
-      .where(eq(accountDeletionRequests.id, requestId))
-      .returning();
-
-    if (!request) throw new Error(`Deletion request ${requestId} not found`);
-
-    await tx
-      .update(communities)
-      .set({ deletedAt: null })
-      .where(eq(communities.id, request.communityId!));
-
-    return request;
-  });
-
-  await logAuditEvent({
-    userId: adminUserId,
-    action: 'update',
-    resourceType: 'account_deletion_request',
-    resourceId: String(requestId),
-    communityId: result.communityId ?? 0,
-    newValues: { status: 'recovered', recoveredAt: now.toISOString() },
-  });
-
-  return result;
-}
-
 /**
  * Terminal step of a COMMUNITY deletion: destroy the community's site assets and
  * generated export archives, then mark the request purged. Idempotent, guarded
@@ -1070,7 +678,7 @@ export async function purgeCommunityData(requestId: number) {
   // A user-type request has no community, and compliance_audit_log.community_id
   // is NOT NULL with a RESTRICT FK — so that case cannot be audited here at all.
   // Passing 0 is not a workaround: there is no community 0, and the insert
-  // FK-violates (see recoverUser, where exactly that has been throwing).
+  // FK-violates (the old web recoverUser did exactly that, and threw).
   // platform_admin_audit_log allows a null community but demands a non-null
   // admin_user_id, and this is a cron with no actor. Both doors are shut.
   //

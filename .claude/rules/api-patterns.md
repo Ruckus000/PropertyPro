@@ -415,12 +415,9 @@ GET      /api/v1/calendar/events
 GET      /api/v1/pm/communities, /dashboard/summary, /reports/[reportType]
 POST     /api/v1/pm/bulk/announcements, /bulk/documents
 
-# Account lifecycle
-GET/POST /api/v1/admin/access-plans          (admin: list/grant free access)
-DELETE   /api/v1/admin/access-plans/[id]     (admin: revoke)
-POST     /api/v1/admin/access-plans/[id]/extend (admin: extend)
-GET      /api/v1/admin/deletion-requests     (admin: list deletion requests)
-POST     /api/v1/admin/deletion-requests/[id]/intervene, /recover
+# Account lifecycle (free-access plans and deletion review are platform-admin
+# work and live in the admin console: apps/admin /api/admin/access-plans and
+# /api/admin/deletion-requests)
 POST     /api/v1/account/delete              (user: request own deletion)
 DELETE   /api/v1/account/delete              (user: cancel own deletion)
 POST     /api/v1/communities/delete          (admin: request community deletion)

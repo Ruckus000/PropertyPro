@@ -266,10 +266,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // findMyRootlessCommunities (cross-community) self-scoped to the authenticated
   // session user (role-v3 Phase 2b).
   resolve(repoRoot, 'apps/web/src/app/api/v1/communities/my-rootless/route.ts'),
-  // Platform admin auth guard — queries platform_admin_users (no community_id)
-  resolve(repoRoot, 'apps/web/src/lib/api/require-platform-admin.ts'),
-  // Admin access-plans routes — platform-level CRUD on access_plans table
-  // Admin deletion-requests routes — platform-level deletion workflow management
   // User-facing deletion routes — cross-community deletion workflows
   // Subscribe route — Stripe checkout + access plan conversion
   // Change-plan route — Stripe subscription update for in-app upgrades

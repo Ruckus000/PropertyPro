@@ -41,9 +41,6 @@
   "apps/web/src/lib/api/branding.ts": {
     "unscoped": 5
   },
-  "apps/web/src/lib/api/require-platform-admin.ts": {
-    "unscoped": 1
-  },
   "apps/web/src/lib/auth/community-address-conflict.ts": {
     "unscoped": 1
   },
@@ -96,7 +93,7 @@
     "fullTableRead": 2
   },
   "apps/web/src/lib/services/account-lifecycle-service.ts": {
-    "unscoped": 27
+    "unscoped": 18
   },
   "apps/web/src/lib/services/announcement-delivery.ts": {
     "fullTableRead": 2
