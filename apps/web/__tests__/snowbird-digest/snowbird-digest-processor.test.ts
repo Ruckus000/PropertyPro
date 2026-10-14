@@ -54,6 +54,7 @@ vi.mock('@/lib/services/snowbird-digest-token', () => ({
 }));
 
 import { processSnowbirdDigests } from '@/lib/services/snowbird-digest-processor';
+import { collectFailureSignals } from '@/lib/cron/with-cron-job';
 
 // Monday 2026-07-20, 08:00 in New York (EDT, UTC-4): the weekly send tick.
 const MONDAY_8AM_EASTERN = new Date('2026-07-20T12:00:00.000Z');
@@ -87,7 +88,10 @@ describe('processSnowbirdDigests', () => {
     const result = await processSnowbirdDigests(MONDAY_8AM_EASTERN);
 
     expect(sendEmailMock).toHaveBeenCalledTimes(3);
-    expect(result).toMatchObject({ emailsSent: 2, emailsFailed: 1 });
+    // `failed` is a withCronJob FAILURE_KEY, so the run is reported, not green.
+    expect(result).toMatchObject({ emailsSent: 2, failed: 1 });
+    // The route returns `{ data: result }`; the cron monitor must see the failure.
+    expect(collectFailureSignals({ data: result })).toEqual([{ key: 'failed', count: 1 }]);
     // The failed recipient's watermark is not advanced: next week's window
     // still covers this one.
     expect(scoped.insert).toHaveBeenCalledTimes(2);
@@ -95,6 +99,15 @@ describe('processSnowbirdDigests', () => {
       'u-2',
       'u-3',
     ]);
+  });
+
+  it('counts failed sends against the per-tick budget', async () => {
+    sendEmailMock.mockRejectedValue(new Error('Resend down'));
+
+    const result = await processSnowbirdDigests(MONDAY_8AM_EASTERN, { emailsPerTick: 2 });
+
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    expect(result).toMatchObject({ emailsSent: 0, failed: 2 });
   });
 
   it('keys each send by community, recipient and community-local date', async () => {

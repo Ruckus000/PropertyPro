@@ -40,8 +40,12 @@ export interface SnowbirdDigestRunResult {
   communitiesProcessed: number;
   emailsSent: number;
   emailsSkippedEmpty: number;
-  /** Sends that threw. The watermark stays put, so the next cycle's window still covers this one. */
-  emailsFailed: number;
+  /**
+   * Sends that threw. The watermark stays put, so the next cycle's window still
+   * covers this one. Named `failed` because withCronJob's FAILURE_KEYS reads
+   * that key: a count under any other name would never reach the cron monitor.
+   */
+  failed: number;
 }
 
 export interface LocalParts {
@@ -148,11 +152,15 @@ export async function processSnowbirdDigests(
     communitiesProcessed: 0,
     emailsSent: 0,
     emailsSkippedEmpty: 0,
-    emailsFailed: 0,
+    failed: 0,
   };
 
+  // Failed sends spend the budget too: during a provider outage every attempt
+  // fails, and an unbudgeted loop would run into the route's time limit.
+  const spent = () => result.emailsSent + result.failed;
+
   for (const community of enabled) {
-    if (result.emailsSent >= budget) break;
+    if (spent() >= budget) break;
 
     const timezone = community.timezone ?? DEFAULT_TIMEZONE;
     const parts = toLocalParts(now, timezone);
@@ -174,7 +182,7 @@ export async function processSnowbirdDigests(
     const recipients = await resolveOwnerRecipients(communityId);
 
     for (const recipient of recipients) {
-      if (result.emailsSent >= budget) break;
+      if (spent() >= budget) break;
 
       const subRow = subByUser.get(recipient.userId) ?? null;
       const cadence = resolveEffectiveCadence(subRow);
@@ -225,7 +233,7 @@ export async function processSnowbirdDigests(
           idempotencyKey: `snowbird/${communityId}/${recipient.userId}/${dateOnlyInTimeZone(now, timezone)}`,
         });
       } catch (error) {
-        result.emailsFailed += 1;
+        result.failed += 1;
         console.warn('[snowbird-digest] send failed', {
           communityId,
           userId: recipient.userId,
