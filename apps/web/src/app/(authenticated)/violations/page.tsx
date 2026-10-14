@@ -71,6 +71,7 @@ export default async function ViolationsPage({ searchParams }: PageProps) {
       */}
       <ViolationsAdminInbox
         communityId={communityId}
+        communityTimezone={membership.timezone}
         userId={userId}
         userRole={membership.role}
         finesEnabled={membership.violationFinesEnabled}

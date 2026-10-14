@@ -90,7 +90,7 @@ export function formatShortDate(iso: string, timeZone: string): string {
  * with no weekend rule a deadline can legitimately land on a Saturday, and a
  * manager needs to see that rather than discover it.
  */
-export function formatDeadlineStamp(iso: string, timeZone: string): string {
+export function formatDeadlineStamp(iso: string | Date, timeZone: string): string {
   const date = new Date(iso);
   const day = date.toLocaleDateString('en-US', {
     timeZone,

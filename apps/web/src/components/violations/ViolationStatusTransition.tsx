@@ -46,6 +46,7 @@ import {
   buildHearingNoticeWarning,
   HEARING_NOTICE_DAYS,
 } from '@/lib/violations/hearing-notice-warning';
+import { utcDateToWallClockValue, wallClockValueToUtcIso } from '@/lib/utils/zoned-datetime';
 import { useFiningCommitteeCandidates } from '@/hooks/use-fining-committee';
 import {
   FINING_COMMITTEE_MIN_MEMBERS,
@@ -83,9 +84,20 @@ const ACTION_CONFIG: Record<ActionType, { title: string; notesLabel: string; not
   },
 };
 
+/** The `datetime-local` value as a UTC ISO instant, or null while it is blank or partial. */
+function toHearingIso(value: string, timeZone: string): string | null {
+  try {
+    return value ? wallClockValueToUtcIso(value, timeZone) : null;
+  } catch {
+    return null;
+  }
+}
+
 interface ViolationStatusTransitionProps {
   violation: ViolationItem;
   communityId: number;
+  /** IANA zone the hearing time is entered and read in (`membership.timezone`). */
+  communityTimezone: string;
   /** The signed-in user; may not sit on the committee for their own fine. */
   actorUserId: string;
   action: ActionType;
@@ -96,6 +108,7 @@ interface ViolationStatusTransitionProps {
 export function ViolationStatusTransition({
   violation,
   communityId,
+  communityTimezone,
   actorUserId,
   action,
   onComplete,
@@ -103,8 +116,11 @@ export function ViolationStatusTransition({
 }: ViolationStatusTransitionProps) {
   const config = ACTION_CONFIG[action];
   const [notes, setNotes] = useState('');
+  // A `datetime-local` value in the COMMUNITY's clock. Defaults to 6 PM fifteen
+  // community days out: hearings happen at a time, and fifteen days keeps the
+  // default clear of the 14-day warning whatever time the form is opened.
   const [hearingDate, setHearingDate] = useState(
-    format(addDays(new Date(), 14), 'yyyy-MM-dd'),
+    () => `${utcDateToWallClockValue(addDays(new Date(), 15), communityTimezone).slice(0, 10)}T18:00`,
   );
   const [hearingLocation, setHearingLocation] = useState('');
   const [fineAmountDollars, setFineAmountDollars] = useState('');
@@ -136,14 +152,11 @@ export function ViolationStatusTransition({
    * server computes the same warning (`buildHearingNoticeWarning`), and this
    * calls that same function so the two cannot disagree.
    */
+  const hearingAtIso = toHearingIso(hearingDate, communityTimezone);
   const hearingNoticeWarning = buildHearingNoticeWarning({
-    // Parsed exactly as it will be SUBMITTED (`new Date(hearingDate)` — a bare
-    // `yyyy-MM-dd` is UTC midnight), not as local midnight. The two differ by
-    // the host's UTC offset, and while the rule's one-day tolerance currently
-    // absorbs that, an accidental asymmetry between what the form warns about
-    // and what it sends is the kind of thing that only surfaces after someone
-    // tightens the tolerance.
-    hearingDate: hearingDate ? new Date(hearingDate) : null,
+    // The exact instant that will be SUBMITTED, so the form and the server's
+    // copy of this check cannot disagree.
+    hearingDate: hearingAtIso,
     now: new Date(),
   });
 
@@ -173,6 +186,11 @@ export function ViolationStatusTransition({
         }
       }
 
+      if (action === 'hearing' && !hearingAtIso) {
+        setError('Choose a hearing date and time.');
+        return;
+      }
+
       setSubmitting(true);
       try {
         switch (action) {
@@ -190,7 +208,7 @@ export function ViolationStatusTransition({
             const result = await updateViolation(violation.id, {
               communityId,
               status: 'hearing_scheduled',
-              hearingDate: new Date(hearingDate).toISOString(),
+              hearingDate: hearingAtIso,
               hearingLocation: hearingLocation.trim() || null,
               resolutionNotes: notes.trim() || undefined,
             });
@@ -240,7 +258,7 @@ export function ViolationStatusTransition({
         setSubmitting(false);
       }
     },
-    [action, violation.id, communityId, notes, hearingDate, hearingLocation, fineAmountDollars, fineDueDate, committeeIds, committeeApproved, committeeReady, committeeRule, committee.data, config, onComplete],
+    [action, violation.id, communityId, notes, hearingAtIso, hearingLocation, fineAmountDollars, fineDueDate, committeeIds, committeeApproved, committeeReady, committeeRule, committee.data, config, onComplete],
   );
 
   return (
@@ -256,11 +274,11 @@ export function ViolationStatusTransition({
         <>
           <div>
             <label htmlFor="hearing-date" className="mb-1 block text-sm font-medium text-content-secondary">
-              Hearing Date
+              Hearing date and time ({communityTimezone})
             </label>
             <input
               id="hearing-date"
-              type="date"
+              type="datetime-local"
               value={hearingDate}
               onChange={(e) => setHearingDate(e.target.value)}
               className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
