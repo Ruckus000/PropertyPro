@@ -12,7 +12,7 @@
  * `parseCommunityIdFromQuery` is functionally equivalent to
  * `resolveEffectiveCommunityId(req, query.communityId)` (drain #10 lesson).
  *
- * `requireElectionsEnabled` is synchronous; not awaited.
+ * `requireElectionsEnabled` is async (it reads the plan) and is awaited.
  *
  * Behavior change: pre-migration used `parsePositiveInt(params?.id ?? '',
  * 'election id')` which threw a bespoke message; Zod path-param coercion now
@@ -36,7 +36,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);

@@ -330,6 +330,21 @@ describe('POST /api/v1/elections/[id]/vote', () => {
     expect(castElectionVoteForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 403, and casts no vote, when the plan lacks voting (async rejection)', async () => {
+    // requireElectionsEnabled reads the plan from the database, so its 403
+    // arrives as a REJECTED promise. A route that forgets to await it would
+    // carry on and cast the vote: this case is what turns that red.
+    requireElectionsEnabledMock.mockRejectedValueOnce(
+      new ForbiddenError('This feature requires the Professional plan'),
+    );
+
+    const res = await POST(jsonPost(7, { communityId: 42 }), routeCtx('7'));
+
+    expect(res.status).toBe(403);
+    expect(requirePermissionMock).not.toHaveBeenCalled();
+    expect(castElectionVoteForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 when elections.write permission is denied', async () => {
     requirePermissionMock.mockImplementationOnce(() => {
       throw new ForbiddenError('Insufficient permissions');

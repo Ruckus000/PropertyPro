@@ -6,14 +6,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
-  getFeaturesForCommunityMock,
+  getEffectiveFeaturesForPageMock,
   requirePageAuthenticatedUserIdMock,
   requirePageCommunityMembershipMock,
   requirePermissionMock,
   boardElectionsPanelMock,
   redirectMock,
 } = vi.hoisted(() => ({
-  getFeaturesForCommunityMock: vi.fn(),
+  getEffectiveFeaturesForPageMock: vi.fn(),
   requirePageAuthenticatedUserIdMock: vi.fn(),
   requirePageCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
@@ -21,9 +21,8 @@ const {
   redirectMock: vi.fn(),
 }));
 
-vi.mock('@propertypro/shared', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@propertypro/shared')>()),
-  getFeaturesForCommunity: getFeaturesForCommunityMock,
+vi.mock('@/lib/middleware/plan-guard', () => ({
+  getEffectiveFeaturesForPage: getEffectiveFeaturesForPageMock,
 }));
 
 vi.mock('@/lib/request/page-auth-context', () => ({
@@ -88,7 +87,7 @@ describe('BoardElectionsPage', () => {
     vi.clearAllMocks();
     requirePageAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requirePageCommunityMembershipMock.mockResolvedValue(membership);
-    getFeaturesForCommunityMock.mockReturnValue({ hasVoting: true });
+    getEffectiveFeaturesForPageMock.mockResolvedValue({ hasVoting: true });
   });
 
   it('shows the attorney-review explanation and a safe board return for a disabled community', async () => {
@@ -103,7 +102,7 @@ describe('BoardElectionsPage', () => {
 
   it('redirects a non-voting community to the available Board polls page', async () => {
     const redirectSignal = new Error('NEXT_REDIRECT');
-    getFeaturesForCommunityMock.mockReturnValue({ hasVoting: false });
+    getEffectiveFeaturesForPageMock.mockResolvedValue({ hasVoting: false });
     requirePageCommunityMembershipMock.mockResolvedValue({
       ...membership,
       communityType: 'apartment',
@@ -118,6 +117,22 @@ describe('BoardElectionsPage', () => {
     expect(redirectMock).toHaveBeenCalledWith('/communities/42/board/polls');
     expect(requirePermissionMock).not.toHaveBeenCalled();
     expect(boardElectionsPanelMock).not.toHaveBeenCalled();
+  });
+
+  it('reads features for the plan, not just the community type', async () => {
+    // A condo on Essentials: hasVoting by type, but not by plan. The API 403s
+    // (requireElectionsEnabled), so the page must not offer elections either.
+    const redirectSignal = new Error('NEXT_REDIRECT');
+    getEffectiveFeaturesForPageMock.mockResolvedValue({ hasVoting: false });
+    redirectMock.mockImplementation(() => {
+      throw redirectSignal;
+    });
+
+    await expect(BoardElectionsPage({ params: Promise.resolve({ id: '42' }) })).rejects.toBe(
+      redirectSignal,
+    );
+    expect(getEffectiveFeaturesForPageMock).toHaveBeenCalledWith(42, 'condo_718');
+    expect(redirectMock).toHaveBeenCalledWith('/communities/42/board/polls');
   });
 
   it('keeps the existing election panel and permission gate once attorney review is complete', async () => {

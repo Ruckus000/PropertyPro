@@ -1,9 +1,9 @@
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { BoardChrome } from '@/components/board/board-chrome';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { requireCommunityBoardEnabled } from '@/lib/polls/common';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -21,7 +21,8 @@ export default async function BoardLayout({ children, params }: LayoutProps) {
   const userId = await requirePageAuthenticatedUserId();
   const membership = await requirePageCommunityMembership(communityId, userId);
   requireCommunityBoardEnabled(membership);
-  const features = getFeaturesForCommunity(membership.communityType);
+  // Plan-aware, so the Elections tab is hidden where the API would 403.
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
 
   return (
     <FeatureGate feature="hasCommunityBoard" communityId={communityId}>

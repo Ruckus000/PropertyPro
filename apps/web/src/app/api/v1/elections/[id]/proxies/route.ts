@@ -18,7 +18,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
@@ -35,7 +35,7 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'write');
 
     return createElectionProxyForCommunity(

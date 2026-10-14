@@ -9,7 +9,7 @@
  *   requireAuthenticatedUserId
  *   → resolveEffectiveCommunityId(req, query.communityId)
  *   → requireCommunityMembership
- *   → requireElectionsEnabled (sync, NOT awaited)
+ *   → requireElectionsEnabled (awaited: type, attorney review, plan)
  *   → requirePermission('elections', 'read')
  *   → getElectionDetailForCommunity(communityId, electionId)
  *
@@ -35,7 +35,7 @@ export const GET = withErrorHandler(
     const communityId = resolveEffectiveCommunityId(req, query.communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);

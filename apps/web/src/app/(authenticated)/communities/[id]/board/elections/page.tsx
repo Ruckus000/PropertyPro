@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { BoardElectionsPanel } from '@/components/board/board-elections-panel';
 import { canActAsBoard, requirePermission } from '@/lib/db/access-control';
+import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -16,11 +16,14 @@ export default async function BoardElectionsPage({ params }: PageProps) {
   const userId = await requirePageAuthenticatedUserId();
   const membership = await requirePageCommunityMembership(communityId, userId);
 
-  const features = getFeaturesForCommunity(membership.communityType);
+  // Type AND plan: `hasVoting` is Professional-only, the same check the API's
+  // requireElectionsEnabled makes.
+  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
 
   // Apartments have the Board (polls and forums), but never the statutory
-  // election feature. Send a stale/direct election URL to the Board's real
-  // entry point instead of implying attorney review could enable it.
+  // election feature, and a condo below Professional does not have it either.
+  // Send a stale/direct election URL to the Board's real entry point instead
+  // of implying attorney review could enable it.
   if (!features.hasVoting) {
     redirect(`/communities/${communityId}/board/polls`);
   }

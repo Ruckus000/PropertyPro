@@ -5,7 +5,7 @@
  * Params: { id }. Query: { communityId }. No body.
  *
  * Auth chain (5 gates): requireAuthenticatedUserId → resolveEffectiveCommunityId
- * → requireCommunityMembership → requireElectionsEnabled (SYNC) →
+ * → requireCommunityMembership → requireElectionsEnabled (awaited) →
  * requirePermission(membership, 'elections', 'read') →
  * getMyElectionVoteReceiptForCommunity(communityId, electionId, actorUserId).
  *

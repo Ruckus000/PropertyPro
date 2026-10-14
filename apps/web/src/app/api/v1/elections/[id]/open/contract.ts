@@ -3,7 +3,7 @@
  *
  * Plan A1 drain #42. Sibling precedents:
  *  - drain #32 (`GET /api/v1/elections/[id]`, PR #442) — same `elections`
- *    resource + `requireElectionsEnabled` (sync) gate; this drain swaps
+ *    resource + `requireElectionsEnabled` gate; this drain swaps
  *    `read` for `write` and adds the demo-grace + admin-role gates.
  *  - drain #39 (`POST /api/v1/access-requests/[id]/approve`, PR #443) —
  *    canonical body+params POST shape used here.
@@ -13,7 +13,7 @@
  *     → resolveEffectiveCommunityId(req, body.communityId)
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
- *     → requireElectionsEnabled (sync — NOT awaited)
+ *     → requireElectionsEnabled (awaited: type, attorney review, plan)
  *     → requirePermission('elections', 'write')
  *     → requireElectionsAdminRole
  *     → openElectionForCommunity(communityId, electionId, actorUserId, x-request-id)

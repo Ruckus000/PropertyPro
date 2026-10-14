@@ -34,7 +34,7 @@ export const GET = withErrorHandler(
     const communityId = parseCommunityIdFromQuery(req as NextRequest);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'read');
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
