@@ -1,5 +1,5 @@
 import { render } from '@testing-library/react';
-import type { AuthChangeEvent } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { refreshMock, onAuthStateChangeMock, pathnameState } = vi.hoisted(() => ({
@@ -21,7 +21,11 @@ vi.mock('@/lib/supabase/client', () => ({
 
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 
-type Listener = (event: AuthChangeEvent, session: null) => void;
+type Listener = (event: AuthChangeEvent, session: Session | null) => void;
+
+function sessionFor(userId: string): Session {
+  return { user: { id: userId } } as Session;
+}
 
 function lastListener(): Listener {
   return onAuthStateChangeMock.mock.calls.at(-1)![0] as Listener;
@@ -48,6 +52,20 @@ describe('AuthSessionSync', () => {
     const listener = lastListener();
     listener('INITIAL_SESSION', null);
     listener('USER_UPDATED', null);
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes on SIGNED_IN only when the user differs — supabase-js re-emits it on every tab focus', () => {
+    render(<AuthSessionSync />);
+    const listener = lastListener();
+    listener('INITIAL_SESSION', sessionFor('user-a'));
+
+    // Returning to the tab: _recoverAndRefresh re-announces the same session.
+    listener('SIGNED_IN', sessionFor('user-a'));
+    expect(refreshMock).not.toHaveBeenCalled();
+
+    // Another tab signed in as someone else.
+    listener('SIGNED_IN', sessionFor('user-b'));
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
