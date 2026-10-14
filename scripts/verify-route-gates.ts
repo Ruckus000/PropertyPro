@@ -102,7 +102,6 @@ export const GATE_HELPERS: ReadonlyArray<GateHelper> = [
   { name: 'requireBoardDesignation', file: 'apps/web/src/lib/db/access-control.ts' },
   { name: 'requireRole', file: 'apps/web/src/lib/api/role-guard.ts' },
   { name: 'requireRootManager', file: 'apps/web/src/lib/api/role-guard.ts' },
-  { name: 'requirePlatformAdmin', file: 'apps/web/src/lib/api/require-platform-admin.ts' },
   { name: 'requireCronSecret', file: 'apps/web/src/lib/api/cron-auth.ts' },
   { name: 'requirePmPortfolioAccess', file: 'apps/web/src/lib/api/pm-portfolio-access.ts' },
   { name: 'requireStaffOperator', file: 'apps/web/src/lib/logistics/common.ts' },

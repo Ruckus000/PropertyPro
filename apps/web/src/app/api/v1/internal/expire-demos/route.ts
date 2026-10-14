@@ -39,6 +39,9 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   // ── Step 2: Expire demos past demo_expires_at ──
   const expired = await findExpiredDemos(now);
   let count = 0;
+  // Reported as `failed` (a withCronJob FAILURE_KEY), so a ban that did not
+  // land surfaces on the cron monitor instead of only in a log line.
+  let banFailures = 0;
 
   for (const row of expired) {
     const deleted = await softDeleteExpiredDemo({
@@ -60,7 +63,8 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       if (result.ok) {
         console.info(`[expire-demos] banned demo user ${userId}`);
       } else {
-        // Non-fatal: demo user may have already been deleted or banned
+        // Non-fatal for the rest of the run, but counted: this login is live.
+        banFailures++;
         console.warn(`[expire-demos] failed to ban demo user ${userId}: ${result.error}`);
       }
     }
@@ -91,6 +95,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       expired: count,
       graceDetected: enteringGrace.length,
       expiredRequests: expiredRequests.length,
+      failed: banFailures,
     },
   });
 });

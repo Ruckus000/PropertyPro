@@ -181,7 +181,15 @@ async function banDemoUsers(demoId: number): Promise<void> {
 
   for (const userId of userIds) {
     try {
-      await admin.auth.admin.updateUserById(userId!, { ban_duration: '876600h' });
+      // GoTrue RETURNS its failures rather than throwing them, so the error
+      // must be read. A user that no longer exists cannot log in: 404 is done.
+      const { error } = await admin.auth.admin.updateUserById(userId!, {
+        ban_duration: '876600h',
+      });
+      if (error && error.status !== 404) {
+        console.warn(`[demo-conversion] failed to ban demo user ${userId}: ${error.message}`);
+        continue;
+      }
       console.info(`[demo-conversion] banned demo user ${userId}`);
     } catch (err) {
       // Non-fatal: demo user may have already been deleted or banned
@@ -506,8 +514,13 @@ export async function softDeleteExpiredDemo(params: {
 
 /**
  * Permanently ban a demo Supabase auth user (876600h ≈ 100 years). Returns
- * a discriminated union so the caller can log the error context without
+ * a discriminated union so the caller can count and log a failure without
  * aborting the rest of the cron loop.
+ *
+ * GoTrue's `updateUserById` RETURNS `{ error }` rather than throwing, so the
+ * error is read explicitly: ignoring it reported `ok: true` for a ban that
+ * never landed, leaving an expired demo's logins live. A 404 (the user is
+ * already gone) counts as banned, the same rule as the admin demo DELETE.
  *
  * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
  */
@@ -516,7 +529,8 @@ export async function banDemoAuthUser(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const admin = createAdminClient();
-    await admin.auth.admin.updateUserById(userId, { ban_duration: '876600h' });
+    const { error } = await admin.auth.admin.updateUserById(userId, { ban_duration: '876600h' });
+    if (error && error.status !== 404) return { ok: false, error: error.message };
     return { ok: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

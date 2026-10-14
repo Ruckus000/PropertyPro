@@ -224,7 +224,7 @@ describe('expire-demos cron route', () => {
     expect(res.status).toBe(200);
 
     const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
-    expect(json.data).toEqual({ expired: 0, graceDetected: 0, expiredRequests: 0 });
+    expect(json.data).toEqual({ expired: 0, graceDetected: 0, expiredRequests: 0, failed: 0 });
 
     // The access request expiry update always runs (1 call), but no community/demo soft-deletes
     expect(mockDbUpdate).toHaveBeenCalledTimes(1);
@@ -356,12 +356,46 @@ describe('expire-demos cron route', () => {
     // Route should still return 200 — ban failure is non-fatal
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
+    const json = (await res.json()) as { data: { expired: number; failed: number } };
     expect(json.data.expired).toBe(1);
+    expect(json.data.failed).toBe(1);
 
     // Both ban attempts were made despite the first failing
     expect(mockUpdateUserById).toHaveBeenCalledTimes(2);
     expect(mockUpdateUserById).toHaveBeenCalledWith('user-fail', { ban_duration: '876600h' });
     expect(mockUpdateUserById).toHaveBeenCalledWith('user-ok', { ban_duration: '876600h' });
+  });
+
+  // GoTrue RETURNS `{ error }` instead of throwing. The helper ignored it, so a
+  // ban that never landed was logged as done and nothing counted it.
+  it('counts a ban GoTrue returned an error for, and reports it as failed', async () => {
+    buildMocks(
+      [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
+      [],
+      'success',
+    );
+    mockUpdateUserById.mockImplementation(async (userId: string) =>
+      userId === 'user-bbb'
+        ? { data: null, error: { status: 500, message: 'GoTrue down' } }
+        : { data: {}, error: null },
+    );
+
+    const res = await POST(makeRequest('test-demo-secret'));
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { expired: number; failed: number } };
+    expect(json.data).toMatchObject({ expired: 1, failed: 1 });
+  });
+
+  it('treats an already-deleted demo login (404) as banned', async () => {
+    buildMocks(
+      [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
+      [],
+      'success',
+    );
+    mockUpdateUserById.mockResolvedValue({ data: null, error: { status: 404, message: 'User not found' } });
+
+    const res = await POST(makeRequest('test-demo-secret'));
+    const json = (await res.json()) as { data: { failed: number } };
+    expect(json.data.failed).toBe(0);
   });
 });
