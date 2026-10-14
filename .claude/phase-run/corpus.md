@@ -20,8 +20,8 @@ already load. This file is for the landmines.
 | Do this | Never this | Why |
 |---|---|---|
 | `DATABASE_URL="postgresql://postgres:postgres@localhost:5432/propertypro_stub" pnpm test` | `pnpm test` | Three test files are DB-gated and a bare run **silently skips** them. CI's unit job sets exactly this stub URL and **runs** them. Nothing connects to it — the value only has to be *present* at import. A bare run reporting `3 failed` is not evidence of anything. |
-| `pnpm --filter @propertypro/web exec tsc --noEmit` | `pnpm typecheck` | Turbo caches per-package results on input hashes and reports **exit 0 on a freshly-broken file**. |
-| `node scripts/run-lint-guards.mjs` | `pnpm lint \| tail` | The ~20 guards run *after* eslint and *outside* turbo, so a tail shows only the eslint summary and hides every guard failure. |
+| `pnpm exec turbo run typecheck --force && pnpm exec tsc -p scripts/tsconfig.json` | `pnpm typecheck` (cached) or `pnpm typecheck --force` (TS5093) | Turbo caches per-package results on input hashes and reports **exit 0 on a freshly-broken file**. CI runs the whole `pnpm typecheck` (every package plus `scripts/`), so checking apps/web alone misses the rest. |
+| `node scripts/run-lint-guards.mjs` | `pnpm lint \| tail` | The 34 guards run *after* eslint and *outside* turbo, so a tail shows only the eslint summary and hides every guard failure. |
 | `pnpm test:integration:local` | `scripts/with-env-local.sh …` | `.env.local`'s `DATABASE_URL` is **PRODUCTION**. Running the integration suite against it is how test communities leaked into prod. |
 | `pnpm --filter @propertypro/web build` | (skipping it) | The only thing that catches a `node:*` import pulled into a `'use client'` bundle. Typecheck and vitest both pass on that bug. |
 
@@ -126,13 +126,18 @@ pnpm --filter "@propertypro/*" --filter "!@propertypro/web" --filter "!@property
   snapshot records a real diff). `when` is wall-clock, never derived from the
   previous entry — a `when` at or below the newest applied value is **silently
   skipped** by drizzle.
-- Auto-merge is **disabled** and so is `delete_branch_on_merge`, so a stacked PR is
-  **not** retargeted when its base merges. Retarget by hand and re-check the diff.
+- Repo auto-merge is **allowed** and `delete_branch_on_merge` is **on** (`gh api
+  repos/Ruckus000/PropertyPro`, 2026-10-14). Deleting a merged base branch closes
+  or retargets a stacked PR, so re-check a stacked PR's base and diff after its base
+  merges. Never enable auto-merge on a PR unless the user asked.
 - `Build` does not build. `perf-check` owns the only production build; `Build`
   asserts `needs.perf-check.result == 'success'`, so a *skipped* perf-check fails
   it. Do not read a skip as a pass.
-- **CI runs no e2e except `e2e/pdfjs-runtime.spec.ts`** inside perf-check. Do not
-  assume a Playwright spec guards anything in CI.
+- **CI runs e2e in two places.** perf-check runs `test:e2e:prod` against a production
+  build (the three `PROD_SAFE_SPECS`, floor in `apps/web/e2e/prod-smoke-floor.json`),
+  and `.github/workflows/e2e.yml` runs `apps/web/e2e/ci-safe-specs.json` on PRs and
+  pushes to `main`. Only perf-check is a required check. Removing or skipping a spec
+  in either set trips its floor.
 
 ---
 

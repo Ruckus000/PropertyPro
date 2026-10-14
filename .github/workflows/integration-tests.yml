@@ -16,7 +16,7 @@
 # scripts/assert-executed-test-floor.ts, which counts EXECUTED tests and FAILS
 # the job when that is below the suite's `expectedExecutedCount`:
 #   - apps/web:    apps/web/__tests__/integration/ci-integration-floor.json (491)
-#   - packages/db: packages/db/__tests__/ci-integration-floor.json (272)
+#   - packages/db: packages/db/__tests__/ci-integration-floor.json (271)
 # Each value is the executed count PRINTED by the green main run named in its
 # file — never a local measurement, and never the audit's "52", which counted
 # FILES. Removing an integration test means lowering that suite's floor in the

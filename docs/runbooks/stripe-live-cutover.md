@@ -213,7 +213,7 @@ operation that has already half-completed.
 1. In the Stripe dashboard, create a **live-mode** webhook endpoint pointing at
    `https://www.getpropertypro.com/api/v1/webhooks/stripe`, subscribed to the
    nine events the route actually handles
-   (`apps/web/src/app/api/v1/webhooks/stripe/route.ts:588-629`):
+   (`apps/web/src/app/api/v1/webhooks/stripe/route.ts:606-635`):
 
    | | |
    |---|---|
@@ -223,7 +223,10 @@ operation that has already half-completed.
    | `invoice.payment_failed` | `invoice.payment_succeeded` |
    | `price.updated` | |
 
-   Copy its `whsec_…`.
+   Copy its `whsec_…`. This covers platform billing only. Resident payments
+   (finance events on connected accounts) also need a **Connect** endpoint with
+   its own secret, which the route cannot verify yet; see the resident-payments
+   row in `docs/LAUNCH-BLOCKERS.md`.
 2. Update the env vars in Vercel production — `--no-sensitive`, because a
    sensitive var is written back by `vercel pull` as the literal `[SENSITIVE]`
    and then **inlined into the build**:
