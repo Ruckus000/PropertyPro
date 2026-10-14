@@ -64,7 +64,10 @@ const SheetContent = React.forwardRef<
       className={cn(sheetVariants({ side }), className)}
       {...props}
     >
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-surface-card transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-surface-muted">
+      {/* Hit area: 44px below md, 36px at md+ (touch-target rule). Anchored at the
+          icon's centre (24px in from top/right) and shifted back by half its own
+          size, so the visible X stays put whichever size applies. */}
+      <SheetPrimitive.Close className="absolute right-6 top-6 inline-flex h-11 w-11 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-md opacity-70 ring-offset-surface-card md:h-9 md:w-9 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-surface-muted">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </SheetPrimitive.Close>
