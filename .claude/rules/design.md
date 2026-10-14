@@ -30,7 +30,8 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   (`space-y-6`) and optional narrower centred columns
   (`width="prose|form|content|reading|narrow"`), and applies NO horizontal padding.
   Do NOT add root `px-*`/`py-*` (double-pads the gutter) or a page-level `<main>`
-  (the shell owns the only `<main>`). Enforced by `guard:page-padding` (shrink-only
+  (the shell owns the only `<main>`). `guard:page-padding` enforces the horizontal half
+  only — root `px`/`pl`/`pr`/`p-<n>`, and a nested `<main>` (shrink-only
   `scripts/page-padding-baseline.json`; escape hatch `// page-padding:exempt — …`).
   Retune app-wide padding by editing `PAGE_GUTTER_X`/`py-*` in `PageContainer`.
 

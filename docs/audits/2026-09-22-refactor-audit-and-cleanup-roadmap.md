@@ -93,8 +93,9 @@ adversarially verified; counts re-run at HEAD.
 > Deferred with triggers: **finance fence atomicity** — the fence is written
 > before, not with, the ledger postings, so a fenced event now fails loudly
 > (`FinanceWebhookFenceConflict`) rather than being skipped or re-posted; real fix
-> is fence+writes in one transaction after 3.T2 (trigger: 3.T2 lands, or the
-> first live finance event — 0 rows 2026-09-28). **Stripe `isRetry` in-flight
+> is fence+writes in one transaction (trigger: a real community turns on
+> `assessmentPaymentsEnabled`, or the first live finance event — 0 rows
+> 2026-09-28; the earlier "3.T2 lands" trigger fired at `dc3c04f3f`, 2026-09-30). **Stripe `isRetry` in-flight
 > re-run** (`webhooks/stripe/route.ts` step 3: a retry arriving while the first
 > attempt still runs re-processes concurrently; pre-dates Phase 1, needs an
 > in-flight lease column) — trigger: billing launch or any double-processing

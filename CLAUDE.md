@@ -237,14 +237,15 @@ pnpm --filter @propertypro/web test:e2e:prod
 > `localhost` regardless of `--hostname`, so mixing the two silently drops the
 > session (see the eighth addendum).
 >
-> **CI does not run the whole suite. It runs two disjoint sets, across two runners.**
+> **CI does not run the whole suite. It runs two overlapping sets, across two runners.**
+> `activation-smoke` and `marketing-smoke` are in both; `pdfjs-runtime` is only in the first.
 > **Any count here must carry the date it was measured**, because these cascade every time a
 > spec gains a block — every undated number this paragraph used to carry was stale. For a
 > current figure, run `playwright test --list` per config; `grep -c 'test('` gives a wrong
 > answer.
 >
-> 1. The **localci suite's build step** (`pnpm build` → `test:e2e:prod` →
->    `perf:check`) runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
+> 1. CI's **`perf-check` job** (`ci.yml`: `pnpm build` → `test:e2e:prod` →
+>    `perf:check`, a required check; floor in `apps/web/e2e/prod-smoke-floor.json`) runs `pdfjs-runtime`, `activation-smoke` and `marketing-smoke`
 >    in one `test:e2e:prod` invocation. Those three are exactly the
 >    ones needing no DB, no Auth and no seed, which is what lets them run against
 >    a stub `DATABASE_URL` that was never started. This is also the only place
@@ -254,7 +255,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 >    real Supabase stack (`supabase start` in `.supabase-ci/`, migrations,
 >    `pnpm seed:demo`) and a **dev** server — which is what `/dev/agent-login`
 >    requires, and why `next start` cannot host these. It is NOT a required
->    check, and it only fires on PRs touching app/package/e2e paths. That file's
+>    check. It fires on PRs touching app/package/e2e paths and on every push to `main`. That file's
 >    `expectedTestCount` is the authority on how many blocks it expects; the
 >    workflow asserts it as a floor.
 >
@@ -308,7 +309,7 @@ pnpm --filter @propertypro/web test:e2e:prod
 > are **cleared, never inherited** — overriding only the id is what previously
 > showed the admin's identity over the impersonated user's data.
 >
-> **Adding a spec to the localci suite's `test:e2e:prod` step requires proving it
+> **Adding a spec to `perf-check`'s `test:e2e:prod` step requires proving it
 > passes against a PRODUCTION build with an UNREACHABLE database.** Passing under
 > `pnpm test:e2e` proves nothing about that step — that command runs a dev server
 > against a real database, differing on both axes.
@@ -384,7 +385,9 @@ pnpm guard:call-ceilings        # Shrink-only per-file counts of createUnscopedC
 > (`width="prose|form|content|reading|narrow"`) **without** horizontal padding.
 > Pages must NOT re-add their own `px-*`/`py-*` at the root (double-pads the gutter)
 > or render their own `<main>` (the shell owns the only `<main id="main-content">`).
-> The guard scans `(authenticated)/**/page.tsx`; violations are frozen shrink-only in
+> The guard scans `(authenticated)/**/page.tsx` for **horizontal** padding only
+> (`px`/`pl`/`pr`/`p-<n>`, `verify-page-padding.ts:61`); a root `py-*` is a review
+> rule, not an enforced one. Violations are frozen shrink-only in
 > `scripts/page-padding-baseline.json` (currently empty); escape hatch
 > `// page-padding:exempt — <reason>`. To retune app-wide padding, edit
 > `PAGE_GUTTER_X` / `py-*` in `PageContainer` — one line, whole app.

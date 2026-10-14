@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-13
 **Author:** Claude, multi-agent refactor-audit workflow, ponytail lens
-**Status:** Audit only. No code was changed.
+**Status:** The audit itself changed no code. Fixes land in follow-up PRs; see the progress list at the top of Appendix E.
 **Scope:** Commit `70cefc77a` (previous ponytail-lens audit: `07e56b6e7`). All eight dimensions ran: M (money), T (trust), W (writes), S (statute), P (scale), R (reuse), E (exist), C (truth). No dimension failed, and every verifier caught both of its planted canaries (16 of 16), so every verdict below is calibrated and no finding is UNCHECKED. The 2026-10-13 security audit's 22 findings are not re-filed here.
 
 ---
@@ -319,6 +319,13 @@ This is the single home for every deferral. "Fired?" is taken from the C dimensi
 | (none) | ponytail: convention defined | Missing | 3 lines in verification.md (C-06) |
 
 ## Appendix E. Roadmap
+
+**Progress (finding numbers from section 2):**
+- #1–#5 (must fix): merged in #1369 (`ea149a357`), with the post-merge prod ban repair.
+- #6–#13 (live-today should-fix): merged in #1370 (`eedd3cced`).
+- #17, #19 (truth and fired trigger): the docs-truth PR after #1370.
+- #14, #15 (security) and #20 (web admin twins): their own PRs after that.
+- Not started: #16, #18, and the nice-to-have items other than #20.
 
 The order follows dependencies, with fired triggers and must-fixes first. PRs 1–4 touch disjoint files and can run in parallel sessions. Re-fetch `origin/main` before each merge.
 

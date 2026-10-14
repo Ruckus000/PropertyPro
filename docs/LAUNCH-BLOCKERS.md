@@ -141,6 +141,15 @@ line says where.
 - **Resident payments** are gated per community (`assessmentPaymentsEnabled`) and are not
   launching. `STRIPE_CONNECT_CLIENT_ID` is unset, which now returns a typed 503 rather than
   a raw 500.
+  - Before it can launch, three money items are open (ponytail audit #17). (1) Finance
+    events (`payment_intent.succeeded`, `charge.refunded`, `charge.dispute.created`) are
+    created on connected accounts, so they arrive on a **Connect** webhook endpoint with
+    its own signing secret; the route verifies only `STRIPE_WEBHOOK_SECRET`
+    (`webhooks/stripe/route.ts:665`) and the cutover runbook registers only the nine
+    platform events, so no payment would be credited. (2) The finance fence and the
+    ledger writes must commit in one transaction (`FinanceWebhookFenceConflict` in
+    `finance-service.ts`). (3) No `charge.dispute.closed` handler exists, so a won
+    dispute leaves a phantom debt.
 - **PM lead notification** deferred — leads are captured and visible in admin `/leads`;
   only the push is missing, and there is no inbox to push to until item 3.
 - **`docs/gtm/03-LAUNCH-READINESS.md` is stale.** Its B1–B4 blockers are all resolved or

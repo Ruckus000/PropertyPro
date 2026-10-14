@@ -2118,10 +2118,12 @@ export async function getConnectStatus(
  * keeps the platform fence's `processedAt` null, so the event stays visible
  * (Sentry, 500s, Stripe's retry dashboard) for a human to reconcile.
  *
- * ponytail: the real fix is fence + writes in one transaction. Deferred to the
- * finance characterization work (roadmap 3.T2), which must land before any
- * finance restructuring. Trigger: 3.T2 lands, or the first live finance event
+ * ponytail: the real fix is fence + writes in one transaction. Its first
+ * trigger (roadmap 3.T2, the finance characterization tests) fired at
+ * dc3c04f3f on 2026-09-30. Trigger now: a real community turns on
+ * `assessmentPaymentsEnabled`, or the first live finance event
  * (`finance_stripe_webhook_events` held 0 rows in production on 2026-09-28).
+ * Prerequisite: a scoped-client transaction. Tracked in LAUNCH-BLOCKERS.
  */
 export class FinanceWebhookFenceConflict extends Error {
   constructor(readonly eventId: string) {
