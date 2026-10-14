@@ -6,6 +6,7 @@
  * requested `page` window. Same pattern as `listAllRequests` and #228
  * violations / #236 work-orders.
  */
+import { JSON_HEADERS, requestJsonEnvelope } from './request-json';
 import { walkAndSlice } from './walk-paginated';
 
 export interface PhotoEntry {
@@ -61,21 +62,6 @@ export interface CreateRequestPayload {
   storagePaths?: string[];
 }
 
-async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error((err as Record<string, unknown>)['message'] as string ?? res.statusText);
-  }
-  return res.json() as Promise<T>;
-}
-
 export async function listMyRequests(
   communityId: number,
   params?: { status?: string; page?: number; limit?: number },
@@ -96,7 +82,7 @@ export async function getRequest(
   id: number,
   communityId: number,
 ): Promise<{ data: MaintenanceRequestItem }> {
-  return apiFetch<{ data: MaintenanceRequestItem }>(
+  return requestJsonEnvelope<MaintenanceRequestItem>(
     `/api/v1/maintenance-requests/${id}?communityId=${communityId}`,
   );
 }
@@ -104,8 +90,9 @@ export async function getRequest(
 export async function createMaintenanceRequest(
   payload: CreateRequestPayload,
 ): Promise<{ data: MaintenanceRequestItem }> {
-  return apiFetch<{ data: MaintenanceRequestItem }>('/api/v1/maintenance-requests', {
+  return requestJsonEnvelope<MaintenanceRequestItem>('/api/v1/maintenance-requests', {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ action: 'create', ...payload }),
   });
 }
@@ -116,8 +103,9 @@ export async function addComment(payload: {
   text: string;
   isInternal?: boolean;
 }): Promise<{ data: CommentItem }> {
-  return apiFetch<{ data: CommentItem }>('/api/v1/maintenance-requests', {
+  return requestJsonEnvelope<CommentItem>('/api/v1/maintenance-requests', {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ action: 'add_comment', ...payload }),
   });
 }
@@ -129,8 +117,9 @@ export async function requestPhotoUploadUrl(payload: {
   fileSize: number;
   mimeType: string;
 }): Promise<{ data: { uploadUrl: string; storagePath: string } }> {
-  return apiFetch<{ data: { uploadUrl: string; storagePath: string } }>('/api/v1/maintenance-requests', {
+  return requestJsonEnvelope<{ uploadUrl: string; storagePath: string }>('/api/v1/maintenance-requests', {
     method: 'POST',
+    headers: JSON_HEADERS,
     body: JSON.stringify({ action: 'request_upload_url', ...payload }),
   });
 }
