@@ -254,8 +254,8 @@ NOT repeat it. Read its report first. Your job is what it explicitly left OPEN:
    PII in Sentry breadcrumbs or console output.
 5. **Fake-adapter routes** live with no UI (calendar/google, accounting): what can an HTTP client do
    with them today (corpus lens 1)?
-6. Duplicate admin APIs: \`apps/web/src/app/api/v1/admin/*\` vs \`apps/admin/src/app/api/admin/*\` — do
-   both still gate equivalently?
+6. Duplicate admin APIs: the web twins were deleted (ponytail #20). Check nothing re-adds a
+   platform-admin route under \`apps/web/src/app/api/v1/admin/*\` beside \`apps/admin/src/app/api/admin/*\`.
 
 Treat \`// route-gate:\` and \`// AUTHZ:\` claims as decisions (challenge only with a concrete leak). Do
 NOT re-file any of the security audit's 22 findings except as a regression or an incomplete fix.`,

@@ -18,7 +18,7 @@
  *   soft_deleted -> recovered
  */
 import { addDays, addMonths } from 'date-fns';
-import { eq, and, desc, inArray, isNull, isNotNull, lt, ne } from '@propertypro/db/filters';
+import { eq, and, desc, inArray, isNull, isNotNull, lt } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   accessPlans,
@@ -387,7 +387,6 @@ export async function executeUserSoftDelete(requestIds: number[]) {
   return results;
 }
 
-/** Recovers a soft-deleted user: clears deletedAt, sets status to recovered, lifts the auth ban. */
 /**
  * Scrubs PII from a user record after the purge window.
  * Idempotent: guarded by purgedAt IS NULL on the deletion request.
@@ -602,7 +601,6 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
   return results;
 }
 
-/** Recovers a soft-deleted community. */
 /**
  * Terminal step of a COMMUNITY deletion: destroy the community's site assets and
  * generated export archives, then mark the request purged. Idempotent, guarded

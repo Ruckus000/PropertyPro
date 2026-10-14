@@ -276,16 +276,10 @@ ${skipBlock}
      (a 4-method CRUD route whose GET returns a small non-paginated list is
      fine — classify it MULTI_METHOD, not PAGINATED).
 
-   **NOT a blocker — platform-admin CORS:** a \`apps/web/src/app/api/v1/admin/*\`
-   route that ONLY adds CORS via \`mergeAdminCorsHeaders(response, origin)\` /
-   \`corsHeaders(origin)\` and re-exports \`handleOptions as OPTIONS\` is
-   **DRAINABLE** (classify SIMPLE_POST/SIMPLE_GET/MULTI_METHOD per its methods),
-   NOT RUNNER_BLOCKED. The runner handles it by wrapping \`runRoute(...)\` output
-   in an outer \`withErrorHandler\` that re-applies the CORS merge — proven in the
-   merged drains #178 (admin/access-plans/community/[id]) and #179
-   (admin/deletion-requests/[id]/intervene). Only reject an admin route when it
-   ALSO has a real blocker (cookie-set, redirect, binary body, Cache-Control
-   no-store, multipart, reauth).
+   (The platform-admin CORS routes under \`apps/web/src/app/api/v1/admin/*\`
+   were deleted with their \`admin-cors.ts\` helper in the ponytail audit #20
+   PR; platform-admin APIs live in \`apps/admin\`. Only \`admin/join-requests\`
+   remains there, and it is community-scoped with no CORS.)
 
 4. Justification: 1 sentence per pick (why drainable, what shape).
 
@@ -360,21 +354,6 @@ Use the matching canonical template:
 - **SIMPLE_POST** / **SIMPLE_GET** — mirror \`apps/web/src/app/api/v1/elections/[id]/vote/{contract.ts,route.ts}\` and \`apps/web/__tests__/elections/elections-vote-route.test.ts\`.
 - **PAGINATED** — mirror \`apps/web/src/app/api/v1/visitors/denied/{contract.ts,route.ts}\` (tri-state filter) or \`apps/web/src/app/api/v1/polls/{contract.ts,route.ts}\` (boolean filters + time-dependent service args). Set \`paginated: true\` on the contract.
 - **MULTI_METHOD** — two contracts in one file (one per method).
-
-## Platform-admin CORS routes (\`apps/web/src/app/api/v1/admin/*\`)
-
-If the pre-migration route attaches CORS headers (\`mergeAdminCorsHeaders(response, origin)\`
-/ \`corsHeaders(origin)\`) and/or re-exports an OPTIONS handler
-(\`export { handleOptions as OPTIONS }\`), you MUST preserve that exactly. The
-runner returns a JSON response, so wrap its output: keep an OUTER
-\`withErrorHandler(async (req, ctx) => { ... })\` that (a) resolves the origin,
-(b) \`const response = await runRoute(contract, handler)(req, ctx)\`, (c)
-\`return mergeAdminCorsHeaders(response, origin)\`, and (d) still
-\`export { handleOptions as OPTIONS }\`. Mirror the already-merged drains
-\`apps/web/src/app/api/v1/admin/access-plans/community/[id]/{contract.ts,route.ts}\`
-(GET, drain #178) and \`apps/web/src/app/api/v1/admin/deletion-requests/[id]/intervene/{contract.ts,route.ts}\`
-(POST, drain #179) — read both before writing. Auth is the platform-admin chain
-(NOT community membership); preserve it verbatim.
 
 ## Corpus rules to follow
 
