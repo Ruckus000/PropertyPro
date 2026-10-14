@@ -226,7 +226,7 @@ operation that has already half-completed.
    Copy its `whsec_…`. This covers platform billing only. Resident payments
    (finance events on connected accounts) also need a **Connect** endpoint with
    its own secret, which the route cannot verify yet; see the resident-payments
-   row in `docs/LAUNCH-BLOCKERS.md`.
+   bullet in `docs/LAUNCH-BLOCKERS.md`.
 2. Update the env vars in Vercel production — `--no-sensitive`, because a
    sensitive var is written back by `vercel pull` as the literal `[SENSITIVE]`
    and then **inlined into the build**:

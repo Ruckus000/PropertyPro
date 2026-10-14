@@ -137,7 +137,8 @@ pnpm --filter "@propertypro/*" --filter "!@propertypro/web" --filter "!@property
   build (the three `PROD_SAFE_SPECS`, floor in `apps/web/e2e/prod-smoke-floor.json`),
   and `.github/workflows/e2e.yml` runs `apps/web/e2e/ci-safe-specs.json` on PRs and
   pushes to `main`. Only perf-check is a required check. Removing or skipping a spec
-  in either set trips its floor.
+  in either set trips its floor. (`stripe-e2e.yml` also runs the signup specs on PRs
+  and daily, conditional on its Stripe test secrets.)
 
 ---
 

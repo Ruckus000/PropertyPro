@@ -1,9 +1,10 @@
 # Integration Tests — WHAT RUNS AND WHY IT MATTERS
 #
-# This job is the required merge context `Integration Tests` AND the
-# production-deploy gate: `deploy.yml` waits for it on the CI run's head_sha,
-# so a red or over-tight floor here blocks merges and automatic deploys
-# repo-wide until a manual `workflow_dispatch` escape hatch.
+# This job is NOT a required merge context (branch protection requires only
+# the seven ci.yml jobs; see CLAUDE.md "CI"). It IS the production-deploy gate:
+# `deploy.yml` waits for it on the CI run's head_sha, so a red or over-tight
+# floor here blocks automatic deploys repo-wide until a manual
+# `workflow_dispatch` escape hatch.
 #
 # It runs two suites against a disposable vanilla-Postgres service container:
 #   1. `pnpm exec vitest run --config apps/web/vitest.integration.config.ts`

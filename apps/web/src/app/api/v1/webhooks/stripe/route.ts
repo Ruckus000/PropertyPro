@@ -647,7 +647,10 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       break;
   }
 
-  // WS-66: Finance payment lifecycle events share the Stripe webhook endpoint.
+  // WS-66: finance payment lifecycle events are dispatched here too. They are
+  // created on CONNECTED accounts, so in production they arrive only through a
+  // Connect endpoint with its own secret, which this route cannot verify yet
+  // (LAUNCH-BLOCKERS, resident payments).
   await processFinanceStripeEvent(event);
 }
 

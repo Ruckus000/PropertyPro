@@ -296,7 +296,8 @@ site" are secondary.)
   `width="prose|form|content|reading|narrow"` **without** adding horizontal
   padding. Do **not** add root `px-*`/`py-*` (double-pads the gutter) and do
   **not** render your own `<main>` (the shell owns the only
-  `<main id="main-content">`). Enforced by `guard:page-padding`.
+  `<main id="main-content">`). `guard:page-padding` enforces the horizontal
+  padding and `<main>` halves; root `py-*` is a review rule.
   > Today's page uses a legacy hand-rolled container
   > (`<div class="mx-auto max-w-5xl px-6 py-8">`, spec §2). The redesign should
   > **drop that** and use `PageBody` (e.g. `width="content"` for a narrower
@@ -409,7 +410,7 @@ These guards run on every PR (all bundled into `pnpm lint`):
 |---|---|
 | `guard:design-tokens` | Raw hex, raw palette classes (`bg-blue-500`), arbitrary colors/fonts/spacing (`bg-[#…]`, `text-[13px]`, `p-[13px]`), functional color literals, **slash-opacity on semantic tokens**. New files must be clean (shrink-only baseline). |
 | `guard:token-coverage` | Any referenced `var(--*)` that isn't defined. |
-| `guard:page-padding` | Per-page root `px-*`/`py-*` and page-level `<main>` (the gutter belongs to the shell — §4). |
+| `guard:page-padding` | Per-page root horizontal padding (`px`/`pl`/`pr`/`p-<n>`) and page-level `<main>` (the gutter belongs to the shell — §4). Root `py-*` is not checked. |
 | `guard:breadcrumbs` | Detail/new/edit pages missing a page-title `<h1>`; page-authored breadcrumbs. |
 | `guard:token-freshness` | A hand-edited `tokens.css` that drifted from `packages/tokens/src`. |
 
