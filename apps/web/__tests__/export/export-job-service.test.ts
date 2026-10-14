@@ -79,7 +79,9 @@ const {
   findPurgeableJobArchives,
   markJobArchivePurged,
   markJobFailed,
+  markJobReady,
   queueExportJob,
+  saveJobProgress,
 } = await import('@/lib/services/export/export-job-service');
 
 /**
@@ -460,5 +462,55 @@ describe('markJobArchivePurged', () => {
     const setArg = (db.update as ReturnType<typeof vi.fn>).mock.results[0]!.value.set.mock
       .calls[0]![0];
     expect(setArg.deletedAt).toBeInstanceOf(Date);
+  });
+});
+
+/**
+ * A cancel must stick. `cancelExportJob` is status-guarded; the worker's own
+ * writes used to match on `id` alone, so a tick already in flight undid the
+ * cancel — back to `running`, or to `ready` with the archive emailed.
+ */
+describe('worker writes refuse a cancelled job', () => {
+  const whereOf = (db: ReturnType<typeof buildDb>) =>
+    JSON.stringify(
+      (db.update as ReturnType<typeof vi.fn>).mock.results[0]!.value.set.mock.results[0]!.value
+        .where.mock.calls[0]![0],
+    );
+  const LIVE_ONLY = JSON.stringify({ __inArray: ['jobs.status', ['queued', 'running']] });
+
+  it('saveJobProgress only writes a job still queued or running', async () => {
+    const db = buildDb({});
+    createUnscopedClientMock.mockReturnValue(db);
+    await saveJobProgress(5, {} as never, {} as never);
+    expect(whereOf(db)).toContain(LIVE_ONLY);
+  });
+
+  it('markJobReady only flips a live job, and says so when it did not', async () => {
+    const db = buildDb({ updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(db);
+    const marked = await markJobReady({
+      jobId: 5,
+      manifest: {} as never,
+      totalBytes: 1,
+      partCount: 1,
+      expiresAt: new Date(),
+    });
+    expect(whereOf(db)).toContain(LIVE_ONLY);
+    expect(marked).toBe(false);
+  });
+
+  it('markJobReady reports success when the job was live', async () => {
+    const db = buildDb({ updateReturning: [[{ id: 5 }]] });
+    createUnscopedClientMock.mockReturnValue(db);
+    await expect(
+      markJobReady({ jobId: 5, manifest: {} as never, totalBytes: 1, partCount: 1, expiresAt: new Date() }),
+    ).resolves.toBe(true);
+  });
+
+  it('markJobFailed does not re-queue a cancelled job', async () => {
+    const db = buildDb({ selectResults: [[{ id: 5, attemptCount: 1, maxAttempts: 3 }]] });
+    createUnscopedClientMock.mockReturnValue(db);
+    await markJobFailed({ jobId: 5, errorCode: 'X', errorMessage: 'x' });
+    expect(whereOf(db)).toContain(LIVE_ONLY);
   });
 });

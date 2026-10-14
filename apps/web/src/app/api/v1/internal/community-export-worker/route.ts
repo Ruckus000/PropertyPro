@@ -125,7 +125,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
         const expiresAt = new Date(
           Date.now() + COMMUNITY_EXPORT_RETENTION_DAYS * 24 * 60 * 60 * 1000,
         );
-        await markJobReady({
+        const marked = await markJobReady({
           jobId: job.id,
           // The manifest AS BUILT by this run, not the stale one from the row we
           // claimed — otherwise a completed export would report zero warnings.
@@ -137,6 +137,9 @@ const handler = withErrorHandler(async (req: NextRequest) => {
           partCount: result.totalParts,
           expiresAt,
         });
+        // Cancelled while this tick was building it: nothing was marked, so
+        // nothing is announced.
+        if (!marked) continue;
         summary.completed += 1;
 
         // AFTER the ready flip, never before. `markJobReady` stamps `notifiedAt`

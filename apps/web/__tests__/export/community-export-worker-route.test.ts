@@ -108,7 +108,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   findPurgeableJobArchivesMock.mockResolvedValue([]);
   markJobArchivePurgedMock.mockResolvedValue(undefined);
-  markJobReadyMock.mockResolvedValue(undefined);
+  markJobReadyMock.mockResolvedValue(true);
   failExhaustedJobsMock.mockResolvedValue([]);
   findJobByIdMock.mockResolvedValue({ ...JOB, status: 'ready' });
   sendExportReadyEmailMock.mockResolvedValue({ sent: true });
@@ -186,6 +186,18 @@ describe('community-export-worker', () => {
     expect(body.data.errors[0]).toContain('params: [redacted]');
     expect(body.data.errors[0]).not.toContain('canary@x.com');
     expect(body.data.completed).toBe(1);
+  });
+
+  it('does NOT email a job that was cancelled while this tick built it', async () => {
+    // markJobReady's WHERE refuses a cancelled job and reports it wrote nothing.
+    claimOnce();
+    runExportJobMock.mockResolvedValue(COMPLETED);
+    markJobReadyMock.mockResolvedValue(false);
+
+    const body = await (await POST(request())).json();
+
+    expect(sendExportReadyEmailMock).not.toHaveBeenCalled();
+    expect(body.data.completed).toBe(0);
   });
 
   it('does NOT email a job that only yielded', async () => {
