@@ -2,7 +2,7 @@
  * Demo instance API — get and delete individual demos.
  *
  * GET    /api/admin/demos/:id — returns a single demo instance
- * DELETE /api/admin/demos/:id — hard-deletes a demo instance + community + auth users
+ * DELETE /api/admin/demos/:id — retires a demo: soft-deletes it and its community, bans its users
  */
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -11,8 +11,7 @@ import { createAdminClient } from '@propertypro/db/supabase/admin';
 import {
   getDemoById,
   getDemoByIdWithConversionState,
-  deleteDemo,
-  deleteCommunity,
+  softDeleteDemo,
   updateDemo,
   sanitizeDemoRow,
 } from '@/lib/db/demo-queries';
@@ -73,7 +72,7 @@ export const DELETE = withAdminErrorHandler(async (_request: Request, context: R
 
   // 2. Refuse to delete a demo whose community has been converted to a real
   // customer. The community row still references this demo via
-  // seeded_community_id, but cascading the delete would wipe live tenant data.
+  // seeded_community_id, and retiring it would take a paying customer offline.
   if (demo.is_converted) {
     return NextResponse.json(
       {
@@ -87,33 +86,31 @@ export const DELETE = withAdminErrorHandler(async (_request: Request, context: R
     );
   }
 
-  // 3. Delete demo users from Supabase Auth
+  // 3. Retire it the way the expire-demos cron does. This used to hard-delete
+  // the auth users first (errors swallowed), then the community and demo row
+  // (errors discarded) — and conversion_events' NO ACTION FKs block both
+  // deletes, so every attempt left a live demo whose logins were gone.
+  const { error: softDeleteError } = await softDeleteDemo(
+    id,
+    demo.seeded_community_id,
+    new Date().toISOString(),
+  );
+  assertNoDbError(softDeleteError, 'Failed to delete demo instance');
+
+  // 4. Ban the demo logins (876600h, the cron's value). updateUserById reports
+  // failure in its return value rather than throwing, so it is read, not
+  // caught. A user that no longer exists cannot sign in, so 404 is fine.
   const supabase = createAdminClient();
   const userIds = [demo.demo_resident_user_id, demo.demo_board_user_id].filter(Boolean) as string[];
+  const banFailures: string[] = [];
   for (const userId of userIds) {
-    try {
-      await supabase.auth.admin.deleteUser(userId);
-    } catch {
-      // User may already be deleted — continue
-    }
+    const { error } = await supabase.auth.admin.updateUserById(userId, { ban_duration: '876600h' });
+    if (error && error.status !== 404) banFailures.push(userId);
   }
 
-  // 4. Delete the community (cascades demo data)
-  if (demo.seeded_community_id) {
-    await deleteCommunity(demo.seeded_community_id);
-  }
-
-  // 5. Delete the demo_instances row
-  const { error: deleteError } = await deleteDemo(id);
-  assertNoDbError(deleteError, 'Failed to delete demo instance');
-
-  // This is the one call site that cannot log against a live community: steps
-  // 3-5 above destroy the auth users, the community and the demo row. The
-  // details were captured from `demo` before any of that ran, and the audit
-  // table's community_id FK is ON DELETE SET NULL precisely so this entry
-  // survives the community it describes. Recording it with a CASCADE would
-  // mean deleting a tenant also deleted the evidence.
-
+  // The community and demo rows survive (soft-deleted), so this entry keeps a
+  // live community_id. Logged even when a ban failed: the soft delete DID
+  // happen, and an admin who never retries must still leave a record.
   await logAdminAction({
     admin,
     action: 'demo_deleted',
@@ -127,10 +124,24 @@ export const DELETE = withAdminErrorHandler(async (_request: Request, context: R
       demo_board_user_id: demo.demo_board_user_id,
     },
     metadata: {
-      deleted_auth_user_count: userIds.length,
-      cascaded_community: Boolean(demo.seeded_community_id),
+      soft_deleted: true,
+      banned_auth_user_count: userIds.length - banFailures.length,
+      ban_failed_user_ids: banFailures,
     },
   });
+
+  if (banFailures.length > 0) {
+    // Retrying is safe: the soft delete is idempotent and the ban is re-applied.
+    return NextResponse.json(
+      {
+        error: {
+          code: 'DEMO_USER_BAN_FAILED',
+          message: 'The demo was removed, but its logins could not all be disabled. Try again.',
+        },
+      },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({ success: true });
 });
