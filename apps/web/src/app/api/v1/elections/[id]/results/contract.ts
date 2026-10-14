@@ -4,7 +4,7 @@
  * Params: { id }. Query: { communityId }. No body.
  *
  * Auth chain (5 gates): requireAuthenticatedUserId → resolveEffectiveCommunityId
- * → requireCommunityMembership → requireElectionsEnabled (SYNC) →
+ * → requireCommunityMembership → requireElectionsEnabled (awaited) →
  * requirePermission(membership, 'elections', 'read') →
  * getElectionResultsForCommunity(communityId, electionId).
  *
@@ -15,7 +15,7 @@
  *
  * Mirrors drain #30 (sibling /my-vote route) — same params + query + auth
  * chain. Difference: service call signature `(communityId, electionId)`
- * (no actor user) and `requireElectionsEnabled` likewise sync.
+ * (no actor user) and the same awaited `requireElectionsEnabled`.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

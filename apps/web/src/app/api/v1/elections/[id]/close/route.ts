@@ -10,7 +10,7 @@
  *   → resolveEffectiveCommunityId(req, body.communityId)
  *   → assertNotDemoGrace(communityId)
  *   → requireCommunityMembership
- *   → requireElectionsEnabled (sync, NOT awaited)
+ *   → requireElectionsEnabled (awaited: type, attorney review, plan)
  *   → requirePermission('elections', 'write')
  *   → requireElectionsAdminRole(membership)
  *   → closeElectionForCommunity(communityId, electionId, actorUserId, req.headers.get('x-request-id'))
@@ -43,7 +43,7 @@ export const POST = withErrorHandler(
     await requireActiveSubscriptionForMutation(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 

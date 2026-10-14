@@ -12,7 +12,7 @@
  *     → resolveEffectiveCommunityId(req, body.communityId)
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
- *     → requireElectionsEnabled (sync, NOT awaited)
+ *     → requireElectionsEnabled (awaited: type, attorney review, plan)
  *     → requirePermission('elections', 'write')
  *     → requireElectionsAdminRole
  *     → cancelElectionForCommunity(communityId, electionId, actorUserId,
@@ -45,7 +45,7 @@ export const POST = withErrorHandler(
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
 
-    requireElectionsEnabled(membership);
+    await requireElectionsEnabled(membership);
     requirePermission(membership, 'elections', 'write');
     requireElectionsAdminRole(membership);
 

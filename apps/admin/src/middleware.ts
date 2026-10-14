@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createMiddlewareClient } from '@propertypro/db/supabase/middleware';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { MFA_PATH, MFA_REQUIRED_CODE, sessionIsAal2 } from '@/lib/auth/mfa';
 import { applySecurityHeaders } from '@/lib/middleware/security-headers';
 import {
   ADMIN_FORWARDED_HEADERS,
@@ -302,6 +303,7 @@ async function handleRequest(request: NextRequest): Promise<Response> {
 
   // 3. Refresh Supabase session
   const {
+    supabase,
     response,
     user: middlewareUser,
   } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
@@ -365,6 +367,23 @@ async function handleRequest(request: NextRequest): Promise<Response> {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('error', 'access_denied');
     return NextResponse.redirect(loginUrl);
+  }
+
+  // 8. Require a second factor (aal2). A password alone (aal1) reaches only
+  //    `/auth/mfa`, which is public under `/auth/` so this cannot loop. API
+  //    calls get a 401 instead of an HTML redirect. `requirePlatformAdmin`
+  //    repeats this check, because the middleware is not the only gate a
+  //    route handler should trust.
+  if (!(await sessionIsAal2(supabase))) {
+    if (isApiRoute(pathname)) {
+      return NextResponse.json(
+        { error: { code: MFA_REQUIRED_CODE, message: 'Two-factor verification required' } },
+        { status: 401 },
+      );
+    }
+    const mfaUrl = new URL(MFA_PATH, request.url);
+    mfaUrl.searchParams.set('returnTo', pathname);
+    return NextResponse.redirect(mfaUrl);
   }
 
   cleanHeaders.set(ADMIN_USER_ID_HEADER, user.id);

@@ -14,7 +14,7 @@
  *     → resolveEffectiveCommunityId(req, body.communityId)
  *     → assertNotDemoGrace
  *     → requireCommunityMembership
- *     → requireElectionsEnabled (sync — NOT awaited)
+ *     → requireElectionsEnabled (awaited: type, attorney review, plan)
  *     → requirePermission('elections', 'write')
  *     → requireElectionsAdminRole
  *     → rejectElectionProxyForCommunity(

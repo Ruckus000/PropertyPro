@@ -104,9 +104,15 @@ configure_supabase() {
     s/^#\\s*auto_expose_new_tables = true/auto_expose_new_tables = true/m;
     s#^site_url = .*#site_url = 'http://localhost:$web_port'#m;
     s/^\[analytics\]\nenabled = true$/[analytics]\nenabled = false/m;
+    s/^\[auth\.mfa\.totp\]\nenroll_enabled = false\nverify_enabled = false$/[auth.mfa.totp]\nenroll_enabled = true\nverify_enabled = true/m;
   " "$config"
   grep -q '^auto_expose_new_tables = true' "$config" || {
     echo 'Could not enable Supabase auto_expose_new_tables.' >&2; exit 70;
+  }
+  # The admin console requires TOTP (aal2) and /dev/agent-login enrols a factor;
+  # the CLI template ships TOTP off. A stack started before this needs a restart.
+  perl -0ne 'exit(/^\[auth\.mfa\.totp\]\nenroll_enabled = true\nverify_enabled = true$/m ? 0 : 1)' "$config" || {
+    echo 'Could not enable Supabase TOTP MFA ([auth.mfa.totp]).' >&2; exit 70;
   }
   # Analytics (Logflare) and its Vector log shipper cost ~800 MiB per stack and
   # nothing in the app or the tests reads them. With several worktree stacks on

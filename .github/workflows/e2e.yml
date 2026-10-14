@@ -229,6 +229,11 @@ jobs:
           sed -i 's/^# *auto_expose_new_tables = true/auto_expose_new_tables = true/' supabase/config.toml
           grep -q '^auto_expose_new_tables = true' supabase/config.toml \
             || { echo "::error::failed to enable auto_expose_new_tables"; exit 1; }
+          # The admin console requires TOTP (aal2); /dev/agent-login enrols a
+          # factor and answers it. The CLI template ships TOTP off.
+          perl -0pi -e 's/^\[auth\.mfa\.totp\]\nenroll_enabled = false\nverify_enabled = false$/[auth.mfa.totp]\nenroll_enabled = true\nverify_enabled = true/m' supabase/config.toml
+          perl -0ne 'exit(/^\[auth\.mfa\.totp\]\nenroll_enabled = true\nverify_enabled = true$/m ? 0 : 1)' supabase/config.toml \
+            || { echo "::error::failed to enable TOTP MFA"; exit 1; }
           supabase start
 
       - name: Export Supabase credentials

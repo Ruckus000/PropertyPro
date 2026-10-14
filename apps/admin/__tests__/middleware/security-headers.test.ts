@@ -13,6 +13,8 @@
  *  3. auth redirect, no user (307 -> /auth/login)
  *  4. auth redirect, non-admin (307 -> access_denied)
  *  5. rate-limit             (429 on /api/*)
+ *  7. MFA redirect, aal1 page (307 -> /auth/mfa)
+ *  8. MFA refusal, aal1 API   (401 MFA_REQUIRED)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -29,10 +31,16 @@ const mockAdminDb = {
 };
 
 let middlewareUser: { id: string; email: string | null; emailVerified: boolean } | null = null;
+let sessionAal: 'aal1' | 'aal2' = 'aal2';
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async () => ({
-    supabase: { auth: { getUser: vi.fn() } },
+    supabase: {
+      auth: {
+        getUser: vi.fn(),
+        getClaims: async () => ({ data: { claims: { aal: sessionAal } }, error: null }),
+      },
+    },
     response: { headers: new Headers(), status: 200 },
     user: middlewareUser,
     authChecked: middlewareUser != null,
@@ -67,6 +75,7 @@ describe('admin security headers', () => {
     vi.clearAllMocks();
     vi.resetModules(); // reset the in-memory rate-limit store between tests
     middlewareUser = null;
+    sessionAal = 'aal2';
   });
 
   // --- Exit 1: public path -------------------------------------------------
@@ -82,8 +91,29 @@ describe('admin security headers', () => {
     asAdmin();
     const res = await runMiddleware('http://admin.getpropertypro.com/clients');
 
+    expect(res.status).toBe(200);
     expectBaselineHeaders(res);
     expect(res.headers.get('Content-Security-Policy')).toContain("frame-ancestors 'none'");
+  });
+
+  // --- Exits 7 and 8: second factor missing (aal1) -------------------------
+  it('sets security headers on the /auth/mfa redirect', async () => {
+    asAdmin();
+    sessionAal = 'aal1';
+    const res = await runMiddleware('http://admin.getpropertypro.com/clients');
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get('location') ?? '').toContain('/auth/mfa');
+    expectBaselineHeaders(res);
+  });
+
+  it('sets security headers on the API MFA_REQUIRED refusal', async () => {
+    asAdmin();
+    sessionAal = 'aal1';
+    const res = await runMiddleware('http://admin.getpropertypro.com/api/admin/stats');
+
+    expect(res.status).toBe(401);
+    expectBaselineHeaders(res);
   });
 
   // --- Exit 3: redirect, unauthenticated -----------------------------------
