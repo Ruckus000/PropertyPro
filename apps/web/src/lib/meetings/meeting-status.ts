@@ -130,13 +130,17 @@ export function describeMeetingStatus(
             label: `Minutes due ${formatShortDate(meeting.deadlines.minutesPostBy, timeZone)}`,
           };
     }
-    case 'noticed':
-      return {
-        status,
-        badge: 'compliant',
-        // `noticed` is only derived when the stamp is present.
-        label: `Noticed ${formatShortDate(meeting.noticePostedAt as string, timeZone)}`,
-      };
+    case 'noticed': {
+      // `noticed` is only derived when the stamp is present.
+      const postedAt = meeting.noticePostedAt as string;
+      // Posted is not the same as posted in time. A late notice painted as
+      // `compliant` told a manager a 2-hour board notice was fine, while the
+      // public transparency page (`metRequirement`) said it was not.
+      const late = noticeShortfall(new Date(meeting.deadlines.noticePostBy), new Date(postedAt));
+      return late
+        ? { status, badge: 'overdue', label: `Noticed ${late.shortfallLabel} late` }
+        : { status, badge: 'compliant', label: `Noticed ${formatShortDate(postedAt, timeZone)}` };
+    }
     case 'notice_missed':
       return {
         status,

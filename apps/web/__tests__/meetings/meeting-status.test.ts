@@ -118,6 +118,21 @@ describe('describeMeetingStatus', () => {
     });
   });
 
+  it('reports a notice posted after its deadline as late, not compliant', () => {
+    // Board meeting tomorrow (48 h notice, so due yesterday); posted 2 h ago.
+    const m = meeting(1 * DAY, BOARD, { noticePostedAt: iso(-2 * HOUR) });
+    expect(describeMeetingStatus(m, NOW, TZ)).toEqual({
+      status: 'noticed',
+      badge: 'overdue',
+      label: 'Noticed 22 hours late',
+    });
+  });
+
+  it('a notice posted exactly at its deadline is on time', () => {
+    const m = meeting(1 * DAY, BOARD, { noticePostedAt: iso(-1 * DAY) });
+    expect(describeMeetingStatus(m, NOW, TZ).badge).toBe('compliant');
+  });
+
   it('reports owed minutes by their posting deadline while it is still ahead', () => {
     // Met 10 days ago; minutes due 20 days from now.
     const m = meeting(-10 * DAY, BOARD);
