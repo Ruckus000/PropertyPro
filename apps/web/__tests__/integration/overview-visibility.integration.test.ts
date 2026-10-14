@@ -10,6 +10,7 @@
  * unit test mocks this whole module, so only a database-backed test can pin it.
  */
 import { afterAll, beforeAll, expect, it } from 'vitest';
+import { eq } from '@propertypro/db/filters';
 import { getActivityFeed, getCommunityCards } from '../../src/lib/queries/cross-community';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
@@ -70,6 +71,22 @@ describeDb('overview visibility (integration)', () => {
       category: 'financial',
       isApplicable: true,
     });
+    // Unposted and long past its deadline: overdue while a posting clock runs.
+    await scoped.insert(kit.dbModule.complianceChecklistItems, {
+      templateKey: `overview-overdue-${kit.runSuffix}`,
+      title: 'Insurance policies',
+      category: 'financial',
+      isApplicable: true,
+      deadline: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    // The board marked this one not applicable: it counts nowhere.
+    await scoped.insert(kit.dbModule.complianceChecklistItems, {
+      templateKey: `overview-na-${kit.runSuffix}`,
+      title: 'Conversion documents',
+      category: 'governing_documents',
+      isApplicable: false,
+      deadline: new Date('2020-01-01T00:00:00.000Z'),
+    });
   });
 
   afterAll(async () => {
@@ -106,5 +123,28 @@ describeDb('overview visibility (integration)', () => {
 
     expect(tenantCard?.complianceScore).toBeNull();
     expect(managerCard?.complianceScore).toBe(0);
+  });
+
+  it('counts critical items as the compliance page does: not-applicable never, and none below the size threshold (audit S-02)', async () => {
+    const communityId = requireCommunity(kit!, 'communityA').id;
+    const managerId = requireUser(kit!, 'actorA').id;
+    const scoped = kit!.dbModule.createScopedClient(communityId);
+    const { communities } = kit!.dbModule;
+    const card = async () =>
+      (await getCommunityCards(managerId, null)).find((c) => c.communityId === communityId)!;
+
+    // Unit count unknown, so the website rule (and its posting clock) applies.
+    expect((await card()).criticalItemCount).toBe(1);
+
+    // A 10-unit condo is below §718.111(12)(g)'s 25-unit threshold: no posting
+    // clock runs, so its own compliance page shows nothing overdue.
+    await scoped.update(communities, { unitCount: 10 }, eq(communities.id, communityId));
+    try {
+      const small = await card();
+      expect(small.criticalItemCount).toBe(0);
+      expect(small.complianceScore).toBe(0);
+    } finally {
+      await scoped.update(communities, { unitCount: null }, eq(communities.id, communityId));
+    }
   });
 });

@@ -171,6 +171,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       and(
         inArray(complianceChecklistItems.communityId, communityIds),
         isNull(complianceChecklistItems.deletedAt),
+        eq(complianceChecklistItems.isApplicable, true),
         isNull(complianceChecklistItems.documentId),
       ),
     )
@@ -425,6 +426,7 @@ export async function getPortfolioDashboard(
             and(
               inArray(complianceChecklistItems.communityId, condoHoaIds),
               isNull(complianceChecklistItems.deletedAt),
+              eq(complianceChecklistItems.isApplicable, true),
             ),
           )
       : Promise.resolve([{ total: 0, satisfied: 0 }]),
@@ -720,6 +722,7 @@ export async function getComplianceStatusReport(
       and(
         inArray(complianceChecklistItems.communityId, condoHoaIds),
         isNull(complianceChecklistItems.deletedAt),
+        eq(complianceChecklistItems.isApplicable, true),
       ),
     )
     .groupBy(complianceChecklistItems.communityId);
