@@ -56,6 +56,7 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
+import { totpCode } from '@/lib/dev/totp';
 
 /**
  * Dedicated dev/e2e platform-admin identity. Deliberately NOT a demo persona and
@@ -194,6 +195,60 @@ export async function GET(request: Request) {
         details: grantError.message,
         hint: 'Ensure migrations have been applied to the local database.',
       },
+      { status: 500 },
+    );
+  }
+
+  // Step 2.75: Raise the session to aal2. The console refuses a password-only
+  // (aal1) session (ponytail audit #14), so this route goes through the REAL
+  // TOTP path rather than a middleware bypass: drop any factor a previous run
+  // left (its secret is gone), enrol a fresh one, and answer its challenge with
+  // a code computed from the secret. CI runs admin e2e with one worker, so no
+  // concurrent login loses its factor mid-flight.
+  const { data: existing, error: listError } = await admin.auth.admin.mfa.listFactors({
+    userId: authData.user.id,
+  });
+  if (listError) {
+    return NextResponse.json(
+      { error: 'Failed to list MFA factors', details: listError.message },
+      { status: 500 },
+    );
+  }
+  for (const factor of existing?.factors ?? []) {
+    const { error: deleteError } = await admin.auth.admin.mfa.deleteFactor({
+      id: factor.id,
+      userId: authData.user.id,
+    });
+    if (deleteError) {
+      return NextResponse.json(
+        { error: 'Failed to reset MFA factor', details: deleteError.message },
+        { status: 500 },
+      );
+    }
+  }
+
+  const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({
+    factorType: 'totp',
+    friendlyName: 'e2e dev login',
+  });
+  if (enrollError || !enrolled) {
+    return NextResponse.json(
+      {
+        error: 'Failed to enrol a TOTP factor',
+        details: enrollError?.message,
+        hint: 'Enable [auth.mfa.totp] enroll_enabled/verify_enabled in the local Supabase config (scripts/agent-env.sh does this; restart the stack).',
+      },
+      { status: 500 },
+    );
+  }
+
+  const { error: verifyError } = await supabase.auth.mfa.challengeAndVerify({
+    factorId: enrolled.id,
+    code: totpCode(enrolled.totp.secret),
+  });
+  if (verifyError) {
+    return NextResponse.json(
+      { error: 'Failed to verify the TOTP factor', details: verifyError.message },
       { status: 500 },
     );
   }

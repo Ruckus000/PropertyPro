@@ -39,7 +39,14 @@ let middlewareUser: { id: string; email: string | null; emailVerified: boolean }
 
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async () => ({
-    supabase: { auth: { getUser: mockGetUser } },
+    // aal2: these cases are about the platform_admin_users row, not the factor
+    // (admin-auth.test.ts covers aal1).
+    supabase: {
+      auth: {
+        getUser: mockGetUser,
+        getClaims: async () => ({ data: { claims: { aal: 'aal2' } }, error: null }),
+      },
+    },
     response: { headers: new Headers(), status: 200 },
     user: middlewareUser,
     authChecked: middlewareUser != null,
@@ -69,8 +76,9 @@ describe('cross-subdomain session', () => {
     const req = new NextRequest('http://admin.getpropertypro.com/clients');
     const res = await middleware(req);
 
-    // Should not redirect to login
-    expect(res.status).not.toBe(307);
+    // Exact: a throw inside the middleware is a 500, which `not.toBe(307)`
+    // would also accept.
+    expect(res.status).toBe(200);
     expect(mockSingle).toHaveBeenCalledOnce();
   });
 

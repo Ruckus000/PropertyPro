@@ -15,6 +15,7 @@ import {
   UnauthorizedError,
 } from '@propertypro/shared/http';
 import { ADMIN_COOKIE_OPTIONS } from './cookie-config';
+import { MFA_REQUIRED_CODE, sessionIsAal2 } from './mfa';
 
 const AdminRowSchema = z.object({ role: z.enum(['super_admin']) });
 
@@ -58,6 +59,12 @@ export async function requirePlatformAdmin(): Promise<PlatformAdminUser> {
 
   if (authError || !user) {
     throw new UnauthorizedError();
+  }
+
+  // A password alone is not a platform-admin session: require the second
+  // factor here too, not only in the middleware (ponytail audit #14).
+  if (!(await sessionIsAal2(supabase))) {
+    throw new AppError('Two-factor verification required', 401, MFA_REQUIRED_CODE);
   }
 
   const adminDb = createAdminClient();
