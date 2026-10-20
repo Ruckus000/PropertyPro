@@ -1,17 +1,11 @@
 /**
- * Access Requests API
+ * GET /api/v1/access-requests — admin: list pending access requests for review.
  *
- * POST  /api/v1/access-requests  — public: submit a self-service resident access request
- * GET   /api/v1/access-requests  — admin: list pending access requests for review
+ * Cursor pagination (Plan B3) via `paginatePendingAccessRequests`; envelope
+ * `{ data: { data: AccessRequest[], pagination } }`.
  *
- * Plan A1 drain #113 — both methods migrated to `runRoute(contract, handler)`;
- * see `./contract.ts` for schemas and auth-chain rationale.
- *
- * POST is public (no session required) — registered in TOKEN_AUTH_ROUTES.
- *
- * GET pagination (Plan B3):
- * - Cursor-based via `paginatePendingAccessRequests` in access-request-service.
- * - Response envelope: `{ data: { data: AccessRequest[], pagination } }`.
+ * The public submit (POST) and OTP verify routes were deleted on 2026-10-20:
+ * nothing could reach them since #764, so no request can be created any more.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { z } from 'zod';
@@ -22,26 +16,13 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { requirePermission } from '@/lib/db/access-control';
-import {
-  paginatePendingAccessRequests,
-  submitAccessRequest,
-} from '@/lib/services/access-request-service';
-import {
-  accessRequestsListContract,
-  accessRequestsSubmitContract,
-} from './contract';
+import { paginatePendingAccessRequests } from '@/lib/services/access-request-service';
+import { accessRequestsListContract } from './contract';
 
 const listQuerySchema = z.object({
   cursor: z.string().min(1).max(256).optional(),
   pageSize: z.coerce.number().int().positive().optional(),
 });
-
-// route-gate: public — self-service access request submit; sessionless by design (TOKEN_AUTH_ROUTES), creates a PENDING request an admin must approve
-export const POST = withErrorHandler(
-  runRoute(accessRequestsSubmitContract, async ({ body }) => {
-    return submitAccessRequest(body);
-  }),
-);
 
 export const GET = withErrorHandler(
   runRoute(accessRequestsListContract, async ({ query, req }) => {

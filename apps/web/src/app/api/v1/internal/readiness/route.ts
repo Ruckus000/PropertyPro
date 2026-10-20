@@ -67,8 +67,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //     401s, and the platform still reports the cron as registered and firing.
   //     Every scheduled job (16 as of apps/web/vercel.json) was dead for months
   //     with a green dashboard.
-  //   - OTP_HMAC_SECRET: access-request OTPs are 6 digits, so the HMAC secret is
-  //     the only barrier to precomputing the whole space.
+  //   - OTP_HMAC_SECRET: hashed the 6-digit access-request OTPs. Their submit and
+  //     verify routes were deleted on 2026-10-20, so nothing live needs it;
+  //     whether to drop the requirement is an open decision.
   //   - TOKEN_ENCRYPTION_KEY: encrypts the calendar/accounting OAuth token
   //     tables. Their only callers, the fake connectors, were deleted on
   //     2026-10-20, so nothing live needs it; whether to drop the requirement

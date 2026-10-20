@@ -2,9 +2,7 @@
  * Unit tests for access-request API route handlers.
  *
  * Tests cover:
- * - POST /api/v1/access-requests: successful submission (201), validation error (400)
  * - GET  /api/v1/access-requests: admin list (200)
- * - POST /api/v1/access-requests/verify: successful OTP verify (200), validation error (400)
  * - POST /api/v1/access-requests/[id]/approve: admin approve (200)
  * - POST /api/v1/access-requests/[id]/deny: admin deny (200)
  */
@@ -16,8 +14,6 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 
 const {
-  submitAccessRequestMock,
-  verifyOtpMock,
   approveAccessRequestMock,
   denyAccessRequestMock,
   paginatePendingAccessRequestsMock,
@@ -26,8 +22,6 @@ const {
   requirePermissionMock,
   resolveEffectiveCommunityIdMock,
 } = vi.hoisted(() => ({
-  submitAccessRequestMock: vi.fn(),
-  verifyOtpMock: vi.fn(),
   approveAccessRequestMock: vi.fn(),
   denyAccessRequestMock: vi.fn(),
   paginatePendingAccessRequestsMock: vi.fn(),
@@ -41,8 +35,6 @@ const {
 // `paginatePendingAccessRequests` (A3 Phase 2 service wrapper), so the route
 // no longer imports `@propertypro/db` directly.
 vi.mock('@/lib/services/access-request-service', () => ({
-  submitAccessRequest: submitAccessRequestMock,
-  verifyOtp: verifyOtpMock,
   approveAccessRequest: approveAccessRequestMock,
   denyAccessRequest: denyAccessRequestMock,
   paginatePendingAccessRequests: paginatePendingAccessRequestsMock,
@@ -102,8 +94,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: vi.fn(
 // Import routes after mocks
 // ---------------------------------------------------------------------------
 
-import { POST as submitPOST, GET as listGET } from '../../src/app/api/v1/access-requests/route';
-import { POST as verifyPOST } from '../../src/app/api/v1/access-requests/verify/route';
+import { GET as listGET } from '../../src/app/api/v1/access-requests/route';
 import { POST as approvePOST } from '../../src/app/api/v1/access-requests/[id]/approve/route';
 import { POST as denyPOST } from '../../src/app/api/v1/access-requests/[id]/deny/route';
 
@@ -179,96 +170,6 @@ describe('Access Request Routes', () => {
     requirePermissionMock.mockReturnValue(undefined);
     resolveEffectiveCommunityIdMock.mockReturnValue(1);
   });
-
-  // =========================================================================
-  // POST /api/v1/access-requests — public submit
-  // =========================================================================
-
-  describe('POST /api/v1/access-requests', () => {
-    const validBody = {
-      communityId: 1,
-      communitySlug: 'sunset-condos',
-      email: 'jane@example.com',
-      fullName: 'Jane Smith',
-      phone: '555-1234',
-      claimedUnitNumber: '4B',
-      isUnitOwner: true,
-      refCode: 'ABC123',
-    };
-
-    it('returns 201 with requestId on successful submission', async () => {
-      submitAccessRequestMock.mockResolvedValue({ requestId: 42, resent: false });
-
-      const req = makeJsonRequest('/api/v1/access-requests', validBody);
-      const response = await submitPOST(req);
-      const json = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(json.data.requestId).toBe(42);
-      expect(json.data.resent).toBe(false);
-      expect(submitAccessRequestMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          communityId: 1,
-          communitySlug: 'sunset-condos',
-          email: 'jane@example.com',
-          fullName: 'Jane Smith',
-          isUnitOwner: true,
-        }),
-      );
-    });
-
-    it('returns resent=true when OTP is resent for existing pending request', async () => {
-      submitAccessRequestMock.mockResolvedValue({ requestId: 42, resent: true });
-
-      const req = makeJsonRequest('/api/v1/access-requests', validBody);
-      const response = await submitPOST(req);
-      const json = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(json.data.resent).toBe(true);
-    });
-
-    it('throws ContractValidationError when required fields are missing', async () => {
-      const invalidBody = {
-        communityId: 1,
-        // missing communitySlug, email, fullName
-        isUnitOwner: false,
-      };
-
-      const req = makeJsonRequest('/api/v1/access-requests', invalidBody);
-      await expect(submitPOST(req)).rejects.toMatchObject({ source: 'body' });
-      expect(submitAccessRequestMock).not.toHaveBeenCalled();
-    });
-
-    it('throws ContractValidationError when email is invalid', async () => {
-      const req = makeJsonRequest('/api/v1/access-requests', {
-        ...validBody,
-        email: 'not-an-email',
-      });
-      await expect(submitPOST(req)).rejects.toMatchObject({ source: 'body' });
-      expect(submitAccessRequestMock).not.toHaveBeenCalled();
-    });
-
-    it('does not require optional fields (phone, claimedUnitNumber, refCode)', async () => {
-      submitAccessRequestMock.mockResolvedValue({ requestId: 10, resent: false });
-
-      const minimalBody = {
-        communityId: 1,
-        communitySlug: 'sunset-condos',
-        email: 'min@example.com',
-        fullName: 'Min User',
-        isUnitOwner: false,
-      };
-
-      const req = makeJsonRequest('/api/v1/access-requests', minimalBody);
-      const response = await submitPOST(req);
-      expect(response.status).toBe(200);
-    });
-  });
-
-  // =========================================================================
-  // GET /api/v1/access-requests — admin list
-  // =========================================================================
 
   describe('GET /api/v1/access-requests', () => {
     it('returns paginated pending requests for admin user', async () => {
@@ -356,65 +257,6 @@ describe('Access Request Routes', () => {
         cursor: 'abc',
         pageSize: 25,
       });
-    });
-  });
-
-  // =========================================================================
-  // POST /api/v1/access-requests/verify — OTP verify
-  // =========================================================================
-
-  describe('POST /api/v1/access-requests/verify', () => {
-    const validBody = {
-      requestId: 42,
-      otp: '123456',
-      communityId: 1,
-    };
-
-    it('returns verified=true on successful OTP verification', async () => {
-      verifyOtpMock.mockResolvedValue({ verified: true });
-
-      const req = makeJsonRequest('/api/v1/access-requests/verify', validBody);
-      const response = await verifyPOST(req);
-      const json = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(json.data.verified).toBe(true);
-      expect(verifyOtpMock).toHaveBeenCalledWith({
-        requestId: 42,
-        otp: '123456',
-        communityId: 1,
-      });
-    });
-
-    // Drain #41: post-runner, the validation 400 envelope is asserted in the
-    // dedicated `access-requests-verify-route.test.ts` (with the real
-    // `withErrorHandler` so the canonical `VALIDATION_ERROR` body is
-    // observable). The inline cases below keep using the identity-mocked
-    // `withErrorHandler` from this file's top-of-file mocks, so they assert
-    // on the underlying thrown ContractValidationError instead.
-
-    it('throws ContractValidationError when OTP is not exactly 6 characters', async () => {
-      const req = makeJsonRequest('/api/v1/access-requests/verify', {
-        ...validBody,
-        otp: '12345', // too short
-      });
-      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
-    });
-
-    it('throws ContractValidationError when requestId is missing', async () => {
-      const req = makeJsonRequest('/api/v1/access-requests/verify', {
-        otp: '123456',
-        communityId: 1,
-      });
-      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
-    });
-
-    it('throws ContractValidationError when communityId is missing', async () => {
-      const req = makeJsonRequest('/api/v1/access-requests/verify', {
-        requestId: 42,
-        otp: '123456',
-      });
-      await expect(verifyPOST(req)).rejects.toMatchObject({ source: 'body' });
     });
   });
 

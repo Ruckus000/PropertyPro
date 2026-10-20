@@ -52,9 +52,6 @@ export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> 
   // issues nothing else. A provider POST carries no Origin header, so the CSRF
   // check must be skipped or every delivery 403s.
   { path: '/api/v1/webhooks/inbound-email', method: 'POST' },
-  // Self-service resident signup: public submit + OTP verify (no session required)
-  { path: '/api/v1/access-requests', method: 'POST' },
-  { path: '/api/v1/access-requests/verify', method: 'POST' },
   // Public community discovery search (rate-limited, returns minimal metadata only)
   { path: '/api/v1/public/communities/search', method: 'GET' },
   // Portfolio inquiry form for property managers (rate-limited, write-only)

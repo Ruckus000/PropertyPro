@@ -51,7 +51,7 @@
     "unscoped": 1
   },
   "apps/web/src/lib/billing/billing-group-service.ts": {
-    "unscoped": 15
+    "unscoped": 12
   },
   "apps/web/src/lib/billing/downgrade-notifications.ts": {
     "unscoped": 1
@@ -88,9 +88,6 @@
   },
   "apps/web/src/lib/queries/apartment-metrics.ts": {
     "fullTableRead": 4
-  },
-  "apps/web/src/lib/services/access-request-service.ts": {
-    "fullTableRead": 2
   },
   "apps/web/src/lib/services/account-lifecycle-service.ts": {
     "unscoped": 18

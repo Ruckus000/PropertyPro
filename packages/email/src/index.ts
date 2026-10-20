@@ -16,7 +16,7 @@ export { InvitationEmail } from "./templates/invitation-email";
 export type { InvitationEmailProps } from "./templates/invitation-email";
 
 export { PasswordResetEmail } from "./templates/password-reset-email";
-export type { PasswordResetEmailProps } from "./templates/password-reset-email";
+export type { PasswordResetEmailProps, EmailRequestDetails } from "./templates/password-reset-email";
 
 export { MeetingNoticeEmail } from "./templates/meeting-notice-email";
 export type { MeetingNoticeEmailProps } from "./templates/meeting-notice-email";
@@ -97,12 +97,6 @@ export type { EsignCompletedEmailProps } from "./templates/esign-completed-email
 
 export { EsignReminderEmail } from "./templates/esign-reminder-email";
 export type { EsignReminderEmailProps } from "./templates/esign-reminder-email";
-
-export { OtpVerificationEmail } from "./templates/otp-verification";
-export type { OtpVerificationEmailProps, EmailRequestDetails } from "./templates/otp-verification";
-
-export { AccessRequestPendingEmail } from "./templates/access-request-pending";
-export type { AccessRequestPendingEmailProps, AccessRequestRecordCheck } from "./templates/access-request-pending";
 
 export { AccessRequestApprovedEmail } from "./templates/access-request-approved";
 export type { AccessRequestApprovedEmailProps } from "./templates/access-request-approved";

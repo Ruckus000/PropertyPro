@@ -31,7 +31,6 @@ import {
   CertificateRequestEmail,
   EmergencyAlertEmail,
   InvitationEmail,
-  OtpVerificationEmail,
   PaymentFailedEmail,
 } from '../src/index';
 import {
@@ -73,7 +72,7 @@ function accentRule(html: string): string | null {
 
 describe('coverage', () => {
   it('found the template directory (non-empty population)', () => {
-    expect(templateFiles.length).toBe(38);
+    expect(templateFiles.length).toBe(36);
   });
 
   it('has a fixture for every template file, and no fixture without a file', () => {
@@ -259,8 +258,6 @@ describe('optional data slots render only when supplied', () => {
     ['assessment-payment-received', 'PP-8FQ2-41K9'],
     ['compliance-alert-email', 'Year-end balance sheet'],
     ['esign-invitation-email', 'Priya Raman'],
-    ['access-request-pending', 'Name matches deed'],
-    ['otp-verification', 'Safari on iPhone'],
     ['password-reset-email', 'Chrome on macOS'],
     ['payment-failed', 'Final attempt'],
     ['subscription-expiry-warning', 'Stays on'],
@@ -405,13 +402,3 @@ describe('card authentication without a known amount', () => {
   });
 });
 
-describe('OTP preview text', () => {
-  it('does not put the code in the inbox preview', async () => {
-    const html = await render(
-      <OtpVerificationEmail branding={{ communityName: 'Sunset Palms HOA' }} recipientName="Marisol" otpCode="481902" />,
-    );
-    // The code appears once, in the body — not in the hidden preheader.
-    expect(html.split('481902')).toHaveLength(2);
-    expect(html).toContain('Your verification code');
-  });
-});
