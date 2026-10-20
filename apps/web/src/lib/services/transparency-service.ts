@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { calculatePostingDeadline } from '@/lib/utils/compliance-calculator';
 import { getNoticeLeadDays, type MeetingType } from '@/lib/utils/meeting-calculator';
 import type { ResolvedCommunityRecord } from '@/lib/tenant/community-resolution';
+import { dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
 import {
   getLinkedDocumentStatesByIds,
   type LinkedDocumentState,
@@ -195,10 +196,13 @@ function asDate(value: unknown): Date | null {
   return null;
 }
 
-function monthKey(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = `${date.getUTCMonth() + 1}`.padStart(2, '0');
-  return `${year}-${month}`;
+/**
+ * 'YYYY-MM' of `date` on the community's calendar. A board meeting at 8 PM EDT
+ * on Sep 30 is already Oct 1 in UTC; keyed in UTC it was credited to October,
+ * and "now" rolled the 12-month window forward a month early every night.
+ */
+function monthKey(date: Date, timezone: string): string {
+  return dateOnlyInTimeZone(date, timezone).slice(0, 7);
 }
 
 function monthLabel(date: Date): string {
@@ -282,11 +286,15 @@ function toMeetingNotice(
 function buildMinutesMonths(
   now: Date,
   meetingRows: ReadonlyArray<Record<string, unknown>>,
+  timezone: string,
 ): TransparencyMinutesMonth[] {
+  // The current month on the community's calendar; earlier months are plain
+  // UTC first-of-month dates, which carry only a year and month from here on.
+  const [currentYear, currentMonth] = monthKey(now, timezone).split('-').map(Number) as [number, number];
   const months: Array<{ key: string; date: Date }> = [];
   for (let offset = 11; offset >= 0; offset -= 1) {
-    const monthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - offset, 1));
-    months.push({ key: monthKey(monthDate), date: monthDate });
+    const monthDate = new Date(Date.UTC(currentYear, currentMonth - 1 - offset, 1));
+    months.push({ key: monthKey(monthDate, 'UTC'), date: monthDate });
   }
 
   const monthSet = new Set(months.map((entry) => entry.key));
@@ -296,7 +304,7 @@ function buildMinutesMonths(
   for (const row of meetingRows) {
     const startsAt = asDate(row['startsAt']);
     if (!startsAt) continue;
-    const key = monthKey(startsAt);
+    const key = monthKey(startsAt, timezone);
     if (!monthSet.has(key)) continue;
 
     monthsWithMeetings.add(key);
@@ -457,7 +465,7 @@ export async function getTransparencyPageData(
     .filter((value): value is TransparencyMeetingNotice => value != null)
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
 
-  const minuteMonths = buildMinutesMonths(now, filteredMeetingRows);
+  const minuteMonths = buildMinutesMonths(now, filteredMeetingRows, timezone);
   const linkedDocumentIds = [
     ...new Set(
       checklistRows

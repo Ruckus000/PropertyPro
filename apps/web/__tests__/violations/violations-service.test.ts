@@ -19,6 +19,7 @@ const {
     arcSubmissions: {
       id: Symbol('arc_submissions.id'),
       unitId: Symbol('arc_submissions.unit_id'),
+      status: Symbol('arc_submissions.status'),
     },
     assessmentLineItems: { id: Symbol('assessment_line_items.id') },
     documents: { id: Symbol('documents.id') },
@@ -78,7 +79,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
 import {
   decideArcSubmissionForCommunity,
   imposeViolationFineForCommunity,
+  reviewArcSubmissionForCommunity,
   updateViolationForCommunity,
+  withdrawArcSubmissionForCommunity,
 } from '../../src/lib/services/violations-service';
 
 function createArcSubmissionRow(overrides: Partial<Record<string, unknown>> = {}) {
@@ -152,6 +155,15 @@ const COMMITTEE = [
 ];
 const COMMITTEE_ROLES = COMMITTEE.map((m) => ({ userId: m.userId, role: 'resident', isUnitOwner: true, designation: null }));
 const APPROVED = { approvedByCommittee: true, committeeMembers: COMMITTEE };
+
+// The WHERE every ARC write carries: the id AND the statuses the write may move
+// a submission out of, so a racing write matches nothing instead of clobbering.
+const ARC_OPEN_WHERE = {
+  and: [
+    { eq: [tables.arcSubmissions.id, 7] },
+    { inArray: [tables.arcSubmissions.status, ['submitted', 'under_review']] },
+  ],
+};
 
 describe('violations-service', () => {
   beforeEach(() => {
@@ -233,7 +245,7 @@ describe('violations-service', () => {
       expect(update).toHaveBeenCalledWith(
         tables.arcSubmissions,
         expect.objectContaining({ status: 'denied' }),
-        { eq: [tables.arcSubmissions.id, 7] },
+        ARC_OPEN_WHERE,
       );
     });
 
@@ -291,6 +303,99 @@ describe('violations-service', () => {
       ).resolves.toMatchObject({ status: 'approved' });
 
       expect(update).toHaveBeenCalled();
+    });
+  });
+
+  // Audit S-05. Each ARC write reads the submission, checks its status in JS,
+  // then updates. Without the status in the UPDATE's WHERE, a decision racing a
+  // withdrawal (or a review landing after a decision) overwrote the other
+  // write's state and notified the owner of an outcome that no longer held.
+  describe('ARC writes refuse to overwrite a status changed since the read', () => {
+    function mockRace(row: Record<string, unknown>) {
+      // The read still sees an open submission; the guarded UPDATE matches no
+      // row because a concurrent write already moved it.
+      const update = vi.fn().mockResolvedValue([]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update,
+        insert: vi.fn(),
+      });
+      return update;
+    }
+
+    it('review: 409, guarded WHERE, nothing audited', async () => {
+      const update = mockRace(createArcSubmissionRow({ status: 'submitted' }));
+
+      await expect(
+        reviewArcSubmissionForCommunity(42, 7, 'reviewer-1', { reviewNotes: 'Looking now' }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      expect(update).toHaveBeenCalledWith(
+        tables.arcSubmissions,
+        expect.objectContaining({ status: 'under_review' }),
+        ARC_OPEN_WHERE,
+      );
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('decide: 409, guarded WHERE, no audit and no decision notification', async () => {
+      const update = mockRace(createArcSubmissionRow({ status: 'under_review' }));
+
+      await expect(
+        decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+          decision: 'approved',
+          reviewNotes: null,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      expect(update).toHaveBeenCalledWith(
+        tables.arcSubmissions,
+        expect.objectContaining({ status: 'approved' }),
+        ARC_OPEN_WHERE,
+      );
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+      expect(sendNotificationMock).not.toHaveBeenCalled();
+      expect(createNotificationsForEventMock).not.toHaveBeenCalled();
+    });
+
+    it('withdraw: 409, guarded WHERE, nothing audited', async () => {
+      const update = mockRace(createArcSubmissionRow({ status: 'submitted' }));
+
+      await expect(
+        withdrawArcSubmissionForCommunity(42, 7, 'resident-1'),
+      ).rejects.toMatchObject({ statusCode: 409 });
+
+      expect(update).toHaveBeenCalledWith(
+        tables.arcSubmissions,
+        { status: 'withdrawn' },
+        ARC_OPEN_WHERE,
+      );
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('withdraw of an already-withdrawn submission is a 422 before any write', async () => {
+      const update = mockRace(createArcSubmissionRow({ status: 'withdrawn' }));
+
+      await expect(
+        withdrawArcSubmissionForCommunity(42, 7, 'resident-1'),
+      ).rejects.toMatchObject({ statusCode: 422, message: 'ARC submission is already withdrawn' });
+
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('withdraw that wins the race succeeds (control)', async () => {
+      const row = createArcSubmissionRow({ status: 'submitted' });
+      const update = vi.fn().mockResolvedValue([{ ...row, status: 'withdrawn' }]);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update,
+        insert: vi.fn(),
+      });
+
+      await expect(
+        withdrawArcSubmissionForCommunity(42, 7, 'resident-1'),
+      ).resolves.toMatchObject({ status: 'withdrawn' });
+      expect(logAuditEventMock).toHaveBeenCalledTimes(1);
     });
   });
 

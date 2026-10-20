@@ -1766,15 +1766,25 @@ export async function waiveLateFeesForUnit(
     return { waivedCount: 0, waivedAmountCents: 0 };
   }
 
+  let waivedCount = 0;
   let waivedAmountCents = 0;
   for (const candidate of candidates) {
-    waivedAmountCents += candidate.lateFeeCents;
-    await scoped.update(
+    // Compare-and-swap on the fee we read: a concurrent waiver (double-click,
+    // two admins) or a payment that settled the item in between leaves this
+    // UPDATE matching no row, and then no second credit is posted.
+    const updated = await scoped.update(
       assessmentLineItems,
       { lateFeeCents: 0 },
-      eq(assessmentLineItems.id, candidate.id),
+      and(
+        eq(assessmentLineItems.id, candidate.id),
+        eq(assessmentLineItems.lateFeeCents, candidate.lateFeeCents),
+        inArray(assessmentLineItems.status, ['pending', 'overdue']),
+      ),
     );
+    if (updated.length === 0) continue;
 
+    waivedCount += 1;
+    waivedAmountCents += candidate.lateFeeCents;
     await postLedgerEntry(scoped, {
       entryType: 'adjustment',
       amountCents: -Math.abs(candidate.lateFeeCents),
@@ -1792,17 +1802,21 @@ export async function waiveLateFeesForUnit(
     });
   }
 
+  if (waivedCount === 0) {
+    return { waivedCount: 0, waivedAmountCents: 0 };
+  }
+
   await logAuditEvent({
     userId: actorUserId,
     action: 'update',
     resourceType: 'assessment_line_item',
     resourceId: String(unitId),
     communityId,
-    newValues: { waivedCount: candidates.length, waivedAmountCents },
+    newValues: { waivedCount, waivedAmountCents },
     metadata: { requestId: requestId ?? null },
   });
 
-  return { waivedCount: candidates.length, waivedAmountCents };
+  return { waivedCount, waivedAmountCents };
 }
 
 export async function exportLedgerCsv(

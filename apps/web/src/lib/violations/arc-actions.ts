@@ -37,9 +37,8 @@ const ACTIONS_BY_STATUS: Record<ArcSubmissionStatus, readonly ArcAction[]> = {
   // submission, and withdrawing a decided one is refused too.
   approved: [],
   denied: [],
-  // The service would technically permit withdrawing an already-withdrawn
-  // submission (it only blocks `approved`/`denied`), but re-withdrawing is a
-  // no-op the resident cannot want. Nothing is offered.
+  // Terminal too: the service refuses to withdraw an already-withdrawn
+  // submission, and review/decide only move one out of submitted|under_review.
   withdrawn: [],
 };
 

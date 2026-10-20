@@ -426,6 +426,41 @@ describe('transparency service', () => {
       expect(result.minutesAvailability.monthsWithMinutes).toBe(1);
     });
 
+    // Audit S-04. Months are the community's calendar months, not UTC's. A
+    // board meeting at 8 PM EDT on Sep 30 is 00:00 UTC on Oct 1.
+    const SEP_30_8PM_EDT = new Date('2026-10-01T00:00:00.000Z');
+
+    it('credits an evening meeting to its local month, not the UTC month it spills into', async () => {
+      vi.setSystemTime(new Date('2026-10-15T16:00:00.000Z'));
+      withRows([
+        {
+          id: 45,
+          title: 'Board Meeting',
+          meetingType: 'board',
+          startsAt: SEP_30_8PM_EDT,
+          noticePostedAt: new Date('2026-09-28T14:00:00.000Z'),
+          minutesApprovedAt: null,
+        },
+      ]);
+
+      const result = await getTransparencyPageData(COMMUNITY);
+
+      expect(monthOf(result, '2026-09')?.status).toBe('minutes_missing');
+      expect(monthOf(result, '2026-10')?.status).toBe('not_expected');
+    });
+
+    it('keeps the 12-month window on the local month at night (Sep 30, 10 PM EDT)', async () => {
+      vi.setSystemTime(new Date('2026-10-01T02:00:00.000Z'));
+      withRows([]);
+
+      const result = await getTransparencyPageData(COMMUNITY);
+      const keys = result.minutesAvailability.months.map((m) => m.month);
+
+      expect(keys).toHaveLength(12);
+      expect(keys[0]).toBe('2025-10');
+      expect(keys[11]).toBe('2026-09');
+    });
+
     it('reports a meeting whose minutes are not stamped as missing', async () => {
       withRows([
         {
