@@ -8,3 +8,4 @@
  */
 export * from './scrub-browser-event';
 export * from './scrub-server-event';
+export * from './server-sentry-options';
