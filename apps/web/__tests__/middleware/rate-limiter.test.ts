@@ -167,30 +167,12 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/auth/login', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/signup/start', 'POST')).toBe('auth');
     expect(classifyRoute('/api/v1/auth/password-reset', 'POST')).toBe('auth');
-    // OTP guessing surface — must be `auth` (10/min per IP, Redis-backed), not
-    // `write` (30/min, in-memory per isolate). See #947.
-    expect(classifyRoute('/api/v1/access-requests/verify', 'POST')).toBe('auth');
-    // ...but NOT the admin queue routes: `auth` keys by IP, so sweeping the
-    // whole prefix in would throttle an admin working through approvals.
-    expect(classifyRoute('/api/v1/access-requests/7/approve', 'POST')).not.toBe('auth');
-    expect(classifyRoute('/api/v1/access-requests/7/deny', 'POST')).not.toBe('auth');
   });
 
-  it('classifies the access-request OTP verify route as auth (#947)', () => {
-    // The OTP guessing surface. On `write` it was 30/min AND counted per
-    // isolate in memory; `auth` is 10/min and Redis-backed.
-    expect(classifyRoute('/api/v1/access-requests/verify', 'POST')).toBe('auth');
-  });
-
-  it('puts access-request SUBMIT on the Redis-backed auth tier but leaves approve/deny on write', () => {
-    // Security audit 2026-10-13 (#3): the OTP-sending SUBMIT (POST to the bare
-    // path) must be Redis-backed (auth tier), or it can be fanned out across
-    // Edge isolates to bomb arbitrary inboxes with branded mail. It is matched
-    // by EXACT path + POST precisely so it does NOT also catch the authenticated
-    // admin approve/deny routes (longer paths), which stay on write — approving
-    // a new community's residents is a legitimate burst. The approve/deny
-    // assertions below guard that the exact match does not over-reach.
-    expect(classifyRoute('/api/v1/access-requests', 'POST')).toBe('auth');
+  it('leaves the admin access-request queue on write, not the IP-keyed auth tier', () => {
+    // `auth` keys by IP, so admins behind one NAT working through approvals
+    // would throttle each other. (The public submit + OTP verify routes that
+    // were auth-tiered here were deleted on 2026-10-20.)
     expect(classifyRoute('/api/v1/access-requests/10/approve', 'POST')).toBe('write');
     expect(classifyRoute('/api/v1/access-requests/10/deny', 'POST')).toBe('write');
   });

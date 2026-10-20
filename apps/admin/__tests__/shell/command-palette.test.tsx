@@ -10,8 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 const DEBOUNCE_WAIT_MS = 200;
 
 // cmdk's Command.List measures itself with a ResizeObserver, which jsdom does
-// not implement. Same shim apps/web already uses for Radix components in jsdom
-// (see apps/web/__tests__/access-requests/request-access-form.test.tsx).
+// not implement. Same shim apps/web uses for Radix components in jsdom.
 global.ResizeObserver = class ResizeObserver {
   observe() {}
   unobserve() {}

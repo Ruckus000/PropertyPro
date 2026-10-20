@@ -236,11 +236,13 @@ describe('invariant 1: tenant resolution runs before the support-impersonation b
 
 describe('support session stamps its consented community when no tenant resolves', () => {
   it('(a) apex /api/v1/communities/<B>/... REJECTS a session consented to by A', async () => {
-    // cancel-preview reads the community from params.id and never reconciles
-    // x-community-id, so a stamp alone could not pin it: the path id is used as
-    // the expected community, and the mismatch rejects the session.
+    // A route under /api/v1/communities/<id>/ reads the community from
+    // params.id and never reconciles x-community-id, so a stamp alone could not
+    // pin it: the path id is used as the expected community, and the mismatch
+    // rejects the session. (`any-route` is an example segment; the middleware
+    // does not know which routes exist.)
     const res = await middleware(
-      req(`https://${ROOT_DOMAIN}/api/v1/communities/2/cancel-preview`, {
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/2/any-route`, {
         supportToken: await signSupportToken(),
       }),
     );
@@ -259,7 +261,7 @@ describe('support session stamps its consented community when no tenant resolves
     // (equal to the token), while the route reads B from params.id.
     const res = await middleware(
       req(
-        `http://localhost:3000/api/v1/communities/2/cancel-preview?communityId=${TOKEN_COMMUNITY_ID}`,
+        `http://localhost:3000/api/v1/communities/2/any-route?communityId=${TOKEN_COMMUNITY_ID}`,
         { supportToken: await signSupportToken() },
       ),
     );
@@ -276,7 +278,7 @@ describe('support session stamps its consented community when no tenant resolves
   it('(a3) a percent-encoded path id (%32 = 2) is decoded and rejected, not skipped', async () => {
     // Next decodes dynamic params, so the route would see id=2.
     const res = await middleware(
-      req(`https://${ROOT_DOMAIN}/api/v1/communities/%32/cancel-preview`, {
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/%32/any-route`, {
         supportToken: await signSupportToken(),
       }),
     );
@@ -288,7 +290,7 @@ describe('support session stamps its consented community when no tenant resolves
 
   it('(a4) an undecodable path segment fails closed', async () => {
     const res = await middleware(
-      req(`https://${ROOT_DOMAIN}/api/v1/communities/%E0%A4%A/cancel-preview`, {
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/%E0%A4%A/any-route`, {
         supportToken: await signSupportToken(),
       }),
     );
@@ -322,12 +324,12 @@ describe('support session stamps its consented community when no tenant resolves
   // The routes read params.id with Number()/z.coerce.number(), which accept all
   // of these as community 2. Each must reject a session consented to by 1.
   it.each([
-    ['/api/v1/communities/+2/cancel-preview', ''],
-    ['/api/v1/communities/%2B2/cancel-preview', ''],
-    ['/api/v1/communities/%202/cancel-preview', ''],
-    ['/api/v1/communities/2./cancel-preview', `?communityId=${TOKEN_COMMUNITY_ID}`],
-    ['/api/v1/communities/2.0/cancel-preview', ''],
-    ['/api/v1/communities/2e0/cancel-preview', ''],
+    ['/api/v1/communities/+2/any-route', ''],
+    ['/api/v1/communities/%2B2/any-route', ''],
+    ['/api/v1/communities/%202/any-route', ''],
+    ['/api/v1/communities/2./any-route', `?communityId=${TOKEN_COMMUNITY_ID}`],
+    ['/api/v1/communities/2.0/any-route', ''],
+    ['/api/v1/communities/2e0/any-route', ''],
     ['/communities/0x2/documents', ''],
     ['/communities/+2/documents', `?communityId=${TOKEN_COMMUNITY_ID}`],
     ['/communities/%202/board', `?communityId=${TOKEN_COMMUNITY_ID}`],
@@ -343,7 +345,7 @@ describe('support session stamps its consented community when no tenant resolves
 
   it('(a8) an unknown non-numeric segment fails closed', async () => {
     const res = await middleware(
-      req(`https://${ROOT_DOMAIN}/api/v1/communities/two/cancel-preview`, {
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/two/any-route`, {
         supportToken: await signSupportToken(),
       }),
     );
@@ -367,7 +369,7 @@ describe('support session stamps its consented community when no tenant resolves
 
   it('(a2) apex /api/v1/communities/<A>/... accepts the session and stamps A', async () => {
     const res = await middleware(
-      req(`https://${ROOT_DOMAIN}/api/v1/communities/${TOKEN_COMMUNITY_ID}/cancel-preview`, {
+      req(`https://${ROOT_DOMAIN}/api/v1/communities/${TOKEN_COMMUNITY_ID}/any-route`, {
         supportToken: await signSupportToken(),
       }),
     );

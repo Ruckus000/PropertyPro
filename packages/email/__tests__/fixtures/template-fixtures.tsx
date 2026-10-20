@@ -262,12 +262,6 @@ export const FIXTURES: Record<string, TemplateFixture> = {
     minimal: () => <E.EsignCompletedEmail branding={association} senderName="Dana Ruiz" documentName="2026 Amended Rules & Regulations" completedAt="September 19, 2026" signerCount={4} />,
     rich: () => <E.EsignCompletedEmail branding={association} senderName="Dana Ruiz" documentName="2026 Amended Rules & Regulations" completedAt="September 19, 2026" signerCount={4} />,
   },
-  'access-request-pending': {
-    accent: 'teal',
-    sender: 'association',
-    minimal: () => <E.AccessRequestPendingEmail branding={association} adminName="Marisol" requesterName="Alan Whitcomb" requesterEmail="a.whitcomb@example.com" dashboardUrl={url('residents/requests')} />,
-    rich: () => <E.AccessRequestPendingEmail branding={association} adminName="Marisol" requesterName="Alan Whitcomb" requesterEmail="a.whitcomb@example.com" claimedUnit="806" role="owner" dashboardUrl={url('residents/requests')} recordCheck={{ label: 'Name matches deed', tone: 'green' }} />,
-  },
   'access-request-approved': {
     accent: 'green',
     sender: 'association',
@@ -314,14 +308,6 @@ export const FIXTURES: Record<string, TemplateFixture> = {
   },
 
   // ── Platform ─────────────────────────────────────────────────────────────
-  'otp-verification': {
-    accent: 'coral',
-    sender: 'platform',
-    minimal: () => <E.OtpVerificationEmail branding={association} recipientName="Marisol" otpCode="481902" />,
-    rich: () => (
-      <E.OtpVerificationEmail branding={association} recipientName="Marisol" otpCode="481902" requestDetails={{ device: 'Safari on iPhone', location: 'Naples, FL', requestedAt: 'Sep 17, 2026 · 9:04 AM EDT' }} />
-    ),
-  },
   'password-reset-email': {
     accent: 'coral',
     sender: 'platform',

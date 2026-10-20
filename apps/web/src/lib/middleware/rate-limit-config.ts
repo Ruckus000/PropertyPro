@@ -107,19 +107,6 @@ const AUTH_RATE_LIMIT_PATHS = [
   '/api/v1/auth/register',
   '/api/v1/auth/password-reset',
   '/api/v1/auth/forgot-password',
-  /*
-   * Access-request OTP verification. This is a credential-guessing surface —
-   * six digits, ~900k values — and it sat in the `write` tier, which is 30/min
-   * AND in-memory per Edge isolate rather than Redis-backed, so the ceiling was
-   * whatever the isolate count made it. `auth` is 10/min per IP and IS in
-   * DISTRIBUTED_CATEGORIES, so the limit actually holds.
-   *
-   * Deliberately the /verify prefix and not '/api/v1/access-requests': the
-   * broader one also matches [id]/approve and [id]/deny, and the auth tier keys
-   * by IP, so it would throttle an admin working through a queue — and several
-   * admins behind one NAT would share the bucket.
-   */
-  '/api/v1/access-requests/verify',
   '/api/v1/reauth/verify',
   // OTP guessing surface (#947). Unauthenticated, so the write tier keyed it by
   // IP at 30/min AND — not being in DISTRIBUTED_CATEGORIES — counted per
@@ -146,8 +133,7 @@ const AUTH_RATE_LIMIT_PATHS = [
  *
  * `/signup` itself stays on the auth tier; its sub-paths fall through to the
  * exempt `page` tier. `transparency` already uses an exact match for the same
- * reason (see `classifyRoute`), and the note on `/api/v1/access-requests/verify`
- * above records prefix breadth as the known hazard here.
+ * reason (see `classifyRoute`): prefix breadth is the known hazard here.
  */
 const AUTH_RATE_LIMIT_EXACT_PATHS: readonly string[] = ['/signup'];
 
@@ -210,17 +196,6 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
   // Roster CSV imports — tighter, Redis-backed tier than generic write.
   if (method === 'POST' && ROSTER_IMPORT_PATHS.includes(pathname)) {
     return 'roster-imports';
-  }
-
-  // Access-request SUBMIT sends a branded OTP email to a caller-supplied
-  // address. Matched by exact path + POST so it does NOT also catch
-  // [id]/approve and [id]/deny (admin, authenticated) the way a bare prefix
-  // would. The generic write tier is in-memory per isolate; the auth tier is
-  // Redis-backed (DISTRIBUTED_CATEGORIES), so it actually bounds an attacker
-  // fanning OTP mail across isolates. (The /verify guess surface is already
-  // auth-tiered above.)
-  if (method === 'POST' && pathname === '/api/v1/access-requests') {
-    return 'auth';
   }
 
   // Public unauthenticated API endpoints

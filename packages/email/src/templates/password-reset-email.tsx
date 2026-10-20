@@ -1,7 +1,13 @@
 import { EmailLayout } from '../components/email-layout';
 import { ActionRow, CategoryMark, DataRows, FinePrint, Headline, SectionLabel, Strong } from '../components/email-blocks';
 import type { BaseEmailProps } from '../types';
-import type { EmailRequestDetails } from './otp-verification';
+
+/** Where a request came from, so an unexpected email reads as an attack, not noise. */
+export interface EmailRequestDetails {
+  device?: string;
+  location?: string;
+  requestedAt?: string;
+}
 
 export interface PasswordResetEmailProps extends BaseEmailProps {
   userName: string;

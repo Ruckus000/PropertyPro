@@ -295,8 +295,6 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Downgrade notifications — queries communities and admins in a billing group for notification dispatch
   resolve(repoRoot, 'apps/web/src/lib/billing/downgrade-notifications.ts'),
   // Pricing preview — queries all communities in a billing group; authorized by billing group ownership
-  // Cancel preview — queries communities in a billing group; authorized by billing group ownership
-  // Community cancel — soft-deletes community + triggers tier recalc; authorized by billing group ownership
   // Self-service community linking: pre-tenant eligibility checks + cross-community lookups
   // authorization contract: caller authenticates userId before invoking these helpers
   resolve(repoRoot, 'apps/web/src/lib/join-requests/eligibility.ts'),
