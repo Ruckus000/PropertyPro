@@ -78,10 +78,11 @@ export function applySecurityHeaders(
         supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
         frameAncestors: "'none'",
         frameSrc: getFrameSrc(),
-        // BOTH Sentry forms are needed. A CSP host wildcard replaces exactly
-        // one label, so `*.ingest.sentry.io` matches `o123.ingest.sentry.io`
-        // but NOT the regional `o123.ingest.us.sentry.io` — which is what this
-        // project's DSN actually is. Listing only the first would silently
+        // BOTH Sentry forms are needed. A CSP `*.ingest.sentry.io` matches
+        // hosts ending in `.ingest.sentry.io` (e.g. `o123.ingest.sentry.io`)
+        // but NOT the regional `o123.ingest.us.sentry.io`, where `us` sits
+        // between `ingest` and `sentry.io` — which is what this project's DSN
+        // actually is. Listing only the first would silently
         // block every browser-side Sentry event from the admin console, and
         // the console has no other client error reporting.
         connectSrc: ['https://*.ingest.sentry.io', 'https://*.ingest.us.sentry.io'],
