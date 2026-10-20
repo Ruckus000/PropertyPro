@@ -1585,8 +1585,8 @@ async function uploadSeedEsignSourceDocument(
 
 /**
  * Prebuilt e-sign template definitions for seeding.
- * Inlined here to avoid importing from apps/web/src (no path alias from scripts/).
- * Source of truth: apps/web/src/lib/esign/prebuilt-templates.ts
+ * This is the only copy: the app-side `lib/esign/prebuilt-templates.ts` it was
+ * once mirrored from had no production importer and was deleted (audit E-08).
  */
 const ESIGN_SEED_TEMPLATES = [
   {

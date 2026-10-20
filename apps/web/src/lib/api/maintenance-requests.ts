@@ -78,15 +78,6 @@ export async function listMyRequests(
   );
 }
 
-export async function getRequest(
-  id: number,
-  communityId: number,
-): Promise<{ data: MaintenanceRequestItem }> {
-  return requestJsonEnvelope<MaintenanceRequestItem>(
-    `/api/v1/maintenance-requests/${id}?communityId=${communityId}`,
-  );
-}
-
 export async function createMaintenanceRequest(
   payload: CreateRequestPayload,
 ): Promise<{ data: MaintenanceRequestItem }> {
@@ -94,19 +85,6 @@ export async function createMaintenanceRequest(
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ action: 'create', ...payload }),
-  });
-}
-
-export async function addComment(payload: {
-  communityId: number;
-  requestId: number;
-  text: string;
-  isInternal?: boolean;
-}): Promise<{ data: CommentItem }> {
-  return requestJsonEnvelope<CommentItem>('/api/v1/maintenance-requests', {
-    method: 'POST',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ action: 'add_comment', ...payload }),
   });
 }
 

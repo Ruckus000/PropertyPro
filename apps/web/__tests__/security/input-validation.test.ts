@@ -206,67 +206,6 @@ describe('P4-56 / Meetings POST input validation', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Zod schemas primitives
-// ---------------------------------------------------------------------------
-
-describe('P4-56 / Zod schema primitives', () => {
-  it('positiveIntSchema rejects zero', async () => {
-    const { positiveIntSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(positiveIntSchema.safeParse(0).success).toBe(false);
-  });
-
-  it('positiveIntSchema rejects negative numbers', async () => {
-    const { positiveIntSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(positiveIntSchema.safeParse(-1).success).toBe(false);
-  });
-
-  it('positiveIntSchema rejects floats', async () => {
-    const { positiveIntSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(positiveIntSchema.safeParse(1.5).success).toBe(false);
-  });
-
-  it('positiveIntSchema accepts valid positive integer', async () => {
-    const { positiveIntSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(positiveIntSchema.safeParse(42).success).toBe(true);
-  });
-
-  it('isoDateStringSchema rejects non-date strings', async () => {
-    const { isoDateStringSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(isoDateStringSchema.safeParse('not-a-date').success).toBe(false);
-  });
-
-  it('isoDateStringSchema accepts valid ISO strings', async () => {
-    const { isoDateStringSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(isoDateStringSchema.safeParse('2026-03-01T10:00:00Z').success).toBe(true);
-  });
-
-  it('passwordSchema rejects passwords shorter than 8 chars', async () => {
-    const { passwordSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(passwordSchema.safeParse('short').success).toBe(false);
-  });
-
-  it('passwordSchema rejects passwords longer than 72 chars', async () => {
-    const { passwordSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(passwordSchema.safeParse('a'.repeat(73)).success).toBe(false);
-  });
-
-  it('paginationLimitSchema rejects values above 200', async () => {
-    const { paginationLimitSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(paginationLimitSchema.safeParse(201).success).toBe(false);
-  });
-
-  it('emailSchema rejects non-email strings', async () => {
-    const { emailSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(emailSchema.safeParse('not-an-email').success).toBe(false);
-  });
-
-  it('emailSchema accepts valid emails', async () => {
-    const { emailSchema } = await import('../../src/lib/validation/zod-schemas');
-    expect(emailSchema.safeParse('user@getpropertypro.com').success).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Error response shape — verify withErrorHandler sanitizes unknown errors
 // ---------------------------------------------------------------------------
 

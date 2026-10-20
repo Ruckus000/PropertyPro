@@ -67,8 +67,7 @@ function disabledResult(): SmsSendResult {
  * Returns the provider result. Throws only for invalid input.
  *
  * Gated by the global `SMS_DISPATCH_ENABLED` floor — see @/lib/sms/dispatch-flag
- * and @/lib/sms/common for
- * why the kill switch lives here rather than on the routes. Note the check
+ * for why the kill switch lives here rather than on the routes. Note the check
  * comes BEFORE provider construction: `TwilioProvider`'s constructor throws on
  * missing credentials, so a deployment with SMS off need not carry Twilio env
  * vars at all.

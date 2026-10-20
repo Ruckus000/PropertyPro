@@ -3,8 +3,8 @@
 /**
  * ProspectEditSection — inline form for editing demo prospect metadata.
  *
- * Mirrors the CommunityEditSection pattern: fetches current values from
- * GET /api/admin/demos/:id and saves via PATCH /api/admin/demos/:id.
+ * Fetches current values from GET /api/admin/demos/:id and saves via
+ * PATCH /api/admin/demos/:id.
  *
  * Fields: prospect_name (required), external_crm_url (optional), prospect_notes (optional).
  */

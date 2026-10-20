@@ -55,7 +55,7 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
         floor as well, so passing only `membership.smsDispatchEnabled` would offer
         an SMS channel that silently gets skipped server-side — worse than not
         offering it, because the admin would believe texts went out.
-        See @/lib/sms/common.
+        See @/lib/sms/dispatch-flag.
       */}
       <BroadcastComposer
         communityId={context.communityId}

@@ -9,7 +9,7 @@
  *
  * Wraps the existing `useImageUpload` (presign → PUT → finalize) rather than
  * adding a second upload path — the phase's security summary is explicit that
- * the existing pipeline and its `validate-upload` checks are the only one.
+ * the existing pipeline and its server-side checks are the only one.
  *
  * What this adds on top is sequencing, per-file status, and per-file alt text.
  *

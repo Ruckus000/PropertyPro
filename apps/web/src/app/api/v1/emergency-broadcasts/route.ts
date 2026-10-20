@@ -85,7 +85,7 @@ export const POST = withErrorHandler(
       // refusing it — an emergency alert must still go out. Deliberately NOT a
       // guard at the top of this handler: a 403 here would kill the email leg
       // too, defeating the life-safety bypass noted above.
-      // See @/lib/sms/common and audit F-10.
+      // See @/lib/sms/dispatch-flag and audit F-10.
       smsAllowed: isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled,
       initiatedBy: userId,
     });

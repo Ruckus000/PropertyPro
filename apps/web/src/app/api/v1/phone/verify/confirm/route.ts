@@ -72,7 +72,7 @@ export const POST = withErrorHandler(async (req: NextRequest) => {
   // and they are userId-scoped with no communityId, so the per-community
   // `smsDispatchEnabled` flag cannot reach them either. The env floor is the only
   // gate available here. Reuses the existing 503 shape the client already
-  // handles. See @/lib/sms/common and audit F-10.
+  // handles. See @/lib/sms/dispatch-flag and audit F-10.
   if (!isSmsDispatchGloballyEnabled() || !accountSid || !authToken || !verifySid) {
     return NextResponse.json(
       { error: 'SMS verification is not configured' },
