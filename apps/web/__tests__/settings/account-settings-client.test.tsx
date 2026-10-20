@@ -277,6 +277,25 @@ describe('AccountSettingsClient — password section (Supabase, stays in compone
     );
     expect(updateUser).not.toHaveBeenCalled();
   });
+
+  // The rules come from the shared PASSWORD_POLICY (audit R-07), so this form
+  // refuses exactly what set-password / reset-password refuse, in their words.
+  it.each([
+    ['NewPass1', 'Password must include a special character'],
+    [`Aa1!${'x'.repeat(69)}`, 'Password must be between 8 and 72 characters'],
+  ])('rejects %j with the shared policy message before calling Supabase', (pw, message) => {
+    renderComponent();
+
+    fireEvent.change(screen.getByLabelText('Current Password'), {
+      target: { value: 'OldPass1!' },
+    });
+    fireEvent.change(screen.getByLabelText('New Password'), { target: { value: pw } });
+    fireEvent.change(screen.getByLabelText('Confirm New Password'), { target: { value: pw } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update Password' }));
+
+    expect(screen.getByText(message)).toBeDefined();
+    expect(signInWithPassword).not.toHaveBeenCalled();
+  });
 });
 
 describe('AccountSettingsClient — danger zone', () => {

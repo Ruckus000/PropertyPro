@@ -8,6 +8,7 @@ import {
   StaggerChildren,
   StaggerItem,
 } from "@/components/motion";
+import { formatShortDate } from "@/lib/utils/format-date";
 
 // ── Types ───────────────────────────────────────────
 
@@ -26,15 +27,6 @@ interface MobileAnnouncementsContentProps {
 }
 
 // ── Helpers ─────────────────────────────────────────
-
-function formatDate(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 // ── Component ───────────────────────────────────────
 
@@ -103,7 +95,7 @@ export function MobileAnnouncementsContent({
                         {a.title}
                       </span>
                       <span className="mt-0.5 block text-xs text-stone-400">
-                        {a.source} &middot; {formatDate(a.publishedAt, timezone)}
+                        {a.source} &middot; {formatShortDate(a.publishedAt, timezone)}
                         {a.audience === 'board_only' && <> &middot; Board only</>}
                       </span>
                     </li>
@@ -129,7 +121,7 @@ export function MobileAnnouncementsContent({
                         {a.title}
                       </span>
                       <span className="mt-0.5 block text-xs text-stone-400">
-                        {a.source} &middot; {formatDate(a.publishedAt, timezone)}
+                        {a.source} &middot; {formatShortDate(a.publishedAt, timezone)}
                         {a.audience === 'board_only' && <> &middot; Board only</>}
                       </span>
                     </li>

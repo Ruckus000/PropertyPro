@@ -7,9 +7,9 @@
  * `pastDueCents`, `BillingRow.mrrCents`, `CommunityBillingInvoice.amountCents`
  * and, unusually, `series` as well, so that every money value on that interface
  * shares one unit. `lib/server/dashboard-series.ts` exposes the SAME
- * `revenue_snapshots.mrr_cents` column already converted to DOLLARS, and the
- * dashboard's own `formatCurrency` helpers (`KpiGrid`, `RevenueCard`) therefore
- * take dollars. The two are one function call apart and a hundred times
+ * `revenue_snapshots.mrr_cents` column already converted to DOLLARS, so the
+ * dashboard (`KpiGrid`, `RevenueCard`) formats with `formatDollarsAsCurrency`.
+ * The two are one function call apart and a hundred times
  * different, and the wrong one renders a plausible number rather than an
  * obviously broken one — $4,200 of MRR shown as $420,000.
  *
@@ -27,7 +27,10 @@ const USD = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 });
 
-/** Money already in dollars. */
+/**
+ * Money already in dollars. A non-finite input (NaN, ±Infinity) renders `$0`
+ * rather than `$NaN`, so one bad row cannot paint a broken figure on a KPI.
+ */
 export function formatDollarsAsCurrency(dollars: number): string {
   return USD.format(Number.isFinite(dollars) ? dollars : 0);
 }

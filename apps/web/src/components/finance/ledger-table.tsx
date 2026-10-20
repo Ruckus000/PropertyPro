@@ -7,6 +7,7 @@ import { DataTable } from '@/components/shared/data-table';
 import { CsvExportButton } from '@/components/shared/csv-export-button';
 import { useLedger, type LedgerEntry, type LedgerFilters } from '@/hooks/use-finance';
 import { cn } from '@/lib/utils';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 /* ─────── Helpers ─────── */
 
@@ -15,14 +16,6 @@ function formatCents(cents: number): string {
     style: 'currency',
     currency: 'USD',
   }).format(cents / 100);
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 const ENTRY_TYPE_BADGE_CLASSES: Record<string, string> = {
@@ -52,7 +45,7 @@ const columns: ColumnDef<LedgerEntry, unknown>[] = [
     header: 'Date',
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-sm text-content-secondary">
-        {formatDate(row.original.createdAt)}
+        {formatShortDate(row.original.createdAt)}
       </span>
     ),
   },
@@ -147,7 +140,7 @@ export function LedgerTable({ communityId, unitId, onShowAllUnits }: LedgerTable
   const csvRows = useMemo(
     () =>
       (entries ?? []).map((e) => ({
-        Date: formatDate(e.createdAt),
+        Date: formatShortDate(e.createdAt),
         Type: e.entryType,
         Description: e.description,
         Unit: e.unitLabel ?? (e.unitId ? `Unit #${e.unitId}` : ''),

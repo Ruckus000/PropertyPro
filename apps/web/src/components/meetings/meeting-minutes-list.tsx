@@ -16,6 +16,7 @@ import {
   formatShortDate,
   splitSchedule,
 } from '@/lib/meetings/meeting-status';
+import { formatShortDate as formatDateWithYear } from '@/lib/utils/format-date';
 
 interface MeetingMinutesListProps {
   communityId: number;
@@ -27,15 +28,6 @@ interface MeetingMinutesListProps {
   onRetry: () => void;
   canWrite: boolean;
   onOpenMeeting: (meetingId: number) => void;
-}
-
-function formatDate(value: string, timeZone: string): string {
-  return new Date(value).toLocaleDateString('en-US', {
-    timeZone,
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 /** The escalation as a `STATUS_CONFIG` key, so it paints icon + text + colour. */
@@ -123,7 +115,7 @@ export function MeetingMinutesList({
                   onClick={() => onOpenMeeting(meeting.id)}
                   className="text-left text-sm font-medium text-content hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
                 >
-                  {formatDate(meeting.startsAt, timeZone)} · {meeting.title}
+                  {formatDateWithYear(meeting.startsAt, timeZone)} · {meeting.title}
                 </button>
                 <div className="text-xs text-content-tertiary">
                   {published

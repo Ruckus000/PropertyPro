@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 export interface AnnouncementListItem {
   id: number;
@@ -103,14 +104,6 @@ function stripHtml(html: string): string {
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)));
 }
 
-function formatDate(value: Date | string): string {
-  return new Date(value).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 function AnnouncementCard({
   item,
   communityId,
@@ -157,7 +150,7 @@ function AnnouncementCard({
             )}
             {isDeleted && <StatusBadge status="closed" label="Deleted" subtle />}
           </div>
-          <p className="mt-1 text-xs text-content-tertiary">{formatDate(item.publishedAt)}</p>
+          <p className="mt-1 text-xs text-content-tertiary">{formatShortDate(item.publishedAt)}</p>
         </div>
       </div>
       {item.body && (

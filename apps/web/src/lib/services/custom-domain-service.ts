@@ -22,6 +22,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { eq } from '@propertypro/db/filters';
 import { assertCustomDomainAllowed, CustomDomainNotAllowedError } from '@propertypro/shared';
 import { AppError, ConflictError, ValidationError } from '@/lib/api/errors';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 import {
   addProjectDomain,
   checkDomainAvailability,
@@ -71,12 +72,6 @@ function translateProviderError(e: unknown): never {
     throw new AppError(e.message, 502, 'DOMAIN_PROVIDER_ERROR');
   }
   throw e;
-}
-
-/** True when a thrown DB error is a postgres unique violation (possibly nested). */
-function isUniqueViolation(e: unknown): boolean {
-  const err = e as { code?: unknown; cause?: { code?: unknown } } | null;
-  return err?.code === '23505' || err?.cause?.code === '23505';
 }
 
 async function readRow(communityId: number): Promise<PersistedRow> {
@@ -144,7 +139,7 @@ export async function setDomain(
       .set({ customDomain: host, customDomainStatus: status })
       .where(eq(communities.id, communityId));
   } catch (e) {
-    if (isUniqueViolation(e)) {
+    if (isUniqueConstraintError(e)) {
       throw new ConflictError('That domain is already in use by another community.');
     }
     throw e;

@@ -24,6 +24,7 @@ import {
   splitSchedule,
 } from '@/lib/meetings/meeting-status';
 import type { MeetingType } from '@/lib/utils/meeting-calculator';
+import { formatShortDate as formatDateWithYear } from '@/lib/utils/format-date';
 
 type ScheduleRange = 'upcoming' | 'past';
 
@@ -44,15 +45,6 @@ function formatTime(value: string | Date, timeZone: string): string {
     timeZone,
     hour: 'numeric',
     minute: '2-digit',
-  });
-}
-
-function formatDate(value: string, timeZone: string): string {
-  return new Date(value).toLocaleDateString('en-US', {
-    timeZone,
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
   });
 }
 
@@ -172,11 +164,11 @@ export function MeetingSchedule({
                     {meetingTypeLabel(meeting.meetingType)} · {meeting.location}
                   </div>
                   <div className="text-xs text-content-tertiary md:hidden">
-                    {formatDate(meeting.startsAt, timeZone)} · {formatTime(meeting.startsAt, timeZone)}
+                    {formatDateWithYear(meeting.startsAt, timeZone)} · {formatTime(meeting.startsAt, timeZone)}
                   </div>
                 </TableCell>
                 <TableCell className="hidden tabular-nums md:table-cell">
-                  {formatDate(meeting.startsAt, timeZone)}
+                  {formatDateWithYear(meeting.startsAt, timeZone)}
                   <div className="text-xs text-content-tertiary">
                     {formatTime(meeting.startsAt, timeZone)} – {formatTime(endsAt, timeZone)}
                   </div>
