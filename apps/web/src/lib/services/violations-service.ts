@@ -27,7 +27,7 @@ import {
   DEFAULT_FINE_CAP_CENTS,
   formatCents,
 } from '@propertypro/shared';
-import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
+import { AppError, BadRequestError, ConflictError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { parseDateOnly } from '@/lib/finance/common';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
@@ -1054,6 +1054,22 @@ export async function createArcSubmissionForCommunity(
   return record;
 }
 
+/**
+ * The statuses an ARC write may move a submission out of. Each review, decide
+ * and withdraw reads the submission, checks its status, then updates it; the
+ * UPDATE repeats this check in its WHERE so a write racing another (a decision
+ * landing on a just-withdrawn application, a review after a decision) matches
+ * no row instead of overwriting the other's state and notifying the owner of
+ * a contradictory outcome.
+ */
+const ARC_OPEN_STATUSES: ArcSubmissionRecord['status'][] = ['submitted', 'under_review'];
+
+function arcSubmissionChangedConflict(): ConflictError {
+  return new ConflictError(
+    'This ARC application was updated by someone else. Reload it and try again.',
+  );
+}
+
 export async function reviewArcSubmissionForCommunity(
   communityId: number,
   submissionId: number,
@@ -1073,10 +1089,10 @@ export async function reviewArcSubmissionForCommunity(
       status: 'under_review',
       reviewNotes: input.reviewNotes ?? existing.reviewNotes,
     },
-    eq(arcSubmissions.id, submissionId),
+    and(eq(arcSubmissions.id, submissionId), inArray(arcSubmissions.status, ARC_OPEN_STATUSES)),
   );
   if (!updated) {
-    throw new NotFoundError('ARC submission not found');
+    throw arcSubmissionChangedConflict();
   }
 
   const record = mapArcRow(updated as unknown as ArcSubmissionRecord);
@@ -1143,10 +1159,10 @@ export async function decideArcSubmissionForCommunity(
       decidedByUserId: actorUserId,
       decidedAt: new Date(),
     },
-    eq(arcSubmissions.id, submissionId),
+    and(eq(arcSubmissions.id, submissionId), inArray(arcSubmissions.status, ARC_OPEN_STATUSES)),
   );
   if (!updated) {
-    throw new NotFoundError('ARC submission not found');
+    throw arcSubmissionChangedConflict();
   }
 
   const record = mapArcRow(updated as unknown as ArcSubmissionRecord);
@@ -1179,6 +1195,9 @@ export async function withdrawArcSubmissionForCommunity(
   if (existing.status === 'approved' || existing.status === 'denied') {
     throw new UnprocessableEntityError('Decided ARC submissions cannot be withdrawn');
   }
+  if (existing.status === 'withdrawn') {
+    throw new UnprocessableEntityError('ARC submission is already withdrawn');
+  }
 
   const scoped = createScopedClient(communityId);
   const [updated] = await scoped.update(
@@ -1186,10 +1205,10 @@ export async function withdrawArcSubmissionForCommunity(
     {
       status: 'withdrawn',
     },
-    eq(arcSubmissions.id, submissionId),
+    and(eq(arcSubmissions.id, submissionId), inArray(arcSubmissions.status, ARC_OPEN_STATUSES)),
   );
   if (!updated) {
-    throw new NotFoundError('ARC submission not found');
+    throw arcSubmissionChangedConflict();
   }
 
   const record = mapArcRow(updated as unknown as ArcSubmissionRecord);
