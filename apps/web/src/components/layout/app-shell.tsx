@@ -36,9 +36,6 @@ import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
-// Feature flag: set to true to use the new command palette
-const USE_COMMAND_PALETTE_V2 = true;
-
 interface HelpDocsModalProps {
   communityId: number;
   flagEnabled: boolean;
@@ -62,9 +59,8 @@ interface LazyCommandPaletteProps {
   enableGlobalShortcut?: boolean;
 }
 
-const loadCommandPalette = USE_COMMAND_PALETTE_V2
-  ? () => import('@/components/command-palette').then((module) => module.CommandPalette)
-  : () => import('./command-palette').then((module) => module.CommandPalette);
+const loadCommandPalette = () =>
+  import('@/components/command-palette').then((module) => module.CommandPalette);
 
 const LazyCommandPalette = dynamic<LazyCommandPaletteProps>(loadCommandPalette, {
   ssr: false,

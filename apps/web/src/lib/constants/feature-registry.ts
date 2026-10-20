@@ -50,7 +50,6 @@ import { directoryHref } from '@/lib/directory/directory-href';
 // ---------------------------------------------------------------------------
 
 export type RegistryCategory = 'page' | 'action' | 'setting';
-export type RegistryAudience = 'resident' | 'admin' | 'all';
 
 /**
  * Role-based visibility for a registry item (v3-native, ADR-006).
@@ -68,7 +67,6 @@ export interface FeatureRegistryItem {
   icon: LucideIcon;
   href: string | ((communityId: number) => string);
   roles: RegistryVisibility;
-  audience: RegistryAudience;
   category: RegistryCategory;
   group: string;
   featureFlag?: keyof CommunityFeatures;
@@ -89,7 +87,7 @@ export interface ResolvedRegistryItem extends Omit<FeatureRegistryItem, 'href'> 
 
 export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
   // ========================================================================
-  // PAGES — audience: 'all'
+  // PAGES — every role
   // ========================================================================
   {
     id: 'page-dashboard',
@@ -99,7 +97,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: LayoutDashboard,
     href: '/dashboard',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'General',
   },
@@ -111,7 +108,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: FileText,
     href: (cid: number) => `/communities/${cid}/documents`,
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'General',
     requiredPermission: { resource: 'documents', action: 'read' },
@@ -124,7 +120,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: CalendarDays,
     href: (cid: number) => `/communities/${cid}/meetings`,
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'General',
     featureFlag: 'hasMeetings',
@@ -138,7 +133,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Megaphone,
     href: (cid: number) => `/announcements?communityId=${cid}`,
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'General',
     requiredPermission: { resource: 'announcements', action: 'read' },
@@ -151,7 +145,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Wrench,
     href: (cid: number) => operationsTabHref(cid, 'requests'),
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'General',
     featureFlag: 'hasMaintenanceRequests',
@@ -165,7 +158,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: CreditCard,
     href: (cid: number) => `/communities/${cid}/payments`,
     roles: 'owner_or_admin',
-    audience: 'all',
     category: 'page',
     group: 'Finance',
     featureFlag: 'hasFinance',
@@ -178,7 +170,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Package,
     href: '/dashboard/packages',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Services',
     featureFlag: 'hasPackageLogging',
@@ -191,7 +182,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: UserCheck,
     href: '/dashboard/visitors',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Services',
     featureFlag: 'hasVisitorLogging',
@@ -204,7 +194,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Settings,
     href: '/settings',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Account',
   },
@@ -216,13 +205,12 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: HelpCircle,
     href: '/help',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Support',
   },
 
   // ========================================================================
-  // PAGES — audience: 'admin'
+  // PAGES — management tier
   // ========================================================================
   {
     id: 'page-compliance',
@@ -232,7 +220,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ShieldCheck,
     href: (cid: number) => `/communities/${cid}/compliance`,
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Compliance',
     featureFlag: 'hasCompliance',
@@ -245,7 +232,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: AlertTriangle,
     href: '/violations',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Compliance',
     featureFlag: 'hasViolations',
@@ -259,7 +245,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Inbox,
     href: (cid: number) => operationsTabHref(cid, 'requests'),
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
     featureFlag: 'hasMaintenanceRequests',
@@ -273,7 +258,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: PenTool,
     href: '/esign',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Documents',
     featureFlag: 'hasEsign',
@@ -286,7 +270,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: FileSignature,
     href: '/contracts',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
   },
@@ -298,7 +281,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Home,
     href: '/dashboard/leases',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
     featureFlag: 'hasLeaseTracking',
@@ -311,7 +293,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Truck,
     href: '/dashboard/move-in-out',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
     featureFlag: 'hasLeaseTracking',
@@ -324,7 +305,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ScrollText,
     href: '/audit-trail',
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Compliance',
   },
@@ -336,7 +316,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: BarChart3,
     href: (cid: number) => `/communities/${cid}/payments?tab=overview`,
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Finance',
     featureFlag: 'hasFinance',
@@ -349,7 +328,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: DollarSign,
     href: (cid: number) => `/communities/${cid}/payments?tab=assessments`,
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Finance',
     featureFlag: 'hasFinance',
@@ -362,7 +340,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Building2,
     href: (cid: number) => directoryHref('residents', { communityId: cid }),
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
     requiredPermission: { resource: 'residents', action: 'read' },
@@ -375,7 +352,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Vote,
     href: (cid: number) => `/communities/${cid}/board/elections`,
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Governance',
     featureFlag: 'hasVoting',
@@ -388,7 +364,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: MessageSquare,
     href: (cid: number) => `/communities/${cid}/board/forum`,
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Community',
     featureFlag: 'hasCommunityBoard',
@@ -401,7 +376,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Landmark,
     href: (cid: number) => operationsTabHref(cid, 'reservations'),
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Services',
     featureFlag: 'hasAmenities',
@@ -414,7 +388,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ClipboardCheck,
     href: '/arc-requests',
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Governance',
     featureFlag: 'hasARC',
@@ -427,7 +400,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Columns3,
     href: (cid: number) => `/communities/${cid}/board/polls`,
     roles: 'all',
-    audience: 'all',
     category: 'page',
     group: 'Community',
     featureFlag: 'hasPolls',
@@ -440,7 +412,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ClipboardList,
     href: (cid: number) => operationsTabHref(cid, 'work-orders'),
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Operations',
     featureFlag: 'hasWorkOrders',
@@ -453,14 +424,13 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: BookOpen,
     href: (cid: number) => `/communities/${cid}/public-notices`,
     roles: 'admin',
-    audience: 'admin',
     category: 'page',
     group: 'Compliance',
     featureFlag: 'hasPublicNoticesPage',
   },
 
   // ========================================================================
-  // ACTIONS — audience: 'all'
+  // ACTIONS — every role
   // ========================================================================
   {
     id: 'action-submit-maintenance',
@@ -470,7 +440,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Wrench,
     href: (cid: number) => operationsTabHref(cid, 'requests'),
     roles: 'all',
-    audience: 'all',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasMaintenanceRequests',
@@ -484,7 +453,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: AlertTriangle,
     href: '/violations/report',
     roles: 'all',
-    audience: 'all',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasViolations',
@@ -502,7 +470,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     // redirected to the review queue, which is the useful page for them.
     href: '/arc-requests/new',
     roles: 'all',
-    audience: 'all',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasARC',
@@ -515,14 +482,13 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Landmark,
     href: (cid: number) => operationsTabHref(cid, 'reservations'),
     roles: 'all',
-    audience: 'all',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasAmenities',
   },
 
   // ========================================================================
-  // ACTIONS — audience: 'admin'
+  // ACTIONS — management tier
   // ========================================================================
   {
     id: 'action-upload-document',
@@ -532,7 +498,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Upload,
     href: (cid: number) => `/communities/${cid}/documents`,
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     requiredPermission: { resource: 'documents', action: 'write' },
@@ -545,7 +510,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Megaphone,
     href: (cid: number) => `/announcements/new?communityId=${cid}`,
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     requiredPermission: { resource: 'announcements', action: 'write' },
@@ -558,7 +522,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: CalendarPlus,
     href: (cid: number) => `/communities/${cid}/meetings`,
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasMeetings',
@@ -572,7 +535,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: FilePlus,
     href: '/esign/templates/new',
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasEsign',
@@ -585,7 +547,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Send,
     href: '/esign/submissions/new',
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasEsign',
@@ -598,7 +559,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Siren,
     href: '/emergency/new',
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasEmergencyNotifications',
@@ -611,7 +571,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ClipboardList,
     href: '/violations',
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasViolations',
@@ -624,7 +583,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: UserCheck,
     href: (cid: number) => directoryHref('residents', { communityId: cid }),
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
   },
@@ -636,7 +594,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Columns3,
     href: (cid: number) => `/communities/${cid}/board/polls`,
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasPolls',
@@ -649,7 +606,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: ClipboardList,
     href: (cid: number) => operationsTabHref(cid, 'work-orders'),
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasWorkOrders',
@@ -662,14 +618,13 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: BarChart3,
     href: (cid: number) => `/communities/${cid}/payments?tab=overview`,
     roles: 'admin',
-    audience: 'admin',
     category: 'action',
     group: 'Quick Actions',
     featureFlag: 'hasFinance',
   },
 
   // ========================================================================
-  // SETTINGS — audience: 'all'
+  // SETTINGS — every role
   // ========================================================================
   {
     id: 'setting-notifications',
@@ -679,7 +634,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Bell,
     href: '/settings',
     roles: 'all',
-    audience: 'all',
     category: 'setting',
     group: 'Account',
   },
@@ -691,13 +645,12 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Download,
     href: '/settings/export',
     roles: 'all',
-    audience: 'all',
     category: 'setting',
     group: 'Account',
   },
 
   // ========================================================================
-  // SETTINGS — audience: 'admin'
+  // SETTINGS — management tier
   // ========================================================================
   {
     id: 'setting-payments',
@@ -707,7 +660,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: CreditCard,
     href: '/settings/payments',
     roles: 'admin',
-    audience: 'admin',
     category: 'setting',
     group: 'Administration',
     featureFlag: 'hasFinance',
@@ -720,7 +672,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: CircleGauge,
     href: '/settings/transparency',
     roles: 'admin',
-    audience: 'admin',
     category: 'setting',
     group: 'Administration',
     featureFlag: 'hasTransparencyPage',
@@ -733,7 +684,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: Building2,
     href: '/settings',
     roles: 'admin',
-    audience: 'admin',
     category: 'setting',
     group: 'Administration',
   },
@@ -745,7 +695,6 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
     icon: BookOpen,
     href: '/settings/roles',
     roles: 'admin',
-    audience: 'admin',
     category: 'setting',
     group: 'Administration',
   },
