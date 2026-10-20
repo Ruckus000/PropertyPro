@@ -69,10 +69,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //     with a green dashboard.
   //   - OTP_HMAC_SECRET: access-request OTPs are 6 digits, so the HMAC secret is
   //     the only barrier to precomputing the whole space.
-  //   - TOKEN_ENCRYPTION_KEY: calendar sync and accounting connectors throw
-  //     without it, so those features 500 rather than degrade.
-  //   - OAUTH_STATE_SECRET: `signOAuthState` throws without it, so connecting a
-  //     Google Calendar or an accounting platform 500s instead of degrading.
+  //   - TOKEN_ENCRYPTION_KEY: encrypts the calendar/accounting OAuth token
+  //     tables. Their only callers, the fake connectors, were deleted on
+  //     2026-10-20, so nothing live needs it; whether to drop the requirement
+  //     (and the tables) is an open decision.
+  //   - OAUTH_STATE_SECRET: `signPayload` throws without it, so Stripe Connect
+  //     onboarding 500s instead of degrading.
   //   - SUPPORT_SESSION_JWT_SECRET: the admin app signs the support-access JWT
   //     and web verifies it. Absent on either side, Start Session 500s and the
   //     popup never opens — the exact failure that made `support-access` look

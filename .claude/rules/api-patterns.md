@@ -100,6 +100,10 @@ The runner:
 - Wraps the result: non-paginated → `{ data: payload }`, paginated → `{ data: { data: items, pagination } }`.
 - Pre-`NextResponse.json` `safeParse` — so `Date` values must be converted in the handler (`.toISOString()`) if the response schema is `z.string()`.
 
+**A contract's docblock describes the route as it is now.** Drain history ("drain
+#7, mirrors drain #4", "pre-migration returned …") belongs in the commit message.
+When you edit a contract for any other reason, strip its drain lines in the same diff.
+
 ### Known constraints (avoid when contracting)
 
 The runner cannot handle these without changes — leave on allowlist or wait for runner extension:
@@ -167,15 +171,12 @@ Convention: `requireAuthenticatedUserId → resolveEffectiveCommunityId → asse
 4. Delete the route's `[path, reason]` entry from `ALLOWLIST_REASONS`.
 5. Verify: `pnpm typecheck && pnpm lint && pnpm guard:contracts` (Contracted count increments; allowlist decrements).
 
-**For batches, use `/drain-loop`** (`.claude/skills/drain-loop.md`, driving
-`drain-loop.workflow.js` → `drain-one-batch.workflow.js`) rather than
-hand-driving it. That tooling automates what this rule used to describe as a
-manual seven-step choreography — pick 3 routes with disjoint hooks and services,
-worktree each, implement in parallel, dual review, then **sequential** PR
-creation and merge with a rebase between each. Two constraints survive from that
-manual era and still bite: `gh pr create` writes local git state, so concurrent
-calls race; and batched routes must have **disjoint file sets**, or the rebases
-conflict.
+**Batching several drains:** give each route its own worktree, but open and merge
+the PRs **sequentially**, rebasing between each. `gh pr create` writes local git
+state, so concurrent calls race, and batched routes must have **disjoint file
+sets** (hooks and services included) or the rebases conflict. (The `/drain-loop`
+tooling that automated this was deleted on 2026-10-20: with no `pending-drain`
+routes left it had nothing to run.)
 
 **Hook migrations are out of scope** for an allowlist drain — keep consumer hooks byte-identical. The runner produces `{ data: payload }` exactly as the pre-migration handler did; consumers using `requestJson<T>` keep working.
 
@@ -408,7 +409,6 @@ POST     /api/v1/esign/sign/[submissionExternalId]/[slug]  (unauthenticated)
 
 # Calendar
 GET      /api/v1/calendar/events
-#        Google Calendar integration: /calendar/google/{connect,callback,disconnect,sync}
 #        (No .ics export route exists — the meetings UI tells users to copy details manually.)
 
 # PM dashboard
@@ -425,7 +425,7 @@ DELETE   /api/v1/communities/delete          (admin: cancel community deletion)
 POST     /api/v1/subscribe                   (user: Stripe checkout for subscription)
 POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
 
-# Finance & billing — /api/v1/finance, /accounting, /ledger, /payments, /billing,
+# Finance & billing — /api/v1/finance, /ledger, /payments, /billing,
 #                      /billing-groups, /assessments, /delinquency, /stripe
 # Governance — /api/v1/elections, /polls, /violations, /arc
 # Operations — /api/v1/work-orders, /maintenance-requests, /amenities, /reservations,
