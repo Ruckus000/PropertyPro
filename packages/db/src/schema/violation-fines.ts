@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { assessmentLineItems } from './assessment-line-items';
 import { communities } from './communities';
 import { ledgerEntries } from './ledger-entries';
 import { users } from './users';
@@ -43,6 +44,10 @@ export const violationFines = pgTable('violation_fines', {
   ledgerEntryId: bigint('ledger_entry_id', { mode: 'number' }).references(() => ledgerEntries.id, {
     onDelete: 'set null',
   }),
+  /** The line item that bills this fine; a payment marks the fine paid by it, never by amount. */
+  lineItemId: bigint('line_item_id', { mode: 'number' })
+    .unique()
+    .references(() => assessmentLineItems.id, { onDelete: 'set null' }),
   status: text('status').$type<ViolationFineStatus>().notNull().default('pending'),
   /**
    * §718.303(3) / §720.305(2): a fine may not be imposed without the approval

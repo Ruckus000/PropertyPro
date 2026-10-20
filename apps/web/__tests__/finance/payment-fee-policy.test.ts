@@ -87,7 +87,7 @@ vi.mock('@/lib/services/stripe-service', () => ({
 }));
 
 vi.mock('@/lib/services/violations-service', () => ({
-  markMatchingViolationFinePaid: vi.fn(),
+  markViolationFinePaidForLineItem: vi.fn(),
 }));
 
 vi.mock('@/lib/services/oauth-state', () => ({
