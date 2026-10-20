@@ -7,7 +7,6 @@ import {
 } from '@propertypro/db';
 import {
   getComplianceTemplate,
-  getFeaturesForCommunity,
   postingClockApplies,
   type CommunityType,
 } from '@propertypro/shared';
@@ -81,7 +80,6 @@ export interface TransparencyPageData {
   portalStatus: {
     passwordProtected: boolean;
     individualCredentials: boolean;
-    publicNoticesPage: boolean;
   };
   metadata: {
     generatedAt: string;
@@ -163,7 +161,6 @@ const transparencyPageDataSchema: z.ZodType<TransparencyPageData> = z.object({
   portalStatus: z.object({
     passwordProtected: z.boolean(),
     individualCredentials: z.boolean(),
-    publicNoticesPage: z.boolean(),
   }),
   metadata: z.object({
     generatedAt: z.string().datetime(),
@@ -477,7 +474,6 @@ export async function getTransparencyPageData(
       unitCount: asNumber(communityRow?.['unitCount']),
     }),
   );
-  const features = getFeaturesForCommunity(community.communityType);
 
   const payload: TransparencyPageData = {
     community: {
@@ -504,7 +500,6 @@ export async function getTransparencyPageData(
     portalStatus: {
       passwordProtected: true,
       individualCredentials: true,
-      publicNoticesPage: features.hasPublicNoticesPage,
     },
     metadata: {
       generatedAt: new Date().toISOString(),

@@ -6,7 +6,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 interface Props {
   passwordProtected: boolean;
   individualCredentials: boolean;
-  publicNoticesPage: boolean;
 }
 
 function renderBooleanItem(label: string, value: boolean) {
@@ -24,7 +23,6 @@ function renderBooleanItem(label: string, value: boolean) {
 export function PortalStatusSection({
   passwordProtected,
   individualCredentials,
-  publicNoticesPage,
 }: Props) {
   return (
     <Card className="border-edge bg-surface-card">
@@ -38,7 +36,6 @@ export function PortalStatusSection({
         <ul className="space-y-2">
           {renderBooleanItem('Password-protected portal', passwordProtected)}
           {renderBooleanItem('Individual owner credentials', individualCredentials)}
-          {renderBooleanItem('Public notices page', publicNoticesPage)}
         </ul>
       </CardContent>
     </Card>

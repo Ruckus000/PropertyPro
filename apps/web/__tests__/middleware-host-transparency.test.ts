@@ -41,6 +41,17 @@ describe('public host route helpers', () => {
     expect(parsePathBasedPublicRoute('/legal')).toBeNull();
   });
 
+  it('never reads a public page name as a community slug', () => {
+    // `/notices` on the apex used to 308 to `notices.<root>`, which no community owns.
+    for (const name of ['notices', 'request-access', 'unavailable']) {
+      expect(parsePathBasedPublicRoute(`/${name}`)).toBeNull();
+    }
+    expect(parsePathBasedPublicRoute('/sunset-condos/notices')).toEqual({
+      slug: 'sunset-condos',
+      path: '/notices',
+    });
+  });
+
   it('still redirects real slug routes that share a marketing suffix', () => {
     // Only the BARE segment belongs to marketing. `/<slug>/transparency` is a
     // genuine community route and must keep redirecting to the subdomain.

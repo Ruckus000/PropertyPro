@@ -76,7 +76,6 @@ describe('transparency public route', () => {
       portalStatus: {
         passwordProtected: true,
         individualCredentials: true,
-        publicNoticesPage: true,
       },
       metadata: {
         generatedAt: '2026-03-07T12:00:00.000Z',

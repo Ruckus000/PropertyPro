@@ -94,6 +94,9 @@ test.describe('marketing smoke', () => {
 
     const reserved = await page.goto('/support');
     expect(reserved?.status()).toBe(404);
+
+    const pageName = await page.goto('/notices');
+    expect(pageName?.status()).toBe(404);
   });
 
   test('a resource article renders with its legal disclaimer', async ({ page }) => {

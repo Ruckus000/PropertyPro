@@ -76,7 +76,6 @@ export function TransparencyPage({ data }: Props) {
         <PortalStatusSection
           passwordProtected={data.portalStatus.passwordProtected}
           individualCredentials={data.portalStatus.individualCredentials}
-          publicNoticesPage={data.portalStatus.publicNoticesPage}
         />
       </section>
 

@@ -134,6 +134,8 @@ export function parsePathBasedPublicRoute(pathname: string): { slug: string; pat
   if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) return null;
   if (isReservedSubdomain(slug)) return null;
   if (PROTECTED_FIRST_SEGMENTS.has(slug)) return null;
+  // A public page name (`/notices`) is never a community slug.
+  if (PATH_PUBLIC_SUFFIXES.has(slug)) return null;
   // Checked after the reserved sets so a marketing path can never re-open one
   // of them, and before the length branch so `/transparency` (a bare marketing
   // route) is distinguished from `/sunset-condos/transparency` (a real slug
@@ -270,6 +272,15 @@ export function classifySubdomainPath(pathname: string): SubdomainPathKind {
 
   if (INFRASTRUCTURE_FIRST_SEGMENTS.has(first)) return 'app';
   if (METADATA_FIRST_SEGMENTS.has(first)) return 'metadata';
+  // No app route serves a suffix without a host-native twin, so let the public
+  // site render its branded 404 (as on a custom domain) instead of the fallback.
+  if (
+    segments.length === 1 &&
+    PATH_PUBLIC_SUFFIXES.has(first) &&
+    !HOST_NATIVE_PUBLIC_SUFFIX_ROUTES[first]
+  ) {
+    return 'site-page';
+  }
   if (isReservedPublicSlug(first)) return 'app';
   if (segments.length > 1) return 'app';
   if (!PUBLIC_PAGE_SLUG_PATTERN.test(first)) return 'app';
