@@ -9,8 +9,8 @@ issues); the engineering backlog below was not re-measured.
 **No blocker is open on the evidence available.** Items 1–7 are resolved and collapsed
 below. Item 1 carries an open tail that only the Stripe and Vercel dashboards can confirm.
 
-The code is in good shape: the `guard:*` suite passes **31/31** (measured 2026-09-22,
-`pnpm lint`), and ~12,155 unit tests plus a clean production build of both apps were
+The code is in good shape: the `guard:*` suite passes (`pnpm lint`; **34/34** on
+2026-10-20 — re-run it rather than trust this number), and ~12,155 unit tests plus a clean production build of both apps were
 green at `aabf9727`.
 
 The through-line of everything here is that it fails **silently**. None of it crashes
@@ -172,7 +172,7 @@ says a count grew as "this program is not progressing", never as "this is broken
 
 The original pass could run nothing — `node_modules` was absent in the container that
 produced it — so it could say what the tree *contained*, never what *passed*. That gap is
-now closed for the guards: **29/29 pass**, re-measured 2026-09-09 via `pnpm lint`. The
+now closed for the guards: `pnpm lint` runs them all (34/34 on 2026-10-20). The
 unit-test and e2e counts are still un-rerun and stay stamped at `aabf9727`.
 
 Baselines in the "2026-07-18" column are quoted from the refactor audit's §1 headline
@@ -181,69 +181,14 @@ table and are like-for-like: route counts are scoped to `apps/web/src/app/api/v1
 
 ---
 
-## B1. In-flight programs, re-measured against their own baselines
+## B1. In-flight programs (removed 2026-10-20)
 
-The structural work the July audit ranked first. Four of the eight rows are **larger**
-than the day they were written down, one is flat, and the two that improved improved
-because a *different* program (the admin design migration) was actively worked. This is
-the part of this section that argues for doing something.
-
-| Program | 2026-07-18 | 2026-09-07 @ `ddf3469` | |
-|---|---|---|---|
-| Uncontracted routes (`KNOWN_UNCONTRACTED_ROUTES`) | 37 of 257 | **46 of 284** | ⬆ · **ceiling pinned 2026-09-07** |
-| `contract.ts` declaring `tenantScope` | 12 | **15** | ⬆ (the column said “flat”; 12→15 is growth) |
-| Contracted routes still hand-calling `resolveEffectiveCommunityId` | 121 | **148** | ⬆ · unratcheted (ceiling removed on review — see below) |
-| `apps/web/src/middleware.ts` | 994 LOC | **1,318 LOC** | ⬆ 33% |
-| `lib/services/finance-service.ts` | 2,410 LOC | **2,548 LOC** | ⬆ |
-| Design-token baseline | 1,650 in 76 files | **1,019 in 84 files** | ⬇ (admin drain) |
-| `scripts/page-padding-baseline.json` | — | **`{}`** | clean |
-
-```bash
-find apps/web/src/app/api -name route.ts | wc -l                                  # 284
-grep -rl "runRoute(" apps/web/src/app/api --include=route.ts | wc -l              # 238
-awk '/KNOWN_UNCONTRACTED_ROUTES/,/^\];/' scripts/verify-contracts.ts \
-  | grep -cE "^\s*'apps/"                                                          # 46
-grep -rl tenantScope apps/web/src/app/api --include=contract.ts | wc -l           # 15
-grep -rl "runRoute(" apps/web/src/app/api --include=route.ts \
-  | xargs grep -lE 'resolveEffectiveCommunityId\s*\(' | wc -l                      # 148
-wc -l apps/web/src/middleware.ts apps/web/src/lib/services/finance-service.ts
-```
-
-> **The `ddf3469` column is a dated measurement, not a current one.** Re-measured
-> 2026-09-09: middleware.ts is **1,332** LOC, finance-service.ts **2,554**, the
-> design-token baseline **1,017 across 83 files**. Everything else in the table is flat —
-> the contract ceiling is holding at 46. The two LOC rows are the only things that grew,
-> which is what this section predicted would happen when it declined to add LOC ceilings.
-> The hook-coverage row was dropped: it printed no command, and two independent attempts
-> to reproduce it disagreed (110 vs 111 hooks).
-
-238 contracted + 46 allowlisted = 284, so the allowlist is exactly the uncontracted set
-and the guard is telling the truth about coverage. What it cannot tell you is that **the
-allowlist is a hand-edited array**: `guard:contracts` fails a new uncontracted route only
-until somebody appends a line to `scripts/verify-contracts.ts`. Nine lines were appended
-in the seven weeks since the audit. Most are `internal/*` cron and webhook routes the
-runner genuinely cannot express (201/202/204, raw bodies, non-JSON) — that is the
-documented permanent tier, not backsliding — but the ratchet is a convention, not a
-mechanism, and the number it guards has only ever gone up.
-
-**One of the three is ratcheted (2026-09-07).** `guard:contracts` fails if the allowlist
-exceeds 46, via a shared shrink-only helper (`scripts/lib/ceiling.ts`) that copies
-`guard:legacy-roles`' slack hint, so coming in UNDER passes and prints the value to ratchet
-down to.
-
-A second ceiling on `guard:tenant-scope`'s hand-rolled resolver count was added and then
-**removed on review**, for the reason stated immediately below about LOC ceilings:
-`.claude/rules/api-patterns.md` says routes that resolve tenancy differently (PM
-cross-community, token-auth, header-only) SHOULD hand-resolve — so the first correctly
-authored one fails CI and the only response is to raise the number. It fired on honest
-work, which is the test this section already applies.
-
-**LOC ceilings were deliberately NOT added**, on a ponytail review: `middleware.ts` (1,318)
-and `finance-service.ts` (2,548) stay unratcheted. A line count is the one signal here that
-fires on honest work — any real feature added to middleware trips it — so it would get
-raised rather than respected. The decomposition in the July audit is the actual fix for
-those two; a ceiling would be a nag standing in for it. That is an accepted gap, not an
-oversight.
+This section was a dated re-measurement (2026-09-07) of the July audit's programs. Its
+numbers drifted and one claim became false (it said `guard:tenant-scope` had no ceiling;
+it has one, 144 after #1380). The guards print their own counts and ceilings, so read
+them instead: `pnpm guard:contracts`, `pnpm guard:tenant-scope`, `pnpm guard:design-tokens`.
+The two deliberate non-ratchets it recorded still stand: no line-count ceilings on
+`middleware.ts` or `finance-service.ts`.
 
 ## B2. Coverage that is absent rather than failing
 
@@ -261,7 +206,7 @@ checklist, unit, roster import, document, invitation, the resident accepting —
 spec on the CI allowlist (2 blocks, `expectedTestCount` 61). The shipped 2-step wizard at
 `/onboarding/condo` / `/onboarding/apartment`, which no route ever sent a founder to, was then
 deleted (onboarding audit F11, `docs/audits/2026-10-05-onboarding/`). The
-`onboarding_wizard_state` table is kept for now; dropping it is a separate contract migration.
+`onboarding_wizard_state` table was then dropped by migration `0091`.
 The table row above is a dated snapshot and still counts the 2 old blocks.
 
 ## B3. Open on GitHub

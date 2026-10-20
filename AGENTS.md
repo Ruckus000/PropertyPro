@@ -39,7 +39,7 @@ Drizzle Kit does not auto-increment migration numbers. The pipeline has known fr
 The compliance engine tracks Florida statutory obligations for condos (§718, 17 items) and HOAs (§720, 10 items). Templates live in `packages/shared/src/compliance/templates.ts`. Apartments are excluded via feature gating.
 
 - **Status is computed at query time**, not stored — prevents stale data. Statuses: `satisfied`, `unsatisfied`, `overdue`, `not_applicable`.
-- **30-day posting rule:** Documents must be posted within 30 days of creation. The deadline is exact elapsed milliseconds with **no** weekend adjustment (`packages/shared/src/compliance/posting-deadline.ts` explains why); do not reintroduce a weekend roll or `date-fns` `addDays`.
+- **30-day posting rule:** an item's deadline is `deadlineDays` after its checklist row is generated (see `.claude/rules/florida-compliance.md`). The deadline is exact elapsed milliseconds with **no** weekend adjustment (`packages/shared/src/compliance/posting-deadline.ts` explains why); do not reintroduce a weekend roll or `date-fns` `addDays`.
 - **Rolling 12-month windows:** Meeting minutes, video recordings, and bids use rolling retention windows checked at query time.
 - **Florida timezone split:** Florida spans Eastern and Central zones. Timezone is per-community (`communities.timezone` column), not per-application. All dates stored UTC, displayed in community-local timezone.
 - **Append-only audit log:** `compliance_audit_log` is excluded from soft-delete filtering and has DB-native delete protection. Never attempt to delete audit rows. Integration test teardown must be best-effort and tolerate FK-restricted cleanup.

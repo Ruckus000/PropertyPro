@@ -12,18 +12,19 @@
 
 ## Timing Rules
 
-- **30-day rule:** Documents must be posted within 30 days of creation
+- **30-day rule:** each checklist item's posting deadline is `deadlineDays` after the checklist row is generated (`calculatePostingDeadline`, exact elapsed ms, no weekend roll; single source `packages/shared/src/compliance/posting-deadline.ts`), not 30 days after a document is created
 - **Meeting notices:** 14 days for owner meetings, 48 hours for board meetings
 - **Violation hearings:** 14-day notice requirement per most bylaws
 - **SIRS inspections:** Buildings 3+ stories / 30+ years old require milestone inspections
 
 ## Compliance Engine
 
-The compliance scoring system in `apps/web/src/lib/utils/compliance-calculator.ts` tracks:
-- Document posting timeliness (30-day window)
-- Meeting notice compliance (14-day / 48-hour windows)
-- Required document categories present/missing
-- Overall compliance score per community
+The pieces live in different files; read the one you change:
+- Checklist item status, overdue checks and summaries: `apps/web/src/lib/utils/compliance-calculator.ts`
+  (it re-exports `calculatePostingDeadline` from `@propertypro/shared`)
+- Meeting notice windows (14-day / 48-hour): `apps/web/src/lib/meetings/notice-warning.ts` and
+  `apps/web/src/lib/compliance/notice-window.ts`; hearing notices: `apps/web/src/lib/violations/hearing-notice-warning.ts`
+- The per-community compliance score: `apps/web/src/lib/queries/cross-community.ts`
 
 ## Important Constraints
 

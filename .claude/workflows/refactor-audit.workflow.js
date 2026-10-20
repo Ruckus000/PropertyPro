@@ -252,8 +252,8 @@ NOT repeat it. Read its report first. Your job is what it explicitly left OPEN:
    limiter is a per-instance in-memory Map (\`apps/admin/src/middleware.ts\`) on Fluid compute.
 4. **Log injection / PII in structured logs** (gap 4): user free text concatenated into log messages,
    PII in Sentry breadcrumbs or console output.
-5. **Fake-adapter routes** live with no UI (calendar/google, accounting): what can an HTTP client do
-   with them today (corpus lens 1)?
+5. **Fake-adapter routes**: the calendar/accounting ones were deleted (ponytail E-05, 2026-10-20).
+   Check nothing re-adds a live route whose adapter returns invented tokens.
 6. Duplicate admin APIs: the web twins were deleted (ponytail #20). Check nothing re-adds a
    platform-admin route under \`apps/web/src/app/api/v1/admin/*\` beside \`apps/admin/src/app/api/admin/*\`.
 
@@ -364,19 +364,14 @@ anything dead, grep the WHOLE tree (see the lens). \`/pdfjs-test\` looks like de
 depends on it — that is the trap to avoid.
 
 Hunt:
-- Fake adapters with services and live routes but no UI caller: Google Calendar
-  (\`lib/calendar/google-calendar-adapter.ts\`, \`calendar-sync-service.ts\`, \`api/v1/calendar/google/*\`)
-  and QuickBooks/Xero (\`lib/accounting/adapters.ts\`, \`accounting-connectors-service.ts\`,
-  \`api/v1/accounting/*\`). Note #1368 just added plan gates to them — someone is maintaining dead code.
-  File as delete-pending-product-confirm.
-- \`USE_COMMAND_PALETTE_V2 = true\` hard-coded → dead V1 palette + \`cmdk\`; feature-registry \`audience\`
-  (written, never read); zero-importer modules (\`validate-upload.ts\`, test-only \`pdf-export.ts\`).
-- Unused dependencies in every package.json (web \`marked\`, \`prettier\`, \`@dnd-kit/utilities\`,
-  \`@types/qrcode\` in runtime deps; admin \`codemirror\` ×5) — check \`next.config\` transpile lists, tsup
-  externals and peer requirements before filing.
-- Unwired verify scripts (except \`verify-stripe-mode\` → M).
-- Env drift: \`.env.example\` vars never read; vars read but undocumented. \`OPERATIONS_HUB_CREATE_SHEETS\`
-  read in a \`'use client'\` module without \`NEXT_PUBLIC_\` is a probable BUG — file it as one.
+- The 2026-10-13 audit's dead code was deleted on 2026-10-20 (ponytail E-01, E-05, E-08, E-09,
+  E-11, E-13, R-09): fake calendar/accounting adapters, the V1 palette, feature-registry \`audience\`,
+  the zero-importer modules, the unused deps and the unwired verify scripts. Hunt for NEW instances
+  of the same shapes: live routes with no UI caller, constants that pin a branch, fields written but
+  never read, modules with only test importers, package.json deps with no import (check \`next.config\`
+  transpile lists, tsup externals and peer requirements first), scripts nothing runs.
+- Env drift: \`.env.example\` vars never read; vars read but undocumented. A non-\`NEXT_PUBLIC_\` var
+  read in a \`'use client'\` module is a probable BUG — file it as one.
 - One-implementation interfaces with test-only setters (\`sms-provider\`); single-export, single-importer
   modules (inline only if not a test seam).
 - Tests that pin nothing: file one only if a mental revert-check says it stays green with the behavior
@@ -408,7 +403,7 @@ actually match reality?
 3. **Protections that claim to run**: GUARDS in \`scripts/run-lint-guards.mjs\` vs the \`lint\` script;
    \`apps/web/e2e/ci-safe-specs.json\` vs \`expectedTestCount\`; the lint guards with no self-test — could
    any pass while checking nothing (empty scan root, swallowed exit status)?; \`.skip\`/\`.fixme\` counts
-   and whether each is env-conditional; \`docs/LOAD_TEST_RESULTS.md\` (an empty template).
+   and whether each is env-conditional; load-test results are in \`docs/audits/p4-62-load-test-results.md\`.
 4. **Comment bloat**: changelog-in-code (drain history, census tallies, "previously…") in \`contract.ts\`
    files and elsewhere. Keep "why"; history belongs in git. NEVER propose touching \`AUTHZ:\`,
    \`route-gate:\`, \`ponytail:\`, \`design-tokens:exempt\` claim comments. File this as at most one or two

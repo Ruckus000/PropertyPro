@@ -327,7 +327,17 @@ This is the single home for every deferral. "Fired?" is taken from the C dimensi
 - #14, #15 (security) and #20 (web admin twins): their own PRs after that.
 - #18 (web CSP): #1376, plus `NEXT_PUBLIC_SENTRY_DSN` re-added non-Sensitive on 2026-10-20 (it had been Sensitive, so the build saw no DSN and shipped no browser Sentry).
 - #16 (fine paid by amount): a fine now records the line item that bills it (migration `0092`), and a payment marks the fine with that line item paid. The audit's `assessmentId == null` guard would still have matched rent, which also has no assessment.
-- Not started: the nice-to-have items other than #20.
+- Nice-to-have items, 2026-10-20 (re-verified against `main` first; every one was still open):
+  - E-05 fake connectors, C-13 drain tooling, C-14 rule: #1380. E-06 search twins: #1381. E-08 orphan modules: #1382.
+  - M-05, S-05, S-04: #1383. E-01, E-13, E-09, R-09/E-10: #1384. E-11, C-07: #1385. R-08: #1386.
+  - R-03–R-07, R-10: #1387. W-09, T-05, W-06 and the P-02 marker: #1388. W-08: #1389.
+  - E-12, the S-06 code comment, C-06 triggers: #1390. E-03, E-04 (deleted, by product decision): #1391.
+  - S-06 rule, C-06 convention, C-08, C-09, C-11, C-12: the agent-context docs PR. C-10: memory, outside the repo.
+  - Still deferred: P-02 (its trigger has not fired: max 9 / 5 rows) and C-14's per-file sweep (the rule is enough).
+  - Open decisions this round surfaced: whether readiness should still require `OTP_HMAC_SECRET` and
+    `TOKEN_ENCRYPTION_KEY` (no live caller left); whether to delete the now-unreachable access-request
+    review side; `setDesignation`'s president swap is two updates, not a transaction; a converted demo's
+    founding user gets no login email (§5 handoff); `communities.cancellation_reason` is no longer written.
 
 The order follows dependencies, with fired triggers and must-fixes first. PRs 1–4 touch disjoint files and can run in parallel sessions. Re-fetch `origin/main` before each merge.
 
