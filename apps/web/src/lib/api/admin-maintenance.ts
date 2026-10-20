@@ -6,7 +6,6 @@
  * requested `page` window. Same pattern as #228 violations, #236 work-orders.
  */
 import type { MaintenanceRequestItem } from './maintenance-requests';
-import { JSON_HEADERS, requestJsonEnvelope } from './request-json';
 import { walkAndSlice } from './walk-paginated';
 
 export type { MaintenanceRequestItem };
@@ -43,24 +42,3 @@ export async function listAllRequests(
     { page: params?.page, limit: params?.limit },
   );
 }
-
-export async function updateRequestStatus(
-  id: number,
-  communityId: number,
-  updates: {
-    status?: string;
-    internalNotes?: string | null;
-    resolutionDescription?: string | null;
-    resolutionDate?: string | null;
-    assignedToId?: string | null;
-    category?: string;
-    priority?: string;
-  },
-): Promise<{ data: MaintenanceRequestItem }> {
-  return requestJsonEnvelope<MaintenanceRequestItem>(`/api/v1/maintenance-requests/${id}`, {
-    method: 'PATCH',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ communityId, ...updates }),
-  });
-}
-

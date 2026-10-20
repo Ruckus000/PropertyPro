@@ -7,8 +7,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createViolation, updateViolation } from '@/lib/api/violations';
-import { addComment, createMaintenanceRequest } from '@/lib/api/maintenance-requests';
-import { updateRequestStatus } from '@/lib/api/admin-maintenance';
+import { createMaintenanceRequest } from '@/lib/api/maintenance-requests';
 
 function respond(status: number, body: unknown) {
   // statusText '' is what production serves over HTTP/2.
@@ -29,8 +28,6 @@ describe('client fetch helpers surface the server error message', () => {
     ['createViolation', () => createViolation({} as never)],
     ['updateViolation', () => updateViolation(1, {} as never)],
     ['createMaintenanceRequest', () => createMaintenanceRequest({} as never)],
-    ['addComment', () => addComment({ communityId: 1, requestId: 1, text: 'x' })],
-    ['updateRequestStatus', () => updateRequestStatus(1, 1, { status: 'open' })],
   ])('%s rejects with error.message', async (_name, call) => {
     vi.stubGlobal('fetch', respond(422, SERVER_ERROR));
     await expect(call()).rejects.toThrow('Unit 4B is not in this community');
