@@ -44,7 +44,6 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | Supabase Dashboard > Project Settings > API |
 | `DEMO_TOKEN_ENCRYPTION_KEY_HEX` | AES-256-GCM key for demo token-secret encryption | Generated via `openssl rand -hex 32` |
 | `DEMO_DEFAULT_PASSWORD` | Password for demo seed users | Internal documentation |
-| `DIGEST_CRON_BASE_URL` | Production URL for cron invocations | `https://getpropertypro.com` |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
 | `COUPON_SYNC_RETRY_CRON_SECRET` | Bearer token for coupon sync retry cron endpoint | Generated shared secret |
 | `READINESS_CHECK_SECRET` | Bearer token for `/api/v1/internal/readiness` and `/api/v1/internal/cron-health`, read by `production-health.yml` | Same value as the Vercel variable of the same name |
@@ -615,7 +614,7 @@ an unavoidable outage across all six addresses, and the expected failure is sile
 | **Deploy (manual)** | `deploy.yml` | `workflow_dispatch` | Same deploy, deliberately bypassing the automatic Integration Tests wait |
 | **Integration Tests** | `integration-tests.yml` | PR + push to main | Database integration tests (requires Postgres service) |
 | **Branch Freshness** | `branch-freshness-guard.yml` | PR | Rebase enforcement (max 20 commits behind) |
-| **Demo Reset** | `reset-demo.yml` | Daily 3:00 AM ET | Nightly demo data reset |
+| **Demo Reset** | `reset-demo.yml` | Daily 03:17 UTC (late evening ET; GitHub often starts it hours late) | Nightly demo data reset |
 
 ### 6.2 Branch Protection Rules
 

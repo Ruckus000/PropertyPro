@@ -2,8 +2,12 @@ name: Nightly Demo Reset
 
 on:
   schedule:
-    # 3:00 AM ET (8:00 AM UTC) daily
-    - cron: '0 8 * * *'
+    # 03:17 UTC = 11:17 PM EDT / 10:17 PM EST. GitHub starts scheduled runs
+    # late: 4-7 hours in Oct 2026 (the old '0 8 * * *' ran at 8-11:30 AM ET,
+    # resetting demo data in business hours). Starting earlier absorbs that
+    # delay, and :17 avoids the congested top of the hour. No start time is
+    # guaranteed; if it must finish before a given hour, trigger it another way.
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:

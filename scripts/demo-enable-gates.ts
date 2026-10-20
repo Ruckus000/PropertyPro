@@ -23,12 +23,11 @@
  *
  * SMS additionally needs `SMS_DISPATCH_ENABLED=true` in the environment — the
  * per-community flag alone will not send a text. That is a second, deliberate
- * layer; see apps/web/src/lib/sms/common.ts.
+ * layer; see apps/web/src/lib/sms/dispatch-flag.ts.
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md §2a.
  */
-import { pathToFileURL } from 'node:url';
-import { inArray, sql } from '@propertypro/db/filters';
+import { and, eq, inArray, sql } from '@propertypro/db/filters';
 import { communities } from '@propertypro/db';
 // The `communities` table is the root tenant table and cannot be scoped by
 // community_id, and this is a dev CLI with no request context. Refused outside
@@ -36,6 +35,7 @@ import { communities } from '@propertypro/db';
 // AUTHZ: dev-only CLI — out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient, createUnscopedClient } from '@propertypro/db/unsafe';
 import { DEMO_COMMUNITIES } from './config/demo-data';
+import { isMainModule } from './lib/is-main-module';
 import { assertSeedEnvironment } from './lib/seed-safety';
 
 /**
@@ -66,7 +66,9 @@ export async function runDemoEnableGates(enable: boolean): Promise<void> {
   const rows = await db
     .select({ id: communities.id, slug: communities.slug, name: communities.name })
     .from(communities)
-    .where(inArray(communities.slug, slugs));
+    // The slug alone is not proof a row is a demo: a real association holding a
+    // demo slug must never get fines, payments, SMS or notice PDFs switched on.
+    .where(and(inArray(communities.slug, slugs), eq(communities.isDemo, true)));
 
   if (rows.length === 0) {
     console.error(
@@ -108,9 +110,7 @@ export async function runDemoEnableGates(enable: boolean): Promise<void> {
   console.log('\nProduction communities are unaffected.');
 }
 
-const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isDirectRun) {
+if (isMainModule(import.meta.url)) {
   const enable = !process.argv.includes('--off');
   runDemoEnableGates(enable)
     .catch((error) => {
