@@ -41,7 +41,7 @@ Verified against the route tree on 2026-08-05.
 | Assessments | **Shipped** | 2 pages |
 | E-voting / elections | **Shipped** | `elections/` + `polls/` pages + API |
 | E-Sign | **Shipped** | 7 pages — deepest surface in the app |
-| Accounting / finance | **Shipped** | `finance/`, `/api/v1/accounting`, `/ledger` |
+| Accounting / finance | **Shipped** | `finance/`, `/ledger`. No QuickBooks/Xero connector: the fake one was deleted 2026-10-20 |
 | Amenities / reservations | **Thin** | API exists; UI is one `operations/` page |
 | Work orders | **Thin** | API exists; no dedicated UI |
 | Native mobile app | **Does not exist** | `/mobile/` is web-only routes |

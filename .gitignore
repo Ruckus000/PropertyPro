@@ -57,7 +57,6 @@ load-test-summary*.json
 # below can be re-included — git can't un-ignore a file whose parent DIR is
 # ignored, but it can when only the dir's contents are.
 .claude/skills/*
-!.claude/skills/drain-loop.md
 !.claude/skills/phase-run.md
 .claude/start-*.sh
 .claude/scheduled_tasks.lock

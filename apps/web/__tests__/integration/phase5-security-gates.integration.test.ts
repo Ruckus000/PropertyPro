@@ -38,12 +38,6 @@ type AmenitiesRouteModule = typeof import('../../src/app/api/v1/amenities/route'
 type AmenityScheduleRouteModule = typeof import('../../src/app/api/v1/amenities/[id]/schedule/route');
 type PackagesRouteModule = typeof import('../../src/app/api/v1/packages/route');
 type VisitorsRouteModule = typeof import('../../src/app/api/v1/visitors/route');
-type GoogleConnectRouteModule = typeof import('../../src/app/api/v1/calendar/google/connect/route');
-type GoogleCallbackRouteModule = typeof import('../../src/app/api/v1/calendar/google/callback/route');
-type GoogleSyncRouteModule = typeof import('../../src/app/api/v1/calendar/google/sync/route');
-type AccountingConnectRouteModule = typeof import('../../src/app/api/v1/accounting/connect/route');
-type AccountingCallbackRouteModule = typeof import('../../src/app/api/v1/accounting/callback/route');
-type AccountingMappingRouteModule = typeof import('../../src/app/api/v1/accounting/mapping/route');
 
 interface RouteModules {
   assessments: AssessmentsRouteModule;
@@ -61,12 +55,6 @@ interface RouteModules {
   amenitySchedule: AmenityScheduleRouteModule;
   packages: PackagesRouteModule;
   visitors: VisitorsRouteModule;
-  googleConnect: GoogleConnectRouteModule;
-  googleCallback: GoogleCallbackRouteModule;
-  googleSync: GoogleSyncRouteModule;
-  accountingConnect: AccountingConnectRouteModule;
-  accountingCallback: AccountingCallbackRouteModule;
-  accountingMapping: AccountingMappingRouteModule;
 }
 
 let state: TestKitState | null = null;
@@ -198,12 +186,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       amenitySchedule: await import('../../src/app/api/v1/amenities/[id]/schedule/route'),
       packages: await import('../../src/app/api/v1/packages/route'),
       visitors: await import('../../src/app/api/v1/visitors/route'),
-      googleConnect: await import('../../src/app/api/v1/calendar/google/connect/route'),
-      googleCallback: await import('../../src/app/api/v1/calendar/google/callback/route'),
-      googleSync: await import('../../src/app/api/v1/calendar/google/sync/route'),
-      accountingConnect: await import('../../src/app/api/v1/accounting/connect/route'),
-      accountingCallback: await import('../../src/app/api/v1/accounting/callback/route'),
-      accountingMapping: await import('../../src/app/api/v1/accounting/mapping/route'),
     };
   });
 
@@ -284,25 +266,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
 
     // visitors: property_manager_admin now has write=true (same as residents);
     // no resident-tier actor can be denied — assertion removed.
-
-    // calendar_sync: tenant write=false (property_manager now has write; use resident-tier actor)
-    setActor(kit, 'tenantA');
-    const calendarDenied = await routeModules.googleConnect.POST(
-      jsonRequest(apiUrl('/api/v1/calendar/google/connect'), 'POST', {
-        communityId: communityA.id,
-      }),
-    );
-    expect(calendarDenied.status).toBe(403);
-
-    // accounting: tenant write=false (property_manager now has write; use resident-tier actor)
-    setActor(kit, 'tenantA');
-    const accountingDenied = await routeModules.accountingConnect.POST(
-      jsonRequest(apiUrl('/api/v1/accounting/connect'), 'POST', {
-        communityId: communityA.id,
-        provider: 'quickbooks',
-      }),
-    );
-    expect(accountingDenied.status).toBe(403);
   });
 
   it('enforces cross-tenant isolation across WS66-WS71 resource surfaces', async () => {
@@ -310,7 +273,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const routeModules = requireRoutes();
     const communityA = requireCommunity(kit, 'communityA');
     const communityB = requireCommunity(kit, 'communityB');
-    const communityC = requireCommunity(kit, 'communityC');
 
     setActor(kit, 'tenantA');
     const violationCreate = await routeModules.violations.POST(
@@ -409,23 +371,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(visitorCreate.status).toBe(200);
 
-    setActor(kit, 'actorA');
-    const calendarConnect = await routeModules.googleConnect.POST(
-      jsonRequest(apiUrl('/api/v1/calendar/google/connect'), 'POST', {
-        communityId: communityA.id,
-      }),
-    );
-    expect(calendarConnect.status).toBe(200);
-
-    setActor(kit, 'actorC');
-    const accountingConnect = await routeModules.accountingConnect.POST(
-      jsonRequest(apiUrl('/api/v1/accounting/connect'), 'POST', {
-        communityId: communityC.id,
-        provider: 'quickbooks',
-      }),
-    );
-    expect(accountingConnect.status).toBe(200);
-
     setActor(kit, 'actorB');
 
     const financeCrossTenant = await routeModules.ledger.GET(
@@ -472,18 +417,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       new NextRequest(apiUrl(`/api/v1/visitors?communityId=${communityA.id}`)),
     );
     expect(visitorsCrossTenant.status).toBe(403);
-
-    const calendarCrossTenant = await routeModules.googleSync.POST(
-      jsonRequest(apiUrl('/api/v1/calendar/google/sync'), 'POST', {
-        communityId: communityA.id,
-      }),
-    );
-    expect(calendarCrossTenant.status).toBe(403);
-
-    const accountingCrossTenant = await routeModules.accountingMapping.GET(
-      new NextRequest(apiUrl(`/api/v1/accounting/mapping?communityId=${communityC.id}&provider=quickbooks`)),
-    );
-    expect(accountingCrossTenant.status).toBe(403);
   });
 
   it('enforces Phase 5 feature flags for disabled community types', async () => {
@@ -548,7 +481,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     const kit = requireState();
     const routeModules = requireRoutes();
     const communityA = requireCommunity(kit, 'communityA');
-    const communityC = requireCommunity(kit, 'communityC');
 
     setActor(kit, 'actorA');
     const financeRequestId = randomUUID();
@@ -691,54 +623,5 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
     );
     expect(visitorsMutation.status).toBe(200);
     await expectAuditEventForRequestId(kit, communityA.id, visitorsRequestId);
-
-    setActor(kit, 'actorA');
-    const calendarConnectRes = await routeModules.googleConnect.POST(
-      jsonRequest(apiUrl('/api/v1/calendar/google/connect'), 'POST', {
-        communityId: communityA.id,
-      }),
-    );
-    expect(calendarConnectRes.status).toBe(200);
-    const calendarState = (await parseJson<{ data: { state: string } }>(calendarConnectRes)).data.state;
-
-    const calendarRequestId = randomUUID();
-    const calendarMutation = await routeModules.googleCallback.GET(
-      new NextRequest(
-        apiUrl(`/api/v1/calendar/google/callback?communityId=${communityA.id}&code=ws72-calendar-code&state=${calendarState}`),
-        {
-          headers: {
-            'x-request-id': calendarRequestId,
-          },
-        },
-      ),
-    );
-    expect(calendarMutation.status).toBe(200);
-    await expectAuditEventForRequestId(kit, communityA.id, calendarRequestId);
-
-    setActor(kit, 'actorC');
-    const acctConnectRes = await routeModules.accountingConnect.POST(
-      jsonRequest(apiUrl('/api/v1/accounting/connect'), 'POST', {
-        communityId: communityC.id,
-        provider: 'quickbooks',
-      }),
-    );
-    expect(acctConnectRes.status).toBe(200);
-    const acctState = (await parseJson<{ data: { state: string } }>(acctConnectRes)).data.state;
-
-    const accountingRequestId = randomUUID();
-    const accountingMutation = await routeModules.accountingCallback.GET(
-      new NextRequest(
-        apiUrl(
-          `/api/v1/accounting/callback?communityId=${communityC.id}&provider=quickbooks&code=ws72-accounting-code&state=${acctState}`,
-        ),
-        {
-          headers: {
-            'x-request-id': accountingRequestId,
-          },
-        },
-      ),
-    );
-    expect(accountingMutation.status).toBe(200);
-    await expectAuditEventForRequestId(kit, communityC.id, accountingRequestId);
   });
 });

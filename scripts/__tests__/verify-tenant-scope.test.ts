@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import {
   validateRoute,
@@ -107,8 +104,6 @@ describe('extractDefineRouteBlocks', () => {
 // TENANT_SCOPE_BACKLOG_CEILING in scripts/verify-tenant-scope.ts.
 // ---------------------------------------------------------------------------
 
-const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-
 const CONTRACTLESS = "import { runRoute } from '@propertypro/api-contract';\nexport const GET = withErrorHandler(runRoute(c, async () => ({})));";
 
 function censusRoute(overrides: Partial<CensusRoute> = {}): CensusRoute {
@@ -131,13 +126,6 @@ describe('isBacklogRoute — what counts as hand-resolving single-tenant work', 
     // ONLY through it. A resolver-only grep is how the last audit got 121.
     const route = censusRoute({
       routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQuery } from '@/lib/finance/request';\nconst communityId = parseCommunityIdFromQuery(req);`,
-    });
-    expect(isBacklogRoute(route)).toBe(true);
-  });
-
-  it("counts the `@/lib/calendar/request` delegate too", () => {
-    const route = censusRoute({
-      routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQueryOrHeader } from '@/lib/calendar/request';\nconst communityId = parseCommunityIdFromQueryOrHeader(req);`,
     });
     expect(isBacklogRoute(route)).toBe(true);
   });
@@ -184,43 +172,29 @@ describe('isBacklogRoute — what counts as hand-resolving single-tenant work', 
 });
 
 describe('isBacklogRoute — the prose-vs-declaration trap (ledger D9)', () => {
-  // `calendar/google/callback` is the ONE contract in the repo where a bare
-  // substring grep for `tenantScope` and a declaration grep disagree, so it is
-  // pinned by name: the file's own docblock says the words while declaring
-  // nothing, and a substring predicate would silently drop the route from the
-  // census (156 -> 155) and hand the sweep a phantom "already adopted".
+  // A contract docblock can say the words while declaring nothing. The Google
+  // Calendar callback contract did exactly that until it was deleted on
+  // 2026-10-20; a substring predicate would silently drop such a route from the
+  // census and hand the sweep a phantom "already adopted".
   const PROSE =
-    ' * Tenancy is resolved via `parseCommunityIdFromQueryOrHeader` (query OR\n' +
-    ' * header), NOT via a declared `tenantScope` — so no `tenantScope` is declared\n' +
-    ' * and the runner does not inject `communityId`.\n';
+    ' * Tenancy is resolved by hand from the query, NOT via a declared\n' +
+    ' * `tenantScope` — so no `tenantScope` is declared and the runner does not\n' +
+    ' * inject `communityId`.\n';
 
   it('does NOT treat the prose mention as a declaration', () => {
     const route = censusRoute({
-      path: 'apps/web/src/app/api/v1/calendar/google/callback/route.ts',
-      routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQueryOrHeader } from '@/lib/calendar/request';\nconst communityId = parseCommunityIdFromQueryOrHeader(req);`,
-      contractContent: `/**\n${PROSE} */\ndefineRoute({ method: 'GET', path: '/api/v1/calendar/google/callback' });`,
+      routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQuery } from '@/lib/finance/request';\nconst communityId = parseCommunityIdFromQuery(req);`,
+      contractContent: `/**\n${PROSE} */\ndefineRoute({ method: 'GET', path: '/api/v1/widgets' });`,
     });
     expect(isBacklogRoute(route)).toBe(true);
   });
 
   it('is contradicted by a real declaration — the regex keys on the colon', () => {
     const withProseAndDeclaration = censusRoute({
-      path: 'apps/web/src/app/api/v1/calendar/google/callback/route.ts',
-      routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQueryOrHeader } from '@/lib/calendar/request';`,
+      routeContent: `${CONTRACTLESS}\nimport { parseCommunityIdFromQuery } from '@/lib/finance/request';`,
       contractContent: `/**\n${PROSE} */\ndefineRoute({ method: 'GET', path: '/x', tenantScope: { in: 'query' } });`,
     });
     expect(isBacklogRoute(withProseAndDeclaration)).toBe(false);
-  });
-
-  it('holds on the REAL file in the tree, not just the fixture', () => {
-    // If someone ever declares a scope there for real, this fails and the
-    // ceiling must come down by one — which is the correct outcome.
-    const real = readFileSync(
-      join(repoRoot, 'apps/web/src/app/api/v1/calendar/google/callback/contract.ts'),
-      'utf-8',
-    );
-    expect(real).toContain('tenantScope'); // prose present…
-    expect(real).not.toMatch(/tenantScope\s*:/); // …but no declaration.
   });
 });
 

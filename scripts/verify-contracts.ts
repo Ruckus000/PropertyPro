@@ -18,9 +18,8 @@
  * CON-07 (2026-09-23): the allowlist is a `Map<path, AllowlistReason>`, not a
  * bare Set — every entry carries a machine-readable classification of WHY it
  * cannot go through the runner today. This is the single source of truth for
- * permanent skips; the prose in `.claude/rules/api-patterns.md` and the
- * pre-seed in `.claude/skills/drain-loop.md` are derived from it, not parallel
- * registries. An entry without a reason fails this guard, and only a route
+ * permanent skips; the prose in `.claude/rules/api-patterns.md` is derived
+ * from it, not a parallel registry. An entry without a reason fails this guard, and only a route
  * still named in PENDING_DRAIN_ROUTES may carry `pending-drain` — anything
  * else claimed as pending-drain must actually be drained, not relabelled.
  * CON-05 drained all three of its CRUD routes on 2026-09-29
@@ -121,8 +120,7 @@ const RUN_ROUTE_REGEX = /\brunRoute\s*\(/;
 // the guard fails an entry with no reason (or with an unknown reason). The
 // reason values below were AUTHORED by reading each route (2026-09-23), not
 // copied from prose — the map is the machine-readable single source of truth
-// for permanent skips, and `drain-loop`'s PERMANENT_SKIPS pre-seed is
-// regenerated from `git show origin/main:scripts/verify-contracts.ts`.
+// for permanent skips.
 //
 // To migrate a file off the list:
 //   1. Author the contract — either inline `runRoute(defineRoute({...}), ...)`

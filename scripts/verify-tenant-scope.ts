@@ -256,12 +256,12 @@ export function validateRoute(
  * this constant must equal it.
  *
  * The drift is not noise, it is three specific predicates:
- *   - bare-substring `tenantScope` vs the DECLARATION regex below: the prose
- *     mention at `apps/web/src/app/api/v1/calendar/google/callback/contract.ts:20`
- *     ("NOT via a declared `tenantScope` — so no `tenantScope` is declared")
- *     reads as a declaration to a substring grep, which silently drops that
- *     route and moves the count by one. Pinned by a self-test case, because
- *     this is the ONE file in the repo where the two strategies differ.
+ *   - bare-substring `tenantScope` vs the DECLARATION regex below: prose such as
+ *     "so no `tenantScope` is declared" reads as a declaration to a substring
+ *     grep, which silently drops that route and moves the count by one. The
+ *     only file that did this (the Google Calendar callback contract) was
+ *     deleted with the fake connectors on 2026-10-20; a self-test case keeps
+ *     the predicate pinned with a fixture.
  *   - the prior audit's exclusion bucket: `/api/v1/(pm|admin|internal|webhooks)/`
  *     is 20 routes here, NOT the 19 its arithmetic claimed — measured
  *     composition is 17 `/pm/` + 3 `/admin/`, and `/internal/` and `/webhooks/`
@@ -273,12 +273,10 @@ export function validateRoute(
  *   - the prior audit's population grep missed the `@/lib/finance/request`
  *     idiom entirely (CON-01's 121 → 157 correction); this census unions it.
  *
- * This ceiling will NOT reach zero for free: `calendar/google/callback` is a
- * permanent non-candidate (see `isBacklogRoute`) and the multi-community routes
- * under `/pm/`/`/admin/` were never in it. That is fine — the point is that it
- * cannot GROW unnoticed.
+ * The multi-community routes under `/pm/`/`/admin/` were never in this
+ * ceiling. The point is that it cannot GROW unnoticed.
  */
-const TENANT_SCOPE_BACKLOG_CEILING = 156;
+const TENANT_SCOPE_BACKLOG_CEILING = 144;
 
 /** Adoption marker: the route is written through the contract runner. */
 const RUN_ROUTE_CALL = /\brunRoute\s*\(/;
@@ -288,10 +286,8 @@ const RESOLVER_CALL = /\bresolveEffectiveCommunityId\s*\(/;
  * Idiom 2 — the route calls a helper that delegates to the resolver.
  *
  * `apps/web/src/lib/finance/request.ts:17` is literally
- * `return resolveEffectiveCommunityId(req, parsedCommunityId)`, and
- * `apps/web/src/lib/calendar/request.ts` does the same for its
- * `parseCommunityIdFromQueryOrHeader`. So the union of the two greps is ONE
- * trust path, and a resolver-only census understates the backlog (that is how
+ * `return resolveEffectiveCommunityId(req, parsedCommunityId)`. So the union of
+ * the two greps is ONE trust path, and a resolver-only census understates the backlog (that is how
  * the 2026-07-18 audit got 121 against this census's 156 — 31 routes here
  * match ONLY through a delegate module). Matched on the IMPORT, not a bare
  * substring: ~20 route docblocks mention `parseCommunityIdFromQuery` as prose
@@ -301,7 +297,7 @@ const RESOLVER_CALL = /\bresolveEffectiveCommunityId\s*\(/;
  * invisible here. If a third delegating helper appears, add its module path.
  */
 const RESOLVER_DELEGATE_IMPORT =
-  /import\s*\{[^}]*\bparse[A-Za-z]*CommunityId[A-Za-z]*\b[^}]*\}\s*from\s*['"]@\/lib\/(?:finance|calendar)\/request['"]/;
+  /import\s*\{[^}]*\bparse[A-Za-z]*CommunityId[A-Za-z]*\b[^}]*\}\s*from\s*['"]@\/lib\/finance\/request['"]/;
 /**
  * A DECLARATION, never a bare substring — see the ceiling docblock for the one
  * file where the difference is a whole count. `defineRoute`'s option is
@@ -331,14 +327,6 @@ export interface CensusRoute {
  *   3. it is single-tenant — not under `/pm/`, `/admin/`, `/internal/`, `/webhooks/`;
  *   4. a sibling `contract.ts` EXISTS to declare the scope on;
  *   5. that contract declares no `tenantScope`.
- *
- * `apps/web/src/app/api/v1/calendar/google/callback/route.ts` deliberately
- * STAYS inside this ceiling. It is mechanically hand-resolving, but its helper
- * resolves `?communityId=` OR the `x-community-id` header when the query is
- * absent, and `tenantScope` has exactly one `in:` per route — so its
- * non-declaration cannot be expressed by a declaration. It is a permanent
- * floor member of this number, not drainable work, and it is the case the
- * prose-vs-declaration self-test pins.
  *
  * Pure over file contents — exported so the unit test can exercise the
  * predicates without touching the filesystem.
@@ -430,9 +418,8 @@ function main(): void {
     TENANT_SCOPE_BACKLOG_CEILING,
     'Declare `tenantScope` on the route\'s contract and drop the hand-resolved ' +
       '`communityId` (see `.claude/rules/api-patterns.md` § Tenant scoping). ' +
-      'calendar/google/callback is a permanent floor member — if a route genuinely ' +
-      'cannot express its tenancy in one `in:`, exclude it deliberately here and ' +
-      'say why.',
+      'If a route genuinely cannot express its tenancy in one `in:`, exclude it ' +
+      'deliberately here and say why.',
   );
   if (ceiling.message) {
     console[ceiling.failed ? 'error' : 'log'](`\n${ceiling.failed ? '❌' : 'ℹ️ '} ${ceiling.message}`);
