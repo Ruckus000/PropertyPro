@@ -69,6 +69,10 @@ test.describe('marketing smoke', () => {
    *
    * These two pages are fs-only and hit no database, so they are safe to assert
    * in `perf-check`, which runs a production build against an unreachable DB.
+   *
+   * A path middleware lets through but no page owns falls to `(public)/[subdomain]`,
+   * which used to 307 `/pricing` and `/legal` to subdomains too. The redirects and
+   * the 404 below are fs-only as well.
    */
   test('apex marketing routes render instead of redirecting to a subdomain', async ({
     page,
@@ -81,6 +85,15 @@ test.describe('marketing smoke', () => {
     await page.goto('/contact');
     await expect(page).toHaveURL(/\/contact$/);
     await expect(page.getByLabel('Work email')).toBeVisible();
+
+    await page.goto('/pricing');
+    await expect(page).toHaveURL(/\/#pricing$/);
+
+    await page.goto('/legal');
+    await expect(page).toHaveURL(/\/legal\/terms$/);
+
+    const reserved = await page.goto('/support');
+    expect(reserved?.status()).toBe(404);
   });
 
   test('a resource article renders with its legal disclaimer', async ({ page }) => {
