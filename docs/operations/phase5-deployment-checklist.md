@@ -45,10 +45,8 @@ pnpm typecheck
 pnpm test
 npx tsx scripts/verify-migration-ordering.ts
 npx tsx scripts/verify-no-mocks-in-integration.ts
-npx tsx scripts/verify-phase5-security-gates.ts
 pnpm exec vitest run --config apps/web/vitest.integration.config.ts apps/web/__tests__/integration/phase5-security-gates.integration.test.ts
 pnpm exec vitest run apps/web/__tests__/middleware/phase5-security-gates.test.ts
-npx tsx scripts/verify-audit-evidence.ts
 ```
 
 ## 2. Deployment Execution
@@ -64,7 +62,6 @@ npx tsx scripts/verify-audit-evidence.ts
   - Violations/ARC: `/api/v1/violations`, `/api/v1/arc`
   - Polls/Forum: `/api/v1/polls`, `/api/v1/forum/threads`
   - Work Orders/Amenities: `/api/v1/work-orders`, `/api/v1/amenities`
-  - Calendar/Accounting: `/api/v1/calendar/google/connect`, `/api/v1/accounting/connect`
   - Package/Visitor: `/api/v1/packages`, `/api/v1/visitors`
 - Verify cross-tenant access attempts return `403`/`404`.
 - Verify feature-disabled community combinations return `403`.

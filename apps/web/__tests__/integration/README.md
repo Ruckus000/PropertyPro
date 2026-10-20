@@ -19,9 +19,12 @@ The integration test config ([`vitest.integration.config.ts`](../../vitest.integ
 2. Appear as **skipped** in the default `pnpm test` suite (because they lack `DATABASE_URL`)
 3. Silently lose integration test coverage
 
-### Automated Guard
+### What catches a misnamed file
 
-The naming convention is enforced by [`scripts/verify-integration-test-discovery.ts`](../../../../scripts/verify-integration-test-discovery.ts), which runs as part of `pnpm lint`. If you add a misnamed integration test, the lint step will fail with rename instructions.
+No lint guard checks the name. What fails is CI: the integration job asserts an
+executed-test floor ([`ci-integration-floor.json`](./ci-integration-floor.json)),
+so a file that drops out of the glob lowers the executed count and turns the job
+red.
 
 ## Running Integration Tests
 
