@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
+import { parsePathBasedPublicRoute } from '@/lib/middleware/public-host-routes';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 /**
@@ -17,6 +18,11 @@ export function redirectToCanonicalHost(slug: string, path: string = '/'): never
   // Hostnames are case-insensitive, so `/Sunset-Condos` keeps redirecting.
   const normalized = slug.toLowerCase();
   if (!SLUG_PATTERN.test(normalized)) {
+    notFound();
+  }
+  // Middleware's own rule, so a reserved or marketing name it declined (`/legal`,
+  // `/support`) 404s here instead of becoming a subdomain no community can own.
+  if (!parsePathBasedPublicRoute(`/${normalized}${path}`)) {
     notFound();
   }
   redirect(buildCommunityUrl(normalized, path));
