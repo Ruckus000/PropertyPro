@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -36,29 +35,7 @@ const ReservationCreateSheet = dynamic(
   { ssr: false },
 );
 
-/**
- * OPERATIONS_HUB_CREATE_SHEETS env var (read at module load):
- *   - default / 'on': CTA buttons open drawer sheets via ?create= URL param.
- *   - 'off': CTAs render as Phase 1 <Link>s to legacy routes; ?create= is ignored.
- *
- * Escape-hatch scope: this flag disables Phase 2's drawer-opening behavior only.
- * It does NOT restore Phase 1's pre-redirect submit pages — Phase 1 already rewrote
- * /maintenance/submit and /maintenance/inbox as redirect-only shims back to
- * Operations. Under this rollback, CTAs render as Links, but clicking them still
- * lands on Operations. The flag is useful for suppressing the drawer during an
- * incident; a full revert to the pre-Phase-1 submit form requires a git revert.
- *
- * Client bundles inline this at build time; rollback requires redeploy.
- */
-const CREATE_SHEETS_ENABLED = process.env.OPERATIONS_HUB_CREATE_SHEETS !== 'off';
-
 type CreateValue = 'request' | 'work-order' | 'reservation';
-
-function legacyHrefFor(value: CreateValue, communityId: number): string {
-  if (value === 'request') return `/maintenance/submit?communityId=${communityId}`;
-  if (value === 'work-order') return `/communities/${communityId}/operations?tab=work-orders`;
-  return `/communities/${communityId}/operations?tab=reservations`;
-}
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
 
@@ -280,7 +257,6 @@ export function OperationsHub({
    * history nor re-render this force-dynamic page on the server.
    */
   function openCreate(value: CreateValue) {
-    if (!CREATE_SHEETS_ENABLED) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set('create', value);
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
@@ -305,7 +281,7 @@ export function OperationsHub({
         }
         icon="wrench"
         action={
-          cta && CREATE_SHEETS_ENABLED
+          cta
             ? (
               <Button size="sm" onClick={() => openCreate(cta.createValue)}>
                 {cta.label}
@@ -332,17 +308,11 @@ export function OperationsHub({
         description={requestsDescription}
         actions={
           cta
-            ? CREATE_SHEETS_ENABLED
-              ? (
-                <Button size="sm" onClick={() => openCreate(cta.createValue)}>
-                  {cta.label}
-                </Button>
-              )
-              : (
-                <Button asChild size="sm">
-                  <Link href={legacyHrefFor(cta.createValue, communityId)}>{cta.label}</Link>
-                </Button>
-              )
+            ? (
+              <Button size="sm" onClick={() => openCreate(cta.createValue)}>
+                {cta.label}
+              </Button>
+            )
             : undefined
         }
       />
@@ -537,7 +507,7 @@ export function OperationsHub({
         ) : null}
       </section>
 
-      {CREATE_SHEETS_ENABLED && createValue === 'request' && requestsEnabled ? (
+      {createValue === 'request' && requestsEnabled ? (
         <RequestCreateSheet
           open
           onClose={closeCreate}
@@ -545,14 +515,14 @@ export function OperationsHub({
           userId={userId}
         />
       ) : null}
-      {CREATE_SHEETS_ENABLED && createValue === 'work-order' && isAdmin && workOrdersEnabled ? (
+      {createValue === 'work-order' && isAdmin && workOrdersEnabled ? (
         <WorkOrderCreateSheet
           open
           onClose={closeCreate}
           communityId={communityId}
         />
       ) : null}
-      {CREATE_SHEETS_ENABLED && createValue === 'reservation' && reservationsEnabled ? (
+      {createValue === 'reservation' && reservationsEnabled ? (
         <ReservationCreateSheet
           open
           onClose={closeCreate}

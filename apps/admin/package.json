@@ -14,10 +14,6 @@
     "lint": "eslint . --cache --cache-location .turbo/eslint-cache"
   },
   "dependencies": {
-    "@codemirror/lang-javascript": "^6.0.0",
-    "@codemirror/state": "^6.0.0",
-    "@codemirror/theme-one-dark": "^6.0.0",
-    "@codemirror/view": "^6.0.0",
     "@propertypro/db": "workspace:*",
     "@propertypro/email": "workspace:*",
     "@propertypro/shared": "workspace:*",
@@ -27,7 +23,6 @@
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "clsx": "^2.1.1",
-    "codemirror": "^6.0.0",
     "date-fns": "^4.1.0",
     "import-in-the-middle": "2.0.6",
     "jose": "^6.2.2",
