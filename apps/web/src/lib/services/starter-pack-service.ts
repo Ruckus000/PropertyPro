@@ -137,7 +137,8 @@ export async function applyStarterPackToCommunity(
  * ponytail: runs on every demo entry (two small reads once filled), and the
  * removed rows it relies on are purged after 30 days (`cleanupSoftDeletedSiteBlocks`),
  * about a demo's lifetime. Moving this into `seedCommunity` (it needs
- * `ensureHomePage` in packages/db) ends both.
+ * `ensureHomePage` in packages/db) ends both. Trigger: a demo lives past the
+ * 30-day purge, so the pack would re-apply to an emptied site.
  *
  * Best-effort, like `createCommunityForPm`'s call: a failure is logged and
  * never blocks the entry.

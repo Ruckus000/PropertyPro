@@ -67,11 +67,13 @@ export async function getViolationReadUnitIds(
 /**
  * Gate on imposing a violation fine.
  *
- * Disabled because the fine route enforces no statutory cap ($100 per violation /
- * $1,000 aggregate under §718.303(3) / §720.305(2) absent authorizing documents)
- * and records no fining-committee approval, which those statutes require. Blocks
- * WRITES only — existing fine records stay readable and payable, because they are
- * association financial records.
+ * Off by default as a LEGAL decision (legal-risk audit F-04), not a missing
+ * safeguard: the statutory caps ($100 per violation / $1,000 aggregate under
+ * §718.303(3) / §720.305(2) absent authorizing documents) are enforced in the
+ * service, and the fining-committee approval is required by the route contract
+ * and snapshotted on the fine. A platform admin turns it on per community.
+ * Blocks WRITES only — existing fine records stay readable and payable, because
+ * they are association financial records.
  */
 export function requireViolationFinesEnabled(membership: CommunityMembership): void {
   if (!membership.violationFinesEnabled) {

@@ -38,8 +38,8 @@ export const POST = withErrorHandler(
 
     const inviterName = inviterNameFrom(req);
     const results: Array<{ userId: string; status: 'sent' | 'failed'; error?: string }> = [];
-    // ponytail: serial sends, ~100 max per request; fan out only if a batch
-    // this size is measured as too slow (the email provider rate-limits too).
+    // ponytail: serial sends, ~100 max per request (the email provider
+    // rate-limits too). Trigger: any batch request takes over 60 s; fan out then.
     for (const userId of userIds) {
       try {
         await sendCommunityInvitation({
