@@ -17,8 +17,8 @@
  * authenticated community membership. `permission` metadata is therefore
  * intentionally omitted (it is optional on the contract).
  *
- * Query schema mirrors the drained sibling search routes
- * (`/api/v1/search/residents`, `/meetings`, etc.):
+ * Query schema mirrors the sibling search routes
+ * (`/api/v1/search/residents`, `/units`, `/users`):
  *   - `q`: optional string (trimmed in-handler; empty → '')
  *   - `limit`: optional coerced int, range-validated to [1, 20] by the schema
  *     (default 3 applied in-handler)
