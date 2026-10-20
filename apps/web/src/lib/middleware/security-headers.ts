@@ -111,7 +111,16 @@ export function buildCspHeader(options?: { isPreview?: boolean }): string {
     supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
     frameAncestors: options?.isPreview ? `'self' ${getAdminOrigins()}` : "'none'",
     scriptSrc: ['https://js.stripe.com'],
-    connectSrc: ['https://*.ingest.sentry.io', 'https://api.stripe.com'],
+    // BOTH Sentry forms are needed (admin learned this in #906). A CSP
+    // `*.ingest.sentry.io` matches hosts ENDING in `.ingest.sentry.io`, and
+    // this project's regional DSN host `o123.ingest.us.sentry.io` does not
+    // (`us` sits between `ingest` and `sentry.io`). Without the second entry
+    // every browser event is blocked, with only a console warning to show it.
+    connectSrc: [
+      'https://*.ingest.sentry.io',
+      'https://*.ingest.us.sentry.io',
+      'https://api.stripe.com',
+    ],
     frameSrc: ['https://js.stripe.com', 'https://hooks.stripe.com'],
     // Community themes deliberately emit Google Fonts stylesheet links for
     // non-vendored families. Both origins are needed: CSS comes from

@@ -218,6 +218,36 @@ describe('buildCspHeader', () => {
     expect(csp).toContain('https://*.ingest.sentry.io');
   });
 
+  // A substring check cannot see that `*.ingest.sentry.io` misses the regional
+  // host, so ask the question the browser asks: does any connect-src source
+  // admit this URL? Matching follows CSP3 host-part-match: `*.x` admits any
+  // host ending in `.x`.
+  it('lets the browser reach the regional Sentry ingest host', () => {
+    const connectSrc = buildCspHeader()
+      .split(';')
+      .map((d) => d.trim())
+      .find((d) => d.startsWith('connect-src '));
+    expect(connectSrc).toBeDefined();
+    const sources = connectSrc!.split(/\s+/).slice(1);
+
+    const admits = (url: string) => {
+      const { protocol, hostname } = new URL(url);
+      return sources.some((source) => {
+        const match = /^(https?:)\/\/(.+)$/.exec(source);
+        if (!match || match[1] !== protocol) return false;
+        const pattern = match[2]!;
+        return pattern.startsWith('*.')
+          ? hostname.endsWith(pattern.slice(1))
+          : hostname === pattern;
+      });
+    };
+
+    expect(admits('https://o4508000000000000.ingest.us.sentry.io/api/1/envelope/')).toBe(true);
+    expect(admits('https://o4508000000000000.ingest.sentry.io/api/1/envelope/')).toBe(true);
+    // Control: the matcher is not admitting everything.
+    expect(admits('https://o4508000000000000.ingest.de.sentry.io/api/1/envelope/')).toBe(false);
+  });
+
   it('includes connect-src for Stripe', () => {
     const csp = buildCspHeader();
     expect(csp).toContain('https://api.stripe.com');
