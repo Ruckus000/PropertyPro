@@ -45,7 +45,7 @@ describe('redirectToCanonicalHost', () => {
 
   // Names middleware declines as community slugs (reserved, or a marketing path)
   // used to fall through to this page and become `<name>.getpropertypro.com`.
-  it.each(['support', 'pricing', 'legal'])('404s %j instead of inventing a subdomain', (slug) => {
+  it.each(['support', 'pricing', 'legal', 'notices'])('404s %j instead of inventing a subdomain', (slug) => {
     expect(() => redirectToCanonicalHost(slug, '/')).toThrow('NOT_FOUND');
     expect(redirectMock).not.toHaveBeenCalled();
   });

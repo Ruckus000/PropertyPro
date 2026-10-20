@@ -342,6 +342,11 @@ describe('community subdomain — public page slugs now resolve [D1]', () => {
     expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-transparency' });
   });
 
+  it('rewrites /notices to the public site instead of the app fallback', async () => {
+    const res = await middleware(request(`notice-condos.${ROOT_DOMAIN}`, '/notices'));
+    expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/notices' });
+  });
+
   it('forwards x-preview when ?preview=true and there is a session', async () => {
     signedIn(true);
     const res = await middleware(

@@ -9,7 +9,6 @@ const {
   meetingsTable,
   documentsTable,
   getComplianceTemplateMock,
-  getFeaturesForCommunityMock,
   getLinkedDocumentStatesByIdsMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
@@ -20,7 +19,6 @@ const {
   meetingsTable: Symbol('meetings'),
   documentsTable: Symbol('documents'),
   getComplianceTemplateMock: vi.fn(),
-  getFeaturesForCommunityMock: vi.fn(),
   getLinkedDocumentStatesByIdsMock: vi.fn(),
 }));
 
@@ -45,7 +43,6 @@ vi.mock('@propertypro/db', () => ({
 vi.mock('@propertypro/shared', async (importActual) => ({
   ...(await importActual<typeof import('@propertypro/shared')>()),
   getComplianceTemplate: getComplianceTemplateMock,
-  getFeaturesForCommunity: getFeaturesForCommunityMock,
 }));
 
 import {
@@ -157,9 +154,6 @@ describe('transparency service', () => {
       },
     ]);
 
-    getFeaturesForCommunityMock.mockReturnValue({
-      hasPublicNoticesPage: true,
-    });
     getLinkedDocumentStatesByIdsMock.mockImplementation(
       async (_communityId: number, ids: readonly number[]) =>
         new Map(ids.map((id) => [id, { deletedAt: null, isDraft: false }])),
@@ -187,7 +181,6 @@ describe('transparency service', () => {
 
     expect(result.meetingNotices.meetings[0]?.requiredLeadTimeHours).toBe(48);
     expect(result.meetingNotices.meetings[0]?.metRequirement).toBe(true);
-    expect(result.portalStatus.publicNoticesPage).toBe(true);
     expect(result.minutesAvailability.months).toHaveLength(12);
   });
 

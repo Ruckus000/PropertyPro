@@ -192,6 +192,19 @@ describe('classifySubdomainPath', () => {
     expect(classifySubdomainPath(`/${segment}`)).toBe('metadata');
   });
 
+  // No app route serves these, so the app fallback used to read the name as a
+  // community and 307 to `notices.<root>`. The public site renders the 404.
+  it.each(['/notices', '/request-access', '/unavailable'])(
+    'sends %s to the public site, which has no such page',
+    (path) => {
+      expect(classifySubdomainPath(path)).toBe('site-page');
+    },
+  );
+
+  it('leaves /transparency to its host-native rewrite', () => {
+    expect(classifySubdomainPath('/transparency')).toBe('app');
+  });
+
   it('refuses nested slugs — site_pages_slug_shape_check forbids "/"', () => {
     expect(classifySubdomainPath('/a/b')).toBe('app');
     expect(classifySubdomainPath('/about/team')).toBe('app');
