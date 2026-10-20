@@ -124,7 +124,6 @@ const BASELINE_PATH = join(repoRoot, 'scripts/page-state-copy-baseline.json');
 const EXEMPT = /page-state-copy:exempt/;
 
 function walk(dir: string): string[] {
-  if (!existsSync(dir)) return [];
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -141,10 +140,24 @@ const baseline: Record<string, number> = existsSync(BASELINE_PATH)
   ? (JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, number>)
   : {};
 
+// A renamed or moved root must not read as "clean": refuse (exit 2) rather than
+// pass having scanned nothing.
+const missingRoots = SCAN_ROOTS.filter((root) => !existsSync(root));
+if (missingRoots.length > 0) {
+  console.error('❌ guard:page-state-copy could not check — scan root(s) missing:');
+  for (const root of missingRoots) console.error(`  ${relative(repoRoot, root)}`);
+  process.exit(2);
+}
+const scannedFiles = SCAN_ROOTS.flatMap(walk);
+if (scannedFiles.length === 0) {
+  console.error('❌ guard:page-state-copy could not check — the scan roots hold no .ts/.tsx files.');
+  process.exit(2);
+}
+
 const violations: string[] = [];
 const counts: Record<string, number> = {};
 
-for (const file of SCAN_ROOTS.flatMap(walk)) {
+for (const file of scannedFiles) {
   const rel = relative(repoRoot, file);
   if (isDescriberModule(rel)) continue;
   const lines = readFileSync(file, 'utf8').split('\n');
@@ -212,5 +225,6 @@ if (breaches.length > 0) {
 
 const frozen = Object.values(baseline).reduce((a, b) => a + b, 0);
 console.log(
-  `✅ guard:page-state-copy — no new page-visibility copy outside the module (${frozen} frozen)`,
+  `✅ guard:page-state-copy — no new page-visibility copy outside the module ` +
+    `(${scannedFiles.length} files scanned, ${frozen} frozen)`,
 );

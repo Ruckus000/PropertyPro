@@ -3,48 +3,58 @@
  * CI guard: verifies that generated token CSS files are fresh.
  * If someone edits primitives.ts or semantic.ts without re-running
  * the generator, this check will fail.
+ *
+ * Read-only: it renders the CSS in memory and compares it with the files on
+ * disk. It used to run the generator (overwriting both files) and then
+ * `git checkout` them, which threw away any uncommitted edit to either file.
+ *
+ * Exit codes: 0 fresh · 1 stale · 2 could not check (generator failed, file
+ * missing) — never a pass.
  */
-import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 
 const FILES = [
   "packages/tokens/src/generated/tokens.css",
   "packages/ui/src/styles/tokens.css",
 ];
 
-try {
-  // Re-run the generator
-  execSync("pnpm --filter @propertypro/tokens generate", {
-    stdio: "pipe",
-    cwd: process.cwd(),
-  });
+async function main(): Promise<number> {
+  let expected: string;
+  try {
+    // Imported here, not at the top, so a generator that fails to LOAD is also
+    // a "could not check" (exit 2) rather than an uncaught crash read as stale.
+    const { generateFullCSS } = await import("../packages/tokens/scripts/build");
+    expected = generateFullCSS();
+  } catch (error) {
+    console.error("✗ Token freshness could not check — the generator failed:", error);
+    return 2;
+  }
 
-  // Check if the generated files differ from what's committed
-  execSync(`git diff --exit-code ${FILES.join(" ")}`, {
-    stdio: "pipe",
-    cwd: process.cwd(),
-  });
+  const stale: string[] = [];
+  for (const file of FILES) {
+    let onDisk: string;
+    try {
+      onDisk = readFileSync(file, "utf-8");
+    } catch (error) {
+      console.error(`✗ Token freshness could not check — cannot read ${file}:`, error);
+      return 2;
+    }
+    if (onDisk !== expected) stale.push(file);
+  }
 
-  console.log("✓ Token CSS files are fresh");
-  process.exit(0);
-} catch (error: unknown) {
-  // git diff --exit-code returns 1 if there are differences
-  const err = error as { status?: number; stdout?: Buffer };
-  if (err.status === 1 && err.stdout) {
+  if (stale.length > 0) {
     console.error("✗ Token CSS files are stale!");
     console.error("");
-    console.error("The generated CSS does not match the committed files.");
+    for (const file of stale) console.error(`  ${file}`);
+    console.error("");
+    console.error("The generated CSS does not match these files.");
     console.error("Run: pnpm --filter @propertypro/tokens generate");
     console.error("Then commit the updated files.");
-    console.error("");
-    console.error("Diff:");
-    console.error(err.stdout.toString());
-
-    // Restore the committed versions
-    execSync(`git checkout -- ${FILES.join(" ")}`, { stdio: "pipe" });
-
-    process.exit(1);
+    return 1;
   }
-  // Some other error (generate failed, etc.)
-  console.error("✗ Token freshness check failed:", error);
-  process.exit(1);
+
+  console.log(`✓ Token CSS files are fresh (${FILES.length} files checked)`);
+  return 0;
 }
+
+void main().then((code) => process.exit(code));
