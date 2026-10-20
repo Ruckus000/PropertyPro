@@ -169,6 +169,35 @@ describe('demo-conversion prerequisites', () => {
       // No legacy pm_admin / manager founding rows survive.
       expect(rows.some((r) => r.role === 'pm_admin')).toBe(false);
     });
+
+    // Logs ship to Vercel and Sentry breadcrumbs; a customer's address must not
+    // ride along. Both the success and the failure branch of the login link.
+    it.each([
+      ['succeeds', vi.fn().mockResolvedValue({ data: {}, error: null })],
+      ['fails', vi.fn().mockRejectedValue(new Error('link service down'))],
+    ])('never logs the founding user email when generating the login link %s', async (_label, generateLink) => {
+      buildDb();
+      createAdminClientMock.mockReturnValue({
+        auth: {
+          admin: {
+            createUser: vi.fn().mockResolvedValue({ data: { user: { id: 'founding-uuid' } }, error: null }),
+            updateUserById: vi.fn().mockResolvedValue({ data: {}, error: null }),
+            generateLink,
+          },
+        },
+      });
+      const spies = (['info', 'warn', 'error', 'log'] as const).map((level) =>
+        vi.spyOn(console, level).mockImplementation(() => undefined),
+      );
+
+      await handleDemoConversion(SESSION, 'evt_002', 1_700_000_000);
+
+      expect(generateLink).toHaveBeenCalled();
+      const logged = spies.flatMap((spy) => spy.mock.calls.map((call) => call.map(String).join(' ')));
+      expect(logged.some((line) => line.includes('founding-uuid'))).toBe(true);
+      expect(logged.filter((line) => line.includes('founder@example.com'))).toEqual([]);
+      spies.forEach((spy) => spy.mockRestore());
+    });
   });
 });
 

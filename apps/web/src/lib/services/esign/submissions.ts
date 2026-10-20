@@ -169,7 +169,7 @@ export async function createSubmission(
           }),
         });
       } catch (err) {
-        console.error(`Failed to send invitation email to ${signer.email}:`, err);
+        console.error(`Failed to send invitation email to signer ${signer.id}:`, err);
         // Continue — email failure must not abort submission creation
       }
     }

@@ -188,6 +188,10 @@ export async function loadApartmentMetrics(
             computeLeaseMetrics(unitRows as Unit[], leaseRows as Lease[]),
           )
         : Promise.resolve(LEASE_METRICS_WITHHELD),
+      // ponytail: reads every maintenance request and announcement to compute a
+      // few counts — fine at today's size (max 9 / 5 rows, 2026-10-20). Push the
+      // counts into SQL once one apartment community passes 2,000 maintenance
+      // requests or 500 announcements, or this dashboard's p95 passes 1 s.
       scoped.query(maintenanceRequests),
       scoped.query(announcements),
       scoped.query(communities),

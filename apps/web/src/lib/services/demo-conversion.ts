@@ -320,17 +320,18 @@ async function ensureFoundingUser(
     userId,
   });
 
-  // Send magic link so the founding user can set their password
+  // generateLink RETURNS a link and sends no email, so the founding user does
+  // not receive one from here (a known gap, not fixed in this change).
   try {
     await admin.auth.admin.generateLink({
       type: 'magiclink',
       email,
       options: { redirectTo: '/dashboard' },
     });
-    console.info(`[demo-conversion] magic link sent to founding user ${email}`);
+    console.info(`[demo-conversion] login link generated (not emailed) for founding user ${userId}`);
   } catch (err) {
     // Non-fatal: user can always use "forgot password" flow
-    console.warn(`[demo-conversion] failed to send magic link to ${email}:`, err);
+    console.warn(`[demo-conversion] failed to generate login link for founding user ${userId}:`, err);
   }
 
   console.info(
