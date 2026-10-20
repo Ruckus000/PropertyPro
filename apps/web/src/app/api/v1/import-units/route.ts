@@ -72,6 +72,7 @@ export const POST = withErrorHandler(
     const created: ReturnType<typeof toUnit>[] = [];
     // ponytail: serial inserts, ≤2,000 rows per file (validator cap) — the
     // same trade-off as the resident import; each is one indexed insert.
+    // Trigger: any import request takes over 60 s; batch the inserts then.
     for (const row of candidates) {
       const unit = toUnit(row);
       try {

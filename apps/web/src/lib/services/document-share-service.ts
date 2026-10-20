@@ -134,7 +134,8 @@ export async function shareDocuments(params: {
 
   const results: DocumentShareResult[] = [];
   // ponytail: serial, ≤100 recipients per request (contract cap) — same
-  // trade-off as the batch invitations route.
+  // trade-off as the batch invitations route. Trigger: any share request takes
+  // over 60 s; fan out then.
   for (const userId of userIds) {
     const role = roleByUser.get(userId);
     const user = userById.get(userId);

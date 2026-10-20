@@ -288,7 +288,8 @@ export function LeadsDashboard({
                       ponytail: /demo/new does not read `?lead=` yet — a later
                       program wires the wizard to prefill prospect details from
                       the originating lead. For now this link carries the id
-                      but nothing on the receiving end consumes it.
+                      but nothing on the receiving end consumes it. Trigger:
+                      the demo wizard gains a lead field — read `?lead=` then.
                     */}
                     <Link
                       href={`/demo/new?lead=${lead.id}`}
