@@ -18,8 +18,7 @@ const {
   createResidentRoleMock,
   createResidentUserMock,
   createResidentNotificationPreferencesMock,
-  updateResidentRoleMock,
-  updateResidentUserMock,
+  updateResidentInTransactionMock,
   getResidentUserByIdMock,
   listResidentsForCommunityMock,
   deleteResidentRoleMock,
@@ -39,8 +38,7 @@ const {
   createResidentRoleMock: vi.fn(),
   createResidentUserMock: vi.fn(),
   createResidentNotificationPreferencesMock: vi.fn(),
-  updateResidentRoleMock: vi.fn(),
-  updateResidentUserMock: vi.fn(),
+  updateResidentInTransactionMock: vi.fn(),
   getResidentUserByIdMock: vi.fn(),
   listResidentsForCommunityMock: vi.fn(),
   deleteResidentRoleMock: vi.fn(),
@@ -93,8 +91,7 @@ vi.mock('@/lib/services/resident-service', () => ({
   createResidentRole: createResidentRoleMock,
   createResidentUser: createResidentUserMock,
   createResidentNotificationPreferences: createResidentNotificationPreferencesMock,
-  updateResidentRole: updateResidentRoleMock,
-  updateResidentUser: updateResidentUserMock,
+  updateResidentInTransaction: updateResidentInTransactionMock,
   getResidentUserById: getResidentUserByIdMock,
   listResidentsForCommunity: listResidentsForCommunityMock,
   deleteResidentRole: deleteResidentRoleMock,
@@ -180,7 +177,7 @@ describe('PATCH /api/v1/residents — only real changes, and no silent overwrite
     getResidentCommunityTypeValueMock.mockResolvedValue('condo_718');
     getResidentRoleByUserIdMock.mockResolvedValue({ role: 'resident', unitId: 4, isUnitOwner: true });
     getResidentUserByIdMock.mockResolvedValue({ fullName: 'Ana Ruiz', phone: '555-0100' });
-    updateResidentRoleMock.mockResolvedValue(true);
+    updateResidentInTransactionMock.mockResolvedValue(true);
   });
 
   const patch = (body: Record<string, unknown>) =>
@@ -189,35 +186,36 @@ describe('PATCH /api/v1/residents — only real changes, and no silent overwrite
   it('re-saving the form unchanged writes and audits nothing (no "unit 4 → 4" rows)', async () => {
     const res = await patch({ fullName: 'Ana Ruiz', phone: '555-0100', unitId: 4, isUnitOwner: true, expectedUpdatedAt: TOKEN });
     expect(res.status).toBe(200);
-    expect(updateResidentRoleMock).not.toHaveBeenCalled();
-    expect(updateResidentUserMock).not.toHaveBeenCalled();
+    expect(updateResidentInTransactionMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('audits only the field that changed', async () => {
     await patch({ fullName: 'Ana Ruiz', phone: '555-0100', unitId: 9, isUnitOwner: true });
-    expect(updateResidentRoleMock).toHaveBeenCalledWith(COMMUNITY_ID, USER, { unitId: 9 });
-    expect(updateResidentUserMock).not.toHaveBeenCalled();
+    expect(updateResidentInTransactionMock).toHaveBeenCalledWith(COMMUNITY_ID, USER, { unitId: 9 }, {}, undefined);
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ oldValues: { unitId: 4 }, newValues: { unitId: 9 } }),
     );
   });
 
-  it('with a token, a name-only edit still claims the membership row first (bumping its version)', async () => {
+  it('with a token, a name-only edit passes the token so the service claims the membership row', async () => {
+    // Membership-first ordering inside the one transaction is pinned in
+    // resident-service-transaction.test.ts.
     await patch({ fullName: 'Ana R. Ruiz', expectedUpdatedAt: TOKEN });
-    expect(updateResidentRoleMock).toHaveBeenCalledWith(COMMUNITY_ID, USER, {}, TOKEN);
-    expect(updateResidentUserMock).toHaveBeenCalledWith(COMMUNITY_ID, USER, { fullName: 'Ana R. Ruiz' });
-    expect(updateResidentRoleMock.mock.invocationCallOrder[0]!).toBeLessThan(
-      updateResidentUserMock.mock.invocationCallOrder[0]!,
+    expect(updateResidentInTransactionMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      USER,
+      {},
+      { fullName: 'Ana R. Ruiz' },
+      TOKEN,
     );
   });
 
   it('a stale token is a 409 and nothing else is written or audited', async () => {
-    updateResidentRoleMock.mockResolvedValue(false);
+    updateResidentInTransactionMock.mockResolvedValue(false);
     const res = await patch({ fullName: 'Ana R. Ruiz', unitId: 9, expectedUpdatedAt: TOKEN });
     expect(res.status).toBe(409);
     expect((await res.json()).error.message).toMatch(/someone else changed this resident/i);
-    expect(updateResidentUserMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 });

@@ -23,7 +23,11 @@ import {
   getUnitByNumber,
   updateUnitById,
 } from '../../src/lib/services/unit-service';
-import { listResidentsForCommunity, updateResidentRole } from '../../src/lib/services/resident-service';
+import {
+  listResidentsForCommunity,
+  updateResidentInTransaction,
+  updateResidentRole,
+} from '../../src/lib/services/resident-service';
 import { createOccupant, updateOccupant } from '../../src/lib/services/occupant-service';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 
@@ -112,6 +116,24 @@ describeDb('unit number uniqueness + concurrency (db-backed integration)', () =>
     const token = (JSON.parse(JSON.stringify(listed)) as { updatedAt: string }).updatedAt;
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(true);
     expect(await updateResidentRole(communityId, userId, {}, token)).toBe(false);
+  });
+
+  it('resident PATCH writes roll back together: a failed users write leaves the membership version untouched (W-08)', async () => {
+    const userId = requireUser(state!, 'actorA').id;
+    const before = (await listResidentsForCommunity(communityId)).find((r) => r.userId === userId)!;
+    const token = (JSON.parse(JSON.stringify(before)) as { updatedAt: string }).updatedAt;
+
+    // With a token the membership row is written first, bumping its version;
+    // users.email is NOT NULL, so the second write then fails in Postgres.
+    await expect(
+      updateResidentInTransaction(communityId, userId, {}, { email: null }, token),
+    ).rejects.toThrow();
+
+    // Rolled back: the version did not move, so the same token still applies.
+    // Committed outside the transaction, the bump would leave it stale (false).
+    expect(await updateResidentRole(communityId, userId, {}, token)).toBe(true);
+    const after = (await listResidentsForCommunity(communityId)).find((r) => r.userId === userId)!;
+    expect(after.email).toBe(before.email);
   });
 
   /**

@@ -35,8 +35,7 @@ import {
   getResidentUserByEmail,
   getResidentUserById,
   listResidentsForCommunity,
-  updateResidentRole,
-  updateResidentUser,
+  updateResidentInTransaction,
 } from '@/lib/services/resident-service';
 import { withdrawNoticeConsent } from '@/lib/services/notice-consent-service';
 import {
@@ -311,24 +310,22 @@ export const PATCH = withErrorHandler(
     const changed = Object.keys(userUpdate).length > 0 || Object.keys(roleUpdate).length > 0;
 
     // The membership row is the version (`ResidentListRow.updatedAt`). With a
-    // token, it is written first — conditionally, and even when only contact
-    // fields change, which bumps its updatedAt — so of two managers saving from
-    // the same read, the second is refused before touching anything.
-    // ponytail: no transaction (the scoped client has none). A failure writing
-    // `users` after this leaves the membership bumped; the retry then gets a
-    // 409 and a refreshed form, which is safe. A resident editing their own
-    // profile in between is not detected — their edits go through `users`
-    // only, outside this version.
-    if (changed && expectedUpdatedAt !== undefined) {
-      const fresh = await updateResidentRole(communityId, userId, roleUpdate, expectedUpdatedAt);
+    // token it is written first — conditionally, and even when only contact
+    // fields change — so of two managers saving from the same read, the second
+    // is refused before touching anything. Both writes share one transaction.
+    // A resident editing their own profile in between is not detected: those
+    // edits go through `users` only, outside this version.
+    if (changed) {
+      const fresh = await updateResidentInTransaction(
+        communityId,
+        userId,
+        roleUpdate,
+        userUpdate,
+        expectedUpdatedAt,
+      );
       if (!fresh) {
         throw new ConflictError('Someone else changed this resident since you opened them. Reload to see their changes.');
       }
-    } else if (Object.keys(roleUpdate).length > 0) {
-      await updateResidentRole(communityId, userId, roleUpdate);
-    }
-    if (Object.keys(userUpdate).length > 0) {
-      await updateResidentUser(communityId, userId, userUpdate);
     }
 
     if (!changed) {

@@ -22,8 +22,7 @@ const {
   createResidentRoleMock,
   createResidentUserMock,
   createResidentNotificationPreferencesMock,
-  updateResidentRoleMock,
-  updateResidentUserMock,
+  updateResidentInTransactionMock,
   getResidentUserByIdMock,
   listResidentsForCommunityMock,
   deleteResidentRoleMock,
@@ -43,8 +42,7 @@ const {
   createResidentRoleMock: vi.fn(),
   createResidentUserMock: vi.fn(),
   createResidentNotificationPreferencesMock: vi.fn(),
-  updateResidentRoleMock: vi.fn(),
-  updateResidentUserMock: vi.fn(),
+  updateResidentInTransactionMock: vi.fn(),
   getResidentUserByIdMock: vi.fn(),
   listResidentsForCommunityMock: vi.fn(),
   deleteResidentRoleMock: vi.fn(),
@@ -96,8 +94,7 @@ vi.mock('@/lib/services/resident-service', () => ({
   createResidentRole: createResidentRoleMock,
   createResidentUser: createResidentUserMock,
   createResidentNotificationPreferences: createResidentNotificationPreferencesMock,
-  updateResidentRole: updateResidentRoleMock,
-  updateResidentUser: updateResidentUserMock,
+  updateResidentInTransaction: updateResidentInTransactionMock,
   getResidentUserById: getResidentUserByIdMock,
   listResidentsForCommunity: listResidentsForCommunityMock,
   deleteResidentRole: deleteResidentRoleMock,
@@ -188,7 +185,7 @@ describe('residents manager-tier lockdown', () => {
   // DB write.
   // -----------------------------------------------------------------------
   describe('PATCH with manager-tier role', () => {
-    it('returns 403 and does NOT call updateResidentRole', async () => {
+    it('returns 403 and does NOT write the resident', async () => {
       // Existing resident row so the handler would proceed past the not-found check
       getResidentRoleByUserIdMock.mockResolvedValue({
         role: 'resident',
@@ -210,7 +207,7 @@ describe('residents manager-tier lockdown', () => {
       expect(json.error.message).toMatch(/Manager roles/i);
 
       // The write must NOT have been called — escalation blocked
-      expect(updateResidentRoleMock).not.toHaveBeenCalled();
+      expect(updateResidentInTransactionMock).not.toHaveBeenCalled();
     });
   });
 
@@ -222,7 +219,7 @@ describe('residents manager-tier lockdown', () => {
   // when `role` itself is omitted.
   // -----------------------------------------------------------------------
   describe('PATCH unit/owner on an existing property_manager (escalation vector)', () => {
-    it('returns 403 and does NOT call updateResidentRole when role is omitted', async () => {
+    it('returns 403 and does NOT write the resident when role is omitted', async () => {
       // Existing manager-tier row (post-2a backfill: board/CAM members are
       // property_manager rows).
       getResidentRoleByUserIdMock.mockResolvedValue({
@@ -246,7 +243,7 @@ describe('residents manager-tier lockdown', () => {
       expect(json.error.message).toMatch(/Manager roles/i);
 
       // The role-config write must NOT have happened.
-      expect(updateResidentRoleMock).not.toHaveBeenCalled();
+      expect(updateResidentInTransactionMock).not.toHaveBeenCalled();
     });
 
     it('still allows contact-only (fullName/phone) edits on a manager-tier row', async () => {
@@ -256,7 +253,7 @@ describe('residents manager-tier lockdown', () => {
         isUnitOwner: false,
       });
       getResidentUserByIdMock.mockResolvedValue({ fullName: 'Old', phone: null });
-      updateResidentUserMock.mockResolvedValue(undefined);
+      updateResidentInTransactionMock.mockResolvedValue(true);
 
       const res = await PATCH(
         patchReq({
@@ -268,8 +265,14 @@ describe('residents manager-tier lockdown', () => {
 
       // Contact-only edit has no access impact → not blocked by the guard.
       expect(res.status).not.toBe(403);
-      // The role-config write must NOT have run; only the user (contact) update.
-      expect(updateResidentRoleMock).not.toHaveBeenCalled();
+      // No role-config fields are written; only the user (contact) update.
+      expect(updateResidentInTransactionMock).toHaveBeenCalledWith(
+        COMMUNITY_ID,
+        'b0476f53-6f95-4493-b329-13ff1a2334e6',
+        {},
+        { fullName: 'New Name' },
+        undefined,
+      );
     });
   });
 
@@ -312,8 +315,8 @@ describe('residents manager-tier lockdown', () => {
         isUnitOwner: false,
         presetKey: null,
       });
-      // Let the rest of the handler proceed — mock updateResidentRole
-      updateResidentRoleMock.mockResolvedValue(undefined);
+      // Let the rest of the handler proceed.
+      updateResidentInTransactionMock.mockResolvedValue(true);
 
       const res = await PATCH(
         patchReq({
