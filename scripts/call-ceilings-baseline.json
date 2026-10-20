@@ -188,6 +188,7 @@
     "unscoped": 3
   },
   "apps/web/src/lib/services/resident-service.ts": {
+    "unscoped": 1,
     "fullTableRead": 1
   },
   "apps/web/src/lib/services/revenue-snapshot-data-service.ts": {

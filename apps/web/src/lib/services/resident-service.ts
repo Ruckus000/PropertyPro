@@ -12,10 +12,14 @@ import {
   users,
 } from '@propertypro/db';
 import { and, eq, inArray, sql } from '@propertypro/db/filters';
-// AUTHZ: listResidentsForCommunity's callers verify residents:read for this community first.
-import { findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
+// updateResidentInTransaction uses the unscoped client only to open a transaction,
+// and writes only through createScopedClient(communityId, tx).
+// AUTHZ: callers verify residents:read (listResidentsForCommunity) or residents:write (updateResidentInTransaction) for this community first.
+import { createUnscopedClient, findCommunityResidentPortalActivity } from '@propertypro/db/unsafe';
 import { expandTransitionRoleFilter } from '@propertypro/shared';
 import { listNoticeConsentEmails } from '@/lib/services/notice-consent-service';
+
+type ScopedClient = ReturnType<typeof createScopedClient>;
 
 type RoleFilter = {
   role?: string;
@@ -342,8 +346,8 @@ export async function updateResidentUser(
   communityId: number,
   userId: string,
   values: Record<string, unknown>,
+  scoped: ScopedClient = createScopedClient(communityId),
 ): Promise<void> {
-  const scoped = createScopedClient(communityId);
   // A new number is unverified until it goes through phone/verify (same rule
   // as updateUserProfile): keep phoneVerifiedAt only when the number is
   // unchanged. `users` is platform-level, so without this a manager editing a
@@ -375,8 +379,8 @@ export async function updateResidentRole(
   userId: string,
   values: Record<string, unknown>,
   expectedUpdatedAt?: string,
+  scoped: ScopedClient = createScopedClient(communityId),
 ): Promise<boolean> {
-  const scoped = createScopedClient(communityId);
   const where =
     expectedUpdatedAt === undefined
       ? eq(userRoles.userId, userId)
@@ -386,6 +390,38 @@ export async function updateResidentRole(
         );
   const rows = await scoped.update(userRoles, values, where);
   return expectedUpdatedAt === undefined || (rows as unknown[]).length > 0;
+}
+
+/**
+ * A resident PATCH's two writes — the membership row (the version) and the
+ * global `users` row — in ONE transaction. Before, a failure writing `users`
+ * after the membership update left the membership changed and its version
+ * bumped, with no audit row; the retry then got a 409.
+ *
+ * The membership row is written whenever there are role fields OR a version
+ * token, so a contact-only edit still bumps the version. Returns false, having
+ * written nothing, when `expectedUpdatedAt` no longer matches.
+ *
+ * AUTHZ: caller MUST have verified `requirePermission('residents', 'write')`.
+ */
+export async function updateResidentInTransaction(
+  communityId: number,
+  userId: string,
+  roleValues: Record<string, unknown>,
+  userValues: Record<string, unknown>,
+  expectedUpdatedAt?: string,
+): Promise<boolean> {
+  return createUnscopedClient().transaction(async (tx) => {
+    const scoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
+    if (Object.keys(roleValues).length > 0 || expectedUpdatedAt !== undefined) {
+      const fresh = await updateResidentRole(communityId, userId, roleValues, expectedUpdatedAt, scoped);
+      if (!fresh) return false;
+    }
+    if (Object.keys(userValues).length > 0) {
+      await updateResidentUser(communityId, userId, userValues, scoped);
+    }
+    return true;
+  });
 }
 
 /**

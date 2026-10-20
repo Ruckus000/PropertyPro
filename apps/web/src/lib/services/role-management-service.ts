@@ -208,7 +208,9 @@ export async function revokePropertyManager(
  * - Apartment communities have no board → ValidationError.
  * - Non-owner targets require explicit `acknowledgeNonOwner=true`.
  * - board_president is unique: the existing president's designation is cleared
- *   first (sequential updates; the scoped client has no .transaction()).
+ *   first. These are two sequential updates, NOT one transaction, so a failure
+ *   between them leaves no president. (A scoped client can join a transaction
+ *   via `createScopedClient(communityId, tx)`; see updateResidentInTransaction.)
  */
 export async function setDesignation(
   communityId: number,
