@@ -148,12 +148,6 @@ export function isZeroRent(amount: string | null | undefined): boolean {
   return amount != null && Number(amount) === 0;
 }
 
-export function isUniqueViolation(err: unknown): boolean {
-  const code = (err as { code?: unknown; cause?: { code?: unknown } } | null)?.code
-    ?? (err as { cause?: { code?: unknown } } | null)?.cause?.code;
-  return code === '23505';
-}
-
 export async function ensureNoUnpaidObligations(communityId: number, leaseId: number, action: string): Promise<void> {
   const unpaid = await listUnpaidObligationsForLease(communityId, leaseId);
   if (unpaid.length > 0) {

@@ -3,6 +3,7 @@
 import { StatusBadge, type StatusKey } from '@propertypro/ui';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type { TransparencyMeetingNotice } from '@/lib/services/transparency-service';
+import { formatInCommunityTimezone } from '@/lib/utils/format-date';
 
 interface Props {
   meetings: TransparencyMeetingNotice[];
@@ -17,22 +18,6 @@ function statusForMeeting(value: boolean | null): StatusKey {
 function statusLabel(value: boolean | null): string {
   if (value == null) return 'Not recorded';
   return value ? 'Requirement met' : 'Requirement missed';
-}
-
-function formatDate(value: string, timezone: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '—';
-  }
-
-  return date.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: timezone,
-  });
 }
 
 function formatLeadTime(value: number | null, required: number): string {
@@ -75,11 +60,11 @@ export function MeetingNoticeTable({ meetings, timezone }: Props) {
                     <tr key={meeting.id}>
                       <td className="py-3 pr-3">
                         <p className="font-medium text-content">{meeting.title}</p>
-                        <p className="text-xs text-content-tertiary">Starts: {formatDate(meeting.startsAt, timezone)}</p>
+                        <p className="text-xs text-content-tertiary">Starts: {formatInCommunityTimezone(meeting.startsAt, timezone)}</p>
                       </td>
                       <td className="py-3 pr-3 capitalize">{meeting.meetingType}</td>
                       <td className="py-3 pr-3">
-                        {meeting.noticePostedAt ? formatDate(meeting.noticePostedAt, timezone) : 'Not recorded'}
+                        {meeting.noticePostedAt ? formatInCommunityTimezone(meeting.noticePostedAt, timezone) : 'Not recorded'}
                       </td>
                       <td className="py-3 pr-3">{formatLeadTime(meeting.leadTimeHours, meeting.requiredLeadTimeHours)}</td>
                       <td className="py-3">
@@ -102,11 +87,11 @@ export function MeetingNoticeTable({ meetings, timezone }: Props) {
                   <dl className="mt-2 space-y-1 text-sm text-content-secondary">
                     <div>
                       <dt className="inline font-medium text-content-secondary">Starts: </dt>
-                      <dd className="inline">{formatDate(meeting.startsAt, timezone)}</dd>
+                      <dd className="inline">{formatInCommunityTimezone(meeting.startsAt, timezone)}</dd>
                     </div>
                     <div>
                       <dt className="inline font-medium text-content-secondary">Notice Posted: </dt>
-                      <dd className="inline">{meeting.noticePostedAt ? formatDate(meeting.noticePostedAt, timezone) : 'Not recorded'}</dd>
+                      <dd className="inline">{meeting.noticePostedAt ? formatInCommunityTimezone(meeting.noticePostedAt, timezone) : 'Not recorded'}</dd>
                     </div>
                     <div>
                       <dt className="inline font-medium text-content-secondary">Lead Time: </dt>

@@ -11,6 +11,7 @@ import {
   StaggerChildren,
   StaggerItem,
 } from "@/components/motion";
+import { formatShortDate } from "@/lib/utils/format-date";
 
 // ── Types ───────────────────────────────────────────
 
@@ -31,15 +32,6 @@ interface MobileDocumentsContentProps {
 }
 
 // ── Helpers ─────────────────────────────────────────
-
-function formatDate(iso: string, timezone: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    timeZone: timezone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 function getFileType(fileName: string): string {
   const ext = fileName.split(".").pop()?.toUpperCase();
@@ -200,7 +192,7 @@ export function MobileDocumentsContent({
                       </span>
                       <span className="mt-0.5 text-xs text-stone-400">
                         {doc.category} &middot; {getFileType(doc.fileName)} &middot;{" "}
-                        {formatDate(doc.createdAt, timezone)}
+                        {formatShortDate(doc.createdAt, timezone)}
                       </span>
                       {doc.requiresSignature && (
                         <span className="mt-1.5 inline-flex w-fit rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-600">

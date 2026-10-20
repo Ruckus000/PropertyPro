@@ -12,16 +12,9 @@ import { useArcSubmissions, type ArcSubmission, type ArcSubmissionStatus } from 
 import { cn } from '@/lib/utils';
 import { ArcDecisionForm } from './ArcDecisionForm';
 import { STATUS_BADGE_CLASSES, STATUS_LABELS } from './arc-status';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 /* ─────── Helpers ─────── */
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 /* ─────── Columns ─────── */
 
@@ -74,7 +67,7 @@ function buildColumns(
       header: 'Submitted',
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-sm text-content-secondary">
-          {formatDate(row.original.createdAt)}
+          {formatShortDate(row.original.createdAt)}
         </span>
       ),
     },
@@ -231,7 +224,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
           </h4>
           <p className="mt-1 text-sm">
             {submission.estimatedStartDate
-              ? formatDate(submission.estimatedStartDate)
+              ? formatShortDate(submission.estimatedStartDate)
               : '-'}
           </p>
         </div>
@@ -241,7 +234,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
           </h4>
           <p className="mt-1 text-sm">
             {submission.estimatedCompletionDate
-              ? formatDate(submission.estimatedCompletionDate)
+              ? formatShortDate(submission.estimatedCompletionDate)
               : '-'}
           </p>
         </div>
@@ -283,7 +276,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
             Decided
           </h4>
           <p className="mt-1 text-sm">
-            {formatDate(submission.decidedAt)}
+            {formatShortDate(submission.decidedAt)}
           </p>
         </div>
       )}
@@ -293,7 +286,7 @@ function ArcDetailContent({ submission }: { submission: ArcSubmission }) {
         <h4 className="text-sm font-medium text-content-secondary">
           Submitted
         </h4>
-        <p className="mt-1 text-sm">{formatDate(submission.createdAt)}</p>
+        <p className="mt-1 text-sm">{formatShortDate(submission.createdAt)}</p>
       </div>
     </div>
   );

@@ -17,22 +17,7 @@
  */
 import { createScopedClient, helpArticleFeedback } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
-
-const UNIQUE_VIOLATION = '23505';
-
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== 'object') return false;
-  const candidate = error as { code?: unknown; cause?: { code?: unknown } };
-  if (candidate.code === UNIQUE_VIOLATION) return true;
-  if (
-    candidate.cause &&
-    typeof candidate.cause === 'object' &&
-    candidate.cause.code === UNIQUE_VIOLATION
-  ) {
-    return true;
-  }
-  return false;
-}
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 
 export interface ArticleFeedbackRecord {
   rating: number;
@@ -99,7 +84,7 @@ export async function upsertArticleFeedback(
     });
     return { row: inserted[0], created: true };
   } catch (error) {
-    if (!isUniqueViolation(error)) throw error;
+    if (!isUniqueConstraintError(error)) throw error;
 
     const updated = await scoped.update(
       helpArticleFeedback,

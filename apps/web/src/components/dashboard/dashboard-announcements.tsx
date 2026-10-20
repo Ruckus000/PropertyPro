@@ -2,19 +2,12 @@ import type { DashboardAnnouncement } from '@/lib/dashboard/dashboard-selectors'
 import Link from 'next/link';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 interface DashboardAnnouncementsProps {
   items: DashboardAnnouncement[];
   communityId?: number;
   canWriteAnnouncements?: boolean;
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 export function DashboardAnnouncements({
@@ -61,7 +54,7 @@ export function DashboardAnnouncements({
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1 text-sm text-content-secondary">{formatDate(item.publishedAt)}</p>
+              <p className="mt-1 text-sm text-content-secondary">{formatShortDate(item.publishedAt)}</p>
             </article>
           ))
         )}

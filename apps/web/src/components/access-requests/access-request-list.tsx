@@ -11,18 +11,11 @@ import { accessRequestsQueryOptions, type AccessRequest } from '@/hooks/use-acce
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/directory/directory-badges';
 import { initialsFor } from '@/components/directory/directory-model';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 export type { AccessRequest } from '@/hooks/use-access-requests';
 
 /* ─────── Helpers ─────── */
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 function RoleBadge({ role }: { role: 'owner' | 'tenant' }) {
   return (
@@ -190,7 +183,7 @@ export function AccessRequestList({
                 />
                 <span className="inline-flex items-center gap-1 text-xs text-content-tertiary">
                   <Clock size={12} aria-hidden="true" />
-                  {formatDate(request.createdAt)}
+                  {formatShortDate(request.createdAt)}
                 </span>
               </div>
               <div className="flex gap-2">
@@ -232,7 +225,7 @@ export function AccessRequestList({
                 />
               </div>
               <RoleBadge role={request.isUnitOwner ? 'owner' : 'tenant'} />
-              <span className="text-sm text-content-secondary">{formatDate(request.createdAt)}</span>
+              <span className="text-sm text-content-secondary">{formatShortDate(request.createdAt)}</span>
               <div className="flex items-center gap-2">
                 <ApproveDialog
                   requestId={request.id}

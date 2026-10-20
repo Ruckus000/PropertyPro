@@ -81,6 +81,7 @@ import {
   DomainProviderRateLimitedError,
 } from '@/lib/domains/vercel-domains-client';
 import { ConflictError, ValidationError, AppError } from '@/lib/api/errors';
+import { drizzleUniqueViolation } from '../../helpers/pg-errors';
 
 // ---------------------------------------------------------------------------
 // Unscoped-client mock chain
@@ -237,6 +238,26 @@ describe('setDomain', () => {
             e.code = '23505';
             return Promise.reject(e);
           };
+          return chain;
+        },
+      }));
+
+    await expect(setDomain(7, 'user-1', 'www.example.com')).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('translates a drizzle-wrapped unique violation (23505 on .cause) to ConflictError', async () => {
+    // The shape the driver actually produces: no top-level code, 23505 on
+    // `.cause` (see helpers/pg-errors.ts). Uses the shared postgres-error
+    // predicate, so this pins the swap off the private copy (audit R-03).
+    selectRowsQueue.push([{ customDomain: null, customDomainStatus: null, customDomainVerifiedAt: null }]);
+    addProjectDomainMock.mockResolvedValue({ status: 'pending', records: [] });
+    createUnscopedClientMock
+      .mockImplementationOnce(() => makeDb())
+      .mockImplementationOnce(() => ({
+        update: () => {
+          const chain: Record<string, unknown> = {};
+          chain.set = () => chain;
+          chain.where = () => Promise.reject(drizzleUniqueViolation('communities_custom_domain_unique'));
           return chain;
         },
       }));

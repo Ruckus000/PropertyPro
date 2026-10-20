@@ -13,7 +13,10 @@ const SHORT_DATE_FORMAT: Intl.DateTimeFormatOptions = {
 
 /**
  * Format an ISO date string or Date to "Jan 1, 2025" (en-US locale).
- * Pass a timezone string (IANA) to localize; omit for UTC display.
+ * Pass an IANA timezone to render in that zone. Omitted, the date renders in
+ * the RUNTIME's local zone (the server's on the server, the viewer's in the
+ * browser), not UTC, so pass the community timezone for anything a manager
+ * and a resident must agree on.
  */
 export function formatShortDate(value: string | Date, timeZone?: string): string {
   const date = typeof value === 'string' ? new Date(value) : value;

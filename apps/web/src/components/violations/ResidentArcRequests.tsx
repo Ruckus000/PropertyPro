@@ -28,17 +28,10 @@ import {
 } from '@/hooks/use-arc';
 import { allowedArcActions } from '@/lib/violations/arc-actions';
 import { STATUS_BADGE_CLASSES, STATUS_LABELS } from './arc-status';
+import { formatShortDate } from '@/lib/utils/format-date';
 
 interface ResidentArcRequestsProps {
   communityId: number;
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
@@ -120,7 +113,7 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
                 <h3 className="text-sm font-semibold text-content">{submission.title}</h3>
                 <p className="mt-1 text-xs text-content-secondary">
                   {submission.projectType} · {submission.unitLabel ?? `Unit #${submission.unitId}`} · Submitted{' '}
-                  {formatDate(submission.createdAt)}
+                  {formatShortDate(submission.createdAt)}
                 </p>
               </div>
               <Badge

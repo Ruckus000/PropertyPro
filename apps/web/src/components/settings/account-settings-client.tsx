@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, User, Lock, Shield, Trash2, Clock } from 'lucide-react';
+import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@/lib/supabase/client';
 import {
@@ -24,29 +25,18 @@ import { useReauth } from '@/hooks/use-reauth';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 import { PageHeader } from '@/components/shared/page-header';
 
-// ── Password requirements (same as set-password-form) ──────────────
-
-interface PasswordRequirement {
-  label: string;
-  test: (pw: string) => boolean;
-}
-
-const PASSWORD_REQUIREMENTS: PasswordRequirement[] = [
-  { label: 'At least 8 characters', test: (pw) => pw.length >= 8 },
-  { label: 'At most 72 characters', test: (pw) => pw.length <= 72 },
-  { label: 'One lowercase letter', test: (pw) => /[a-z]/.test(pw) },
-  { label: 'One uppercase letter', test: (pw) => /[A-Z]/.test(pw) },
-  { label: 'One number', test: (pw) => /[0-9]/.test(pw) },
-  { label: 'One special character', test: (pw) => /[^a-zA-Z0-9]/.test(pw) },
-];
+// ── Password requirements ──────────────────────────────
+//
+// The shared policy, from its zod-free SUBPATH like `set-password-form.tsx` and
+// `reset-password-form.tsx` (the barrel would pull zod into this route). The
+// first failing rule's message is the one surfaced.
 
 function validatePassword(pw: string): string | null {
-  if (pw.length < 8) return 'Password must be at least 8 characters.';
-  if (pw.length > 72) return 'Password must be at most 72 characters.';
-  if (!/[a-z]/.test(pw)) return 'Password must contain a lowercase letter.';
-  if (!/[A-Z]/.test(pw)) return 'Password must contain an uppercase letter.';
-  if (!/[0-9]/.test(pw)) return 'Password must contain a number.';
-  if (!/[^a-zA-Z0-9]/.test(pw)) return 'Password must contain a special character.';
+  for (const rule of PASSWORD_POLICY.rules) {
+    if (!rule.test(pw)) {
+      return rule.message;
+    }
+  }
   return null;
 }
 
@@ -367,7 +357,7 @@ export function AccountSettingsClient({
               />
               {showRequirements && newPassword.length > 0 && (
                 <ul className="mt-2 space-y-1" aria-label="Password requirements">
-                  {PASSWORD_REQUIREMENTS.map((req) => {
+                  {PASSWORD_POLICY.rules.map((req) => {
                     const met = req.test(newPassword);
                     return (
                       <li

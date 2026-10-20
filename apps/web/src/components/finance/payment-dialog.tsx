@@ -6,6 +6,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { type PaymentFeePolicy, calculateConvenienceFee } from '@propertypro/shared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCreatePaymentIntent, useUpdatePaymentIntentMethod } from '@/hooks/use-payment-intent';
+import { formatDateOnly } from '@/lib/utils/format-date';
 
 /* ─────── Types ─────── */
 
@@ -63,14 +64,6 @@ function formatCents(cents: number): string {
   }).format(cents / 100);
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 /* ─────── Main Dialog ─────── */
 
 export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSuccess }: PaymentDialogProps) {
@@ -112,7 +105,7 @@ export function PaymentDialog({ communityId, lineItem, unitId, onClose, onSucces
           <div className="mb-4 rounded-md bg-surface-page p-4">
             <div className="flex justify-between text-sm">
               <span className="text-content-secondary">Assessment Due</span>
-              <span className="text-content">{formatDate(lineItem.dueDate)}</span>
+              <span className="text-content">{formatDateOnly(lineItem.dueDate)}</span>
             </div>
             <div className="mt-1 flex justify-between text-sm">
               <span className="text-content-secondary">Amount</span>

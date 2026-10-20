@@ -29,7 +29,8 @@ import { createLease, type LeaseResidentInput } from '@/lib/leases/create-lease'
 import { createOccupant, removeOccupant } from '@/lib/services/occupant-service';
 import { startMoveOutChecklist } from '@/lib/leases/lease-rules';
 import { addDays, termEndDate } from '@/lib/leases/lease-state';
-import { isUniqueViolation, isZeroRent } from '@/lib/leases/lease-rules';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
+import { isZeroRent } from '@/lib/leases/lease-rules';
 import {
   getCommunityLeaseSettings,
   getLeaseById,
@@ -197,7 +198,7 @@ export const POST = withErrorHandler(
       });
     } catch (err) {
       for (const id of proposed?.createdOccupantIds ?? []) await removeOccupant(communityId, actorUserId, id);
-      if (isUniqueViolation(err)) {
+      if (isUniqueConstraintError(err)) {
         throw new ConflictError('This lease already has an open offer. Withdraw or expire it before sending another.');
       }
       throw err;

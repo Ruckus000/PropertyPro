@@ -13,6 +13,7 @@
 import { logAuditEvent } from '@propertypro/db';
 import type { CommunityType } from '@propertypro/shared';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { isUniqueConstraintError } from '@/lib/db/postgres-error';
 import {
   createLeaseForCommunity,
   discardFailedLease,
@@ -33,7 +34,6 @@ import { createOccupant, removeOccupant } from '@/lib/services/occupant-service'
 import {
   ensureNoUnitLeaseOverlap,
   ensureRenewalContinuity,
-  isUniqueViolation,
   isZeroRent,
   partyKeysFor,
   validateLeaseDateWindow,
@@ -283,7 +283,7 @@ export async function createLease(
   } catch (err) {
     await rollbackOccupants();
     // Lost a race with an identical submission: return the winner's lease.
-    if (payload.idempotencyKey && isUniqueViolation(err)) {
+    if (payload.idempotencyKey && isUniqueConstraintError(err)) {
       const winner = await findLeaseByIdempotencyKey(communityId, payload.idempotencyKey);
       if (winner) return winner;
     }

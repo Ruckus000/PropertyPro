@@ -10,6 +10,7 @@ import {
   useUpdateAssessment,
   type Assessment,
 } from '@/hooks/use-finance';
+import { formatDateOnly } from '@/lib/utils/format-date';
 
 /* ─────── Types ─────── */
 
@@ -23,14 +24,6 @@ interface AssessmentManagerProps {
 
 function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
-}
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 const FREQUENCY_LABELS: Record<string, string> = {
@@ -279,7 +272,7 @@ function LineItemsPanel({
                 {lineItems?.map((li) => (
                   <tr key={li.id} className="hover:bg-surface-hover">
                     <td className="whitespace-nowrap px-3 py-2 text-sm text-content">{li.unitLabel ?? `Unit #${li.unitId}`}</td>
-                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content-secondary">{formatDate(li.dueDate)}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-sm text-content-secondary">{formatDateOnly(li.dueDate)}</td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[li.status] || ''}`}>
                         {li.status.charAt(0).toUpperCase() + li.status.slice(1)}

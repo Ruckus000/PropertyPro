@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { AlertTriangle, Bug, Building2, DollarSign, Inbox, ShieldCheck, TrendingUp, Users } from 'lucide-react';
 import { KpiCard, type KpiCardProps } from '@propertypro/ui';
 import type { PlatformDashboardStats } from '@/lib/server/dashboard';
+import { formatDollarsAsCurrency } from '@/lib/billing/format';
 import type { DashboardSeries, MonthPoint } from '@/lib/server/dashboard-series';
 import type { ShellSignals } from '@/lib/server/shell-signals';
 import { KpiDetailDialog, type KpiDetailBreakdownRow } from './KpiDetailDialog';
@@ -92,15 +93,6 @@ function deltaToTrend(delta: number | undefined): KpiCardProps['trend'] {
   return delta > 0 ? 'up' : 'down';
 }
 
-function formatCurrency(dollars: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(dollars);
-}
-
 export function KpiGrid({ stats, series, signals }: KpiGridProps) {
   const [openKey, setOpenKey] = useState<string | null>(null);
 
@@ -167,7 +159,7 @@ export function KpiGrid({ stats, series, signals }: KpiGridProps) {
       // `DashboardSeries.latestMrr` docblock). Falls back to the bucket only
       // when there is no snapshot at all (series.latestMrr undefined/null),
       // which also legitimately renders $0.
-      value: formatCurrency(series.latestMrr ?? latestValue(series.mrr)),
+      value: formatDollarsAsCurrency(series.latestMrr ?? latestValue(series.mrr)),
       delta: mrrDelta,
       deltaLabel: 'vs yesterday',
       trend: deltaToTrend(mrrDelta),
