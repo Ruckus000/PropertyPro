@@ -132,6 +132,7 @@ function createViolationFineRow(overrides: Partial<Record<string, unknown>> = {}
     violationId: 10,
     amountCents: 2500,
     ledgerEntryId: 77,
+    lineItemId: 5,
     status: 'pending',
     issuedAt: new Date('2026-03-02T00:00:00.000Z'),
     paidAt: null,
@@ -367,8 +368,8 @@ describe('violations-service', () => {
     warn.mockRestore();
   });
 
-  it('soft-deletes the fine and ledger entry if line-item creation fails', async () => {
-    const lineItemError = new Error('line item insert failed');
+  it('soft-deletes the line item and ledger entry if fine creation fails', async () => {
+    const fineError = new Error('fine insert failed');
     const selectFrom = vi
       .fn()
       .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
@@ -376,8 +377,8 @@ describe('violations-service', () => {
       .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
-      .mockResolvedValueOnce([createViolationFineRow()])
-      .mockRejectedValueOnce(lineItemError);
+      .mockResolvedValueOnce([{ id: 5 }])
+      .mockRejectedValueOnce(fineError);
     const update = vi.fn().mockResolvedValue([]);
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -390,13 +391,13 @@ describe('violations-service', () => {
 
     await expect(
       imposeViolationFineForCommunity(42, 10, 'actor-1', { amountCents: 2500, ...APPROVED }),
-    ).rejects.toThrow('line item insert failed');
+    ).rejects.toThrow('fine insert failed');
 
     expect(update).toHaveBeenNthCalledWith(
       1,
-      tables.violationFines,
+      tables.assessmentLineItems,
       { deletedAt: expect.any(Date) },
-      { eq: [tables.violationFines.id, 88] },
+      { eq: [tables.assessmentLineItems.id, 5] },
     );
     expect(update).toHaveBeenNthCalledWith(
       2,
@@ -443,8 +444,8 @@ describe('violations-service', () => {
       .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
-      .mockResolvedValueOnce([createViolationFineRow({ amountCents: 15_000 })])
-      .mockResolvedValueOnce([{ id: 5 }]);
+      .mockResolvedValueOnce([{ id: 5 }])
+      .mockResolvedValueOnce([createViolationFineRow({ amountCents: 15_000 })]);
     createScopedClientMock.mockReturnValue({
       selectFrom,
       insert,
@@ -493,8 +494,8 @@ describe('violations-service', () => {
       .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
-      .mockResolvedValueOnce([createViolationFineRow()])
-      .mockResolvedValueOnce([{ id: 5 }]);
+      .mockResolvedValueOnce([{ id: 5 }])
+      .mockResolvedValueOnce([createViolationFineRow()]);
     createScopedClientMock.mockReturnValue({
       selectFrom,
       insert,
@@ -515,8 +516,8 @@ describe('violations-service', () => {
       .mockResolvedValueOnce(COMMITTEE_ROLES);
     const insert = vi
       .fn()
-      .mockResolvedValueOnce([createViolationFineRow()])
-      .mockResolvedValueOnce([{ id: 5 }]);
+      .mockResolvedValueOnce([{ id: 5 }])
+      .mockResolvedValueOnce([createViolationFineRow()]);
     createScopedClientMock.mockReturnValue({
       selectFrom,
       insert,
@@ -538,6 +539,11 @@ describe('violations-service', () => {
         committeeMembers: COMMITTEE,
         committeeApprovedAt: expect.any(Date),
       }),
+    );
+    // The link a payment marks the fine paid by (#16): never matched by amount.
+    expect(insert).toHaveBeenCalledWith(
+      tables.violationFines,
+      expect.objectContaining({ lineItemId: 5 }),
     );
   });
 
@@ -595,8 +601,8 @@ describe('violations-service', () => {
         .mockResolvedValueOnce(communityResidents); // every resident, to count eligible owners
       const insert = vi
         .fn()
-        .mockResolvedValueOnce([createViolationFineRow()])
-        .mockResolvedValueOnce([{ id: 5 }]);
+        .mockResolvedValueOnce([{ id: 5 }])
+        .mockResolvedValueOnce([createViolationFineRow()]);
       createScopedClientMock.mockReturnValue({
         selectFrom,
         insert,
@@ -652,7 +658,7 @@ describe('violations-service', () => {
         .mockResolvedValueOnce([createViolationRow({ status: 'noticed' })])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce(COMMITTEE_ROLES);
-      const insert = vi.fn().mockResolvedValueOnce([createViolationFineRow()]).mockResolvedValueOnce([{ id: 5 }]);
+      const insert = vi.fn().mockResolvedValueOnce([{ id: 5 }]).mockResolvedValueOnce([createViolationFineRow()]);
       createScopedClientMock.mockReturnValue({
         selectFrom,
         insert,

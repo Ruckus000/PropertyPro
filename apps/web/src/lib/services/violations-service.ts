@@ -71,6 +71,7 @@ export interface ViolationFineRecord {
   violationId: number;
   amountCents: number;
   ledgerEntryId: number | null;
+  lineItemId: number | null;
   status: ViolationFineStatus;
   issuedAt: Date;
   paidAt: Date | null;
@@ -804,7 +805,7 @@ export async function imposeViolationFineForCommunity(
   // Validate status transition before starting multi-step operation
   assertValidStatusTransition(violation.status, 'fined');
 
-  // Multi-step operation: ledger → fine → line item → status update.
+  // Multi-step operation: ledger → line item → fine → status update.
   // The scoped client does not expose database transactions, so we use
   // compensating soft-deletes on failure to avoid orphaned records.
   let ledgerEntryId: number | undefined;
@@ -830,23 +831,6 @@ export async function imposeViolationFineForCommunity(
     });
     ledgerEntryId = ledgerResult.id;
 
-    const [fineInserted] = await scoped.insert(violationFines, {
-      violationId,
-      amountCents: input.amountCents,
-      ledgerEntryId,
-      status: 'pending',
-      // Snapshot, not a join — committee membership turns over, and the
-      // question in a dispute is who approved this fine at the time.
-      approvedByCommittee: input.approvedByCommittee ?? null,
-      committeeMembers: input.committeeMembers ?? null,
-      committeeApprovedAt: input.approvedByCommittee ? new Date() : null,
-    });
-    if (!fineInserted) {
-      throw new Error('Failed to create violation fine');
-    }
-    fine = mapViolationFineRow(fineInserted as unknown as ViolationFineRecord);
-    fineId = fine.id;
-
     const [lineItem] = await scoped.insert(assessmentLineItems, {
       assessmentId: null,
       unitId: violation.unitId,
@@ -861,10 +845,33 @@ export async function imposeViolationFineForCommunity(
       throw new Error('Failed to create one-off fine line item');
     }
     lineItemId = Number(lineItem['id']);
+
+    const [fineInserted] = await scoped.insert(violationFines, {
+      violationId,
+      amountCents: input.amountCents,
+      ledgerEntryId,
+      lineItemId,
+      status: 'pending',
+      // Snapshot, not a join — committee membership turns over, and the
+      // question in a dispute is who approved this fine at the time.
+      approvedByCommittee: input.approvedByCommittee ?? null,
+      committeeMembers: input.committeeMembers ?? null,
+      committeeApprovedAt: input.approvedByCommittee ? new Date() : null,
+    });
+    if (!fineInserted) {
+      throw new Error('Failed to create violation fine');
+    }
+    fine = mapViolationFineRow(fineInserted as unknown as ViolationFineRecord);
+    fineId = fine.id;
   } catch (error) {
     if (fineId) {
       await scoped
         .update(violationFines, { deletedAt: new Date() }, eq(violationFines.id, fineId))
+        .catch(() => {});
+    }
+    if (lineItemId) {
+      await scoped
+        .update(assessmentLineItems, { deletedAt: new Date() }, eq(assessmentLineItems.id, lineItemId))
         .catch(() => {});
     }
     if (ledgerEntryId) {
@@ -874,6 +881,7 @@ export async function imposeViolationFineForCommunity(
     }
     console.error('[violations-service] fine creation rollback executed', {
       fineId,
+      lineItemId,
       ledgerEntryId,
       violationId,
       communityId,
@@ -1198,78 +1206,43 @@ export async function withdrawArcSubmissionForCommunity(
   return record;
 }
 
-export async function markMatchingViolationFinePaid(
+export async function markViolationFinePaidForLineItem(
   communityId: number,
-  unitId: number,
-  amountCents: number,
+  lineItemId: number,
   actorUserId: string,
   requestId?: string | null,
-  /** When provided, only match fines for this specific violation (avoids ambiguity with duplicate amounts). */
-  violationId?: number,
 ): Promise<number | null> {
   const scoped = createScopedClient(communityId);
-  const fineFilters = [
-    eq(violationFines.status, 'pending'),
-    eq(violationFines.amountCents, Math.abs(amountCents)),
-  ];
-  if (violationId !== undefined) {
-    fineFilters.push(eq(violationFines.violationId, violationId));
-  }
-  const pendingFines = await scoped.selectFrom<ViolationFineRecord>(
+  const [fine] = await scoped.selectFrom<ViolationFineRecord>(
     violationFines,
     {},
-    and(...fineFilters),
+    and(eq(violationFines.lineItemId, lineItemId), eq(violationFines.status, 'pending')),
   );
-  if (pendingFines.length === 0) {
+  if (!fine) {
     return null;
   }
 
-  const violationIds = pendingFines.map((fine) => fine.violationId);
-  const relatedViolations = await scoped.selectFrom<ViolationRecord>(
-    violations,
-    {},
-    inArray(violations.id, violationIds),
-  );
-  const violationById = new Map<number, ViolationRecord>();
-  for (const violation of relatedViolations) {
-    violationById.set(violation.id, violation);
-  }
-
-  const match = pendingFines
-    .filter((fine) => violationById.get(fine.violationId)?.unitId === unitId)
-    .sort((a, b) => b.issuedAt.getTime() - a.issuedAt.getTime())[0];
-
-  if (!match) {
-    return null;
-  }
-
-  await scoped.update(
-    violationFines,
-    {
-      status: 'paid',
-      paidAt: new Date(),
-    },
-    eq(violationFines.id, match.id),
-  );
+  const paidAt = new Date();
+  await scoped.update(violationFines, { status: 'paid', paidAt }, eq(violationFines.id, fine.id));
 
   await logAuditEvent({
     userId: actorUserId,
     action: 'update',
     resourceType: 'violation_fine',
-    resourceId: String(match.id),
+    resourceId: String(fine.id),
     communityId,
     oldValues: {
-      status: match.status,
-      paidAt: match.paidAt,
+      status: fine.status,
+      paidAt: fine.paidAt,
     },
     newValues: {
       status: 'paid',
-      paidAt: new Date().toISOString(),
+      paidAt: paidAt.toISOString(),
     },
     metadata: { requestId: requestId ?? null },
   });
 
-  return match.id;
+  return fine.id;
 }
 
 // ---------------------------------------------------------------------------

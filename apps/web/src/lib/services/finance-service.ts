@@ -35,7 +35,7 @@ import { captureMessage } from '@sentry/nextjs';
 import { AssessmentPaymentReceivedEmail, sendEmail } from '@propertypro/email';
 import { generateCSV } from '@/lib/services/csv-export';
 import { getStripeClient } from '@/lib/services/stripe-service';
-import { markMatchingViolationFinePaid } from '@/lib/services/violations-service';
+import { markViolationFinePaidForLineItem } from '@/lib/services/violations-service';
 import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { signPayload, verifySignature } from '@/lib/services/oauth-state';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
@@ -2465,7 +2465,10 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     });
   }
 
-  await markMatchingViolationFinePaid(communityId, unitId, paymentAmount, payerUserId);
+  // Rent obligation ids live in another table and can equal a fine's line item id.
+  if (payable.payableType === 'assessment_line_item') {
+    await markViolationFinePaidForLineItem(communityId, payable.payableId, payerUserId);
+  }
 
   // Fire-and-forget payment confirmation email — never block webhook processing
   sendPaymentConfirmationEmail(

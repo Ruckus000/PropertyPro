@@ -286,13 +286,15 @@ async function enableCommunityGate(
     expect(lineItems[0]?.assessmentId).toBeNull();
     expect(lineItems[0]?.unitId).toBe(unitAId);
 
-    const fines = await scopedA.selectFrom<{ id: number; status: string }>(
+    const fines = await scopedA.selectFrom<{ id: number; status: string; lineItemId: number | null }>(
       kit.dbModule.violationFines,
       {},
       eq(kit.dbModule.violationFines.id, fineId),
     );
     expect(fines).toHaveLength(1);
     expect(fines[0]?.status).toBe('pending');
+    // The key a payment marks this fine paid by (#16).
+    expect(fines[0]?.lineItemId).toBe(lineItemId);
 
     const resolveResponse = await routeModules.violationResolve.POST(
       jsonRequest(apiUrl(`/api/v1/violations/${violationId}/resolve`), 'POST', {

@@ -1,0 +1,3 @@
+ALTER TABLE "violation_fines" ADD COLUMN "line_item_id" bigint;--> statement-breakpoint
+ALTER TABLE "violation_fines" ADD CONSTRAINT "violation_fines_line_item_id_assessment_line_items_id_fk" FOREIGN KEY ("line_item_id") REFERENCES "public"."assessment_line_items"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "violation_fines" ADD CONSTRAINT "violation_fines_line_item_id_unique" UNIQUE("line_item_id");

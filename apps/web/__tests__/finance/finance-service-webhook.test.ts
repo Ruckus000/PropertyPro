@@ -56,6 +56,7 @@ const {
     amountCents: Symbol('violation_fines.amount_cents'),
     violationId: Symbol('violation_fines.violation_id'),
     issuedAt: Symbol('violation_fines.issued_at'),
+    lineItemId: Symbol('violation_fines.line_item_id'),
   },
   violationsTable: {
     id: Symbol('violations.id'),
@@ -414,6 +415,121 @@ describe('processFinanceStripeEvent', () => {
         externalReference: 'pi_rent_success_1',
       }),
     );
+  });
+
+  describe('marking a violation fine paid', () => {
+    // A pending $250 fine billed by line item 45. Every case pays $250, so only
+    // the line-item link, never the amount, can decide which fine is paid.
+    const pendingFine = {
+      id: 9,
+      violationId: 3,
+      amountCents: 25000,
+      lineItemId: 45,
+      status: 'pending',
+      paidAt: null,
+      issuedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+    const fineColumns = new Map<unknown, keyof typeof pendingFine>([
+      [violationFinesTable.lineItemId, 'lineItemId'],
+      [violationFinesTable.status, 'status'],
+      [violationFinesTable.amountCents, 'amountCents'],
+    ]);
+    // Answers the fine query by evaluating its `where`, so the test sees what
+    // the real lookup asks for rather than a canned answer.
+    function finesMatching(where: unknown) {
+      const clauses = (where as { and?: unknown[] }).and ?? [where];
+      const hit = clauses.every((clause) => {
+        const { column, value } = clause as { column: unknown; value: unknown };
+        const field = fineColumns.get(column);
+        return field !== undefined && pendingFine[field] === value;
+      });
+      return hit ? [pendingFine] : [];
+    }
+
+    function stubPayable(table: unknown, row: Record<string, unknown>) {
+      selectFromMock.mockImplementation((selected: unknown, _cols: unknown, where: unknown) => {
+        if (selected === table) return Promise.resolve([row]);
+        if (selected === violationFinesTable) return Promise.resolve(finesMatching(where));
+        return Promise.resolve([]);
+      });
+    }
+
+    async function pay(metadata: Record<string, string>) {
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'pi_fine_1',
+            metadata: { communityId: '11', unitId: '88', userId: 'user-11', ...metadata },
+            amount_received: 25000,
+            amount: 25000,
+            latest_charge: 'ch_fine_1',
+          }),
+        },
+        charges: {
+          retrieve: vi.fn().mockResolvedValue({ id: 'ch_fine_1', amount: 25000, amount_refunded: 0 }),
+        },
+      });
+      await processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_fine_1', { id: 'pi_fine_1' }),
+      );
+    }
+
+    const lineItem = (id: number, assessmentId: number | null) => ({
+      id,
+      assessmentId,
+      communityId: 11,
+      unitId: 88,
+      amountCents: 25000,
+      dueDate: '2026-01-15',
+      status: 'pending',
+      paidAt: null,
+      paymentIntentId: null,
+      lateFeeCents: 0,
+    });
+
+    it('marks the fine billed by the paid line item', async () => {
+      stubPayable(assessmentLineItemsTable, lineItem(45, null));
+      await pay({ payableType: 'assessment_line_item', payableId: '45' });
+
+      expect(updateMock).toHaveBeenCalledWith(
+        violationFinesTable,
+        expect.objectContaining({ status: 'paid' }),
+        expect.objectContaining({ column: violationFinesTable.id, value: 9 }),
+      );
+    });
+
+    it('leaves a same-amount fine alone when an assessment is paid', async () => {
+      stubPayable(assessmentLineItemsTable, lineItem(44, 7));
+      await pay({ payableType: 'assessment_line_item', payableId: '44' });
+
+      expect(updateMock).toHaveBeenCalledWith(
+        assessmentLineItemsTable,
+        expect.objectContaining({ status: 'paid' }),
+        expect.anything(),
+      );
+      expect(updateMock).not.toHaveBeenCalledWith(violationFinesTable, expect.anything(), expect.anything());
+    });
+
+    it('leaves the fine alone when rent is paid, even if the ids collide', async () => {
+      // Rent obligation 45 is a different table's row from line item 45.
+      stubPayable(rentObligationsTable, {
+        id: 45,
+        leaseId: 42,
+        communityId: 11,
+        unitId: 88,
+        dueDate: '2026-01-01',
+        amountCents: 25000,
+        status: 'pending',
+      });
+      await pay({ payableType: 'rent_obligation', payableId: '45' });
+
+      expect(updateMock).toHaveBeenCalledWith(
+        rentObligationsTable,
+        expect.objectContaining({ status: 'paid' }),
+        expect.anything(),
+      );
+      expect(updateMock).not.toHaveBeenCalledWith(violationFinesTable, expect.anything(), expect.anything());
+    });
   });
 
   it('refuses — loudly, writing nothing — an event whose finance fence already exists', async () => {

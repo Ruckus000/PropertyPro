@@ -325,7 +325,9 @@ This is the single home for every deferral. "Fired?" is taken from the C dimensi
 - #6–#13 (live-today should-fix): merged in #1370 (`eedd3cced`).
 - #17, #19 (truth and fired trigger): the docs-truth PR after #1370.
 - #14, #15 (security) and #20 (web admin twins): their own PRs after that.
-- Not started: #16, #18, and the nice-to-have items other than #20.
+- #18 (web CSP): #1376, plus `NEXT_PUBLIC_SENTRY_DSN` re-added non-Sensitive on 2026-10-20 (it had been Sensitive, so the build saw no DSN and shipped no browser Sentry).
+- #16 (fine paid by amount): a fine now records the line item that bills it (migration `0092`), and a payment marks the fine with that line item paid. The audit's `assessmentId == null` guard would still have matched rent, which also has no assessment.
+- Not started: the nice-to-have items other than #20.
 
 The order follows dependencies, with fired triggers and must-fixes first. PRs 1–4 touch disjoint files and can run in parallel sessions. Re-fetch `origin/main` before each merge.
 
