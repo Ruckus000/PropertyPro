@@ -34,7 +34,7 @@ P1
 
 ## Files Expected
 - `scripts/load-tests/k6-script.js` (or equivalent)
-- `docs/LOAD_TEST_RESULTS.md` (report with metrics and findings)
+- `docs/audits/p4-62-load-test-results.md` (report with metrics and findings)
 
 ## Attempts
 0

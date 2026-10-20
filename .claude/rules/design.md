@@ -101,11 +101,11 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   > **Raw-palette drain is COMPLETE — admin went 1,088 → 0.** The last 15 were
   > the dark `Sidebar.tsx` internals, and wave 1 of the console redesign
   > (`348bdb4e`, #1109) **deleted that file** along with `AdminLayout.tsx`; the
-  > same commit dropped its baseline entry. What remains frozen for admin is 12
-  > files: 33 `raw-hex`/`arbitrary-font`/`arbitrary-color` in the demo-preview
-  > mockups (which render user-supplied branding and are legitimately literal)
-  > plus 36 `bare-focus-ring` in five files — a later rule (#1004), not
-  > un-drained palette.
+  > same commit dropped its baseline entry. What remains frozen for admin is the
+  > demo-preview mockups (they render user-supplied branding, so their raw hex,
+  > font and colour values are legitimately literal). For current counts read
+  > the `apps/admin/` entries in `scripts/design-token-baseline.json` rather than
+  > a number here; numbers in this paragraph have gone stale before.
   >
   > **After any batch, and after ANY edit to `apps/admin/tailwind.config.ts`,
   > run `pnpm guard:admin-semantic-css`** (needs a build first). It

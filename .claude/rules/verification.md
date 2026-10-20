@@ -60,6 +60,14 @@ machine-readable reporter and assert against the report.
   If you add a package with tests, give it a `test` script *and* add it to `vitest.workspace.ts`.
 - A green suite does not prove an absence. To assert something is gone, grep for it directly.
 
+## Deliberate shortcuts: `ponytail:` markers
+
+A `ponytail:` comment marks a shortcut taken on purpose. It names the **limit** and an
+**observable trigger** for revisiting it (`ponytail: serial sends, ~100 per request. Trigger:
+any batch request takes over 60 s`). A marker with no trigger rots silently, and a marker
+whose premise turns out false is a bug report, not a decision (W-08: "the scoped client has
+no transaction" was wrong). A comment that only records a design choice needs no trigger.
+
 ## Writing a guard
 
 Follow `scripts/verify-css-var-migration.sh` (`ce0ec269`) — the canonical shape:

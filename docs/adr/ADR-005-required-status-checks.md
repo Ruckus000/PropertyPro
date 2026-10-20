@@ -9,6 +9,12 @@
   cannot be required individually. `migration-ordering` in particular now runs in
   localci's blocking pre-push `gate`. Recorded rather than rewritten, per ADR
   convention.
+- **Status addendum (2026-10-20):** the paragraph above is itself history. #1155
+  re-enabled `ci.yml` and made GitHub Actions the merge authority again. `main`'s
+  required contexts are now the seven CI jobs `Lint`, `Typecheck`, `Unit Tests`,
+  `no-mock-guard`, `migration-ordering`, `perf-check` and `Build` (strict=false,
+  admins not enforced; read from `gh api repos/Ruckus000/PropertyPro/branches/main/protection`
+  on 2026-10-20). `localci/suite` is optional local feedback and not required.
 - **Date:** 2026-06-05 (applied 2026-06-06)
 - **Context tags:** CI, branch protection, Plan B4
 
