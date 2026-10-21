@@ -200,9 +200,9 @@ describe('migration 0073 — platform admin preferences and push subscriptions',
       // bearing: classifying either table as tenant-scoped would be the exact
       // opposite of the intent, and would show up as a bump. 84 → 87 is
       // leases_v3_expand's three lease tenant tables, 87 → 88 is 0090's
-      // notice_consent, and 88 → 87 is 0091 dropping onboarding_wizard_state —
-      // not these two.
-      expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(87);
+      // notice_consent, 88 → 87 is 0091 dropping onboarding_wizard_state, and
+      // 87 → 84 is 0094 dropping three dead tables — not these two.
+      expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(84);
     });
   });
 

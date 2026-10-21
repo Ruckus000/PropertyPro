@@ -45,14 +45,12 @@ import {
 
 const SIGNED_IN = new Date('2026-09-01T12:00:00.000Z');
 const INVITED = new Date('2026-08-01T12:00:00.000Z');
-const APPROVED = new Date('2026-08-15T12:00:00.000Z');
 
 describe('derivePortalStatus', () => {
   it.each([
-    ['signed in (even if also invited)', { lastSignInAt: SIGNED_IN, lastInvitedAt: INVITED, accessApprovedAt: null }, 'active'],
-    ['invited, never signed in', { lastSignInAt: null, lastInvitedAt: INVITED, accessApprovedAt: null }, 'invited'],
-    ['approved access request, never signed in', { lastSignInAt: null, lastInvitedAt: null, accessApprovedAt: APPROVED }, 'invited'],
-    ['nothing on record', { lastSignInAt: null, lastInvitedAt: null, accessApprovedAt: null }, 'not_invited'],
+    ['signed in (even if also invited)', { lastSignInAt: SIGNED_IN, lastInvitedAt: INVITED }, 'active'],
+    ['invited, never signed in', { lastSignInAt: null, lastInvitedAt: INVITED }, 'invited'],
+    ['nothing on record', { lastSignInAt: null, lastInvitedAt: null }, 'not_invited'],
     ['no activity row at all', undefined, 'not_invited'],
   ] as const)('%s → %s', (_label, activity, expected) => {
     expect(derivePortalStatus(activity)).toBe(expected);
@@ -74,8 +72,8 @@ describe('listResidentsForCommunity', () => {
     ]);
     portalActivityMock.mockResolvedValue(
       new Map([
-        ['u-owner', { userId: 'u-owner', lastSignInAt: SIGNED_IN, lastInvitedAt: INVITED, accessApprovedAt: null }],
-        ['u-tenant', { userId: 'u-tenant', lastSignInAt: null, lastInvitedAt: INVITED, accessApprovedAt: APPROVED }],
+        ['u-owner', { userId: 'u-owner', lastSignInAt: SIGNED_IN, lastInvitedAt: INVITED }],
+        ['u-tenant', { userId: 'u-tenant', lastSignInAt: null, lastInvitedAt: INVITED }],
       ]),
     );
     // The tenant's consent covers an address that is no longer theirs: not shown.
@@ -103,8 +101,7 @@ describe('listResidentsForCommunity', () => {
         designation: null,
         portalStatus: 'invited',
         lastSignInAt: null,
-        // The newer of invitation and access-request approval.
-        lastInvitedAt: APPROVED.toISOString(),
+        lastInvitedAt: INVITED.toISOString(),
         noticeConsent: false,
       }),
       expect.objectContaining({

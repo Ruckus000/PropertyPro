@@ -648,8 +648,6 @@ export const INTENTIONALLY_EXCLUDED: Record<string, string> = {
   notifications: 'Per-user in-app notification feed — derived from records that are themselves exported.',
   notification_preferences: 'Per-user settings including SMS consent state — personal, not association, data.',
   calendar_event_reminder_log: 'Transient dedupe log preventing duplicate reminder sends; no record value.',
-  calendar_sync_tokens: 'Google Calendar OAuth tokens. Exporting them would be a live credential leak.',
-  accounting_connections: 'Third-party accounting OAuth credentials. Exporting them would be a credential leak.',
   announcement_delivery_log: 'Per-recipient delivery telemetry; the announcement itself is exported.',
   provisioning_jobs: 'Internal signup-provisioning state machine — PropertyPro operational state.',
   demo_seed_registry: 'Demo-data bookkeeping — tracks seeded fixtures, never present for a real association.',
@@ -680,7 +678,6 @@ export const INTENTIONALLY_EXCLUDED: Record<string, string> = {
 
   // ── Access / invitation workflow ──────────────────────────────────────────
   invitations: 'Contains live invitation TOKENS. Exporting them would be a credential leak.',
-  access_requests: 'Pending access workflow, superseded by user_roles once granted.',
   community_join_requests: 'Pending join workflow, superseded by user_roles once granted.',
 
   // ── Comms and engagement ──────────────────────────────────────────────────

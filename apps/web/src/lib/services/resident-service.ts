@@ -28,8 +28,7 @@ type RoleFilter = {
 
 /**
  * - `active`: has signed in to the portal at least once.
- * - `invited`: sent an invitation (or approved via access request, which emails
- *   a login link) but has never signed in.
+ * - `invited`: sent an invitation but has never signed in.
  * - `not_invited`: on file, never invited, never signed in.
  */
 export type ResidentPortalStatus = 'active' | 'invited' | 'not_invited';
@@ -73,10 +72,9 @@ export interface ResidentListRow {
 export function derivePortalStatus(activity: {
   lastSignInAt: Date | null;
   lastInvitedAt: Date | null;
-  accessApprovedAt: Date | null;
 } | undefined): ResidentPortalStatus {
   if (activity?.lastSignInAt) return 'active';
-  if (activity?.lastInvitedAt || activity?.accessApprovedAt) return 'invited';
+  if (activity?.lastInvitedAt) return 'invited';
   return 'not_invited';
 }
 
@@ -218,11 +216,7 @@ export async function listResidentsForCommunity(
         ? {
             portalStatus: derivePortalStatus(activity),
             lastSignInAt: activity?.lastSignInAt?.toISOString() ?? null,
-            lastInvitedAt:
-              [activity?.lastInvitedAt, activity?.accessApprovedAt]
-                .filter((d): d is Date => d instanceof Date)
-                .sort((a, b) => b.getTime() - a.getTime())[0]
-                ?.toISOString() ?? null,
+            lastInvitedAt: activity?.lastInvitedAt?.toISOString() ?? null,
           }
         : {}),
       // Shown only while the consent covers the address the association has

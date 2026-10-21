@@ -150,9 +150,11 @@ describe('platform_admin_audit_log RLS registration', () => {
     // community_export_job_parts), then 82 → 83 by 0065
     // (site_publish_schedules), 83 → 84 by unit_occupants, then 84 → 87 by
     // leases_v3_expand (lease_residents, lease_deposits, lease_renewal_offers),
-    // then 87 → 88 by 0090 (notice_consent) — all tenant tables — and 88 → 87 by
-    // 0091 dropping onboarding_wizard_state. The assertion still does its job:
-    // it pins the value so an accidental bump is visible.
-    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(87);
+    // then 87 → 88 by 0090 (notice_consent) — all tenant tables — 88 → 87 by
+    // 0091 dropping onboarding_wizard_state, and 87 → 84 by 0094 dropping
+    // access_requests, calendar_sync_tokens and accounting_connections. The
+    // assertion still does its job: it pins the value so an accidental bump is
+    // visible.
+    expect(RLS_EXPECTED_TENANT_TABLE_COUNT).toBe(84);
   });
 });

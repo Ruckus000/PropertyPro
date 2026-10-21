@@ -22,8 +22,7 @@ import {
  *
  * What is at stake if a table drops off the list: any community member reads
  * every row of it through PostgREST with their own JWT and the anon key that
- * ships in the browser bundle — for accounting_connections and
- * calendar_sync_tokens that is OAuth refresh tokens.
+ * ships in the browser bundle — for invitations that is live invite tokens.
  */
 
 const RAW = readFileSync(
@@ -54,7 +53,10 @@ const EXPECTED = [...DATA_API_REVOKED_TENANT_TABLES].sort();
  * hashed in the ledger, so its frozen array keeps naming them; only the
  * comparison against the migration file adds them back.
  */
-const DROPPED_AFTER_0077 = ['onboarding_wizard_state']; // 0091
+const DROPPED_AFTER_0077 = [
+  'onboarding_wizard_state', // 0091
+  'access_requests', 'accounting_connections', 'calendar_sync_tokens', // 0094
+];
 const EXPECTED_IN_0077 = [...DATA_API_REVOKED_TENANT_TABLES, ...DROPPED_AFTER_0077].sort();
 
 describe('migration 0077 — tenant tables shut to the Data API', () => {
@@ -129,8 +131,8 @@ describe('migration 0077 — tenant tables shut to the Data API', () => {
       );
     });
 
-    it.each(['calendar_sync_tokens', 'accounting_connections', 'invitations',
-      'election_ballot_submissions', 'leases', 'units', 'emergency_broadcast_recipients'])(
+    it.each(['invitations', 'election_ballot_submissions', 'leases', 'units',
+      'emergency_broadcast_recipients'])(
       'still lists %s (a table whose exposure was the reason for 0077)',
       (table) => {
         expect(DATA_API_REVOKED_TENANT_TABLES).toContain(table);

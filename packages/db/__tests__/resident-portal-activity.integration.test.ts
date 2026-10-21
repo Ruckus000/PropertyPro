@@ -4,7 +4,6 @@ import { inArray, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
-import { accessRequests } from '../src/schema/access-requests';
 import { communities } from '../src/schema/communities';
 import { invitations } from '../src/schema/invitations';
 import { userRoles } from '../src/schema/user-roles';
@@ -25,15 +24,13 @@ describeDb('findCommunityResidentPortalActivity (integration)', () => {
 
   const signedIn = randomUUID();
   const invitedOnly = randomUUID();
-  const approvedOnly = randomUUID();
   const neverInvited = randomUUID();
   const invitedElsewhere = randomUUID();
   const memberOfBOnly = randomUUID();
   const inviter = randomUUID();
-  const allUsers = [signedIn, invitedOnly, approvedOnly, neverInvited, invitedElsewhere, memberOfBOnly, inviter];
+  const allUsers = [signedIn, invitedOnly, neverInvited, invitedElsewhere, memberOfBOnly, inviter];
 
   const SIGN_IN_AT = new Date('2026-09-02T10:00:00.000Z');
-  const APPROVED_AT = new Date('2026-08-20T10:00:00.000Z');
 
   async function cleanup() {
     await db.delete(communities).where(inArray(communities.slug, [SLUG_A, SLUG_B]));
@@ -69,7 +66,7 @@ describeDb('findCommunityResidentPortalActivity (integration)', () => {
     communityB = inserted.find((c) => c.slug === SLUG_B)!.id;
 
     await db.insert(userRoles).values([
-      ...[signedIn, invitedOnly, approvedOnly, neverInvited, invitedElsewhere].map((userId) => ({
+      ...[signedIn, invitedOnly, neverInvited, invitedElsewhere].map((userId) => ({
         userId,
         communityId: communityA,
         role: 'resident' as const,
@@ -87,13 +84,6 @@ describeDb('findCommunityResidentPortalActivity (integration)', () => {
       // Soft-deleted invitation — ignored.
       { communityId: communityA, userId: neverInvited, invitedBy: inviter, token: randomUUID(), expiresAt, deletedAt: new Date() },
     ]);
-
-    await db.insert(accessRequests).values([
-      // Case differs from users.email on purpose: the join is case-insensitive.
-      { communityId: communityA, email: `PORTAL-2+${SLUG_A}@EXAMPLE.COM`, fullName: 'User 2', status: 'approved', reviewedAt: APPROVED_AT },
-      // A denied request is not an invitation.
-      { communityId: communityA, email: `portal-3+${SLUG_A}@example.com`, fullName: 'User 3', status: 'denied', reviewedAt: APPROVED_AT },
-    ]);
   });
 
   afterAll(async () => {
@@ -101,30 +91,23 @@ describeDb('findCommunityResidentPortalActivity (integration)', () => {
     await sqlClient.end();
   });
 
-  it('reports sign-in, invitation and approval facts for the community only', async () => {
+  it('reports sign-in and invitation facts for the community only', async () => {
     const activity = await findActivity(communityA);
 
     expect([...activity.keys()].sort()).toEqual(
-      [signedIn, invitedOnly, approvedOnly, neverInvited, invitedElsewhere].sort(),
+      [signedIn, invitedOnly, neverInvited, invitedElsewhere].sort(),
     );
     expect(activity.has(memberOfBOnly)).toBe(false);
 
     expect(activity.get(signedIn)).toMatchObject({ lastSignInAt: SIGN_IN_AT });
     expect(activity.get(signedIn)!.lastInvitedAt).toBeInstanceOf(Date);
 
-    expect(activity.get(invitedOnly)).toMatchObject({ lastSignInAt: null, accessApprovedAt: null });
+    expect(activity.get(invitedOnly)).toMatchObject({ lastSignInAt: null });
     expect(activity.get(invitedOnly)!.lastInvitedAt).toBeInstanceOf(Date);
-
-    expect(activity.get(approvedOnly)).toMatchObject({
-      lastSignInAt: null,
-      lastInvitedAt: null,
-      accessApprovedAt: APPROVED_AT,
-    });
 
     expect(activity.get(neverInvited)).toMatchObject({
       lastSignInAt: null,
       lastInvitedAt: null,
-      accessApprovedAt: null,
     });
     expect(activity.get(invitedElsewhere)).toMatchObject({ lastInvitedAt: null });
   });

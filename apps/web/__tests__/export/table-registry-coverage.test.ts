@@ -140,7 +140,7 @@ describe('community export table registry', () => {
   });
 
   it('excludes tables holding live credentials', () => {
-    for (const table of ['invitations', 'calendar_sync_tokens', 'accounting_connections']) {
+    for (const table of ['invitations']) {
       expect(EXCLUDED.has(table), `${table} holds credentials and must stay excluded`).toBe(true);
     }
   });
