@@ -6,6 +6,8 @@ export interface WelcomeEmailProps extends BaseEmailProps {
   primaryContactName: string;
   communityName: string;
   loginUrl: string;
+  /** Button label; a founding user whose link sets their password needs a different one. */
+  actionLabel?: string;
 }
 
 /**
@@ -13,7 +15,14 @@ export interface WelcomeEmailProps extends BaseEmailProps {
  * Sent to BOTH newly provisioned admins and move-in residents, so the copy
  * stays audience-neutral.
  */
-export function WelcomeEmail({ branding, previewText, primaryContactName, communityName, loginUrl }: WelcomeEmailProps) {
+export function WelcomeEmail({
+  branding,
+  previewText,
+  primaryContactName,
+  communityName,
+  loginUrl,
+  actionLabel = 'Log in to your portal',
+}: WelcomeEmailProps) {
   return (
     <EmailLayout
       branding={branding}
@@ -37,7 +46,7 @@ export function WelcomeEmail({ branding, previewText, primaryContactName, commun
           { title: 'Your account', detail: 'Sign in to choose how you hear from us.' },
         ]}
       />
-      <ActionRow href={loginUrl} label="Log in to your portal" />
+      <ActionRow href={loginUrl} label={actionLabel} />
       <FinePrint>If you have questions, reply to this email or contact PropertyPro support.</FinePrint>
     </EmailLayout>
   );

@@ -8,6 +8,7 @@ const {
   createUnscopedClientMock,
   createAdminClientMock,
   emitConversionEventMock,
+  sendEmailMock,
   communitiesTable,
   demoInstancesTable,
   usersTable,
@@ -16,7 +17,8 @@ const {
   createUnscopedClientMock: vi.fn(),
   createAdminClientMock: vi.fn(),
   emitConversionEventMock: vi.fn().mockResolvedValue(undefined),
-  communitiesTable: { id: 'communities.id', isDemo: 'communities.is_demo', communityType: 'communities.community_type' },
+  sendEmailMock: vi.fn().mockResolvedValue({ id: 'email_1' }),
+  communitiesTable: { id: 'communities.id', isDemo: 'communities.is_demo', communityType: 'communities.community_type', name: 'communities.name' },
   demoInstancesTable: { id: 'demo_instances.id', demoResidentUserId: 'd.resident', demoBoardUserId: 'd.board' },
   usersTable: { id: 'users.id', email: 'users.email' },
   userRolesTable: { id: 'user_roles.id', communityId: 'user_roles.community_id', role: 'user_roles.role', presetKey: 'user_roles.preset_key' },
@@ -51,6 +53,13 @@ vi.mock('../../src/lib/services/conversion-events', () => ({
   emitConversionEvent: emitConversionEventMock,
 }));
 
+vi.mock('@propertypro/email', () => ({
+  sendEmail: sendEmailMock,
+  WelcomeEmail: () => null,
+}));
+
+vi.mock('@/lib/utils/url', () => ({ getBaseUrl: () => 'https://app.example' }));
+
 // Imported after mocks so the mocked deps are picked up.
 import { handleDemoConversion, softDeleteExpiredDemo } from '../../src/lib/services/demo-conversion';
 
@@ -68,6 +77,7 @@ type Recorded = { table: unknown; values: unknown };
  *   1. banDemoUsers: select demo instance        → limit → [demo]
  *   2. ensureFoundingUser: existing root_manager → limit → []   (none yet)
  *   3. ensureFoundingUser: existing user by email → limit → []   (none yet)
+ *   4. sendFoundingUserWelcome: community name   → limit → [community]
  */
 function buildDb(): { inserts: Recorded[] } {
   const inserts: Recorded[] = [];
@@ -75,6 +85,7 @@ function buildDb(): { inserts: Recorded[] } {
     [{ demoResidentUserId: 'res-1', demoBoardUserId: 'board-1' }], // banDemoUsers
     [],                                                            // existing root_manager → none
     [],                                                            // existing user → none
+    [{ name: 'Sunset Condos' }],                                   // welcome email: community name
   ];
 
   const limitMock = vi.fn(() => Promise.resolve(selectQueue.shift() ?? []));
@@ -106,7 +117,7 @@ function buildDb(): { inserts: Recorded[] } {
       admin: {
         createUser: vi.fn().mockResolvedValue({ data: { user: { id: 'founding-uuid' } }, error: null }),
         updateUserById: vi.fn().mockResolvedValue({ data: {}, error: null }),
-        generateLink: vi.fn().mockResolvedValue({ data: {}, error: null }),
+        generateLink: vi.fn().mockResolvedValue({ data: { properties: { hashed_token: 'th_1' } }, error: null }),
       },
     },
   });
@@ -135,6 +146,42 @@ describe('demo-conversion prerequisites', () => {
   describe('ensureFoundingUser (via handleDemoConversion)', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      sendEmailMock.mockResolvedValue({ id: 'email_1' });
+    });
+
+    // createUser sets no password; without this email the founder has no way in
+    // short of finding "Forgot password" on their own.
+    it('emails the founding user a welcome whose button sets their password', async () => {
+      buildDb();
+
+      await handleDemoConversion(SESSION, 'evt_003', 1_700_000_000);
+
+      const generateLink = createAdminClientMock.mock.results[0]!.value.auth.admin.generateLink;
+      expect(generateLink).toHaveBeenCalledWith({ type: 'recovery', email: 'founder@example.com' });
+      expect(sendEmailMock).toHaveBeenCalledOnce();
+      const sent = sendEmailMock.mock.calls[0]![0] as { to: string; subject: string; react: { props: Record<string, unknown> } };
+      expect(sent.to).toBe('founder@example.com');
+      expect(sent.subject).toBe('Welcome to PropertyPro — Sunset Condos is ready');
+      expect(sent.react.props).toMatchObject({
+        primaryContactName: 'Founder Person',
+        communityName: 'Sunset Condos',
+        loginUrl: 'https://app.example/auth/reset-password?token_hash=th_1&type=recovery',
+        actionLabel: 'Choose your password',
+      });
+    });
+
+    it('still completes the conversion when the welcome email fails', async () => {
+      const { inserts } = buildDb();
+      sendEmailMock.mockRejectedValueOnce(new Error('Resend API error: down'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+      await expect(handleDemoConversion(SESSION, 'evt_004', 1_700_000_000)).resolves.toBeUndefined();
+      expect(inserts.some((i) => i.table === userRolesTable)).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('failed to send set-password email to founding user founding-uuid'),
+        expect.any(Error),
+      );
+      warn.mockRestore();
     });
 
     it('creates exactly ONE root_manager per converted community (creator-is-root)', async () => {
@@ -172,7 +219,7 @@ describe('demo-conversion prerequisites', () => {
     // Logs ship to Vercel and Sentry breadcrumbs; a customer's address must not
     // ride along. Both the success and the failure branch of the login link.
     it.each([
-      ['succeeds', vi.fn().mockResolvedValue({ data: {}, error: null })],
+      ['succeeds', vi.fn().mockResolvedValue({ data: { properties: { hashed_token: 'th_1' } }, error: null })],
       ['fails', vi.fn().mockRejectedValue(new Error('link service down'))],
     ])('never logs the founding user email when generating the login link %s', async (_label, generateLink) => {
       buildDb();
