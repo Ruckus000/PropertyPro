@@ -400,6 +400,22 @@ describe('submitSignupDetails', () => {
     expect((values.mock.calls[0]?.[0] as Record<string, unknown>).signupRequestId).not.toBe('other-users-id');
   });
 
+  // #1115: a fresh id matches no row, so the subdomain check must exclude the
+  // row being overwritten by the upsert's own key, the verified email.
+  it('checks the subdomain without the caller\'s own row, matched by email', async () => {
+    mockDb({
+      signupRequestId: 'other-users-id',
+      status: 'email_verified',
+      expiresAt: new Date(Date.now() + 60_000),
+      payload: { flow: 'email_first', authUserId: 'someone-else' },
+    });
+    await submitSignupDetails(CONFIRMED_USER, DETAILS);
+    expect(h.checkSubdomainMock).toHaveBeenCalledWith(
+      DETAILS.candidateSlug,
+      expect.objectContaining({ excludeEmailNormalized: 'founder@example.com' }),
+    );
+  });
+
   it('marks the row it writes as this session\'s', async () => {
     const { values } = mockDb(null);
     await submitSignupDetails(CONFIRMED_USER, DETAILS);

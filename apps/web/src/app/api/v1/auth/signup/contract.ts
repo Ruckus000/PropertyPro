@@ -1,8 +1,9 @@
 /**
  * Route contract for `GET /api/v1/auth/signup`.
  *
- * Plan A1 drain #166. Public signup subdomain check; the query uses
- * `signupSubdomainSchema` from the shared signup module. No session auth.
+ * Public signup subdomain check; the query uses `signupSubdomainSchema` from
+ * the shared signup module. No session required; a signed-in caller's
+ * forwarded email excludes their own pending row (see the route).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 import { signupSubdomainSchema } from '@/lib/auth/signup-schema';

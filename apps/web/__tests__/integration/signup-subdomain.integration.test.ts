@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from '@propertypro/db/filters';
+import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
 import {
   type TestKitState,
   apiUrl,
@@ -66,6 +67,44 @@ async function seedCommunityWithSlug(slug: string): Promise<number> {
   // otherwise leak on every run.
   trackCommunityForCleanup(s, inserted.id);
   return inserted.id;
+}
+
+/**
+ * A live, slot-holding pending signup for `email` under an id the caller does
+ * not hold — what a founder on a new browser leaves behind (#1115).
+ */
+async function seedOwnPendingSignup(email: string, slug: string): Promise<void> {
+  const s = requireState();
+  const houseNumber = 1000 + Math.floor(Math.random() * 89_000);
+  await s.db.insert(s.dbModule.pendingSignups).values({
+    signupRequestId: `lost-${randomUUID()}`,
+    primaryContactName: 'Own Row Tester',
+    email,
+    emailNormalized: email,
+    communityName: 'Own Row Community',
+    address: `${houseNumber} Own Row Ln, Miami, FL 33101`,
+    addressLine1: `${houseNumber} Own Row Ln`,
+    city: 'Miami',
+    state: 'FL',
+    zipCode: '33101',
+    county: 'Miami-Dade',
+    unitCount: 10,
+    communityType: 'condo_718',
+    planKey: 'essentials',
+    candidateSlug: slug,
+    termsAcceptedAt: new Date(),
+    termsVersion: CURRENT_TERMS_VERSION,
+    status: 'email_verified',
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    payload: {},
+  });
+}
+
+async function deletePendingSignups(email: string): Promise<void> {
+  const s = requireState();
+  await s.db
+    .delete(s.dbModule.pendingSignups)
+    .where(eq(s.dbModule.pendingSignups.emailNormalized, email));
 }
 
 describeDb('signup subdomain availability — advisory behavior', () => {
@@ -155,5 +194,62 @@ describeDb('signup subdomain availability — advisory behavior', () => {
       .from(s.dbModule.pendingSignups)
       .where(eq(s.dbModule.pendingSignups.emailNormalized, email));
     expect(rows).toHaveLength(0);
+  });
+
+  // #1115: rows are upserted by email, so the caller's own row must not report
+  // their own subdomain as taken, on either the live check or the save.
+  describe('the caller\'s own pending row', () => {
+    it('GET excludes it for the signed-in email, and only for that email', async () => {
+      const slug = `own-row-get-${randomUUID().slice(0, 8)}`;
+      const email = `own-row+${randomUUID().slice(0, 8)}@example.com`;
+      await seedOwnPendingSignup(email, slug);
+      try {
+        const check = async (headers?: Record<string, string>) => {
+          const req = new NextRequest(apiUrl(`/api/v1/auth/signup?subdomain=${slug}`), { headers });
+          const res = await requireRoutes().signup.GET(req);
+          return (await parseJson<{ data: { available: boolean } }>(res)).data.available;
+        };
+        expect(await check({ 'x-user-email': email })).toBe(true);
+        expect(await check({ 'x-user-email': 'someone-else@example.com' })).toBe(false);
+        expect(await check()).toBe(false);
+      } finally {
+        await deletePendingSignups(email);
+      }
+    });
+
+    it('saving answers for that subdomain succeeds and overwrites the row', async () => {
+      const slug = `own-row-save-${randomUUID().slice(0, 8)}`;
+      const email = `own-row+${randomUUID().slice(0, 8)}@example.com`;
+      await seedOwnPendingSignup(email, slug);
+      const houseNumber = 1000 + Math.floor(Math.random() * 89_000);
+      try {
+        await requireRoutes().emailFirst.submitSignupDetails(
+          { id: randomUUID(), email, email_confirmed_at: new Date().toISOString() },
+          {
+            primaryContactName: 'Own Row Tester',
+            communityName: 'Own Row Community',
+            addressLine1: `${houseNumber} Saved Ln`,
+            city: 'Miami',
+            state: 'FL',
+            zipCode: '33101',
+            county: 'Miami-Dade',
+            unitCount: 10,
+            communityType: 'condo_718',
+            planKey: 'essentials',
+            candidateSlug: slug,
+            termsAccepted: true,
+          },
+        );
+
+        const s = requireState();
+        const rows = await s.db
+          .select({ candidateSlug: s.dbModule.pendingSignups.candidateSlug })
+          .from(s.dbModule.pendingSignups)
+          .where(eq(s.dbModule.pendingSignups.emailNormalized, email));
+        expect(rows).toEqual([{ candidateSlug: slug }]);
+      } finally {
+        await deletePendingSignups(email);
+      }
+    });
   });
 });

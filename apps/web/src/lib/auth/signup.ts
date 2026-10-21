@@ -25,7 +25,16 @@ const SUBDOMAIN_UNKNOWN_MESSAGE =
 
 export async function checkSignupSubdomainAvailability(
   rawSubdomain: string,
-  options?: { excludeSignupRequestId?: string; signupRequestId?: string },
+  options?: {
+    excludeSignupRequestId?: string;
+    /**
+     * The caller's own verified email. Rows are written by an upsert keyed on
+     * `email_normalized`, so a row with this email is the one the caller is
+     * about to overwrite, whatever `signupRequestId` it carries.
+     */
+    excludeEmailNormalized?: string;
+    signupRequestId?: string;
+  },
 ): Promise<SubdomainAvailabilityResult> {
   const normalizedSubdomain = normalizeSignupSubdomain(rawSubdomain);
   const logContext = {
@@ -54,7 +63,7 @@ export async function checkSignupSubdomainAvailability(
   }
 
   let existingCommunityRows: Array<{ id: number }>;
-  let pendingRows: Array<{ id: bigint; signupRequestId: string }>;
+  let pendingRows: Array<{ id: bigint; signupRequestId: string; emailNormalized: string }>;
   try {
     const db = createUnscopedClient();
     [existingCommunityRows, pendingRows] = await Promise.all([
@@ -67,6 +76,7 @@ export async function checkSignupSubdomainAvailability(
         .select({
           id: pendingSignups.id,
           signupRequestId: pendingSignups.signupRequestId,
+          emailNormalized: pendingSignups.emailNormalized,
         })
         .from(pendingSignups)
         .where(
@@ -114,7 +124,9 @@ export async function checkSignupSubdomainAvailability(
   }
 
   const conflictingPendingCount = pendingRows.filter(
-    (row) => row.signupRequestId !== options?.excludeSignupRequestId,
+    (row) =>
+      row.signupRequestId !== options?.excludeSignupRequestId
+      && row.emailNormalized !== options?.excludeEmailNormalized,
   ).length;
 
   if (conflictingPendingCount > 0) {
