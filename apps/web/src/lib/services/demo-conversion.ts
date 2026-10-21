@@ -11,6 +11,7 @@
  * Called from the Stripe webhook handler when `metadata.demoId` is present
  * on a checkout.session.completed event.
  */
+import { createElement } from 'react';
 import type Stripe from 'stripe';
 import { and, eq, gt, isNull, lt } from '@propertypro/db/filters';
 import {
@@ -24,6 +25,8 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 // AUTHZ: GoTrue admin create/ban/link for demo→paid conversion, run by provisioning after payment
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { reactivationClears, type CommunityType } from '@propertypro/shared';
+import { WelcomeEmail, sendEmail } from '@propertypro/email';
+import { getBaseUrl } from '@/lib/utils/url';
 import { emitConversionEvent } from './conversion-events';
 
 // ---------------------------------------------------------------------------
@@ -202,6 +205,52 @@ async function banDemoUsers(demoId: number): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Welcome email whose button is a one-time recovery link to the reset-password
+ * page, which signs the founding user in with it and asks them to choose a
+ * password. Throws on any failure; the caller decides what that means.
+ */
+async function sendFoundingUserWelcome(
+  db: ReturnType<typeof createUnscopedClient>,
+  admin: ReturnType<typeof createAdminClient>,
+  communityId: number,
+  email: string,
+  fullName: string,
+): Promise<void> {
+  const { data, error } = await admin.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+  });
+  const tokenHash = data?.properties?.hashed_token;
+  if (error || !tokenHash) {
+    throw new Error(error?.message ?? 'generateLink returned no token');
+  }
+
+  const [community] = await db
+    .select({ name: communities.name })
+    .from(communities)
+    .where(eq(communities.id, communityId))
+    .limit(1);
+  const communityName = community?.name ?? 'your community';
+
+  const setPasswordUrl = new URL('/auth/reset-password', getBaseUrl());
+  setPasswordUrl.searchParams.set('token_hash', tokenHash);
+  setPasswordUrl.searchParams.set('type', 'recovery');
+
+  await sendEmail({
+    to: email,
+    subject: `Welcome to PropertyPro — ${communityName} is ready`,
+    category: 'transactional',
+    react: createElement(WelcomeEmail, {
+      branding: { communityName },
+      primaryContactName: fullName,
+      communityName,
+      loginUrl: setPasswordUrl.toString(),
+      actionLabel: 'Choose your password',
+    }),
+  });
+}
+
+/**
  * Creates the founding user for a converted community.
  * Assigns root_manager (board_president designation, the single community ROOT)
  * + property_manager roles (community + platform access). Exactly one
@@ -255,7 +304,7 @@ async function ensureFoundingUser(
   if (existingUser) {
     userId = existingUser.id;
   } else {
-    // Create new Supabase auth user — they'll use magic link to set credentials
+    // Create new Supabase auth user — the welcome email below lets them set a password
     const { data, error } = await admin.auth.admin.createUser({
       email,
       email_confirm: true,
@@ -319,18 +368,14 @@ async function ensureFoundingUser(
     userId,
   });
 
-  // generateLink RETURNS a link and sends no email, so the founding user does
-  // not receive one from here (a known gap, not fixed in this change).
+  // The auth user has no password, so the founding user cannot sign in until
+  // they choose one. Non-fatal: the conversion has succeeded, and "Forgot
+  // password" remains the way in if this email never arrives.
   try {
-    await admin.auth.admin.generateLink({
-      type: 'magiclink',
-      email,
-      options: { redirectTo: '/dashboard' },
-    });
-    console.info(`[demo-conversion] login link generated (not emailed) for founding user ${userId}`);
+    await sendFoundingUserWelcome(db, admin, communityId, email, fullName);
+    console.info(`[demo-conversion] set-password email sent to founding user ${userId}`);
   } catch (err) {
-    // Non-fatal: user can always use "forgot password" flow
-    console.warn(`[demo-conversion] failed to generate login link for founding user ${userId}:`, err);
+    console.warn(`[demo-conversion] failed to send set-password email to founding user ${userId}:`, err);
   }
 
   console.info(

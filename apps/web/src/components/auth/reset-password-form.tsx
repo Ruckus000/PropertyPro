@@ -76,6 +76,22 @@ export function ResetPasswordForm() {
       }
     });
 
+    // A link minted on the server (a converted demo's founding user) carries a
+    // one-time recovery token in the query instead. Exchange it the way the
+    // manual fallback below does, then drop it from the address bar so it is
+    // not left in history or sent on as a referrer.
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash');
+    if (tokenHash && params.get('type') === 'recovery') {
+      window.history.replaceState(null, '', window.location.pathname);
+      void supabase.auth
+        .verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+        .then(({ error: otpError }: { error: unknown }) => {
+          if (otpError) setSessionError(true);
+          else setSessionReady(true);
+        });
+    }
+
     // Also check if we already have a session (page might have loaded with the token)
     supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       if (session) {

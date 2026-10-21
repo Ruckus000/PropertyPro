@@ -2,7 +2,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const { routerMock, signOutMock, onAuthStateChangeMock, getSessionMock, updatePasswordActionMock } =
+const { routerMock, signOutMock, onAuthStateChangeMock, getSessionMock, updatePasswordActionMock, verifyOtpMock } =
   vi.hoisted(() => {
     const router = { replace: vi.fn(), push: vi.fn(), prefetch: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn() };
     return {
@@ -11,6 +11,7 @@ const { routerMock, signOutMock, onAuthStateChangeMock, getSessionMock, updatePa
       onAuthStateChangeMock: vi.fn(),
       getSessionMock: vi.fn(),
       updatePasswordActionMock: vi.fn(),
+      verifyOtpMock: vi.fn(),
     };
   });
 
@@ -24,6 +25,7 @@ vi.mock('@propertypro/db/supabase/client', () => ({
       onAuthStateChange: onAuthStateChangeMock,
       getSession: getSessionMock,
       signOut: signOutMock,
+      verifyOtp: verifyOtpMock,
     },
   }),
 }));
@@ -118,5 +120,36 @@ describe('ResetPasswordForm reset → login flow', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('reset-password-error')).toBeNull();
     });
+  });
+});
+
+// A converted demo's founding user has no password; their welcome email links
+// here with a one-time recovery token in the query (demo-conversion.ts).
+describe('ResetPasswordForm with a recovery token in the link', () => {
+  beforeEach(() => {
+    onAuthStateChangeMock.mockReset();
+    onAuthStateChangeMock.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+    getSessionMock.mockReset();
+    getSessionMock.mockResolvedValue({ data: { session: null } });
+    verifyOtpMock.mockReset();
+    window.history.replaceState(null, '', '/auth/reset-password?token_hash=th_123&type=recovery');
+  });
+
+  it('exchanges the token, shows the form, and removes the token from the address bar', async () => {
+    verifyOtpMock.mockResolvedValue({ error: null });
+    render(<ResetPasswordForm />);
+
+    expect(await screen.findByTestId('reset-password-form')).toBeInTheDocument();
+    expect(verifyOtpMock).toHaveBeenCalledWith({ token_hash: 'th_123', type: 'recovery' });
+    expect(window.location.search).toBe('');
+  });
+
+  it('shows the expired-link state when the token is rejected', async () => {
+    verifyOtpMock.mockResolvedValue({ error: { message: 'Token has expired or is invalid' } });
+    render(<ResetPasswordForm />);
+
+    expect(await screen.findByTestId('reset-password-expired')).toBeInTheDocument();
+    expect(verifyOtpMock).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId('reset-password-form')).not.toBeInTheDocument();
   });
 });
