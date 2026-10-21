@@ -2,7 +2,7 @@
   "mcpServers": {
     "supabase-propertypro": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=vbqobyagjzvlfpfozvmx"
+      "url": "https://mcp.supabase.com/mcp?project_ref=vbqobyagjzvlfpfozvmx&skip_elicitations=apply_migration"
     }
   }
 }
