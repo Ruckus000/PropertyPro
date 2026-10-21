@@ -169,14 +169,6 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/api/v1/auth/password-reset', 'POST')).toBe('auth');
   });
 
-  it('leaves the admin access-request queue on write, not the IP-keyed auth tier', () => {
-    // `auth` keys by IP, so admins behind one NAT working through approvals
-    // would throttle each other. (The public submit + OTP verify routes that
-    // were auth-tiered here were deleted on 2026-10-20.)
-    expect(classifyRoute('/api/v1/access-requests/10/approve', 'POST')).toBe('write');
-    expect(classifyRoute('/api/v1/access-requests/10/deny', 'POST')).toBe('write');
-  });
-
   it('classifies provisioning-status as public tier (polling-friendly)', () => {
     expect(classifyRoute('/api/v1/auth/provisioning-status', 'GET')).toBe('public');
   });

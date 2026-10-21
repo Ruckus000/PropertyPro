@@ -117,10 +117,6 @@ describeDb('WS72 phase5 security gates (db-backed integration)', () => {
       return;
     }
 
-    process.env.TOKEN_ENCRYPTION_KEY =
-      process.env.TOKEN_ENCRYPTION_KEY
-      ?? '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-
     process.env.OAUTH_STATE_SECRET =
       process.env.OAUTH_STATE_SECRET ?? 'test-oauth-state-secret-32bytes!!';
 

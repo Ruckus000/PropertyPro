@@ -276,7 +276,7 @@ export function validateRoute(
  * The multi-community routes under `/pm/`/`/admin/` were never in this
  * ceiling. The point is that it cannot GROW unnoticed.
  */
-const TENANT_SCOPE_BACKLOG_CEILING = 144;
+const TENANT_SCOPE_BACKLOG_CEILING = 136;
 
 /** Adoption marker: the route is written through the contract runner. */
 const RUN_ROUTE_CALL = /\brunRoute\s*\(/;

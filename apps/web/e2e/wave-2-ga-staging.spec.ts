@@ -62,8 +62,8 @@ test.describe('Wave 2 GA staging (founding admin)', () => {
         timeout: 60_000,
       });
     }
-    // Its accessible name gains ", N pending access requests" when any are waiting.
-    await expect(nav.getByRole('link', { name: /^Directory(, \d+ pending access requests?)?$/ })).toBeVisible();
+    // Its accessible name gains ", N pending join requests" when any are waiting.
+    await expect(nav.getByRole('link', { name: /^Directory(, \d+ pending join requests?)?$/ })).toBeVisible();
 
     await expect(nav.getByRole('button', { name: /^More$/i })).toBeVisible();
 

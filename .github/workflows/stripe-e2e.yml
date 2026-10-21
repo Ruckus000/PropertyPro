@@ -232,8 +232,8 @@ jobs:
       - name: Generate app secrets
         if: steps.gate.outputs.configured == 'true'
         run: |
-          for name in CRON_SECRET PROVISIONING_RETRY_SECRET OTP_HMAC_SECRET \
-                      TOKEN_ENCRYPTION_KEY SUPPORT_SESSION_JWT_SECRET \
+          for name in CRON_SECRET PROVISIONING_RETRY_SECRET \
+                      SUPPORT_SESSION_JWT_SECRET \
                       DEMO_TOKEN_ENCRYPTION_KEY_HEX; do
             value="$(openssl rand -hex 32)"
             echo "::add-mask::$value"

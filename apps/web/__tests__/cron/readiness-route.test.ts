@@ -77,8 +77,6 @@ describe('readiness route', () => {
     // checked CRON_SECRET). Set them so the baseline is 'healthy'; the
     // missing-secret behaviour has its own test below.
     process.env.CRON_SECRET = 'test-cron-secret-long-enough';
-    process.env.OTP_HMAC_SECRET = 'test-otp-secret-long-enough';
-    process.env.TOKEN_ENCRYPTION_KEY = 'a'.repeat(64);
     process.env.OAUTH_STATE_SECRET = 'test-oauth-state-secret-long-enough';
     process.env.SUPPORT_SESSION_JWT_SECRET = 'test-support-jwt-secret-min-32-chars-abc';
     process.env.COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET = 'test-community-unsub-secret';
@@ -166,7 +164,7 @@ describe('readiness route', () => {
   });
 
   it('reports degraded when a load-bearing secret is too short to be real', async () => {
-    process.env.OTP_HMAC_SECRET = 'short';
+    process.env.OAUTH_STATE_SECRET = 'short';
     executeMock
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
@@ -174,59 +172,30 @@ describe('readiness route', () => {
     const res = await GET(request());
     const body = (await res.json()) as {
       status: string;
-      checks: { otp_hmac_secret: { status: string; error?: string } };
+      checks: { oauth_state_secret: { status: string; error?: string } };
     };
 
     expect(body.status).toBe('degraded');
-    expect(body.checks.otp_hmac_secret.status).toBe('fail');
-    expect(body.checks.otp_hmac_secret.error).toContain('too short');
+    expect(body.checks.oauth_state_secret.status).toBe('fail');
+    expect(body.checks.oauth_state_secret.error).toContain('too short');
   });
 
-  // TOKEN_ENCRYPTION_KEY needs a FORMAT check, not a length floor.
-  // `parseTokenEncryptionKeyHex` requires exactly 64 hex characters, so both
-  // cases below throw on every encrypt and decrypt — while a `length >= 64`
-  // test called them healthy. A green probe over a permanently broken
-  // encryption path is the worst outcome this endpoint can produce, because it
-  // actively certifies the fault as fine.
-  it.each([
-    [
-      'a 128-char key from `openssl rand -hex 64` (the arg is BYTES, not chars)',
-      'a'.repeat(128),
-    ],
-    ['a 64-char passphrase that is not hex', 'z'.repeat(64)],
-  ])('reports degraded for TOKEN_ENCRYPTION_KEY set to %s', async (_label, value) => {
-    process.env.TOKEN_ENCRYPTION_KEY = value;
+  // Nothing live reads these since the access-request OTP and the fake
+  // calendar/accounting connectors were deleted, so an unset one must not turn
+  // readiness degraded.
+  it('stays healthy without OTP_HMAC_SECRET or TOKEN_ENCRYPTION_KEY', async () => {
+    delete process.env.OTP_HMAC_SECRET;
+    delete process.env.TOKEN_ENCRYPTION_KEY;
     executeMock
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
 
     const res = await GET(request());
-    const body = (await res.json()) as {
-      status: string;
-      checks: { token_encryption_key: { status: string; error?: string } };
-    };
+    const body = (await res.json()) as { status: string; checks: Record<string, unknown> };
 
-    expect(body.status).toBe('degraded');
-    expect(body.checks.token_encryption_key.status).toBe('fail');
-    expect(body.checks.token_encryption_key.error).toContain('exactly 64 hex characters');
-  });
-
-  it('still passes TOKEN_ENCRYPTION_KEY for a real 64-char hex key', async () => {
-    // Anti-vacuity for the two cases above: the new format check must not
-    // reject the value operators are told to generate.
-    process.env.TOKEN_ENCRYPTION_KEY = '0123456789abcdefABCDEF0123456789abcdefABCDEF01234567890123456789';
-    executeMock
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(REQUIRED_COLUMNS.map((column_name) => ({ column_name })));
-
-    const res = await GET(request());
-    const body = (await res.json()) as {
-      status: string;
-      checks: { token_encryption_key: { status: string } };
-    };
-
-    expect(body.checks.token_encryption_key.status).toBe('pass');
     expect(body.status).toBe('healthy');
+    expect(body.checks).not.toHaveProperty('otp_hmac_secret');
+    expect(body.checks).not.toHaveProperty('token_encryption_key');
   });
 
   // Each of these was reachable in production with nothing reporting it. The

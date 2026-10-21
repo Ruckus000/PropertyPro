@@ -432,7 +432,7 @@ POST     /api/v1/internal/account-lifecycle  (cron: daily lifecycle processing)
 #              /vendors, /contracts, /move-checklists, /packages, /visitors, /units
 # Engagement — /api/v1/forum, /emergency-broadcasts, /notifications,
 #              /notification-preferences, /help, /faqs, /search
-# Residents & access — /api/v1/access-requests, /import-residents, /invitations,
+# Residents & access — /api/v1/admin/join-requests, /import-residents, /invitations,
 #                       /transparency, /me, /user, /users
 # Auth & onboarding — /api/v1/auth/signup{,/start,/details}, /onboarding/checklist
 # Webhooks — /api/v1/webhooks/stripe, /webhooks/twilio

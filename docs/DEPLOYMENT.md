@@ -90,8 +90,6 @@ Set for **Production** and **Preview** environments unless noted.
 | `SUPPORT_SESSION_JWT_SECRET` | **Both apps, server only** | **Required** — HMAC key for support-impersonation JWTs (min 32 chars). Admin signs, web verifies, so the **same value** must be set on `property-pro-admin` **and** `property-pro-web`. Generate with `openssl rand -hex 32`. See the note below. |
 | `NODE_ENV` | All | `production` |
 | `CRON_SECRET` | **Production, server only** | **Required — every scheduled job depends on it.** Vercel Cron authenticates all 17 jobs with this one platform-wide value. See §4.2. |
-| `OTP_HMAC_SECRET` | Server only | **Required** (min 16 chars). Access-request OTPs are 6 digits, so this HMAC key is the only thing preventing an attacker precomputing the entire code space. See §4.2. |
-| `TOKEN_ENCRYPTION_KEY` | Server only | **Required** — **exactly 64 hex characters** (32 bytes for AES-256-GCM); not a minimum, and not any 64 characters. Calendar sync and accounting connectors throw without it — those features 500 rather than degrade. See §4.2. |
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Server only | Shared bearer secret |
 | `READINESS_CHECK_SECRET` | Server only | Shared bearer secret for deployment readiness checks |
 | `PAYMENT_REMINDERS_CRON_SECRET` | Server only | Shared bearer secret |
@@ -165,19 +163,12 @@ surfaced:
   handed, so a route stays reachable by both its dedicated secret and by
   `CRON_SECRET`.
 
-- **`OTP_HMAC_SECRET`** (min 16) — access-request OTPs are 6 digits. This key is
-  the only barrier to precomputing the whole space.
-
-- **`TOKEN_ENCRYPTION_KEY`** (**exactly 64 hex chars**) — calendar sync and
-  accounting connectors throw without it, so those features return 500 instead
-  of degrading.
-
 - **`REAUTH_JWT_SECRET`** (min 32) — signs short-lived re-authentication
   tokens. The billing portal and account deletion 500 without it.
 
-- **`OAUTH_STATE_SECRET`** (min 16) — HMAC for the OAuth `state` parameter.
-  `signOAuthState` throws without it, so connecting a Google Calendar or an
-  accounting platform returns 500 rather than degrading.
+- **`OAUTH_STATE_SECRET`** (min 16) — HMAC for the OAuth `state` parameter on
+  Stripe Connect onboarding. Signing throws without it, so onboarding returns
+  500 rather than degrading.
 
 - **`COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET`**, **`SNOWBIRD_UNSUBSCRIBE_SECRET`**,
   **`INSURANCE_ALERTS_UNSUBSCRIBE_SECRET`** (min 16) — sign the no-login
@@ -195,7 +186,7 @@ surfaced:
 above (§4.1) because it must carry the identical value on **both** Vercel
 projects.
 
-Generate **each** with the same command (`TOKEN_ENCRYPTION_KEY` excepted — read the warning below before you run it):
+Generate **each** with the same command:
 
 ```bash
 openssl rand -hex 32     # 32 bytes → 64 hex characters
@@ -203,22 +194,12 @@ openssl rand -hex 32     # 32 bytes → 64 hex characters
 
 Add them with `--no-sensitive`, for the same reason as §4.1.
 
-> **`openssl rand -hex 64` is wrong for `TOKEN_ENCRYPTION_KEY`.** The argument
-> is a byte count, not a character count, so `-hex 64` emits **128**
-> characters. `parseTokenEncryptionKeyHex`
-> (`packages/db/src/crypto/token-encryption.ts`) requires
-> `/^[0-9a-fA-F]{64}$/` exactly, so a 128-character key throws on every
-> encrypt and decrypt. The same applies to a 64-character *passphrase* that
-> isn't hex.
-
 #### Verifying them
 
 `/api/v1/internal/readiness` exists to make this a monitorable signal rather
-than silence. It checks **all ten** secrets named in this section — the eight above,
+than silence. It checks every secret named in this section — the ones above,
 `SUPPORT_SESSION_JWT_SECRET` from §4.1, and `INBOUND_EMAIL_WEBHOOK_SECRET` from the table
-in §4 — for presence and minimum length
-(`TOKEN_ENCRYPTION_KEY` by hex format instead: a length floor cannot express
-its requirement), and reports `degraded` — not `healthy` — when any is
+in §4 — for presence and minimum length, and reports `degraded` — not `healthy` — when any is
 missing:
 
 ```bash

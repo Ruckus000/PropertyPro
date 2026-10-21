@@ -12,7 +12,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
@@ -39,7 +39,7 @@ import {
   type NavSection,
   type NavItemWithGateStatus,
 } from './nav-config';
-import { accessRequestsQueryOptions } from '@/hooks/use-access-requests';
+import { useAdminJoinRequests } from '@/hooks/use-admin-join-requests';
 import { useSidebar } from './sidebar-context';
 import { SidebarTenantSwitcher } from './sidebar-tenant-switcher';
 import { UpgradeDialog } from '../billing/upgrade-dialog';
@@ -139,23 +139,19 @@ export function AppSidebar({
   // only recur if these two definitions drift apart.
   const lapsedAdmin = isLapsed && role !== null && isAdminRole(role);
 
-  // Badge counts. Pending access requests: the GET needs residents.write and an
+  // Badge counts. Pending join requests: the GET needs residents.write and an
   // entitled community, so only an admin on a non-lapsed community asks — anyone
   // else would just collect a 403. Shares the Directory's cache entry, so an
   // approve/deny there updates the badge.
   const showRequestBadge = !isPmContext && communityId !== null && role !== null && isAdminRole(role) && !lapsedAdmin;
-  const requestsQ = useQuery({
-    ...accessRequestsQueryOptions(communityId ?? 0),
-    enabled: showRequestBadge,
-    staleTime: 60_000,
-  });
+  const requestsQ = useAdminJoinRequests({ communityId: communityId ?? undefined, enabled: showRequestBadge });
   const pendingRequests = showRequestBadge ? (requestsQ.data?.length ?? 0) : 0;
   const badgeFor = (item: NavItemWithGateStatus): Pick<NavRailItem, 'badge' | 'badgeVariant' | 'badgeDescription'> =>
-    item.badgeSignal === 'pendingAccessRequests' && pendingRequests > 0
+    item.badgeSignal === 'pendingJoinRequests' && pendingRequests > 0
       ? {
           badge: pendingRequests,
           badgeVariant: 'brand',
-          badgeDescription: `${pendingRequests} pending access ${pendingRequests === 1 ? 'request' : 'requests'}`,
+          badgeDescription: `${pendingRequests} pending join ${pendingRequests === 1 ? 'request' : 'requests'}`,
         }
       : {};
 

@@ -12,9 +12,8 @@
  * on a checkout.session.completed event.
  */
 import type Stripe from 'stripe';
-import { and, eq, gt, inArray, isNull, lt, sql } from '@propertypro/db/filters';
+import { and, eq, gt, isNull, lt } from '@propertypro/db/filters';
 import {
-  accessRequests,
   communities,
   demoInstances,
   users,
@@ -537,29 +536,6 @@ export async function banDemoAuthUser(
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   }
-}
-
-/**
- * Bulk-expire access requests still in `pending`/`pending_verification`
- * after 30 days. Returns the affected ids.
- *
- * AUTHZ: cron-only — caller MUST validate the cron secret BEFORE invoking.
- */
-export async function expireStaleAccessRequests(
-  now: Date,
-): Promise<{ id: number }[]> {
-  const db = createUnscopedClient();
-  return await db
-    .update(accessRequests)
-    .set({ status: 'expired', updatedAt: now })
-    .where(
-      and(
-        inArray(accessRequests.status, ['pending_verification', 'pending']),
-        lt(accessRequests.createdAt, sql`now() - interval '30 days'`),
-        isNull(accessRequests.deletedAt),
-      ),
-    )
-    .returning({ id: accessRequests.id });
 }
 
 // ---------------------------------------------------------------------------

@@ -67,13 +67,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //     401s, and the platform still reports the cron as registered and firing.
   //     Every scheduled job (16 as of apps/web/vercel.json) was dead for months
   //     with a green dashboard.
-  //   - OTP_HMAC_SECRET: hashed the 6-digit access-request OTPs. Their submit and
-  //     verify routes were deleted on 2026-10-20, so nothing live needs it;
-  //     whether to drop the requirement is an open decision.
-  //   - TOKEN_ENCRYPTION_KEY: encrypts the calendar/accounting OAuth token
-  //     tables. Their only callers, the fake connectors, were deleted on
-  //     2026-10-20, so nothing live needs it; whether to drop the requirement
-  //     (and the tables) is an open decision.
   //   - OAUTH_STATE_SECRET: `signPayload` throws without it, so Stripe Connect
   //     onboarding 500s instead of degrading.
   //   - SUPPORT_SESSION_JWT_SECRET: the admin app signs the support-access JWT
@@ -90,18 +83,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // This is the check that would have caught the cron outage on day one. It
   // deliberately makes "a secret is missing" a monitorable signal instead of
   // silence.
-  //
-  // TOKEN_ENCRYPTION_KEY is checked by FORMAT, not by minimum length. A length
-  // floor cannot express its requirement: `parseTokenEncryptionKeyHex` demands
-  // exactly 64 hex characters, so `openssl rand -hex 64` (128 chars — the
-  // argument is a byte count) and any 64-character non-hex passphrase both pass
-  // a `length >= 64` test while throwing on every encrypt and decrypt. That
-  // combination is the worst case this check exists to prevent: a green
-  // readiness probe over a permanently broken encryption path.
   const secretRules = [
     { name: 'CRON_SECRET', minLength: 16 },
-    { name: 'OTP_HMAC_SECRET', minLength: 16 },
-    { name: 'TOKEN_ENCRYPTION_KEY', exactHexChars: 64 },
     { name: 'OAUTH_STATE_SECRET', minLength: 16 },
     { name: 'SUPPORT_SESSION_JWT_SECRET', minLength: 32 },
     { name: 'COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', minLength: 16 },
@@ -121,17 +104,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (!value) {
       checks[key] = { status: 'fail', error: `${rule.name} is not set` };
-      continue;
-    }
-
-    if ('exactHexChars' in rule) {
-      const valid = new RegExp(`^[0-9a-fA-F]{${rule.exactHexChars}}$`).test(value);
-      checks[key] = valid
-        ? { status: 'pass' }
-        : {
-            status: 'fail',
-            error: `${rule.name} must be exactly ${rule.exactHexChars} hex characters (got ${value.length})`,
-          };
       continue;
     }
 

@@ -4,7 +4,6 @@ import { requireCronSecret } from '@/lib/api/cron-auth';
 import { bulkEmitConversionEvents, emitConversionEvent } from '@/lib/services/conversion-events';
 import {
   banDemoAuthUser,
-  expireStaleAccessRequests,
   findDemosEnteringGrace,
   findExpiredDemos,
   softDeleteExpiredDemo,
@@ -85,16 +84,10 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     count++;
   }
 
-  // ── Step 3: Expire stale access requests older than 30 days ──
-  const expiredRequests = await expireStaleAccessRequests(now);
-
-  console.info(`[expire-demos] expired ${expiredRequests.length} stale access requests`);
-
   return NextResponse.json({
     data: {
       expired: count,
       graceDetected: enteringGrace.length,
-      expiredRequests: expiredRequests.length,
       failed: banFailures,
     },
   });

@@ -13,10 +13,10 @@
  */
 import { randomUUID } from 'node:crypto';
 import {
-  accessRequests,
   announcements,
   arcSubmissions,
   communities,
+  communityJoinRequests,
   contractBids,
   contracts,
   createScopedClient,
@@ -365,22 +365,18 @@ async function main(): Promise<void> {
     return true;
   });
 
-  // jr-queue, jr-deny
-  await step('pending access request', async () => {
-    const email = 'jordan.rivera@sunset.local';
+  // jr-queue, jr-deny — someone who already has an account (the Sunset Ridge
+  // site manager) asks to join Sunset Condos.
+  await step('pending join request', async () => {
     const existing = await first(
-      condo.selectFrom(accessRequests, { id: accessRequests.id }, and(eq(accessRequests.email, email), eq(accessRequests.status, 'pending'))).limit(1),
+      condo.selectFrom(communityJoinRequests, { id: communityJoinRequests.id }, and(eq(communityJoinRequests.userId, siteManagerId), eq(communityJoinRequests.status, 'pending'))).limit(1),
     );
     if (existing) return false;
-    await condo.insert(accessRequests, {
-      email,
-      fullName: 'Jordan Rivera',
-      unitId: ownerUnit.id,
-      claimedUnitNumber: ownerUnit.unitNumber,
-      roleRequested: 'resident',
-      isUnitOwner: true,
+    await condo.insert(communityJoinRequests, {
+      userId: siteManagerId,
+      unitIdentifier: ownerUnit.unitNumber,
+      residentType: 'tenant',
       status: 'pending',
-      emailVerifiedAt: new Date(),
     });
     return true;
   });

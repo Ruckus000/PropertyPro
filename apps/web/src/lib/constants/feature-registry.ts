@@ -335,8 +335,8 @@ export const FEATURE_REGISTRY: FeatureRegistryItem[] = [
   {
     id: 'page-residents',
     label: 'Directory',
-    keywords: ['resident', 'owner', 'tenant', 'member', 'directory', 'contact', 'unit', 'units', 'who lives', 'access request'],
-    description: 'Units, residents and access requests',
+    keywords: ['resident', 'owner', 'tenant', 'member', 'directory', 'contact', 'unit', 'units', 'who lives', 'join request'],
+    description: 'Units, residents and join requests',
     icon: Building2,
     href: (cid: number) => directoryHref('residents', { communityId: cid }),
     roles: 'admin',

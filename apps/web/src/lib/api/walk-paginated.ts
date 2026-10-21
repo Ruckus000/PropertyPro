@@ -4,8 +4,7 @@
  * (Plan B3).
  *
  * Use this from consumers that need the **full** result set — e.g.
- * `useDocumentCategories` resolves a category by name across all rows, and
- * `access-request-list.tsx` renders the entire pending queue. Callers that
+ * `useDocumentCategories` resolves a category by name across all rows. Callers that
  * paginate through a list with a "Load more" button should NOT use this
  * helper; they want one page at a time.
  *

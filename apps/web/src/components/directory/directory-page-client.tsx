@@ -3,7 +3,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { AlertTriangle, DollarSign, Download, MoreHorizontal, Plus, Upload } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
@@ -19,8 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AccessRequestList } from '@/components/access-requests/access-request-list';
-import { accessRequestsQueryOptions } from '@/hooks/use-access-requests';
+import { AdminReviewList } from '@/components/join-requests/admin-review-list';
 import { useAdminJoinRequests } from '@/hooks/use-admin-join-requests';
 import type { ResidentFormSubmitValues } from '@/components/residents/resident-form';
 import { useDeleteUnit, useUnits } from '@/hooks/use-units';
@@ -242,13 +241,11 @@ export function DirectoryPageClient({
   const occupantsQ = useOccupants(communityId, { enabled: isAdmin });
   const delinquencyQ = useDelinquency(communityId, { enabled: canSeeBalances });
   const ruleQ = usePastDueRule(communityId, { enabled: canSeeBalances });
-  const requestsQ = useQuery({ ...accessRequestsQueryOptions(communityId), enabled: isAdmin });
-  // People who already have an account ask through "Join another community";
-  // their requests live on /admin/join-requests, which nothing linked to, so
-  // they sat unseen (onboarding audit F5). Count them with access requests.
+  // People who already have an account ask through "Join another community".
+  // The Requests tab is where they are reviewed; a separate page nothing linked
+  // to left them unseen (onboarding audit F5).
   const joinRequestsQ = useAdminJoinRequests({ communityId, enabled: isAdmin });
-  const pendingJoinRequests = joinRequestsQ.data?.length ?? 0;
-  const pendingRequests = (requestsQ.data?.length ?? 0) + pendingJoinRequests;
+  const pendingRequests = joinRequestsQ.data?.length ?? 0;
   const exporter = useDirectoryExport(communityId);
   const runExport = useCallback(
     (input: DirectoryExportInput) =>
@@ -610,7 +607,7 @@ export function DirectoryPageClient({
       {isAdmin && !unitsLoading && !residentsLoading && !unitsQ.isError ? (
         <OverviewStrip
           stats={stats}
-          requestCount={requestsQ.data ? pendingRequests : null}
+          requestCount={joinRequestsQ.data ? pendingRequests : null}
           canSeeBalances={balancesVisible}
           onOccupancy={() => {
             setTab('units');
@@ -641,7 +638,7 @@ export function DirectoryPageClient({
                 <span className="text-xs font-medium text-content-tertiary">{residentRows.length}</span>
               </TabsTrigger>
               <TabsTrigger value="requests" className="h-full gap-2 px-3.5">
-                Access requests
+                Join requests
                 {pendingRequests > 0 ? (
                   <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-interactive px-1.5 text-xs font-semibold text-content-inverse">
                     {pendingRequests}
@@ -1035,26 +1032,13 @@ export function DirectoryPageClient({
           </TabsContent>
         ) : null}
 
-        {/* ─────────── Access requests (admins only) ─────────── */}
+        {/* ─────────── Join requests (admins only) ─────────── */}
         {isAdmin ? (
           <TabsContent value="requests" className="mt-0 flex flex-col gap-4">
             <p className="text-sm text-content-secondary">
-              People who asked to join from the signup page. Approving gives them portal access and links them to a unit.
+              People with a PropertyPro account who asked to join this community. Approving gives them portal access; a denied person must wait 30 days to ask again.
             </p>
-            {pendingJoinRequests > 0 ? (
-              <p className="text-sm text-content">
-                {pendingJoinRequests === 1
-                  ? '1 person who already has a PropertyPro account asked to join. '
-                  : `${pendingJoinRequests} people who already have a PropertyPro account asked to join. `}
-                <Link
-                  href={`/admin/join-requests?communityId=${communityId}`}
-                  className={cn('font-medium text-content-link underline', FOCUS)}
-                >
-                  Review join requests
-                </Link>
-              </p>
-            ) : null}
-            <AccessRequestList communityId={communityId} unitOptions={unitOptions} />
+            <AdminReviewList communityId={communityId} />
           </TabsContent>
         ) : null}
       </Tabs>

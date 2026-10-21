@@ -98,12 +98,6 @@ export type { EsignCompletedEmailProps } from "./templates/esign-completed-email
 export { EsignReminderEmail } from "./templates/esign-reminder-email";
 export type { EsignReminderEmailProps } from "./templates/esign-reminder-email";
 
-export { AccessRequestApprovedEmail } from "./templates/access-request-approved";
-export type { AccessRequestApprovedEmailProps } from "./templates/access-request-approved";
-
-export { AccessRequestDeniedEmail } from "./templates/access-request-denied";
-export type { AccessRequestDeniedEmailProps } from "./templates/access-request-denied";
-
 export { FreeAccessExpiringEmail } from "./templates/free-access-expiring-email";
 export type { FreeAccessExpiringEmailProps } from "./templates/free-access-expiring-email";
 

@@ -31,7 +31,6 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
 }));
 
 vi.mock('@propertypro/db', () => ({
-  accessRequests: {},
   communities: communitiesTable,
   demoInstances: demoInstancesTable,
   users: usersTable,

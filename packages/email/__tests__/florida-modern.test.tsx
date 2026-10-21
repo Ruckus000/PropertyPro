@@ -72,7 +72,7 @@ function accentRule(html: string): string | null {
 
 describe('coverage', () => {
   it('found the template directory (non-empty population)', () => {
-    expect(templateFiles.length).toBe(36);
+    expect(templateFiles.length).toBe(34);
   });
 
   it('has a fixture for every template file, and no fixture without a file', () => {
