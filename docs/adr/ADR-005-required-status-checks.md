@@ -1,20 +1,10 @@
 # ADR-005: Required status checks for `main`
 
-- **Status:** Accepted — applied 2026-06-06. **Superseded in practice 2026-08 by
-  #976**, which disabled `.github/workflows/ci.yml` and moved CI to localci when
-  GitHub Actions minutes ran out. The decision below — "a guard only prevents
-  regressions if its job is a required status check" — still stands; what changed
-  is where the jobs live. `main`'s required contexts today are a single
-  `localci/suite`, so the eight named below are no longer GitHub contexts and
-  cannot be required individually. `migration-ordering` in particular now runs in
-  localci's blocking pre-push `gate`. Recorded rather than rewritten, per ADR
-  convention.
-- **Status addendum (2026-10-20):** the paragraph above is itself history. #1155
-  re-enabled `ci.yml` and made GitHub Actions the merge authority again. `main`'s
-  required contexts are now the seven CI jobs `Lint`, `Typecheck`, `Unit Tests`,
-  `no-mock-guard`, `migration-ordering`, `perf-check` and `Build` (strict=false,
-  admins not enforced; read from `gh api repos/Ruckus000/PropertyPro/branches/main/protection`
-  on 2026-10-20). `localci/suite` is optional local feedback and not required.
+- **Status:** Superseded. This file does not say which contexts are required on
+  `main`; GitHub does. Ask it with the command in `docs/DEPLOYMENT.md` §6.2.
+  The decision below still stands: a guard only prevents regressions if its job is
+  a required status check. History: applied 2026-06-06; #976 (2026-08) moved the
+  checks into localci; #1155 (2026-09) made GitHub Actions the merge authority again.
 - **Date:** 2026-06-05 (applied 2026-06-06)
 - **Context tags:** CI, branch protection, Plan B4
 
