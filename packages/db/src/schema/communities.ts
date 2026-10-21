@@ -155,12 +155,6 @@ export const communities = pgTable('communities', {
   subscriptionCanceledAt: timestamp('subscription_canceled_at', { withTimezone: true }),
   /** Stripe subscription current_period_end — trial end or renewal date for in-app banners. */
   subscriptionCurrentPeriodEndAt: timestamp('subscription_current_period_end_at', { withTimezone: true }),
-  /** Admin metrics: why the community canceled (e.g. 'price', 'missing_feature', 'switching'). Validated at API boundary. */
-  cancellationReason: text('cancellation_reason'),
-  /** Admin metrics: free-text elaboration on the cancellation reason. */
-  cancellationNote: text('cancellation_note'),
-  /** Admin metrics: when the cancellation reason was captured. */
-  cancellationCapturedAt: timestamp('cancellation_captured_at', { withTimezone: true }),
   /** Account lifecycle: denormalized from access_plans for fast subscription guard check. */
   freeAccessExpiresAt: timestamp('free_access_expires_at', { withTimezone: true }),
   /** Admin: true for demo communities created via the admin console. */
