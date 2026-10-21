@@ -120,6 +120,13 @@ export function buildDedupeKey(email: InboundEmail): string {
  * `spam` does NOT reopen. That status is the operator's explicit verdict, and
  * undoing it automatically would make the spam button useless — the next
  * message from the same sender would put the thread straight back in the inbox.
+ * So an in-chain reply (`findThreadId`'s RFC branch) joins the shelved thread,
+ * while the subject fallback, which has no chain to honour, skips spam threads.
+ *
+ * ponytail: a real reply to a WRONGLY shelved thread stays hidden in Spam.
+ * Safe while every shelve is a human's (6 of 6, none replied to, 2026-10-21).
+ * Revisit once both classes reach `COLD_START_MIN_DOCUMENTS` (spam-scan-plan.ts)
+ * and the scan starts shelving on its own.
  */
 export function nextThreadStatus(current: SupportThreadStatus): SupportThreadStatus {
   return current === 'spam' ? 'spam' : 'open';

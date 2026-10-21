@@ -35,12 +35,12 @@ const MAX_CORPUS_ROWS = 500;
  * Every one of them is re-scored on every run — there is deliberately no
  * "already scored" filter, because that is the self-blinding bug this job was
  * rewritten to remove (see the note in `planSpamScan`). The bound here is
- * recency instead, which has its own horizon: once the inbox holds more than
- * this many inbound emails, the older ones stop being re-scored and keep
- * whatever score they last received. At one or two messages a day that is
- * months away, and the feature is advisory, so a single unpaginated read is
- * the honest trade for now. Paginating this is tracked separately; if you do
- * it, page the read — do not reintroduce a `spam_score IS NULL` filter.
+ * recency instead.
+ *
+ * ponytail: only the newest 200 inbound emails are re-scored; older ones keep
+ * their last score. Page the read (keyset on id, never a `spam_score IS NULL`
+ * filter) once `support_inbox_messages` holds over 200 inbound emails
+ * (17 on 2026-10-21).
  */
 const MAX_SCORE_BATCH = 200;
 
@@ -48,12 +48,11 @@ const MAX_SCORE_BATCH = 200;
  * Ceiling on message bodies read to build the model.
  *
  * Separate from `MAX_CORPUS_ROWS` because that caps THREADS and messages per
- * thread are unbounded — `findThreadId` matches on the RFC `In-Reply-To` /
- * `References` chain without the `status <> 'spam'` exclusion its
- * subject-fallback branch carries, so a sender whose thread has been shelved
- * can keep appending to it indefinitely by replying in-chain. Without a cap
- * here, one flooded thread grows this read without bound, and `MAX_TEXT_CHARS`
- * truncates only AFTER the full body has crossed the wire.
+ * thread are unbounded: in-chain replies keep joining a shelved thread (see
+ * the marker on `nextThreadStatus`), so a sender can append to one
+ * indefinitely. Without a cap here, one flooded thread grows this read without
+ * bound, and `MAX_TEXT_CHARS` truncates only AFTER the full body has crossed
+ * the wire.
  *
  * Newest-first so a flooded thread cannot starve the rest of the corpus of its
  * share of the cap.
