@@ -76,18 +76,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
 
     // Only paths that actually RENDER on a tenant host belong here. `/` and
-    // `/transparency` do; `/notices` and `/request-access` did not, and were
-    // advertised to crawlers as 404s on both host types until this was fixed.
+    // `/transparency` do; `/notices` does not, and was advertised to crawlers
+    // as a 404 on both host types until this was fixed. (`/request-access` was
+    // the same, and has since been retired outright.)
     //
-    // The reason is structural, not an oversight to "fix" by re-adding them:
-    // those renderers live at `app/(public)/[subdomain]/<suffix>` and need a
-    // `[subdomain]` PATH segment, which a host that carries tenancy implicitly
+    // The reason is structural, not an oversight to "fix" by re-adding it:
+    // the notices renderer lives at `app/(public)/[subdomain]/notices` and needs
+    // a `[subdomain]` PATH segment, which a host that carries tenancy implicitly
     // never supplies. `transparency` is the one suffix with a host-native twin
     // (`app/public-transparency`), which is why it is the one that survives —
     // see HOST_NATIVE_PUBLIC_SUFFIX_ROUTES in lib/middleware/public-host-routes.ts.
     // Both slugs are reserved by `isReservedPublicSlug`, so a community cannot
-    // create a page at either address either. Adding one back means building a
-    // host-native renderer for it first.
+    // create a page at either address either. Adding `/notices` back means
+    // building a host-native renderer for it first.
     //
     // Kept as two sources deliberately: that map is request ROUTING, this list
     // is SEO inventory. Deduping them across that seam would couple the two for

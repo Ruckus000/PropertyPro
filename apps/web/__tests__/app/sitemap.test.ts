@@ -75,9 +75,10 @@ describe('sitemap.ts', () => {
 
   it('does not advertise /notices or /request-access — neither renders on a tenant host', async () => {
     // Regression. Both were static entries until this was fixed, and both 404 on
-    // a community subdomain AND a verified custom domain: their renderers live at
-    // `app/(public)/[subdomain]/<suffix>` and need a `[subdomain]` PATH segment,
-    // which a host carrying tenancy implicitly never supplies. `transparency` is
+    // a community subdomain AND a verified custom domain. `/notices` has its
+    // renderer at `app/(public)/[subdomain]/notices`, which needs a `[subdomain]`
+    // PATH segment that a host carrying tenancy implicitly never supplies;
+    // `/request-access` is retired and has no renderer at all. `transparency` is
     // the only suffix with a host-native twin (`app/public-transparency`).
     headersMock.mockResolvedValueOnce(new Headers({ host: 'sunset-condos.getpropertypro.com' }));
     resolveCommunityContextMock.mockReturnValueOnce({

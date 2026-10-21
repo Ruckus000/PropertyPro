@@ -3,7 +3,6 @@ import { isReservedSubdomain } from '@propertypro/shared';
 export const PATH_PUBLIC_SUFFIXES = new Set([
   'transparency',
   'notices',
-  'request-access',
   'unavailable',
 ]);
 
@@ -28,8 +27,8 @@ export const PATH_PUBLIC_SUFFIXES = new Set([
  * so a first segment missing from here is classified `site-page` and rewritten
  * to the public-site renderer, which 404s for a logged-in resident clicking it
  * in the sidebar. `/meetings` and `/arc-requests` (both sidebar nav items) were
- * exactly that; `/account`, `/admin` and `/billing` survived only by accident,
- * because every route under them happens to be ≥2 segments deep.
+ * exactly that; `/account` and `/billing` survived only by accident, because
+ * every route under them happens to be ≥2 segments deep.
  * `public-host-routes.test.ts` enumerates the route tree and fails on drift.
  *
  * No prefix should be a substring-prefix of another (e.g. adding '/con'
@@ -42,7 +41,6 @@ export const PROTECTED_PATH_PREFIXES = [
   '/meetings',
   '/arc-requests',
   '/account',
-  '/admin',
   '/billing',
   '/select-community',
   '/settings',
@@ -78,6 +76,10 @@ export const PROTECTED_PATH_PREFIXES = [
  * - `_next`, `api` — framework infrastructure. (`api` is also derivable from
  *   `/api/v1`; listed here as well so removing that prefix can never un-reserve
  *   it.)
+ * - `admin` — a retired app route (join requests moved to Directory); old staff
+ *   bookmarks must not land on a public page.
+ * - `request-access` — the retired access-request page; old links must not land
+ *   on a public page.
  */
 const NON_PROTECTED_RESERVED_FIRST_SEGMENTS = [
   'auth',
@@ -89,6 +91,8 @@ const NON_PROTECTED_RESERVED_FIRST_SEGMENTS = [
   'pdfjs-test',
   '_next',
   'api',
+  'admin',
+  'request-access',
 ] as const;
 
 const PROTECTED_FIRST_SEGMENTS = new Set<string>([
@@ -193,8 +197,8 @@ export const METADATA_FIRST_SEGMENTS = new Set(['sitemap.xml', 'robots.txt']);
  * verified custom domain) there is no `/[subdomain]/` path segment, so the
  * apex renderer under `app/(public)/[subdomain]/…` cannot serve them. Only
  * `transparency` has a host-native twin today (`app/public-transparency`); the
- * remaining suffixes (`notices`, `request-access`, `unavailable`) have none, so
- * they keep the default public-site handling and render the branded 404.
+ * remaining suffixes (`notices`, `unavailable`) have none, so they keep the
+ * default public-site handling and render the branded 404.
  *
  * `app/sitemap.ts`'s static entries must stay consistent with this: a suffix
  * with no host-native twin is a 404 and must not be advertised to crawlers.
