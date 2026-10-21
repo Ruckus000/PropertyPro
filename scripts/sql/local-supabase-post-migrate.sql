@@ -232,9 +232,8 @@ DECLARE
   s text;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'access_requests', 'accounting_connections', 'amenities',
-    'amenity_reservations', 'announcements', 'arc_submissions',
-    'assessment_line_items', 'assessments', 'calendar_sync_tokens',
+    'amenities', 'amenity_reservations', 'announcements', 'arc_submissions',
+    'assessment_line_items', 'assessments',
     'community_join_requests', 'compliance_checklist_items', 'contract_bids',
     'contracts', 'document_categories', 'document_drafts', 'documents',
     'election_ballot_submissions', 'election_ballots', 'election_candidates',

@@ -1495,7 +1495,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     }
   });
 
-  describe('0021: access_requests + community_join_requests RLS repair', () => {
+  describe('0021: community_join_requests RLS repair', () => {
     it('installs the write-scope trigger on every tenant-scoped table', async () => {
       // Matched on the FUNCTION, not the trigger name. Several baseline tables
       // attach pp_rls_enforce_tenant_community_id() under a legacy name (see
@@ -1558,8 +1558,8 @@ describeDb('P4-55 RLS policies (integration)', () => {
         (entry) => !familiesWithoutTrigger.has(entry.policyFamily),
       ).map((entry) => entry.tableName);
 
-      // Both repaired tables (access_requests, community_join_requests) must be present.
-      expect(triggerNamesByTable.get('access_requests')).toContain('pp_rls_enforce_tenant_scope');
+      // The repaired table must be present (0021 also repaired access_requests,
+      // which 0094 dropped).
       expect(triggerNamesByTable.get('community_join_requests')).toContain(
         'pp_rls_enforce_tenant_scope',
       );
@@ -2245,7 +2245,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
     // Before 0077, every one of these had a membership-only SELECT policy and
     // Supabase's open grant, so any member could read every row through
     // PostgREST with their own JWT and the public anon key: OAuth refresh
-    // tokens (accounting_connections, calendar_sync_tokens), other people's
+    // tokens (in two connector tables since dropped by 0094), other people's
     // invite tokens, ballot submissions, every neighbour's lease. Measured in
     // production 2026-09-25 (has_table_privilege + pg_policy).
     //
@@ -2282,7 +2282,7 @@ describeDb('P4-55 RLS policies (integration)', () => {
       },
     );
 
-    it.each(['leases', 'units', 'calendar_sync_tokens', 'accounting_connections', 'invitations'])(
+    it.each(['leases', 'units', 'invitations'])(
       'a community member querying %s as authenticated is refused at the ACL',
       async (tableName) => {
         // By message, not only SQLSTATE: naming the table proves it exists and

@@ -1,7 +1,6 @@
 /**
  * Schema barrel export — all tables, enums, and inferred types.
  */
-export * from './access-requests';
 export * from './community-join-requests';
 export * from './enums';
 export * from './communities';
@@ -30,8 +29,6 @@ export * from './rent-obligations';
 export * from './rent-payments';
 export * from './stripe-connected-accounts';
 export * from './finance-stripe-webhook-events';
-export * from './calendar-sync-tokens';
-export * from './accounting-connections';
 export * from './violations';
 export * from './violation-fines';
 export * from './arc-submissions';
@@ -117,8 +114,6 @@ import type { rentObligations } from './rent-obligations';
 import type { rentPayments } from './rent-payments';
 import type { stripeConnectedAccounts } from './stripe-connected-accounts';
 import type { financeStripeWebhookEvents } from './finance-stripe-webhook-events';
-import type { calendarSyncTokens } from './calendar-sync-tokens';
-import type { accountingConnections } from './accounting-connections';
 import type { violations } from './violations';
 import type { violationFines } from './violation-fines';
 import type { arcSubmissions } from './arc-submissions';
@@ -243,14 +238,6 @@ export type NewStripeConnectedAccount = typeof stripeConnectedAccounts.$inferIns
 // Finance Stripe Webhook Events
 export type FinanceStripeWebhookEvent = typeof financeStripeWebhookEvents.$inferSelect;
 export type NewFinanceStripeWebhookEvent = typeof financeStripeWebhookEvents.$inferInsert;
-
-// Calendar Sync Tokens
-export type CalendarSyncToken = typeof calendarSyncTokens.$inferSelect;
-export type NewCalendarSyncToken = typeof calendarSyncTokens.$inferInsert;
-
-// Accounting Connections
-export type AccountingConnection = typeof accountingConnections.$inferSelect;
-export type NewAccountingConnection = typeof accountingConnections.$inferInsert;
 
 // Violations
 export type Violation = typeof violations.$inferSelect;
@@ -500,11 +487,6 @@ export type NewHelpArticleView = typeof helpArticleViews.$inferInsert;
 import type { deniedVisitors } from './denied-visitors';
 export type DeniedVisitor = typeof deniedVisitors.$inferSelect;
 export type NewDeniedVisitor = typeof deniedVisitors.$inferInsert;
-
-// Access Requests (self-service resident signup)
-import type { accessRequests } from './access-requests';
-export type AccessRequest = typeof accessRequests.$inferSelect;
-export type NewAccessRequest = typeof accessRequests.$inferInsert;
 
 // Account Lifecycle
 export { accessPlans } from './access-plans';

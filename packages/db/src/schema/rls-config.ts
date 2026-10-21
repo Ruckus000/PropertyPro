@@ -56,17 +56,7 @@ export const RLS_TENANT_TABLES = [
     policyFamily: 'tenant_admin_write',
     notes: 'Payment journal for rent obligations; write access remains admin-gated in service/route layer.',
   },
-  {
-    tableName: 'calendar_sync_tokens',
-    policyFamily: 'tenant_admin_write',
-    notes: 'Calendar sync credentials are scoped per user/community and mutated only through authenticated calendar-sync routes.',
-  },
   { tableName: 'calendar_event_reminder_log', policyFamily: 'service_only' },
-  {
-    tableName: 'accounting_connections',
-    policyFamily: 'tenant_admin_write',
-    notes: 'Accounting connector credentials and mappings are admin-managed and encrypted at application layer.',
-  },
   {
     tableName: 'announcements',
     policyFamily: 'tenant_member_configurable',
@@ -318,16 +308,10 @@ export const RLS_TENANT_TABLES = [
   { tableName: 'support_consent_grants', policyFamily: 'service_only' },
   { tableName: 'support_access_log', policyFamily: 'audit_log_restricted' },
   {
-    tableName: 'access_requests',
-    policyFamily: 'tenant_crud',
-    notes:
-      'Self-service resident signup with OTP verification. RLS hardened in 0021 to use pp_rls_can_access_community(community_id) and the canonical pp_rls_enforce_tenant_scope trigger; the baseline policies referenced the wrong GUC (app.community_id) and never installed a write-scope trigger.',
-  },
-  {
     tableName: 'community_join_requests',
     policyFamily: 'tenant_crud',
     notes:
-      'Self-service community linking: users submit a request to join a community, admins approve/deny. RLS hardened in 0021 (same GUC + missing-trigger drift fix as access_requests).',
+      'Self-service community linking: users submit a request to join a community, admins approve/deny. RLS hardened in 0021: the baseline policies referenced the wrong GUC (app.community_id) and never installed a write-scope trigger.',
   },
   {
     tableName: 'onboarding_checklist_items',
@@ -605,9 +589,10 @@ export const RLS_GLOBAL_EXCLUSION_NAMES = RLS_GLOBAL_TABLE_EXCLUSIONS.map(
 // 80 on main + community_export_jobs + community_export_job_parts (0058) = 82,
 // + site_publish_schedules (0065) = 83, + unit_occupants (0085) = 84,
 // + lease_residents / lease_deposits / lease_renewal_offers = 87,
-// + notice_consent (0090) = 88, - onboarding_wizard_state (0091) = 87.
+// + notice_consent (0090) = 88, - onboarding_wizard_state (0091) = 87,
+// - access_requests / calendar_sync_tokens / accounting_connections (0094) = 84.
 // RE-DERIVE AT MERGE, same as every bump above.
-export const RLS_EXPECTED_TENANT_TABLE_COUNT = 87;
+export const RLS_EXPECTED_TENANT_TABLE_COUNT = 84;
 
 export type RlsTenantTableName = (typeof RLS_TENANT_TABLES)[number]['tableName'];
 export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number]['tableName'];
@@ -633,9 +618,8 @@ export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number
  * packages/db/__tests__/data-api-revoke-migration.test.ts enforces both.
  */
 export const DATA_API_REVOKED_TENANT_TABLES = [
-  'access_requests', 'accounting_connections', 'amenities',
-  'amenity_reservations', 'announcements', 'arc_submissions',
-  'assessment_line_items', 'assessments', 'calendar_sync_tokens',
+  'amenities', 'amenity_reservations', 'announcements', 'arc_submissions',
+  'assessment_line_items', 'assessments',
   'community_join_requests', 'compliance_checklist_items', 'contract_bids',
   'contracts', 'document_categories', 'document_drafts', 'documents',
   'election_ballot_submissions', 'election_ballots', 'election_candidates',
