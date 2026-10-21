@@ -43,13 +43,20 @@ describe('public host route helpers', () => {
 
   it('never reads a public page name as a community slug', () => {
     // `/notices` on the apex used to 308 to `notices.<root>`, which no community owns.
-    for (const name of ['notices', 'request-access', 'unavailable']) {
+    for (const name of ['notices', 'unavailable']) {
       expect(parsePathBasedPublicRoute(`/${name}`)).toBeNull();
     }
     expect(parsePathBasedPublicRoute('/sunset-condos/notices')).toEqual({
       slug: 'sunset-condos',
       path: '/notices',
     });
+  });
+
+  it('neither redirects nor reads a slug from the retired /request-access', () => {
+    // The access-request flow is gone, so `/<slug>/request-access` no longer
+    // redirects to the subdomain, and the bare name stays reserved.
+    expect(parsePathBasedPublicRoute('/request-access')).toBeNull();
+    expect(parsePathBasedPublicRoute('/sunset-condos/request-access')).toBeNull();
   });
 
   it('still redirects real slug routes that share a marketing suffix', () => {

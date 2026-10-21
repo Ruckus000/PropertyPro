@@ -194,12 +194,19 @@ describe('classifySubdomainPath', () => {
 
   // No app route serves these, so the app fallback used to read the name as a
   // community and 307 to `notices.<root>`. The public site renders the 404.
-  it.each(['/notices', '/request-access', '/unavailable'])(
+  it.each(['/notices', '/unavailable'])(
     'sends %s to the public site, which has no such page',
     (path) => {
       expect(classifySubdomainPath(path)).toBe('site-page');
     },
   );
+
+  // `/request-access` and `/admin` were retired. Both stay reserved, so they go
+  // to the app, where `(public)/[subdomain]` 404s on a reserved name instead of
+  // redirecting to a subdomain no community owns.
+  it.each(['/request-access', '/admin'])('leaves the retired path %s to the app', (path) => {
+    expect(classifySubdomainPath(path)).toBe('app');
+  });
 
   it('leaves /transparency to its host-native rewrite', () => {
     expect(classifySubdomainPath('/transparency')).toBe('app');
