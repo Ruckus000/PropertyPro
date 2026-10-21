@@ -34,7 +34,7 @@ describe('GET /api/v1/auth/signup', () => {
     expect(body.data.available).toBe(true);
     expect(checkSignupSubdomainAvailabilityMock).toHaveBeenCalledWith(
       'sunrise-cove',
-      { excludeSignupRequestId: undefined, signupRequestId: undefined },
+      { excludeSignupRequestId: undefined, excludeEmailNormalized: undefined, signupRequestId: undefined },
     );
   });
 
@@ -47,9 +47,27 @@ describe('GET /api/v1/auth/signup', () => {
 
     expect(checkSignupSubdomainAvailabilityMock).toHaveBeenCalledWith(
       'sunrise-cove',
-      { excludeSignupRequestId: 'req-42', signupRequestId: 'req-42' },
+      { excludeSignupRequestId: 'req-42', excludeEmailNormalized: undefined, signupRequestId: 'req-42' },
     );
   });
+
+  // #1115: on a new browser no draft carries the row's id, so the founder's own
+  // pending row reported their own subdomain as taken.
+  it('excludes the signed-in founder\'s own row by their forwarded email', async () => {
+    await GET(
+      new NextRequest('http://localhost:3000/api/v1/auth/signup?subdomain=sunrise-cove', {
+        headers: { 'x-user-email': 'Founder@Example.com' },
+      }),
+    );
+
+    expect(checkSignupSubdomainAvailabilityMock).toHaveBeenCalledWith('sunrise-cove', {
+      excludeSignupRequestId: undefined,
+      excludeEmailNormalized: 'founder@example.com',
+      signupRequestId: undefined,
+    });
+  });
+
+
 
   it('returns 400 when subdomain query is missing', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/auth/signup');

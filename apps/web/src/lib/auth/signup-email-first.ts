@@ -291,8 +291,11 @@ export async function submitSignupDetails(
     }
   }
 
+  // Excluded by EMAIL, the upsert's conflict key: the row this caller is about
+  // to overwrite may carry an id they no longer hold (`signupRequestId` above is
+  // fresh whenever the row is not provably theirs), and it must not block them.
   const subdomain = await checkSignupSubdomainAvailability(input.candidateSlug, {
-    excludeSignupRequestId: signupRequestId,
+    excludeEmailNormalized: email,
     signupRequestId,
   });
   if (!subdomain.available) {

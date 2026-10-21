@@ -12,10 +12,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createUnscopedClientMock,
+  closeCheckoutSessionMock,
   eqMock,
   pendingSignupsTable,
 } = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
+  closeCheckoutSessionMock: vi.fn(),
   eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: { col, val } })),
   pendingSignupsTable: {
     id: 'pending_signups.id',
@@ -52,10 +54,14 @@ vi.mock('../../src/lib/billing/volume-discounts', () => ({
 vi.mock('../../src/lib/billing/downgrade-notifications', () => ({
   notifyDowngrade: vi.fn(),
 }));
+vi.mock('../../src/lib/services/stripe-service', () => ({
+  closeCheckoutSession: closeCheckoutSessionMock,
+}));
 
 import {
   createPendingAddToGroupSignup,
   recordAddToGroupCheckoutSession,
+  retireOwnAddToGroupSignup,
 } from '../../src/lib/billing/billing-group-service';
 import { SIGNUP_EXPIRY_MS } from '../../src/lib/auth/signup-expiry';
 import { ValidationError } from '@propertypro/shared/http';
@@ -205,5 +211,57 @@ describe('recordAddToGroupCheckoutSession', () => {
 
     const set = setMock.mock.calls[0]![0] as { updatedAt: Date };
     expect(set.updatedAt).toBeInstanceOf(Date);
+  });
+});
+
+// #1115: a PM retrying the same subdomain was blocked by their own abandoned
+// checkout row until the hourly sweep expired it.
+describe('retireOwnAddToGroupSignup', () => {
+  function buildRetireDb(rows: Array<{ id: bigint; payload: Record<string, unknown> }>) {
+    const setMock = vi.fn(() => ({ where: vi.fn(() => Promise.resolve()) }));
+    const updateMock = vi.fn(() => ({ set: setMock }));
+    const db = {
+      select: vi.fn(() => ({ from: () => ({ where: () => Promise.resolve(rows) }) })),
+      update: updateMock,
+    };
+    createUnscopedClientMock.mockReturnValue(db);
+    return { setMock, updateMock };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    closeCheckoutSessionMock.mockResolvedValue('closed');
+  });
+
+  it('closes the open checkout and expires the PM\'s own add-to-group row', async () => {
+    const { setMock } = buildRetireDb([
+      { id: 7n, payload: { kind: 'add_to_group', stripeCheckoutSessionId: 'cs_old' } },
+    ]);
+
+    await retireOwnAddToGroupSignup('user-123', 'oceanview-towers');
+
+    expect(closeCheckoutSessionMock).toHaveBeenCalledWith('cs_old');
+    expect(setMock).toHaveBeenCalledWith(expect.objectContaining({ status: 'expired' }));
+  });
+
+  it('refuses, and expires nothing, when that checkout was already paid', async () => {
+    closeCheckoutSessionMock.mockResolvedValue('complete');
+    const { updateMock } = buildRetireDb([
+      { id: 7n, payload: { kind: 'add_to_group', stripeCheckoutSessionId: 'cs_paid' } },
+    ]);
+
+    await expect(retireOwnAddToGroupSignup('user-123', 'oceanview-towers')).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves a row that is not an add-to-group signup alone', async () => {
+    const { updateMock } = buildRetireDb([{ id: 8n, payload: { flow: 'email_first' } }]);
+
+    await retireOwnAddToGroupSignup('user-123', 'oceanview-towers');
+
+    expect(closeCheckoutSessionMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 });

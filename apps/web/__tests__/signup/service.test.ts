@@ -376,6 +376,7 @@ function createMockDb(state: MockDbState): {
               .map((row) => ({
                 id: row.id,
                 signupRequestId: row.signupRequestId,
+                emailNormalized: row.emailNormalized,
               }));
           }
 
@@ -481,6 +482,33 @@ describe('signup service', () => {
     const availability = await checkSignupSubdomainAvailability('palm-gardens');
     expect(availability.available).toBe(false);
     expect(availability.reason).toBe('taken');
+  });
+
+  // #1115: rows are upserted by email, so the caller's own row (whatever id it
+  // carries) is the one they are about to overwrite, not a competitor.
+  it('does not let the caller\'s own row, matched by email, block them', async () => {
+    state.pendingSignups.push({
+      id: 102,
+      signupRequestId: 'id-the-caller-no-longer-holds',
+      emailNormalized: 'founder@example.com',
+      candidateSlug: 'bayview-towers',
+      status: 'email_verified',
+      expiresAt: new Date(Date.now() + 3600_000),
+      authUserId: 'auth-founder',
+      verificationEmailId: null,
+      verificationEmailSentAt: null,
+    });
+
+    const own = await checkSignupSubdomainAvailability('bayview-towers', {
+      excludeEmailNormalized: 'founder@example.com',
+    });
+    expect(own.available).toBe(true);
+
+    const someoneElse = await checkSignupSubdomainAvailability('bayview-towers', {
+      excludeEmailNormalized: 'other@example.com',
+    });
+    expect(someoneElse.available).toBe(false);
+    expect(someoneElse.reason).toBe('taken');
   });
 
   describe('advisory subdomain check logging and transient failures', () => {

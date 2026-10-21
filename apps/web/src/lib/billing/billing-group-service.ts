@@ -5,6 +5,7 @@ import { eq, and, isNull, lt, ne, sql, inArray } from '@propertypro/db/filters';
 import { AppError, ValidationError } from '../api/errors';
 import { isNamedUniqueViolation } from '../db/postgres-error';
 import { SIGNUP_EXPIRY_MS } from '../auth/signup-expiry';
+import { closeCheckoutSession } from '../services/stripe-service';
 import { determineTier, type VolumeTier } from './tier-calculator';
 import { applyVolumeDiscountToSubscriptions } from './volume-discounts';
 import { notifyDowngrade } from './downgrade-notifications';
@@ -450,6 +451,43 @@ export async function getOrCreateBillingGroupForPm(
   await recalculateVolumeTier(billingGroupId);
 
   return { billingGroupId, stripeCustomerId };
+}
+
+/**
+ * Release a subdomain the PM's own abandoned add-community checkout still holds.
+ *
+ * Without this, retrying the same subdomain is refused by the availability check
+ * and, past it, by `pending_signups_candidate_slug_active_unique` on the insert
+ * below, until the hourly sweep expires the row (#1115). Each open Checkout
+ * session is closed first so the old row can never be paid; one that was already
+ * paid refuses the retry instead.
+ */
+export async function retireOwnAddToGroupSignup(userId: string, slug: string): Promise<void> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ id: pendingSignups.id, payload: pendingSignups.payload })
+    .from(pendingSignups)
+    .where(
+      and(
+        eq(pendingSignups.authUserId, userId),
+        eq(pendingSignups.candidateSlug, slug),
+        eq(pendingSignups.status, 'checkout_started'),
+      ),
+    );
+
+  for (const row of rows) {
+    if (row.payload['kind'] !== 'add_to_group') continue;
+    const sessionId = row.payload['stripeCheckoutSessionId'];
+    if (typeof sessionId === 'string' && sessionId && (await closeCheckoutSession(sessionId)) === 'complete') {
+      throw new ValidationError('That community is already paid for and being set up.', {
+        field: 'subdomain',
+      });
+    }
+    await db
+      .update(pendingSignups)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(and(eq(pendingSignups.id, row.id), eq(pendingSignups.status, 'checkout_started')));
+  }
 }
 
 export async function createPendingAddToGroupSignup(input: {

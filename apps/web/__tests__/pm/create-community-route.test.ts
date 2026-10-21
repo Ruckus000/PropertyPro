@@ -34,6 +34,7 @@ vi.mock('@/lib/billing/billing-group-service', () => ({
   }),
   createPendingAddToGroupSignup: vi.fn().mockResolvedValue(7),
   recordAddToGroupCheckoutSession: vi.fn().mockResolvedValue(undefined),
+  retireOwnAddToGroupSignup: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { POST } from '@/app/api/v1/pm/communities/route';
@@ -41,7 +42,9 @@ import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
 import {
   getOrCreateBillingGroupForPm,
   recordAddToGroupCheckoutSession,
+  retireOwnAddToGroupSignup,
 } from '@/lib/billing/billing-group-service';
+import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/v1/pm/communities', {
@@ -67,6 +70,16 @@ const validBody = {
 describe('POST /api/v1/pm/communities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // #1115: the PM's own abandoned checkout for this subdomain is released
+  // before availability is judged, or it reports their own subdomain as taken.
+  it('retires the PM\'s own abandoned checkout before checking the subdomain', async () => {
+    await POST(makeRequest({ ...validBody, subdomain: 'Oceanview-Towers' }));
+    expect(retireOwnAddToGroupSignup).toHaveBeenCalledWith('user-123', 'oceanview-towers');
+    expect(vi.mocked(retireOwnAddToGroupSignup).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(checkSignupSubdomainAvailability).mock.invocationCallOrder[0]!,
+    );
   });
 
   it('starts a Stripe checkout session with valid input', async () => {

@@ -10,11 +10,13 @@ import { ValidationError } from '@/lib/api/errors';
 import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
 import { listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
 import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
+import { normalizeSignupSubdomain } from '@/lib/auth/signup-schema';
 import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
 import {
   getOrCreateBillingGroupForPm,
   createPendingAddToGroupSignup,
   recordAddToGroupCheckoutSession,
+  retireOwnAddToGroupSignup,
 } from '@/lib/billing/billing-group-service';
 import {
   pmCommunitiesGetContract,
@@ -33,6 +35,8 @@ export const POST = withErrorHandler(
   runRoute(pmCommunitiesPostContract, async ({ body, req }) => {
     const userId = await requirePmPortfolioAccess(req);
 
+    // A retry must not be blocked by this PM's own abandoned checkout for it.
+    await retireOwnAddToGroupSignup(userId, normalizeSignupSubdomain(body.subdomain));
     const slugCheck = await checkSignupSubdomainAvailability(body.subdomain);
     if (!slugCheck.available) {
       throw new ValidationError('Subdomain is not available', {
