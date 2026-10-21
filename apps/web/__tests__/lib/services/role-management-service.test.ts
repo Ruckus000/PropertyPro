@@ -10,6 +10,9 @@ const {
   scopedUpdateMock,
   userRolesTable,
   communitiesTable,
+  TX,
+  txUpdateMock,
+  transactionMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -18,6 +21,9 @@ const {
   scopedUpdateMock: vi.fn().mockResolvedValue(undefined),
   userRolesTable: Symbol('user_roles'),
   communitiesTable: Symbol('communities'),
+  TX: Symbol('tx'),
+  txUpdateMock: vi.fn().mockResolvedValue(undefined),
+  transactionMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -29,6 +35,10 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: { col, val } }),
+}));
+
+vi.mock('@propertypro/db/unsafe', () => ({
+  createUnscopedClient: () => ({ transaction: transactionMock }),
 }));
 
 import {
@@ -66,7 +76,13 @@ describe('role-management-service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     scopedUpdateMock.mockResolvedValue(undefined);
-    createScopedClientMock.mockReturnValue(scopedClient());
+    txUpdateMock.mockResolvedValue(undefined);
+    // A client bound to the transaction writes through txUpdateMock, so a test
+    // can tell a write inside the transaction from one outside it.
+    createScopedClientMock.mockImplementation((_communityId: number, tx?: unknown) =>
+      tx === TX ? { ...scopedClient(), update: txUpdateMock } : scopedClient(),
+    );
+    transactionMock.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) => callback(TX));
   });
 
   // ---------------------------------------------------------------------------
@@ -299,7 +315,7 @@ describe('role-management-service', () => {
       expect(scopedUpdateMock).toHaveBeenCalled();
     });
 
-    it('reassigns board_president (clears prior president then sets)', async () => {
+    it('reassigns board_president in one transaction (clears prior president then sets)', async () => {
       scopedQueryWhereMock.mockResolvedValueOnce([
         { role: 'resident', isUnitOwner: true },
       ]);
@@ -307,11 +323,27 @@ describe('role-management-service', () => {
       const result = await setDesignation(7, 'condo_718', 'target-user', 'board_president', false, 'actor-user');
 
       expect(result).toEqual({ ok: true });
-      expect(scopedUpdateMock).toHaveBeenCalledTimes(2);
+      expect(transactionMock).toHaveBeenCalledOnce();
+      expect(createScopedClientMock).toHaveBeenCalledWith(7, TX);
+      // Both writes ran on the transaction, none outside it.
+      expect(scopedUpdateMock).not.toHaveBeenCalled();
+      expect(txUpdateMock).toHaveBeenCalledTimes(2);
       // First call clears old president
-      expect(scopedUpdateMock.mock.calls[0]?.[1]).toEqual({ designation: null });
+      expect(txUpdateMock.mock.calls[0]?.[1]).toEqual({ designation: null });
       // Second call sets new president
-      expect(scopedUpdateMock.mock.calls[1]?.[1]).toEqual({ designation: 'board_president' });
+      expect(txUpdateMock.mock.calls[1]?.[1]).toEqual({ designation: 'board_president' });
+    });
+
+    it('rejects and audits nothing when setting the new president fails, so the clear rolls back', async () => {
+      scopedQueryWhereMock.mockResolvedValueOnce([
+        { role: 'resident', isUnitOwner: true },
+      ]);
+      txUpdateMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('set failed'));
+
+      await expect(
+        setDesignation(7, 'condo_718', 'target-user', 'board_president', false, 'actor-user'),
+      ).rejects.toThrow('set failed');
+      expect(logAuditEventMock).not.toHaveBeenCalled();
     });
 
     it('rejects designations on apartment communities (ValidationError)', async () => {

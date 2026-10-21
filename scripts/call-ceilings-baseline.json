@@ -191,6 +191,9 @@
   "apps/web/src/lib/services/revenue-snapshot-data-service.ts": {
     "unscoped": 4
   },
+  "apps/web/src/lib/services/role-management-service.ts": {
+    "unscoped": 1
+  },
   "apps/web/src/lib/services/root-dispute-service.ts": {
     "unscoped": 1
   },
