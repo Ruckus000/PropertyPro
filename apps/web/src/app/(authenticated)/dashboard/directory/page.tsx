@@ -1,8 +1,8 @@
 /**
- * Directory — Units, Residents and Access requests on one page.
+ * Directory — Units, Residents and Join requests on one page.
  *
  * Route: /dashboard/directory?communityId=X&tab=units|residents|requests
- * Auth: units.read. Residents tab, overview stats and access requests are
+ * Auth: units.read. Residents tab, overview stats and join requests are
  * admin-only (v3 admin tier); balances additionally need finances.read and a
  * plan with finance. Hiding UI is not the security boundary — each API
  * re-checks — but the page never fetches what the viewer cannot read.

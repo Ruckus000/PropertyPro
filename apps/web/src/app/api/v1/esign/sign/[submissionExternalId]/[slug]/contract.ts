@@ -1,9 +1,8 @@
 /**
  * Contracts for `/api/v1/esign/sign/[submissionExternalId]/[slug]`.
  *
- * Plan A1 drain #176. Public token-authenticated signing (no session).
- * Mirrors drain #41 (`access-requests/verify`) no-auth convention — `permission`
- * omitted. Rate limiting remains in middleware (`ESIGN_SIGN_PATH_PREFIX`).
+ * Public token-authenticated signing (no session), so `permission` is
+ * omitted. Rate limiting is in middleware (`ESIGN_SIGN_PATH_PREFIX`).
  *
  * GET: params-only; response `z.unknown()` (Date fields on submission, presigned
  * URL assembly in handler).

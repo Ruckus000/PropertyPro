@@ -17,8 +17,7 @@
  * PAGINATION (ADR-003 / Plan B3): `paginated: true`, so `response` describes
  * ONE item and the runner emits the canonical double-wrapped envelope
  * `{ data: { data: [...], pagination } }`. `cursor` / `pageSize` are parsed in
- * the handler rather than declared here, matching `/api/v1/access-requests`:
- * an empty-string query param (`?cursor=`) must read as "missing" via `||`,
+ * the handler rather than declared here: an empty-string query param (`?cursor=`) must read as "missing" via `||`,
  * which a Zod `min(1)` / `positive()` in the query schema would 400 on instead.
  *
  * `permission: { resource: 'settings', action: 'read' }` — `settings` IS in

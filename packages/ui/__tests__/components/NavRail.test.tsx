@@ -293,13 +293,13 @@ describe("NavRail", () => {
           {
             label: null,
             items: [
-              { id: "directory", label: "Directory", icon: TestIcon, href: "/d", badge: 3, badgeDescription: "3 pending access requests" },
+              { id: "directory", label: "Directory", icon: TestIcon, href: "/d", badge: 3, badgeDescription: "3 pending join requests" },
               { id: "docs", label: "Docs", icon: TestIcon, href: "/docs", badge: 0 },
             ],
           },
         ],
       });
-      expect(screen.getByRole("link", { name: "Directory, 3 pending access requests" })).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Directory, 3 pending join requests" })).toBeTruthy();
       // No badge, no suffix.
       expect(screen.getByRole("link", { name: "Docs" })).toBeTruthy();
     });

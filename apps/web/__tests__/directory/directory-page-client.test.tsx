@@ -26,6 +26,7 @@ const {
   useOccupantsMock,
   createOccupantMock,
   removeOccupantMock,
+  useAdminJoinRequestsMock,
 } = vi.hoisted(() => ({
   replaceMock: vi.fn(),
   searchState: { value: '' },
@@ -46,6 +47,7 @@ const {
   useOccupantsMock: vi.fn(),
   createOccupantMock: vi.fn(),
   removeOccupantMock: vi.fn(),
+  useAdminJoinRequestsMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -97,11 +99,9 @@ vi.mock('@/hooks/use-occupants', async (importOriginal) => ({
   useUpdateOccupant: () => ({ mutateAsync: vi.fn(), isPending: false, error: null, reset: vi.fn() }),
   useRemoveOccupant: () => ({ mutateAsync: removeOccupantMock, isPending: false, error: null, reset: vi.fn() }),
 }));
-vi.mock('@/hooks/use-access-requests', async (importOriginal) => ({
-  // The real query options (they fetch through the mocked walkPaginated).
-  ...(await importOriginal<typeof import('../../src/hooks/use-access-requests')>()),
-  useApproveAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
-  useDenyAccessRequest: () => ({ mutate: vi.fn(), isPending: false, isError: false, reset: vi.fn() }),
+vi.mock('@/hooks/use-admin-join-requests', () => ({
+  useAdminJoinRequests: useAdminJoinRequestsMock,
+  useReviewJoinRequest: () => ({ mutate: vi.fn(), isPending: false, error: null }),
 }));
 
 import { DirectoryPageClient } from '../../src/components/directory/directory-page-client';
@@ -186,6 +186,7 @@ beforeEach(() => {
   useUnitsMock.mockReturnValue(ok(UNITS));
   useResidentsListMock.mockReturnValue(ok(RESIDENTS));
   useOccupantsMock.mockReturnValue(ok([]));
+  useAdminJoinRequestsMock.mockReturnValue(ok([]));
   useDelinquencyMock.mockReturnValue(ok([{ unitId: 3, overdueAmountCents: 125_000, daysOverdue: 62 }]));
   usePastDueRuleMock.mockReturnValue(ok({ minCents: 0, minDays: 0 }));
   walkPaginatedMock.mockResolvedValue([]);
@@ -534,30 +535,31 @@ describe('DirectoryPageClient — send documents (phase 3)', () => {
   });
 });
 
-describe('DirectoryPageClient — access requests tab', () => {
+describe('DirectoryPageClient — join requests tab', () => {
   const pending = {
     id: 5,
+    userId: 'u-5',
     communityId: 42,
-    fullName: 'Rhea Request',
-    email: 'rhea@example.com',
-    claimedUnitIdentifier: '101',
-    claimedUnitId: null,
-    isUnitOwner: true,
-    status: 'pending' as const,
+    unitIdentifier: '101',
+    residentType: 'owner',
+    status: 'pending',
     createdAt: '2026-09-30T12:00:00.000Z',
+    unitOnRoster: true,
+    requesterName: 'Rhea Request',
+    requesterEmail: 'rhea@example.com',
   };
 
   beforeEach(() => {
     searchState.value = '';
-    walkPaginatedMock.mockResolvedValue([pending]);
+    useAdminJoinRequestsMock.mockReturnValue(ok([pending]));
   });
 
-  it('is a tab with the pending count, reachable by URL (?tab=requests, the email link)', async () => {
+  it('is a tab with the pending count, reachable by URL (?tab=requests)', async () => {
     searchState.value = 'tab=requests';
     renderClient();
-    expect(await screen.findByRole('tab', { name: /access requests\s*1/i })).toHaveAttribute('aria-selected', 'true');
-    // The list renders a phone and a desktop layout; either way the request is there.
-    expect((await screen.findAllByText('Rhea Request')).length).toBeGreaterThan(0);
+    expect(await screen.findByRole('tab', { name: /join requests\s*1/i })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText(/Rhea Request/)).toBeInTheDocument();
+    expect(useAdminJoinRequestsMock).toHaveBeenCalledWith({ communityId: 42, enabled: true });
     // Nothing to add on this tab.
     expect(screen.queryByRole('button', { name: /add (unit|resident)/i })).not.toBeInTheDocument();
   });
@@ -565,7 +567,7 @@ describe('DirectoryPageClient — access requests tab', () => {
   it('the Requests overview cell switches to the tab instead of opening a drawer', async () => {
     const user = userEvent.setup();
     renderClient();
-    await user.click(await screen.findByRole('button', { name: /access requests/i }));
+    await user.click(await screen.findByRole('button', { name: /join requests/i }));
     expect(historyReplace).toHaveBeenCalledWith(null, '', '/dashboard/directory?tab=requests');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -573,8 +575,8 @@ describe('DirectoryPageClient — access requests tab', () => {
   it('non-admins never see or fetch it, even with ?tab=requests', () => {
     searchState.value = 'tab=requests';
     renderClient({ isAdmin: false });
-    expect(screen.queryByRole('tab', { name: /access requests/i })).not.toBeInTheDocument();
-    expect(walkPaginatedMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('tab', { name: /join requests/i })).not.toBeInTheDocument();
+    expect(useAdminJoinRequestsMock).toHaveBeenCalledWith({ communityId: 42, enabled: false });
   });
 });
 

@@ -264,12 +264,12 @@ jobs:
       # as an unrelated-looking 500 deep inside a spec.
       #
       # `-hex 32` for all of them, deliberately: that is 64 characters, which is
-      # what TOKEN_ENCRYPTION_KEY requires EXACTLY (`-hex 64` would emit 128 and
-      # throw on every encrypt). See DEPLOYMENT.md §4.2.
+      # what DEMO_TOKEN_ENCRYPTION_KEY_HEX requires EXACTLY (`-hex 64` would emit
+      # 128 and throw on every encrypt).
       - name: Generate app secrets
         run: |
-          for name in CRON_SECRET PROVISIONING_RETRY_SECRET OTP_HMAC_SECRET \
-                      TOKEN_ENCRYPTION_KEY SUPPORT_SESSION_JWT_SECRET \
+          for name in CRON_SECRET PROVISIONING_RETRY_SECRET \
+                      SUPPORT_SESSION_JWT_SECRET \
                       DEMO_TOKEN_ENCRYPTION_KEY_HEX REAUTH_JWT_SECRET; do
             value="$(openssl rand -hex 32)"
             echo "::add-mask::$value"

@@ -62,14 +62,6 @@ export {
 export { logAuditEvent } from './utils/audit-logger';
 export type { AuditAction, AuditEventParams } from './utils/audit-logger';
 
-// Token encryption
-export {
-  encryptToken,
-  decryptToken,
-  parseTokenEncryptionKeyHex,
-  getTokenEncryptionKeyFromEnv,
-} from './crypto/token-encryption';
-
 // Schema & types
 export * from './schema';
 

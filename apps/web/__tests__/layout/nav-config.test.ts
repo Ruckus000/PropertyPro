@@ -335,9 +335,9 @@ describe('getActiveItemId', () => {
     expect(NAV_ITEMS.some((i) => i.id === 'residents' || i.id === 'units')).toBe(false);
   });
 
-  it('the Directory carries the pending-access-request badge signal and stays manager-only', () => {
+  it('the Directory carries the pending-join-request badge signal and stays manager-only', () => {
     const directory = NAV_ITEMS.find((i) => i.id === 'directory');
-    expect(directory?.badgeSignal).toBe('pendingAccessRequests');
+    expect(directory?.badgeSignal).toBe('pendingJoinRequests');
     expect(directory?.visibility).toBe('admin');
     expect(directory?.href(9)).toBe('/dashboard/directory?communityId=9');
   });

@@ -171,8 +171,6 @@ write_secrets_env() {
   cat > "$secrets_env" <<EOF
 CRON_SECRET=$(openssl rand -hex 32)
 PROVISIONING_RETRY_SECRET=$(openssl rand -hex 32)
-OTP_HMAC_SECRET=$(openssl rand -hex 32)
-TOKEN_ENCRYPTION_KEY=$(openssl rand -hex 32)
 SUPPORT_SESSION_JWT_SECRET=$(openssl rand -hex 32)
 DEMO_TOKEN_ENCRYPTION_KEY_HEX=$(openssl rand -hex 32)
 REAUTH_JWT_SECRET=$(openssl rand -hex 32)

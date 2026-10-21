@@ -176,9 +176,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // Cross-community notifications — aggregated feed across all communities the user belongs to.
   resolve(repoRoot, 'apps/web/src/app/api/v1/notifications/all/route.ts'),
   // Binds a Supabase auth identity to a public.users row (service_role admin
-  // client). Single home for that rule — invitation acceptance and
-  // access-request approval both delegate here, so neither imports the admin
-  // client itself any more.
+  // client). Single home for that rule — invitation acceptance delegates here
+  // rather than importing the admin client itself.
   resolve(repoRoot, 'apps/web/src/lib/services/auth-user-binding.ts'),
   // Task 2.4-2.6: Demo auto-auth — looks up demo_instances (service_role) and creates session.
   // The unsafe-client usage moved into demo-conversion service in A3 Phase 2,

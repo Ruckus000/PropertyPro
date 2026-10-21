@@ -262,18 +262,6 @@ export const FIXTURES: Record<string, TemplateFixture> = {
     minimal: () => <E.EsignCompletedEmail branding={association} senderName="Dana Ruiz" documentName="2026 Amended Rules & Regulations" completedAt="September 19, 2026" signerCount={4} />,
     rich: () => <E.EsignCompletedEmail branding={association} senderName="Dana Ruiz" documentName="2026 Amended Rules & Regulations" completedAt="September 19, 2026" signerCount={4} />,
   },
-  'access-request-approved': {
-    accent: 'green',
-    sender: 'association',
-    minimal: () => <E.AccessRequestApprovedEmail branding={association} recipientName="Alan Whitcomb" loginUrl={url('login')} />,
-    rich: () => <E.AccessRequestApprovedEmail branding={association} recipientName="Alan Whitcomb" loginUrl={url('login')} />,
-  },
-  'access-request-denied': {
-    accent: 'neutral',
-    sender: 'association',
-    minimal: () => <E.AccessRequestDeniedEmail branding={association} recipientName="Alan Whitcomb" />,
-    rich: () => <E.AccessRequestDeniedEmail branding={association} recipientName="Alan Whitcomb" reason="We could not match the unit to a deed on file." />,
-  },
   'document-posted-email': {
     accent: 'coral',
     sender: 'association',

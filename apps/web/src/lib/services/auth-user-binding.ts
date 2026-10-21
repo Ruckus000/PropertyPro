@@ -11,18 +11,11 @@
  *
  * ## Why this is one module
  *
- * Two flows create auth accounts for someone who may already have a `users`
- * row, and both must hold the invariant:
- *
- *   - invitation acceptance (`invitations-service.ts`) — the row is always
- *     pre-provisioned, so the id is always known up front;
- *   - access-request approval (`access-request-service.ts`) — the row usually
- *     does NOT exist yet, but does for a resident pre-provisioned by another
- *     community.
- *
- * The first was fixed in #939; the second was still broken in #944. Implementing
- * "create, verify, roll back" twice is how one gets fixed and the other drifts,
- * so it lives here once.
+ * Invitation acceptance (`invitations-service.ts`) creates auth accounts for
+ * someone who already has a `users` row, and must hold the invariant. A second
+ * flow once did the same and drifted (#939 fixed one, #944 found the other
+ * still broken), so "create, verify, roll back" lives here once. The invite
+ * route and user-linking also share `findAuthAccount`.
  *
  * This module owns the auth identity only. It performs no DB writes, no
  * authorization, and no HTTP — callers keep those.

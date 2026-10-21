@@ -45,7 +45,7 @@ const PII_FIELDS: ReadonlySet<Field> = new Set(['fullName', 'email', 'phone']);
 
 const clean = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
 
-/** One keyset page; the Directory walks every page (walkPaginated), like access requests. */
+/** One keyset page; the Directory walks every page (walkPaginated). */
 export async function paginateOccupants(
   communityId: number,
   page: { cursor?: string; pageSize?: number },

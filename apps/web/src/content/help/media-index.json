@@ -969,16 +969,6 @@
     134,
     "2026-10-01"
   ],
-  "manager/residents/join-requests/jr-deny": [
-    440,
-    400,
-    "2026-10-01"
-  ],
-  "manager/residents/join-requests/jr-queue": [
-    1140,
-    253,
-    "2026-10-01"
-  ],
   "manager/residents/units/un-add": [
     600,
     407,

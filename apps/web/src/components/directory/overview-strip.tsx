@@ -90,7 +90,7 @@ export function OverviewStrip({
           </span>
         }
         valueClassName={requestCount ? 'text-content-brand' : undefined}
-        label="access requests to review"
+        label="join requests to review"
       />
     </div>
   );

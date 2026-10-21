@@ -48,12 +48,6 @@ vi.mock('@propertypro/db', () => ({
     demoBoardUserId: 'demoInstances.demoBoardUserId',
     deletedAt: 'demoInstances.deletedAt',
   },
-  accessRequests: {
-    id: 'accessRequests.id',
-    status: 'accessRequests.status',
-    createdAt: 'accessRequests.createdAt',
-    deletedAt: 'accessRequests.deletedAt',
-  },
 }));
 
 vi.mock('@/lib/services/conversion-events', () => ({
@@ -111,11 +105,9 @@ function resetDbMocks() {
  * 2. For each expired: update().set().where() — soft-delete community
  * 3. For each expired: update().set().where() — soft-delete demo instance
  * 4. admin.auth.admin.updateUserById() — ban demo users
- * 5. update().set().where().returning() — expire stale access requests
  */
 function buildMocks(
   expiredDemos: object[] = [],
-  expiredAccessRequests: object[] = [],
   banBehavior: 'success' | 'fail' = 'success',
   graceDemos: object[] = [],
   /** The community converted between the cron's find and its delete. */
@@ -135,9 +127,9 @@ function buildMocks(
     return Promise.resolve(expiredDemos);
   });
 
-  // Update chains: community/demo soft-deletes and access request expiry. The
-  // community delete is guarded by is_demo and reports what it deleted.
-  mockDbReturning.mockResolvedValue(expiredAccessRequests);
+  // Update chains: community/demo soft-deletes. The community delete is
+  // guarded by is_demo and reports what it deleted.
+  mockDbReturning.mockResolvedValue([]);
   let updatedTable: unknown = null;
   mockUpdateWhere.mockImplementation(() => ({
     returning: (...args: unknown[]) =>
@@ -217,17 +209,17 @@ describe('expire-demos cron route', () => {
   });
 
   it('returns success with zero expired when no demos are expired', async () => {
-    buildMocks([], []);
+    buildMocks([]);
 
     const req = makeRequest('test-demo-secret');
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
-    expect(json.data).toEqual({ expired: 0, graceDetected: 0, expiredRequests: 0, failed: 0 });
+    const json = (await res.json()) as { data: { expired: number; graceDetected: number } };
+    expect(json.data).toEqual({ expired: 0, graceDetected: 0, failed: 0 });
 
-    // The access request expiry update always runs (1 call), but no community/demo soft-deletes
-    expect(mockDbUpdate).toHaveBeenCalledTimes(1);
+    // No community/demo soft-deletes
+    expect(mockDbUpdate).not.toHaveBeenCalled();
     expect(mockUpdateUserById).not.toHaveBeenCalled();
   });
 
@@ -238,7 +230,7 @@ describe('expire-demos cron route', () => {
       trialEndsAt: new Date('2025-01-01T10:00:00Z'),
     };
 
-    buildMocks([], [], 'success', [graceDemo]);
+    buildMocks([], 'success', [graceDemo]);
 
     const req = makeRequest('test-demo-secret');
     const res = await POST(req);
@@ -268,20 +260,17 @@ describe('expire-demos cron route', () => {
       demoBoardUserId: 'user-bbb',
     };
 
-    const staleRequests = [{ id: 501 }, { id: 502 }];
-
-    buildMocks([expiredDemo], staleRequests, 'success');
+    buildMocks([expiredDemo], 'success');
 
     const req = makeRequest('test-demo-secret');
     const res = await POST(req);
     expect(res.status).toBe(200);
 
-    const json = (await res.json()) as { data: { expired: number; graceDetected: number; expiredRequests: number } };
+    const json = (await res.json()) as { data: { expired: number; graceDetected: number } };
     expect(json.data.expired).toBe(1);
-    expect(json.data.expiredRequests).toBe(2);
 
-    // Two soft-delete updates (community + demo instance) + one access request update
-    expect(mockDbUpdate).toHaveBeenCalledTimes(3);
+    // Two soft-delete updates: community + demo instance
+    expect(mockDbUpdate).toHaveBeenCalledTimes(2);
 
     // Both demo users should be banned
     expect(mockUpdateUserById).toHaveBeenCalledTimes(2);
@@ -294,7 +283,6 @@ describe('expire-demos cron route', () => {
   it('leaves a community that converted after it was found entirely alone', async () => {
     buildMocks(
       [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
-      [],
       'success',
       [],
       true,
@@ -371,7 +359,6 @@ describe('expire-demos cron route', () => {
   it('counts a ban GoTrue returned an error for, and reports it as failed', async () => {
     buildMocks(
       [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
-      [],
       'success',
     );
     mockUpdateUserById.mockImplementation(async (userId: string) =>
@@ -389,7 +376,6 @@ describe('expire-demos cron route', () => {
   it('treats an already-deleted demo login (404) as banned', async () => {
     buildMocks(
       [{ communityId: 42, demoInstanceId: 101, demoResidentUserId: 'user-aaa', demoBoardUserId: 'user-bbb' }],
-      [],
       'success',
     );
     mockUpdateUserById.mockResolvedValue({ data: null, error: { status: 404, message: 'User not found' } });

@@ -93,7 +93,7 @@ export function hasBoardDesignation(value: unknown): value is BoardDesignation {
 }
 
 /**
- * President-only arms (access-request notify, billing president check).
+ * President-only arms, e.g. the "Board President" display title.
  * Accepts `unknown` — safe to call directly on a nullable designation column.
  * Returns a plain boolean (not a type guard).
  */

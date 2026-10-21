@@ -73,7 +73,7 @@ export interface NavItemConfig {
 }
 
 /** Counts the sidebar can show on an item. Resolved in `AppSidebar`. */
-export type NavBadgeSignal = 'pendingAccessRequests';
+export type NavBadgeSignal = 'pendingJoinRequests';
 
 export interface NavSection {
   label: string | null;
@@ -232,7 +232,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Users,
     href: (cid) => `/dashboard/directory?communityId=${cid}`,
     visibility: 'admin',
-    badgeSignal: 'pendingAccessRequests',
+    badgeSignal: 'pendingJoinRequests',
     // The old Units / Residents pages permanently redirect here; the resident
     // and unit imports are part of the same job.
     matchPrefixes: ['/dashboard/directory', '/dashboard/residents', '/dashboard/units', '/dashboard/import-residents', '/dashboard/import-units'],
@@ -743,7 +743,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'arc-requests': { title: 'ARC Requests', subtitle: 'Review architectural submissions' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
-  directory: { title: 'Directory', subtitle: 'Units, residents and access requests' },
+  directory: { title: 'Directory', subtitle: 'Units, residents and join requests' },
   communities: { title: 'Communities', subtitle: 'Managed portfolio' },
   branding: { title: 'Website', subtitle: 'Public site editor + branding' },
   website: { title: 'Website', subtitle: 'Public site editor + branding' },

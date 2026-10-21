@@ -5,10 +5,7 @@
  * stamps the SESSION user id into `x-user-id`, so a row whose id differs is
  * unreachable by its own owner — the person signs in and owns nothing.
  *
- * This module exists because two flows need it (invitation acceptance, #939;
- * access-request approval, #944) and implementing it twice is how one gets fixed
- * and the other drifts. The mechanism is therefore tested here, once, rather
- * than through each caller.
+ * The mechanism is tested here, once, rather than through each caller.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -179,7 +176,7 @@ describe('rollBackAuthUser', () => {
   });
 });
 
-// The invite and access-request paths act on 'exists'; user-linking refuses on
+// The invite path acts on 'exists'; user-linking refuses on
 // anything but 'absent'. So ONLY a clean empty answer may read as absent — an
 // error (GoTrue answers a missing id with one too) must stay 'unknown', or the
 // import guard would start attaching accounts it used to refuse.
