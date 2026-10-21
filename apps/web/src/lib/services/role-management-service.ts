@@ -10,6 +10,10 @@
 
 import { createScopedClient, logAuditEvent, userRoles, communities } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// setDesignation uses the unscoped client only to open a transaction, and
+// writes only through createScopedClient(communityId, tx).
+// AUTHZ: the designations route calls requireRootManager for this community before setDesignation.
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
 import type { CommunityType } from '@propertypro/shared';
 import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
@@ -208,9 +212,8 @@ export async function revokePropertyManager(
  * - Apartment communities have no board → ValidationError.
  * - Non-owner targets require explicit `acknowledgeNonOwner=true`.
  * - board_president is unique: the existing president's designation is cleared
- *   first. These are two sequential updates, NOT one transaction, so a failure
- *   between them leaves no president. (A scoped client can join a transaction
- *   via `createScopedClient(communityId, tx)`; see updateResidentInTransaction.)
+ *   first, in the same transaction as the new one is set, so a failure between
+ *   the two cannot leave the community with no president.
  */
 export async function setDesignation(
   communityId: number,
@@ -242,19 +245,20 @@ export async function setDesignation(
   }
 
   if (designation === 'board_president') {
-    // Clear the existing board_president first, then set the new one.
-    // Sequential (no transaction) — safe because the partial unique index
-    // only blocks two non-null rows; clearing first ensures that invariant.
-    await scoped.update(
-      userRoles,
-      { designation: null },
-      eq(userRoles.designation, 'board_president'),
-    );
-    await scoped.update(
-      userRoles,
-      { designation: 'board_president' },
-      eq(userRoles.userId, targetUserId),
-    );
+    // Clear first: the partial unique index allows only one president row.
+    await createUnscopedClient().transaction(async (tx) => {
+      const txScoped = createScopedClient(communityId, tx as unknown as Parameters<typeof createScopedClient>[1]);
+      await txScoped.update(
+        userRoles,
+        { designation: null },
+        eq(userRoles.designation, 'board_president'),
+      );
+      await txScoped.update(
+        userRoles,
+        { designation: 'board_president' },
+        eq(userRoles.userId, targetUserId),
+      );
+    });
   } else {
     await scoped.update(
       userRoles,

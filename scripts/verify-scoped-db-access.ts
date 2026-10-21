@@ -59,6 +59,10 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // user_roles.community_id so it returns only that community's own members.
   // Called only from listResidentsForCommunity, behind residents:read.
   resolve(repoRoot, 'apps/web/src/lib/services/resident-service.ts'),
+  // Board designations: opens a transaction so the president swap (clear the
+  // old, set the new) commits or rolls back together. Writes go only through
+  // createScopedClient(communityId, tx); the route requires the root manager.
+  resolve(repoRoot, 'apps/web/src/lib/services/role-management-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   // Cross-tenant guard for the add-resident-by-email paths: compares the actor's
   // community memberships against the target's. "Do these two people share any
