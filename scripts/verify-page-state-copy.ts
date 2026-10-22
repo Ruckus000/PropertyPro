@@ -59,12 +59,13 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve, relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const SCAN_ROOTS = [
-  join(repoRoot, 'apps/web/src/components/pm/site-editor-v3'),
-  join(repoRoot, 'apps/web/src/components/pm/onboarding-wizard'),
-  join(repoRoot, 'apps/web/src/lib/site-editor'),
+export const SCAN_ROOTS = [
+  'apps/web/src/components/pm/site-editor-v3',
+  'apps/web/src/components/pm/onboarding-wizard',
+  'apps/web/src/lib/site-editor',
 ];
 /**
  * The describer modules — where these sentences are SUPPOSED to live, so they
@@ -136,95 +137,115 @@ function walk(dir: string): string[] {
   return out;
 }
 
-const baseline: Record<string, number> = existsSync(BASELINE_PATH)
-  ? (JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, number>)
-  : {};
-
-// A renamed or moved root must not read as "clean": refuse (exit 2) rather than
-// pass having scanned nothing.
-const missingRoots = SCAN_ROOTS.filter((root) => !existsSync(root));
-if (missingRoots.length > 0) {
-  console.error('❌ guard:page-state-copy could not check — scan root(s) missing:');
-  for (const root of missingRoots) console.error(`  ${relative(repoRoot, root)}`);
-  process.exit(2);
-}
-const scannedFiles = SCAN_ROOTS.flatMap(walk);
-if (scannedFiles.length === 0) {
-  console.error('❌ guard:page-state-copy could not check — the scan roots hold no .ts/.tsx files.');
-  process.exit(2);
+function loadBaseline(): Record<string, number> {
+  return existsSync(BASELINE_PATH)
+    ? (JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) as Record<string, number>)
+    : {};
 }
 
-const violations: string[] = [];
-const counts: Record<string, number> = {};
+/**
+ * Exit codes: 0 clean · 1 a file exceeds its ceiling · 2 could not check (a
+ * scan root is missing or the roots hold no source). `root` and `baseline` are
+ * parameters so the fixture test can point the guard at a temporary tree;
+ * `writeBaseline` is the `--write-baseline` mode.
+ */
+export function checkPageStateCopy(
+  root: string = repoRoot,
+  baseline: Record<string, number> = loadBaseline(),
+  { writeBaseline = false }: { writeBaseline?: boolean } = {},
+): number {
+  // A renamed or moved root must not read as "clean": refuse (exit 2) rather than
+  // pass having scanned nothing.
+  const missingRoots = SCAN_ROOTS.filter((scanRoot) => !existsSync(join(root, scanRoot)));
+  if (missingRoots.length > 0) {
+    console.error('❌ guard:page-state-copy could not check — scan root(s) missing:');
+    for (const scanRoot of missingRoots) console.error(`  ${scanRoot}`);
+    return 2;
+  }
+  const scannedFiles = SCAN_ROOTS.flatMap((scanRoot) => walk(join(root, scanRoot)));
+  if (scannedFiles.length === 0) {
+    console.error('❌ guard:page-state-copy could not check — the scan roots hold no .ts/.tsx files.');
+    return 2;
+  }
 
-for (const file of scannedFiles) {
-  const rel = relative(repoRoot, file);
-  if (isDescriberModule(rel)) continue;
-  const lines = readFileSync(file, 'utf8').split('\n');
+  const violations: string[] = [];
+  const counts: Record<string, number> = {};
 
-  lines.forEach((line, index) => {
-    if (EXEMPT.test(line)) return;
-    // Comments may discuss the phrases — this guard is about rendered copy, and
-    // the surrounding files explain these rules at length on purpose.
-    const trimmed = line.trim();
-    if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) {
-      return;
-    }
+  for (const file of scannedFiles) {
+    const rel = relative(root, file);
+    if (isDescriberModule(rel)) continue;
+    const lines = readFileSync(file, 'utf8').split('\n');
 
-    const hit = VISIBILITY_VOCABULARY.find((pattern) => pattern.test(line));
-    if (hit) {
-      counts[rel] = (counts[rel] ?? 0) + 1;
-      violations.push(
-        `${rel}:${index + 1}  matched ${hit}\n` +
-          `    ${line.trim().slice(0, 100)}\n` +
-          `    Reads as a claim about what a visitor can see. Move it to\n` +
-          `    ${MODULE_PATH} and call the describer, so the claim is DECLARED\n` +
-          `    and checked against the page state. If it is not a page-visibility\n` +
-          `    claim, add it to ALLOWED in this file or mark the line exempt.`,
+    lines.forEach((line, index) => {
+      if (EXEMPT.test(line)) return;
+      // Comments may discuss the phrases — this guard is about rendered copy, and
+      // the surrounding files explain these rules at length on purpose.
+      const trimmed = line.trim();
+      if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) {
+        return;
+      }
+
+      const hit = VISIBILITY_VOCABULARY.find((pattern) => pattern.test(line));
+      if (hit) {
+        counts[rel] = (counts[rel] ?? 0) + 1;
+        violations.push(
+          `${rel}:${index + 1}  matched ${hit}\n` +
+            `    ${line.trim().slice(0, 100)}\n` +
+            `    Reads as a claim about what a visitor can see. Move it to\n` +
+            `    ${MODULE_PATH} and call the describer, so the claim is DECLARED\n` +
+            `    and checked against the page state. If it is not a page-visibility\n` +
+            `    claim, add it to ALLOWED in this file or mark the line exempt.`,
+        );
+      }
+    });
+  }
+
+  if (writeBaseline) {
+    const sorted = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+    writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
+    console.log(`✍️  wrote baseline: ${Object.keys(sorted).length} files`);
+    return 0;
+  }
+
+  // Shrink-only: a file may hold at most its frozen count; anything not frozen
+  // must be clean. The per-line list above is reported only for files that breach.
+  const breaches: string[] = [];
+  for (const [rel, count] of Object.entries(counts)) {
+    const ceiling = baseline[rel] ?? 0;
+    if (count > ceiling) {
+      breaches.push(
+        `${rel}: ${count} page-visibility claim${count === 1 ? '' : 's'}, ceiling ${ceiling}`,
       );
     }
-  });
-}
-
-if (process.argv.includes('--write-baseline')) {
-  const sorted = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
-  writeFileSync(BASELINE_PATH, `${JSON.stringify(sorted, null, 2)}\n`);
-  console.log(`✍️  wrote baseline: ${Object.keys(sorted).length} files`);
-  process.exit(0);
-}
-
-// Shrink-only: a file may hold at most its frozen count; anything not frozen
-// must be clean. The per-line list above is reported only for files that breach.
-const breaches: string[] = [];
-for (const [rel, count] of Object.entries(counts)) {
-  const ceiling = baseline[rel] ?? 0;
-  if (count > ceiling) {
-    breaches.push(
-      `${rel}: ${count} page-visibility claim${count === 1 ? '' : 's'}, ceiling ${ceiling}`,
-    );
   }
+
+  if (breaches.length > 0) {
+    console.error('❌ guard:page-state-copy\n');
+    console.error(
+      'Sentences claiming a page is visible to visitors must come from\n' +
+        `${MODULE_PATH}, not from a literal in a component.\n\n` +
+        'This family of copy has drifted twice: a rule was derived, applied to the\n' +
+        'one surface that prompted it, and left false on its siblings.\n',
+    );
+    for (const b of breaches) console.error(`  ${b}`);
+    console.error('');
+    for (const v of violations) console.error(`  ${v}\n`);
+    console.error(
+      'Escape hatch (rare, and say why): // page-state-copy:exempt — <reason>\n' +
+        'The ceiling only ever goes DOWN. Drain a line, then lower it.',
+    );
+    return 1;
+  }
+
+  const frozen = Object.values(baseline).reduce((a, b) => a + b, 0);
+  console.log(
+    `✅ guard:page-state-copy — no new page-visibility copy outside the module ` +
+      `(${scannedFiles.length} files scanned, ${frozen} frozen)`,
+  );
+  return 0;
 }
 
-if (breaches.length > 0) {
-  console.error('❌ guard:page-state-copy\n');
-  console.error(
-    'Sentences claiming a page is visible to visitors must come from\n' +
-      `${MODULE_PATH}, not from a literal in a component.\n\n` +
-      'This family of copy has drifted twice: a rule was derived, applied to the\n' +
-      'one surface that prompted it, and left false on its siblings.\n',
-  );
-  for (const b of breaches) console.error(`  ${b}`);
-  console.error('');
-  for (const v of violations) console.error(`  ${v}\n`);
-  console.error(
-    'Escape hatch (rare, and say why): // page-state-copy:exempt — <reason>\n' +
-      'The ceiling only ever goes DOWN. Drain a line, then lower it.',
-  );
-  process.exit(1);
+if (isMainModule(import.meta.url)) {
+  const writeBaseline = process.argv.includes('--write-baseline');
+  process.exit(checkPageStateCopy(repoRoot, loadBaseline(), { writeBaseline }));
 }
-
-const frozen = Object.values(baseline).reduce((a, b) => a + b, 0);
-console.log(
-  `✅ guard:page-state-copy — no new page-visibility copy outside the module ` +
-    `(${scannedFiles.length} files scanned, ${frozen} frozen)`,
-);

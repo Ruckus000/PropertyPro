@@ -28,9 +28,10 @@
  * handlers — is NOT in this PR. That's a real migration (~227 routes)
  * tracked separately.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -38,7 +39,7 @@ const repoRoot = resolve(scriptDir, '..');
 // Only scan files that ship in the client bundle. Server components
 // (app/(authenticated)/.../page.tsx, etc.) and route handlers are NOT in
 // scope — they may legitimately call services directly.
-const SCAN_ROOTS: readonly string[] = ['apps/web/src/components'];
+export const SCAN_ROOTS: readonly string[] = ['apps/web/src/components'];
 
 const SKIP_DIR_NAMES = new Set([
   'node_modules',
@@ -57,7 +58,7 @@ const FILE_EXTENSIONS = new Set(['.ts', '.tsx']);
 const SERVICE_IMPORT_PATH_RE =
   /from\s+['"]@\/lib\/(?:services\/[a-z0-9-]+|[a-z0-9-]+\/(?:services\/[a-z0-9-]+|[a-z0-9-]+-service))['"]/;
 
-interface Violation {
+export interface Violation {
   file: string;
   line: number;
   excerpt: string;
@@ -85,7 +86,7 @@ function captureImportStatement(lines: string[], endIdx: number): { text: string
  * `import { foo, type T }` blocks where any non-type identifier appears) is a
  * value import.
  */
-function isTypeOnlyImport(stmt: string): boolean {
+export function isTypeOnlyImport(stmt: string): boolean {
   // Form 1: `import type { ... } from '...'`  → entire block is types
   if (/^\s*import\s+type\s/.test(stmt)) return true;
 
@@ -102,7 +103,7 @@ function isTypeOnlyImport(stmt: string): boolean {
   return members.every((m) => /^type\s+\S/.test(m));
 }
 
-function findViolations(content: string, filePath: string): Violation[] {
+export function findViolations(content: string, filePath: string): Violation[] {
   const lines = content.split('\n');
   const violations: Violation[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -138,18 +139,29 @@ function listSourceFiles(root: string): string[] {
   return files;
 }
 
-function main(): void {
+/**
+ * Exit codes: 0 clean · 1 violations · 2 could not check (scan root missing,
+ * or no component files in it). `root` is a parameter so the fixture test can
+ * point the guard at a temporary tree.
+ */
+export function checkComponentServiceImports(root: string = repoRoot): number {
   console.log('🔍 Component → Service Boundary Guard (ADR-003)');
   console.log('============================================================');
 
-  const allFiles = SCAN_ROOTS.flatMap((rel) => {
-    const abs = resolve(repoRoot, rel);
-    try {
-      return statSync(abs).isDirectory() ? listSourceFiles(abs) : [];
-    } catch {
-      return [];
-    }
-  });
+  // A missing root used to collapse to an empty file list, and the guard then
+  // passed having scanned nothing. Refuse instead.
+  const missingRoots = SCAN_ROOTS.filter((rel) => !existsSync(resolve(root, rel)));
+  if (missingRoots.length > 0) {
+    console.error('\n❌ Could not check — scan root(s) missing:');
+    for (const rel of missingRoots) console.error(`  ${rel}`);
+    return 2;
+  }
+
+  const allFiles = SCAN_ROOTS.flatMap((rel) => listSourceFiles(resolve(root, rel)));
+  if (allFiles.length === 0) {
+    console.error('\n❌ Could not check — the scan roots hold no .ts/.tsx files.');
+    return 2;
+  }
 
   const violations: Violation[] = [];
   for (const file of allFiles) {
@@ -165,12 +177,12 @@ function main(): void {
       `\n✅ No value imports of \`lib/<domain>/services/*\` from components. ` +
         `Type-only imports are allowed.`,
     );
-    return;
+    return 0;
   }
 
   console.error(`\n❌ ${violations.length} component file(s) value-import a service module:\n`);
   for (const v of violations) {
-    const rel = relative(repoRoot, v.file);
+    const rel = relative(root, v.file);
     console.error(`  ${rel}:${v.line}`);
     console.error(`    ${v.excerpt}\n`);
   }
@@ -179,7 +191,9 @@ function main(): void {
       '(apps/web/src/hooks/) — not by importing from `lib/<domain>/services/` directly. ' +
       'If you only need the type, use `import type { ... }` to erase at build time.',
   );
-  process.exit(1);
+  return 1;
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  process.exit(checkComponentServiceImports());
+}

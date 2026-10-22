@@ -43,7 +43,7 @@ import { isMainModule } from './lib/is-main-module';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-const ROOTS = ['apps/web/src', 'packages/ui/src'];
+export const ROOTS = ['apps/web/src', 'packages/ui/src'];
 /** The primitive itself is the one place a raw <table> is correct. */
 const PRIMITIVE = 'apps/web/src/components/ui/table.tsx';
 const BASELINE_PATH = join(repoRoot, 'scripts/responsive-geometry-baseline.json');
@@ -71,30 +71,36 @@ function loadBaseline(): Record<string, number> {
   ) as Record<string, number>;
 }
 
-function main(): void {
+/**
+ * `root` and `baseline` are parameters so the fixture test can point the guard
+ * at a temporary tree; the defaults are the real repo and its baseline file.
+ */
+export function checkResponsiveGeometry(
+  root: string = repoRoot,
+  baseline: Record<string, number> = loadBaseline(),
+): number {
   // Assert the search roots exist. A scan that examined nothing must not pass.
-  for (const root of ROOTS) {
-    if (!existsSync(join(repoRoot, root))) {
-      console.error(`responsive-geometry: search root missing: ${root}`);
+  for (const scanRoot of ROOTS) {
+    if (!existsSync(join(root, scanRoot))) {
+      console.error(`responsive-geometry: search root missing: ${scanRoot}`);
       console.error('Refusing to report a clean scan of a tree that is not there.');
-      process.exit(2);
+      return 2;
     }
   }
 
-  const baseline = loadBaseline();
   const files: string[] = [];
-  for (const root of ROOTS) collectTsx(join(repoRoot, root), files);
+  for (const scanRoot of ROOTS) collectTsx(join(root, scanRoot), files);
 
   if (files.length === 0) {
     console.error('responsive-geometry: scanned 0 .tsx files. Refusing to pass.');
-    process.exit(2);
+    return 2;
   }
 
   let total = 0;
   const failures: Array<{ file: string; count: number; allowed: number; lines: number[] }> = [];
 
   for (const file of files) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(root, file);
     if (rel === PRIMITIVE) continue;
     const source = readFileSync(file, 'utf8');
     if (EXEMPT.test(source)) continue;
@@ -145,12 +151,13 @@ function main(): void {
     console.error(
       '\nIf a raw table is genuinely right here, add `// responsive-geometry:exempt — <reason>`.',
     );
-    process.exit(1);
+    return 1;
   }
 
   console.log('responsive-geometry: passed.');
+  return 0;
 }
 
 if (isMainModule(import.meta.url)) {
-  main();
+  process.exit(checkResponsiveGeometry());
 }
