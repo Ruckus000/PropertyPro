@@ -209,6 +209,7 @@ describe('revenue-snapshot — Stripe ahead of the database (a late webhook)', (
     billingGroups: [],
     accessPlans: [],
   };
+  const emptyInputsForDrift = { communities: [], prices: [], billingGroups: [], accessPlans: [] };
   const stripeListing = (count: number) => ({
     subscriptions: {
       list: () =>
@@ -244,6 +245,33 @@ describe('revenue-snapshot — Stripe ahead of the database (a late webhook)', (
     // the figure is persisted, so the history shows when the gap opened.
     expect(insertSnapshotMock).toHaveBeenCalledTimes(1);
     expect(insertSnapshotMock.mock.calls[0]?.[0]).toMatchObject({ reconciliationDriftPct: 50 });
+    expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_drift_high']);
+  });
+
+  it('caps a drift too large for the column instead of losing the snapshot', async () => {
+    // |25 - 2| / 2 = 1150%. numeric(5,2) holds at most 999.99, and an uncapped
+    // value made the insert throw, failing the whole run.
+    getStripeClientMock.mockReturnValue(stripeListing(25));
+
+    const res = await GET(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(insertSnapshotMock.mock.calls[0]?.[0]).toMatchObject({ reconciliationDriftPct: 999.99 });
+    const warning = captured.find((e) => e.message === 'revenue_snapshot_drift_high');
+    expect(warning?.extra).toMatchObject({ stripe_active: 25, db_active: 2 });
+  });
+
+  it('warns when Stripe has active subscriptions and the database has none', async () => {
+    // Division by zero used to leave drift null, so this, the worst gap, was silent.
+    loadInputsMock.mockResolvedValue(emptyInputsForDrift);
+    getStripeClientMock.mockReturnValue(stripeListing(3));
+
+    const res = await GET(req());
+    await settle();
+
+    expect(res.status).toBe(200);
+    expect(insertSnapshotMock.mock.calls[0]?.[0]).toMatchObject({ reconciliationDriftPct: 999.99 });
     expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_drift_high']);
   });
 

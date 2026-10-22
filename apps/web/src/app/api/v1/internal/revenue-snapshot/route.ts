@@ -23,6 +23,9 @@ import {
 import { withCronJob } from '@/lib/cron/with-cron-job';
 import { withErrorHandler } from '@/lib/api/error-handler';
 
+/** `revenue_snapshots.reconciliation_drift_pct` is numeric(5,2). */
+const DRIFT_PCT_MAX = 999.99;
+
 /*
  * Every response this handler CHOOSES is still its own: the 401, the
  * `compute_error` 500, the `sanity_check_failed` 500 and the warn-and-continue
@@ -87,18 +90,25 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
 
   // Reconciliation against Stripe — paginate to get full count
   let reconciliationDriftPct: number | null = null;
+  let stripeActiveCount: number | null = null;
+  const dbActiveCount = computation.activeSubscriptions;
   try {
     const stripe = getStripeClient();
-    let stripeActiveCount = 0;
+    stripeActiveCount = 0;
     for await (const _sub of stripe.subscriptions.list({ status: 'active' })) {
       stripeActiveCount += 1;
     }
-    const dbActiveCount = computation.activeSubscriptions;
+    // Capped at the column's ceiling (numeric(5,2)): an uncapped 1000%+ made
+    // the insert throw and lost the whole snapshot. A database with none
+    // active while Stripe has some is the worst drift there is, not "no drift",
+    // so it records the cap too. The raw counts go with the warning below.
     if (dbActiveCount > 0) {
-      reconciliationDriftPct =
-        Math.round(
-          (Math.abs(stripeActiveCount - dbActiveCount) / dbActiveCount) * 10000,
-        ) / 100;
+      reconciliationDriftPct = Math.min(
+        DRIFT_PCT_MAX,
+        Math.round((Math.abs(stripeActiveCount - dbActiveCount) / dbActiveCount) * 10000) / 100,
+      );
+    } else if (stripeActiveCount > 0) {
+      reconciliationDriftPct = DRIFT_PCT_MAX;
     }
   } catch (err) {
     captureMessage('revenue_snapshot_reconciliation_failed', {
@@ -145,7 +155,11 @@ async function handleRevenueSnapshot(req: NextRequest): Promise<NextResponse> {
   if (reconciliationDriftPct !== null && reconciliationDriftPct > 5) {
     captureMessage('revenue_snapshot_drift_high', {
       level: 'warning',
-      extra: { drift_pct: reconciliationDriftPct },
+      extra: {
+        drift_pct: reconciliationDriftPct,
+        stripe_active: stripeActiveCount,
+        db_active: dbActiveCount,
+      },
     });
   }
   if (deltaPct !== null && Math.abs(deltaPct) > 20) {
