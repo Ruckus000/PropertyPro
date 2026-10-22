@@ -104,6 +104,21 @@ describeDb('demo starter sections (db-backed integration)', () => {
       .from(sitePages)
       .where(eq(sitePages.communityId, communityId));
     expect(pages).toEqual([{ isHome: true, isDraft: false }]);
+
+    // The site is live, so the community reads as published, stamped exactly
+    // as `publishCommunitySite` and migration 0043 stamp it: the live blocks'
+    // MAX(published_at).
+    const { communities, siteBlocks } = state.dbModule;
+    const blockStamps = await state.db
+      .select({ publishedAt: siteBlocks.publishedAt })
+      .from(siteBlocks)
+      .where(and(eq(siteBlocks.communityId, communityId), isNull(siteBlocks.deletedAt)));
+    const maxBlockStamp = Math.max(...blockStamps.map((b) => b.publishedAt?.getTime() ?? 0));
+    const [community] = await state.db
+      .select({ sitePublishedAt: communities.sitePublishedAt })
+      .from(communities)
+      .where(eq(communities.id, communityId));
+    expect(community?.sitePublishedAt?.getTime()).toBe(maxBlockStamp);
   });
 
   it('keeps a demo site the prospect emptied empty', async () => {
