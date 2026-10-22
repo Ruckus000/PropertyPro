@@ -70,8 +70,10 @@ line says where.
   **Open tail — unverified, nothing in code or the DB can show it:** the live Customer
   Portal is configured (`/billing/portal` 500s until it is); `STRIPE_SECRET_KEY` is live on
   `property-pro-admin` too; a real charge settled (signup is a $0 trial, so only an ended
-  trial produces one). The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are still
-  unprocessed (runbook step 6).
+  trial produces one). The 6 unprocessed `stripe_webhook_events` from 2026-08-10 are
+  closed as test-mode residue (2026-10-22): they predate both #941/#942 and the live
+  cutover, none has failed since (6 of 281 rows), and the admin Health board counts only
+  the last 24 h, so they alert nothing. Left as they are.
   **`STRIPE_EXPECTED_LIVEMODE` on `property-pro-admin` Production was `false`** from its
   creation (~2026-09-12) until the owner changed it to `true` on 2026-09-17. Through that
   window the console's five billing writes refused the live key with
