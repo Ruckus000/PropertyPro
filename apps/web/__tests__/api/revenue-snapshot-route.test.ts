@@ -32,12 +32,14 @@ Sentry.init({
 const {
   loadInputsMock,
   priorMrrMock,
+  insertSnapshotMock,
   getStripeClientMock,
   recordCronRunMock,
   registerCronJobsMock,
 } = vi.hoisted(() => ({
   loadInputsMock: vi.fn(),
   priorMrrMock: vi.fn(),
+  insertSnapshotMock: vi.fn(),
   getStripeClientMock: vi.fn(),
   recordCronRunMock: vi.fn(),
   registerCronJobsMock: vi.fn(),
@@ -46,7 +48,7 @@ const {
 vi.mock('@/lib/services/revenue-snapshot-data-service', () => ({
   loadRevenueSnapshotInputs: loadInputsMock,
   getPriorSnapshotMrr: priorMrrMock,
-  insertRevenueSnapshot: vi.fn(),
+  insertRevenueSnapshot: insertSnapshotMock,
 }));
 vi.mock('@/lib/services/stripe-service', () => ({ getStripeClient: getStripeClientMock }));
 vi.mock('@/lib/services/cron-run-service', () => ({
@@ -66,6 +68,7 @@ beforeEach(() => {
   captured.length = 0;
   loadInputsMock.mockReset();
   priorMrrMock.mockReset();
+  insertSnapshotMock.mockReset().mockResolvedValue(undefined);
   getStripeClientMock.mockReset();
   recordCronRunMock.mockReset().mockResolvedValue(undefined);
   registerCronJobsMock.mockReset().mockResolvedValue(undefined);
@@ -178,5 +181,82 @@ describe('revenue-snapshot — a healthy run is not a Sentry issue', () => {
 
     expect(res.status).toBe(200);
     expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_delta_high']);
+  });
+});
+
+describe('revenue-snapshot — Stripe ahead of the database (a late webhook)', () => {
+  /*
+   * Reconciliation compares COUNTS at snapshot time; it never looks at when a
+   * webhook was sent. A webhook that is hours late shows up here as exactly one
+   * thing: Stripe already lists a subscription as active while our row still
+   * says otherwise. So the scenario is two active communities in the database
+   * and three active subscriptions in Stripe.
+   */
+  const activeCommunity = (id: number) => ({
+    id,
+    subscriptionStatus: 'active',
+    subscriptionPlan: 'plan_1',
+    communityType: 'condo_718',
+    billingGroupId: null,
+    deletedAt: null,
+    isDemo: false,
+  });
+  const twoActiveInDb = {
+    communities: [activeCommunity(1), activeCommunity(2)],
+    prices: [
+      { planId: 'plan_1', communityType: 'condo_718', billingInterval: 'month', unitAmountCents: 10_000 },
+    ],
+    billingGroups: [],
+    accessPlans: [],
+  };
+  const stripeListing = (count: number) => ({
+    subscriptions: {
+      list: () =>
+        (async function* () {
+          for (let i = 0; i < count; i += 1) yield { id: `sub_${i}` };
+        })(),
+    },
+  });
+
+  beforeEach(async () => {
+    await settle();
+    captured.length = 0;
+    loadInputsMock.mockResolvedValue(twoActiveInDb);
+    priorMrrMock.mockResolvedValue(null);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(console.info).mockRestore();
+  });
+
+  it('records the drift on the snapshot and raises the drift warning', async () => {
+    getStripeClientMock.mockReturnValue(stripeListing(3));
+
+    const res = await GET(req());
+    await settle();
+    const body = await res.json();
+
+    // |3 - 2| / 2 = 50%, well past the 5% warning line.
+    expect(res.status).toBe(200);
+    expect(body.drift_pct).toBe(50);
+    // The snapshot is still written — drift is a warning, not a refusal — and
+    // the figure is persisted, so the history shows when the gap opened.
+    expect(insertSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(insertSnapshotMock.mock.calls[0]?.[0]).toMatchObject({ reconciliationDriftPct: 50 });
+    expect(captured.map((e) => e.message)).toEqual(['revenue_snapshot_drift_high']);
+  });
+
+  it('reports zero drift, and no warning, once the webhook has landed', async () => {
+    // Control: the case above must not pass because every run warns.
+    getStripeClientMock.mockReturnValue(stripeListing(2));
+
+    const res = await GET(req());
+    await settle();
+    const body = await res.json();
+
+    expect(body.drift_pct).toBe(0);
+    expect(insertSnapshotMock.mock.calls[0]?.[0]).toMatchObject({ reconciliationDriftPct: 0 });
+    expect(captured).toEqual([]);
   });
 });

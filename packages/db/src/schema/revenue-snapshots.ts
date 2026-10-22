@@ -2,7 +2,9 @@
  * revenue_snapshots — append-only daily MRR snapshots.
  *
  * Platform-wide (not tenant-scoped). Written by the revenue-snapshot cron.
- * Queries use DISTINCT ON (snapshot_date) to fetch latest per day.
+ * A day can hold several rows (a re-run appends); readers take the newest by
+ * `computed_at` — see revenue-snapshot-data-service.ts and the admin billing /
+ * dashboard-series loaders. Nothing uses DISTINCT ON.
  */
 import {
   bigint,
