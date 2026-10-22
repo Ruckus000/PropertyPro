@@ -886,8 +886,10 @@ export function EditorRoot({
   // The shell renders only the phone gate below 768px, so the chooser must not
   // open over it — and a choice saved there would stick on every screen.
   const isPhone = useMediaQuery('(max-width: 767px)');
-  const showChooser =
-    preferences.data?.mode === null && !hasPublishedSite && !chooserDismissed && !isPhone;
+  // Asks the MANAGER, not the site: every new community's starter site is live
+  // from day one, so "published" says nothing about whether this manager has
+  // picked a mode yet.
+  const showChooser = preferences.data?.mode === null && !chooserDismissed && !isPhone;
   const [tourOpen, setTourOpen] = useState(false);
   /*
    * Asked for by the first choice, opened once the chooser has GONE. Opening it

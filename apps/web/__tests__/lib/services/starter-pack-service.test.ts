@@ -10,7 +10,12 @@ vi.mock('@propertypro/db', () => ({
   siteBlocks: Symbol('siteBlocks'),
   siteStarterPacks: Symbol('siteStarterPacks'),
   // applyStarterPackToDemoCommunity reads the community's own row.
-  communities: { id: 'communities.id', communityType: 'communities.community_type', isDemo: 'communities.is_demo' },
+  communities: {
+    id: 'communities.id',
+    communityType: 'communities.community_type',
+    isDemo: 'communities.is_demo',
+    sitePublishedAt: 'communities.site_published_at',
+  },
   // Phase 11b multi-page — reached through site-pages-service.
   sitePages: Symbol('sitePages'),
   sitePageRedirects: Symbol('sitePageRedirects'),
@@ -48,7 +53,11 @@ import {
   applyStarterPackToCommunity,
   applyStarterPackToDemoCommunity,
 } from '@/lib/services/starter-pack-service';
-import { createScopedClient } from '@propertypro/db';
+import {
+  createScopedClient,
+  communities as communitiesTable,
+  sitePages as sitePagesTable,
+} from '@propertypro/db';
 // AUTHZ: test file — mocks createUnscopedClient from @propertypro/db/unsafe; no real DB access occurs.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
@@ -87,9 +96,13 @@ function buildUnscopedClientFromRows(rows: unknown[]) {
   // The apply runs in one transaction under the community row lock. The tx
   // mock takes the lock statement and the draft-home-page publish; the
   // inserts go through the scoped client, as before.
+  // `update(table).set(values)` is recorded per call, so a test can tell the
+  // home-page publish from the community's site_published_at stamp.
   const tx = {
     execute: vi.fn().mockResolvedValue([]),
-    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]) })) })),
+    update: vi.fn((_table: unknown) => ({
+      set: vi.fn((_values: unknown) => ({ where: vi.fn().mockResolvedValue([]) })),
+    })),
   };
   return {
     select: selectMock,
@@ -167,7 +180,26 @@ describe('applyStarterPackToCommunity', () => {
 
     expect(unscopedClient.transaction).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(unscopedClient.tx.execute.mock.calls[0]?.[0])).toContain('FOR UPDATE');
-    expect(unscopedClient.tx.update).toHaveBeenCalledTimes(1);
+    expect(unscopedClient.tx.update).toHaveBeenNthCalledWith(1, sitePagesTable);
+  });
+
+  it("stamps the community's site_published_at with the blocks' own timestamp", async () => {
+    // The site is live once the pack lands. Without the stamp the urgent-notice
+    // gate and admin's live status read the community as never published.
+    const scopedClient = buildScopedClient([]);
+    createScopedClientMock.mockReturnValue(scopedClient as never);
+    const unscopedClient = buildUnscopedClient([HERO_BLOCK]);
+    createUnscopedClientMock.mockReturnValue(unscopedClient as never);
+
+    await applyStarterPackToCommunity(10, 'condo_718');
+
+    const updates = unscopedClient.tx.update.mock.calls.map((call, i) => ({
+      table: call[0],
+      values: unscopedClient.tx.update.mock.results[i]?.value.set.mock.calls[0]?.[0],
+    }));
+    const stamp = updates.find((u) => u.table === communitiesTable);
+    const blockPublishedAt = (scopedClient.insert.mock.calls[0]?.[1] as { publishedAt: Date }).publishedAt;
+    expect(stamp?.values).toEqual({ sitePublishedAt: blockPublishedAt });
   });
 
   it('resolves with the slug of the selected hoa_720 pack', async () => {

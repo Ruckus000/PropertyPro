@@ -23,7 +23,7 @@
 import { communities, createScopedClient, siteBlocks, sitePages, siteStarterPacks } from '@propertypro/db';
 // AUTHZ: PR #5 starter pack lookup — siteStarterPacks is platform-level catalog; caller verifies community creation.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, desc, eq, sql } from '@propertypro/db/filters';
+import { and, desc, eq, isNull, sql } from '@propertypro/db/filters';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import type { CommunityType } from '@propertypro/shared';
 
@@ -115,6 +115,15 @@ export async function applyStarterPackToCommunity(
         content: block.content,
       });
     }
+
+    // Applying the pack IS a publish, so stamp what `publishCommunitySite` stamps
+    // (its Step 5d). Without it the site is live but the urgent-notice gate and
+    // admin's live status read the community as never published. Never
+    // overwrites an existing stamp, the same rule as migration 0043.
+    await tx
+      .update(communities)
+      .set({ sitePublishedAt: now })
+      .where(and(eq(communities.id, communityId), isNull(communities.sitePublishedAt)));
 
     return { applied: true, blockCount: blocks.length, packSlug };
   });

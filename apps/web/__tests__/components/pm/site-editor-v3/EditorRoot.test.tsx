@@ -823,8 +823,14 @@ describe('EditorRoot — editing mode (v4 Phase 3)', () => {
     expect(prefs.mutate).toHaveBeenCalledWith({ mode: 'guided' });
   });
 
-  it('does not ask on a site that is already published', () => {
+  it('asks a manager who has not chosen even on a live site (every starter site is live from day one)', () => {
     prefs.value = saved(null);
+    renderRoot({ hasPublishedSite: true });
+    expect(screen.getByRole('dialog', { name: 'Choose how to edit' })).toBeInTheDocument();
+  });
+
+  it('does not ask a manager who has already chosen', () => {
+    prefs.value = saved('free');
     renderRoot({ hasPublishedSite: true });
     expect(screen.queryByRole('dialog', { name: 'Choose how to edit' })).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
