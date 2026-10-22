@@ -11,7 +11,7 @@
  * deleted; no route ever reached it. Onboarding audit F11.)
  */
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
@@ -23,7 +23,6 @@ import {
   requireCommunity,
   requireUser,
   setActor,
-  requireCurrentActor,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -37,17 +36,10 @@ if (process.env.CI && !process.env.DATABASE_URL) {
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
+// No file-local mocks: setup-integration.ts's shared providers supply the
+// session (keyed on the kit's current actor) and capture the outbound side
+// effects (notification email queue, announcement fan-out, PDF extraction).
+// Membership, permissions and tenant scoping are the real code.
 
 // ---------------------------------------------------------------------------
 // Route types
@@ -147,9 +139,7 @@ describeDb('feature flag enforcement (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'actorA'); // default actor: board_president in condo community
   });
 

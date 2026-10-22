@@ -15,7 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -28,7 +28,7 @@ import {
   requireCommunity,
   requireUser,
   setActor,
-  requireCurrentActor,
+  setSignedOut,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -42,46 +42,10 @@ if (process.env.CI && !process.env.DATABASE_URL) {
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-const {
-  requireAuthenticatedUserIdMock,
-  sendEmailMock,
-  createAdminClientMock,
-  createPresignedUploadUrlMock,
-} = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-  sendEmailMock: vi.fn().mockResolvedValue({ id: 'mock-email-id' }),
-  createAdminClientMock: vi.fn(),
-  createPresignedUploadUrlMock: vi.fn().mockResolvedValue({
-    signedUrl: 'https://mock-storage.example.com/upload',
-    token: 'mock-upload-token',
-    path: 'mock-upload-path',
-  }),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@propertypro/email', () => ({
-  sendEmail: sendEmailMock,
-  InvitationEmail: vi.fn(),
-}));
-
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminClient: createAdminClientMock,
-}));
-
-vi.mock('@propertypro/db', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@propertypro/db')>();
-  return {
-    ...actual,
-    createPresignedUploadUrl: createPresignedUploadUrlMock,
-  };
-});
+// No file-local mocks. The shared providers in setup-integration.ts supply the
+// session (keyed on the kit's current actor), Supabase Auth admin, storage
+// presigning, and email's unconfigured test inbox; every route below runs its
+// real membership, permission and tenant-scoping code against the database.
 
 // ---------------------------------------------------------------------------
 // Route types
@@ -359,37 +323,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'actorA');
-
-    // Default admin client mock for invitation acceptance
-    createAdminClientMock.mockReturnValue({
-      auth: {
-        admin: {
-          // Echo the requested id back, as real GoTrue does. The invitation
-          // accept path now REQUIRES the created auth user to carry the
-          // pre-provisioned id — a fresh uuid there left the invitee able to
-          // sign in while owning no roles — and verifies it rather than
-          // assuming. A stub returning a bare `{ error: null }` has no
-          // `data.user` at all, which is not a shape the API ever produces.
-          createUser: vi
-            .fn()
-            .mockImplementation(async (attrs: { id?: string } | undefined) => ({
-              data: { user: { id: attrs?.id ?? 'test-auth-user' } },
-              error: null,
-            })),
-        },
-      },
-    });
-
-    // Default presigned upload mock
-    createPresignedUploadUrlMock.mockResolvedValue({
-      signedUrl: 'https://mock-storage.example.com/upload',
-      token: 'mock-upload-token',
-      path: 'mock-upload-path',
-    });
   });
 
   afterAll(async () => {
@@ -458,8 +393,8 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const seeded = requireSeeded();
 
-    // No actor set — invitation acceptance is unauthenticated
-    requireAuthenticatedUserIdMock.mockRejectedValue(new Error('Not authenticated'));
+    // Invitation acceptance is token-authenticated; the caller has no session.
+    setSignedOut(kit);
 
     const response = await appRoutes.invitations.PATCH(
       jsonRequest(apiUrl('/api/v1/invitations'), 'PATCH', {
@@ -480,7 +415,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const seeded = requireSeeded();
 
-    requireAuthenticatedUserIdMock.mockRejectedValue(new Error('Not authenticated'));
+    setSignedOut(kit);
 
     const response = await appRoutes.invitations.PATCH(
       jsonRequest(apiUrl('/api/v1/invitations'), 'PATCH', {
@@ -502,7 +437,7 @@ describeDb('p2-43 multi-tenant route coverage (db-backed integration)', () => {
     const communityB = requireCommunity(kit, 'communityB');
     const seeded = requireSeeded();
 
-    requireAuthenticatedUserIdMock.mockRejectedValue(new Error('Not authenticated'));
+    setSignedOut(kit);
 
     const response = await appRoutes.invitations.PATCH(
       jsonRequest(

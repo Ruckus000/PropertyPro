@@ -4,9 +4,16 @@
  * Verifies that integration test files do not use vi.mock(), jest.mock(),
  * or related mocking APIs to mock first-party modules.
  *
- * Files on the LEGACY_ALLOWLIST are exempt — these are pre-existing tests
- * that must be migrated to use shared test providers (WS 65).
- * The allowlist should shrink to zero as migration completes.
+ * The sanctioned stand-ins live in ONE place: `setup-integration.ts`, backed by
+ * `apps/web/__tests__/integration/providers/`. It supplies the session (the kit's
+ * current actor, or `setSignedOut` for a 401), Supabase Auth admin, storage
+ * presigning, and capture sinks for notifications, announcement fan-out and PDF
+ * extraction. That file is not scanned (it is not a test file), so a test file
+ * that needs nothing else carries no mocking call of its own.
+ *
+ * Files on the LEGACY_ALLOWLIST are exempt. An entry FAILS the guard once its
+ * file is gone or no longer mocks anything, so the list can only shrink, and
+ * cannot be left behind to excuse a future mock in a migrated file.
  *
  * Scope matches vitest integration configs exactly:
  *   - apps/web/__tests__/**\/*integration.test.ts
@@ -57,51 +64,24 @@ const FORBIDDEN_PATTERNS: Array<{ regex: RegExp; label: string }> = [
 /**
  * LEGACY ALLOWLIST
  *
- * Pre-existing integration tests that use vi.mock and must be migrated
- * to shared test providers as part of Workstream 65.
+ * Pre-existing integration tests that still use a mocking API.
  *
  * Each entry: relative path from repo root → reason for allowlisting.
- * Remove entries as tests are migrated. WS 65 DoD: this list is empty.
+ * Remove entries as tests are migrated (a stale entry fails the guard).
+ * WS 65 DoD: this list is empty.
  */
 const LEGACY_ALLOWLIST = new Map<string, string>([
-  // Web integration tests — all mock @/lib/api/auth at minimum
-  ['apps/web/__tests__/integration/multi-tenant-routes.integration.test.ts',
-    'LEGACY: mocks auth, email, admin client, DB partial'],
-  ['apps/web/__tests__/integration/multi-tenant-isolation.integration.test.ts',
-    'LEGACY: mocks auth, middleware'],
-  ['apps/web/__tests__/integration/multi-tenant-access-policy.integration.test.ts',
-    'LEGACY: mocks auth'],
-  ['apps/web/__tests__/integration/rls-validation.integration.test.ts',
-    'LEGACY: mocks auth'],
-  ['apps/web/__tests__/integration/document-upload-flow.integration.test.ts',
-    'LEGACY: mocks auth, DB partial, notifications, PDF'],
-  ['apps/web/__tests__/integration/compliance-lifecycle.integration.test.ts',
-    'LEGACY: mocks auth, notifications, PDF'],
-  ['apps/web/__tests__/integration/announcements-crud.integration.test.ts',
-    'LEGACY: mocks auth, announcement delivery, notifications'],
-  ['apps/web/__tests__/integration/meeting-deadlines.integration.test.ts',
-    'LEGACY: mocks auth, notifications, PDF'],
-  ['apps/web/__tests__/integration/calendar-phase2a.integration.test.ts',
-    'LEGACY: mocks auth, notifications — Phase 2A calendar stack'],
-  ['apps/web/__tests__/integration/onboarding-flow.integration.test.ts',
-    'LEGACY: mocks auth, email'],
-  ['apps/web/__tests__/integration/onboarding-flow-condo.integration.test.ts',
-    'LEGACY: mocks auth'],
-  ['apps/web/__tests__/integration/feature-flag-enforcement.integration.test.ts',
-    'LEGACY: mocks auth'],
-  // Compliance statutory deadlines — cherry-picked from test coverage branch
-  ['apps/web/__tests__/integration/compliance-statutory-deadlines.integration.test.ts',
-    'LEGACY: mocks auth, DB scoped client — cherry-picked pre-existing test'],
-  // Billing integration test — lives outside __tests__/integration/ directory
-  ['apps/web/__tests__/billing/subscription-guard-integration.test.ts',
-    'LEGACY: mocks DB unsafe, admin client, auth — deep refactor needed'],
-  // Plan 1 billing group tests — mock auth, Stripe, and downstream services.
-  // Billing group service exercises a real Postgres advisory lock but stubs
-  // Stripe + notifications (those paths have their own unit coverage).
+  // Both remaining entries stub Stripe, which has no test seam: the two call
+  // sites build their client straight from STRIPE_SECRET_KEY
+  // (`lib/services/stripe-service.ts`, `lib/billing/volume-discounts.ts`), and
+  // on Node the SDK sends through its own NodeHttpClient, not global fetch, so a
+  // `vi.stubGlobal('fetch')` boundary stub cannot reach it either. Draining
+  // them needs a production seam first (an injectable client or a configurable
+  // API host), not a test-side change.
   ['apps/web/__tests__/api/pm-communities-gated.integration.test.ts',
-    'LEGACY: mocks auth + Stripe + billing-group-service — exercises gated route'],
+    'LEGACY: stubs Stripe checkout (no seam), plus auth, billing-group-service, PM check, subdomain check'],
   ['apps/web/__tests__/billing/billing-group-service.integration.test.ts',
-    'LEGACY: mocks Stripe discount + notifications — tier recalc integration'],
+    'LEGACY: stubs Stripe volume-discount sync (no seam); the tier recalculation and DB writes are real'],
 ]);
 
 // ---------------------------------------------------------------------------
@@ -147,12 +127,6 @@ function collectFiles(dir: string, pattern: RegExp): string[] {
 function scanFile(filePath: string): Violation[] {
   const violations: Violation[] = [];
   const relPath = relative(repoRoot, filePath);
-
-  // Skip allowlisted files
-  if (LEGACY_ALLOWLIST.has(relPath)) {
-    return [];
-  }
-
   const content = readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
 
@@ -188,19 +162,44 @@ function main(): void {
   let totalFiles = 0;
   let totalViolations = 0;
   const allViolations: Violation[] = [];
+  /** Allowlisted files that no longer use a mocking API — the entry is stale. */
+  const cleanAllowlisted: string[] = [];
+  const scannedPaths = new Set<string>();
 
   for (const { dir, pattern } of SCAN_ROOTS) {
+    try {
+      statSync(dir);
+    } catch {
+      console.error(`\n❌ Scan root missing: ${relative(repoRoot, dir)} — refusing to report a clean scan.`);
+      process.exit(2);
+    }
     const files = collectFiles(dir, pattern);
     totalFiles += files.length;
 
     for (const file of files) {
+      const relPath = relative(repoRoot, file);
+      scannedPaths.add(relPath);
       const violations = scanFile(file);
+      if (LEGACY_ALLOWLIST.has(relPath)) {
+        if (violations.length === 0) cleanAllowlisted.push(relPath);
+        continue;
+      }
       if (violations.length > 0) {
         allViolations.push(...violations);
         totalViolations += violations.length;
       }
     }
   }
+
+  if (totalFiles === 0) {
+    console.error('\n❌ Scanned 0 integration test files — refusing to report a clean scan.');
+    process.exit(2);
+  }
+
+  // The allowlist may only shrink, and only truthfully: an entry whose file is
+  // gone (or no longer matches the integration glob), or whose file no longer
+  // mocks anything, must be deleted rather than left to excuse a future mock.
+  const missingAllowlisted = [...LEGACY_ALLOWLIST.keys()].filter((file) => !scannedPaths.has(file));
 
   // Report allowlist status
   const allowlistSize = LEGACY_ALLOWLIST.size;
@@ -210,16 +209,20 @@ function main(): void {
   if (allowlistSize > 0) {
     console.log('\n📋 Allowlisted files (migrate to test providers):');
     for (const [file, reason] of LEGACY_ALLOWLIST) {
-      // Check if file actually exists (may have been migrated/renamed)
-      const fullPath = resolve(repoRoot, file);
-      try {
-        statSync(fullPath);
-        console.log(`  ⏳ ${file}`);
-        console.log(`     ${reason}`);
-      } catch {
-        console.log(`  ⚠️  ${file} (FILE NOT FOUND — remove from allowlist)`);
-      }
+      console.log(`  ⏳ ${file}`);
+      console.log(`     ${reason}`);
     }
+  }
+
+  if (missingAllowlisted.length > 0 || cleanAllowlisted.length > 0) {
+    console.log('\n❌ Stale LEGACY_ALLOWLIST entries — delete them:\n');
+    for (const file of missingAllowlisted) {
+      console.log(`  ${file} — not a scanned integration test file (deleted, renamed, or outside the glob)`);
+    }
+    for (const file of cleanAllowlisted) {
+      console.log(`  ${file} — no longer uses a mocking API`);
+    }
+    process.exit(1);
   }
 
   if (allViolations.length > 0) {

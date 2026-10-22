@@ -21,18 +21,15 @@ import { and, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { NextRequest } from 'next/server';
 import postgres from 'postgres';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { apiUrl, jsonRequest, parseJson } from './helpers/multi-tenant-test-kit';
+import {
+  clearTestAuthState,
+  registerTestAuthState,
+  type TestAuthState,
+} from './providers/test-auth-provider';
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
-
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
 
 type DbModule = typeof import('@propertypro/db');
 type DocumentsRouteModule = typeof import('../../src/app/api/v1/documents/route');
@@ -62,17 +59,13 @@ let meetingsRoute: MeetingsRouteModule | null = null;
 let sqlClient: ReturnType<typeof postgres> | null = null;
 let db: ReturnType<typeof drizzle> | null = null;
 let seeded: SeededData | null = null;
-let currentActorUserId: string | null = null;
+// The session is supplied by the shared auth double (setup-integration.ts);
+// membership, permissions and scoping below it are the real code.
+const authState: TestAuthState = { currentActorUserId: null };
 
 function setActor(userId: string): void {
-  currentActorUserId = userId;
-}
-
-function requireCurrentActor(): string {
-  if (!currentActorUserId) {
-    throw new Error('Current test actor user ID is not set');
-  }
-  return currentActorUserId;
+  authState.currentActorUserId = userId;
+  authState.signedOut = false;
 }
 
 function requireSeeded(): SeededData {
@@ -87,6 +80,7 @@ describeDb('P4-55 RLS validation (integration)', () => {
     const databaseUrl = process.env.DATABASE_URL;
     if (!databaseUrl) return;
 
+    registerTestAuthState(authState);
     dbModule = await import('@propertypro/db');
     documentsRoute = await import('../../src/app/api/v1/documents/route');
     meetingsRoute = await import('../../src/app/api/v1/meetings/route');
@@ -182,10 +176,8 @@ describeDb('P4-55 RLS validation (integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor());
     if (seeded) {
-      currentActorUserId = seeded.actorAId;
+      setActor(seeded.actorAId);
     }
   });
 
@@ -222,14 +214,14 @@ describeDb('P4-55 RLS validation (integration)', () => {
       }
     }
 
+    clearTestAuthState();
     if (sqlClient) {
       await sqlClient.end();
     }
   });
 
   it('returns structured 401 JSON when no authenticated session exists', async () => {
-    const { UnauthorizedError } = await import('@/lib/api/errors');
-    requireAuthenticatedUserIdMock.mockRejectedValue(new UnauthorizedError());
+    authState.signedOut = true;
 
     const s = requireSeeded();
     const testRequestId = `test-${s.runSuffix}-401`;
