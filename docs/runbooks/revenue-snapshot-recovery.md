@@ -7,8 +7,9 @@ It computes MRR from `communities` + `stripe_prices` + `billing_groups`, reconci
 against the Stripe API, runs sanity checks, and **appends** one row to
 `revenue_snapshots`.
 
-This table is append-only. Multiple rows per day are allowed. Queries use
-`DISTINCT ON (snapshot_date) ... ORDER BY computed_at DESC` to read the latest.
+This table is append-only. Multiple rows per day are allowed. Readers take the
+newest row by `computed_at` (the prior-MRR read orders by
+`snapshot_date DESC, computed_at DESC`); nothing uses `DISTINCT ON`.
 
 ## Deployment checklist
 
@@ -36,7 +37,7 @@ Returns JSON with `snapshot_date`, `mrr_cents`, `drift_pct`, `delta_pct`.
    `SELECT id, computed_at, mrr_cents FROM revenue_snapshots WHERE snapshot_date = 'YYYY-MM-DD' ORDER BY computed_at DESC;`
 2. Fix the upstream data (e.g., correct the Stripe subscription status).
 3. Run the cron manually. The new row will have a later `computed_at` and
-   will be the one that queries return via `DISTINCT ON`.
+   will be the one the readers return.
 
 ## Job failure modes and responses
 
