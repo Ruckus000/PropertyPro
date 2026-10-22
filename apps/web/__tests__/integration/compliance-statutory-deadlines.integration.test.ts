@@ -11,7 +11,7 @@
  * deadline and timing scenarios.
  */
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { addDays } from 'date-fns';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -23,7 +23,6 @@ import {
   teardownTestKit,
   requireCommunity,
   setActor,
-  requireCurrentActor,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -39,35 +38,10 @@ const describeDb = getDescribeDb();
 // Mocks (required by route handlers)
 // ---------------------------------------------------------------------------
 
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@/lib/services/notification-service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/services/notification-service')>();
-  return {
-    ...actual,
-    queueNotification: vi.fn().mockResolvedValue(1),
-    queueNotificationDetailed: vi.fn().mockResolvedValue({
-      recipientsCount: 1,
-      sentCount: 1,
-      queuedCount: 0,
-      failedCount: 0,
-    }),
-    createNotificationsForEvent: vi.fn().mockResolvedValue({
-      created: 1,
-      skipped: 0,
-    }),
-  };
-});
-
-vi.mock('@/lib/workers/pdf-extraction', () => ({
-  queuePdfExtraction: vi.fn(),
-}));
+// No file-local mocks: setup-integration.ts's shared providers supply the
+// session (keyed on the kit's current actor) and capture the outbound side
+// effects (notification email queue, announcement fan-out, PDF extraction).
+// Membership, permissions and tenant scoping are the real code.
 
 // ---------------------------------------------------------------------------
 // Route types
@@ -117,9 +91,7 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'actorA');
   });
 

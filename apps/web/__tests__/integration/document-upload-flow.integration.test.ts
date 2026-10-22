@@ -13,8 +13,8 @@
  *   9. PUT /documents/[id]/file replaces the file in place (same id), and a
  *      late extraction of the OLD file cannot overwrite the new file's text
  *
- * Storage is mocked — files are not uploaded to Supabase. The magic bytes
- * validation and DB operations are exercised against the real database.
+ * Storage is the shared double — files are not uploaded to Supabase. The magic
+ * bytes validation and DB operations are exercised against the real database.
  */
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -29,7 +29,6 @@ import {
   requireCommunity,
   requireUser,
   setActor,
-  requireCurrentActor,
   apiUrl,
   jsonRequest,
   parseJson,
@@ -62,61 +61,25 @@ const PNG_MAGIC = new Uint8Array(
 const INVALID_MAGIC = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x00, 0x00, 0x00]);
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Storage boundary
 // ---------------------------------------------------------------------------
 
-const { requireAuthenticatedUserIdMock, mockStorageBytes } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-  mockStorageBytes: {
-    current: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]) as Uint8Array<ArrayBuffer>,
-  },
-}));
+// The session, presigned URLs, storage deletes, notification email queue and
+// PDF extraction come from setup-integration.ts's shared providers. The one
+// thing they do not cover is the HTTP GET the upload path makes to read the
+// object's first bytes, so `fetch` is stubbed for the shared double's download
+// host only. Magic-byte validation and every DB write are the real code.
+const SHARED_DOUBLE_DOWNLOAD_PREFIX = 'https://storage.test/download/';
+const storageBytes: { current: Uint8Array<ArrayBuffer> } = { current: PDF_MAGIC };
 
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-// Mock storage download to return our controlled bytes
-vi.mock('@propertypro/db', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@propertypro/db')>();
-  return {
-    ...mod,
-    createPresignedDownloadUrl: vi.fn().mockResolvedValue('http://mock-storage/file'),
-    deleteStorageObject: vi.fn().mockResolvedValue(undefined),
-  };
-});
-
-// Override global fetch for the storage download URL
 const originalFetch = globalThis.fetch;
 vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  if (url === 'http://mock-storage/file') {
-    return new Response(mockStorageBytes.current, { status: 200 });
+  if (url.startsWith(SHARED_DOUBLE_DOWNLOAD_PREFIX)) {
+    return new Response(storageBytes.current, { status: 200 });
   }
   return originalFetch(input, init);
 });
-
-vi.mock('@/lib/services/notification-service', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/services/notification-service')>();
-  return {
-    ...actual,
-    queueNotification: vi.fn().mockResolvedValue(1),
-    queueNotificationDetailed: vi.fn().mockResolvedValue({
-      recipientsCount: 1,
-      sentCount: 1,
-      queuedCount: 0,
-      failedCount: 0,
-    }),
-    createNotificationsForEvent: vi.fn().mockResolvedValue({
-      created: 1,
-      skipped: 0,
-    }),
-  };
-});
-
-vi.mock('@/lib/workers/pdf-extraction', () => ({
-  queuePdfExtraction: vi.fn(),
-}));
 
 // ---------------------------------------------------------------------------
 // Route types
@@ -196,12 +159,10 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'actorA');
     // Reset storage bytes to PDF by default
-    mockStorageBytes.current = PDF_MAGIC;
+    storageBytes.current = PDF_MAGIC;
   });
 
   afterAll(async () => {
@@ -218,7 +179,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const route = requireDocumentsRoute();
     const communityA = requireCommunity(kit, 'communityA');
 
-    mockStorageBytes.current = PDF_MAGIC;
+    storageBytes.current = PDF_MAGIC;
 
     const response = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
@@ -252,7 +213,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const route = requireDocumentsRoute();
     const communityA = requireCommunity(kit, 'communityA');
 
-    mockStorageBytes.current = PNG_MAGIC;
+    storageBytes.current = PNG_MAGIC;
 
     const response = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
@@ -285,7 +246,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const route = requireDocumentsRoute();
     const communityA = requireCommunity(kit, 'communityA');
 
-    mockStorageBytes.current = INVALID_MAGIC;
+    storageBytes.current = INVALID_MAGIC;
 
     const response = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
@@ -317,7 +278,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const route = requireDocumentsRoute();
     const communityA = requireCommunity(kit, 'communityA');
 
-    mockStorageBytes.current = PDF_MAGIC;
+    storageBytes.current = PDF_MAGIC;
 
     const response = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
@@ -496,7 +457,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const oldPath = `communities/${communityA.id}/documents/replace-old-${kit.runSuffix}.pdf`;
     const newPath = `communities/${communityA.id}/documents/replace-new-${kit.runSuffix}.pdf`;
 
-    mockStorageBytes.current = PDF_MAGIC;
+    storageBytes.current = PDF_MAGIC;
     const created = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
         communityId: communityA.id,
@@ -511,7 +472,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     expect(created.status).toBe(200);
     const id = readNumberField((await parseJson<{ data: Record<string, unknown> }>(created)).data, 'id');
 
-    mockStorageBytes.current = PNG_MAGIC;
+    storageBytes.current = PNG_MAGIC;
     const replaced = await replaceFileRoute.PUT(
       jsonRequest(apiUrl(`/api/v1/documents/${id}/file`), 'PUT', {
         communityId: communityA.id,
@@ -565,7 +526,7 @@ describeDb('P4-58: document upload flow (db-backed integration)', () => {
     const communityA = requireCommunity(kit, 'communityA');
     const oldPath = `communities/${communityA.id}/documents/tenant-old-${kit.runSuffix}.pdf`;
 
-    mockStorageBytes.current = PDF_MAGIC;
+    storageBytes.current = PDF_MAGIC;
     const created = await route.POST(
       jsonRequest(apiUrl('/api/v1/documents'), 'POST', {
         communityId: communityA.id,

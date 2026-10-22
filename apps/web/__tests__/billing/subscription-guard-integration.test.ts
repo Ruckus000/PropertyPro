@@ -1,210 +1,152 @@
 /**
  * P0 Integration tests — subscription gate end-to-end
  *
- * These tests do NOT mock @/lib/middleware/subscription-guard.
- * The real guard runs, with its DB dependency (@propertypro/db/unsafe) mocked
- * to return a controlled subscriptionStatus.
+ * The real chain, against the real database:
+ *   announcements POST → membership + permission → requireActiveSubscriptionForMutation
+ *   → reads `communities.subscription_status` → 403 SUBSCRIPTION_REQUIRED (or 200)
  *
- * This is the only place in the test suite that verifies the full chain:
- *   Route handler → requireActiveSubscriptionForMutation → 403 SUBSCRIPTION_REQUIRED
+ * Each case writes the community's subscription columns, then calls the route.
+ * Only the session comes from the shared auth double (setup-integration.ts),
+ * and announcement fan-out from the shared capture sink; the guard, its DB read,
+ * the lifecycle rules and the insert are all real.
  *
  * Why this matters (P0 — Day 14 lock):
- *   All other route tests mock the guard away. If someone accidentally removed
- *   the guard call from a route, those unit tests would not catch it. This file
- *   does catch it because the real guard is exercised.
+ *   Route unit tests mock the guard away. If someone removed the guard call
+ *   from a route, those tests would not notice. This file does, because the
+ *   guard runs and a locked community must leave no announcement behind.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
+import { and, eq } from '@propertypro/db/filters';
+import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
+import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
+import {
+  type TestKitState,
+  apiUrl,
+  getDescribeDb,
+  initTestKit,
+  jsonRequest,
+  parseJson,
+  requireCommunity,
+  requireDatabaseUrlInCI,
+  seedCommunities,
+  seedUsers,
+  setActor,
+  teardownTestKit,
+} from '../integration/helpers/multi-tenant-test-kit';
 
-// ---------------------------------------------------------------------------
-// Hoisted mocks
-// ---------------------------------------------------------------------------
+requireDatabaseUrlInCI('Subscription guard integration tests');
 
-const {
-  createUnscopedClientMock,
-  eqMock,
-  communitiesTable,
-  createScopedClientMock,
-  auditLogMock,
-  logAuditEventMock,
-  queueAnnouncementDeliveryMock,
-  announcementsTableMock,
-  usersTableMock,
-  requireAuthenticatedUserIdMock,
-  requireCommunityMembershipMock,
-} = vi.hoisted(() => ({
-  createUnscopedClientMock: vi.fn(),
-  eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
-  communitiesTable: {
-    id: 'communities.id',
-    subscriptionStatus: 'communities.subscription_status',
-  },
-  createScopedClientMock: vi.fn(),
-  auditLogMock: vi.fn().mockResolvedValue(undefined),
-  logAuditEventMock: vi.fn().mockResolvedValue(undefined),
-  queueAnnouncementDeliveryMock: vi.fn().mockResolvedValue(3),
-  announcementsTableMock: { id: Symbol('announcements.id') },
-  usersTableMock: Symbol('users'),
-  requireAuthenticatedUserIdMock: vi.fn(),
-  requireCommunityMembershipMock: vi.fn(),
-}));
+const describeDb = getDescribeDb();
 
-// ---------------------------------------------------------------------------
-// Module mocks — DO NOT mock @/lib/middleware/subscription-guard
-// ---------------------------------------------------------------------------
+type AnnouncementsRouteModule = typeof import('../../src/app/api/v1/announcements/route');
 
-// The real guard's DB dependency
-vi.mock('@propertypro/db/unsafe', () => ({
-  createUnscopedClient: createUnscopedClientMock,
-}));
+let state: TestKitState | null = null;
+let route: AnnouncementsRouteModule | null = null;
 
-vi.mock('@propertypro/db/filters', () => ({
-  eq: eqMock,
-}));
-
-vi.mock('@propertypro/db', () => ({
-  communities: communitiesTable,
-  createScopedClient: createScopedClientMock,
-  announcements: announcementsTableMock,
-  users: usersTableMock,
-  logAuditEvent: logAuditEventMock,
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@/lib/api/community-membership', () => ({
-  requireCommunityMembership: requireCommunityMembershipMock,
-}));
-
-vi.mock('@/lib/middleware/audit-middleware', () => ({
-  // The route builds its audit trail with createAuditContext inside runRoute
-  // (CON-06); withAuditLog is no longer on its path.
-  createAuditContext: (_req: NextRequest, identity: { userId: string; communityId: number }) => ({
-    ...identity,
-    log: auditLogMock,
-  }),
-}));
-
-vi.mock('@/lib/services/announcement-delivery', () => ({
-  queueAnnouncementDelivery: queueAnnouncementDeliveryMock,
-}));
-
-// Route import — after all mocks
-import { POST } from '../../src/app/api/v1/announcements/route';
-
-// ---------------------------------------------------------------------------
-// Helper: configure the real guard's DB mock
-// ---------------------------------------------------------------------------
-
-function setupGuardDb(subscriptionStatus: string): void {
-  const limitMock = vi.fn().mockResolvedValue([{ subscriptionStatus }]);
-  const whereMock = vi.fn(() => ({ limit: limitMock }));
-  const fromMock = vi.fn(() => ({ where: whereMock }));
-  const selectMock = vi.fn(() => ({ from: fromMock }));
-  createUnscopedClientMock.mockReturnValue({ select: selectMock });
+function requireState(): TestKitState {
+  if (!state) throw new Error('Test state not initialized');
+  return state;
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+function requireRoute(): AnnouncementsRouteModule {
+  if (!route) throw new Error('Route not loaded');
+  return route;
+}
 
-describe('P0: subscription gate end-to-end (real guard — no mock)', () => {
+/** Well past the seven-day grace a fresh cancellation still gets. */
+const LONG_AGO = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+async function setSubscription(status: string, canceledAt: Date | null = null): Promise<number> {
+  const kit = requireState();
+  const community = requireCommunity(kit, 'communityA');
+  await kit.db
+    .update(kit.dbModule.communities)
+    .set({
+      subscriptionStatus: status,
+      subscriptionCanceledAt: canceledAt,
+      freeAccessExpiresAt: null,
+    })
+    .where(eq(kit.dbModule.communities.id, community.id));
+  return community.id;
+}
+
+async function postAnnouncement(communityId: number, title: string): Promise<Response> {
+  return requireRoute().POST(
+    jsonRequest(apiUrl('/api/v1/announcements'), 'POST', {
+      title,
+      body: 'Test body',
+      audience: 'all',
+      isPinned: false,
+      communityId,
+    }),
+  );
+}
+
+async function countAnnouncementsTitled(communityId: number, title: string): Promise<number> {
+  const kit = requireState();
+  const rows = await kit.db
+    .select({ id: kit.dbModule.announcements.id })
+    .from(kit.dbModule.announcements)
+    .where(
+      and(
+        eq(kit.dbModule.announcements.communityId, communityId),
+        eq(kit.dbModule.announcements.title, title),
+      ),
+    );
+  return rows.length;
+}
+
+describeDb('P0: subscription gate end-to-end (real guard, real DB)', () => {
+  beforeAll(async () => {
+    state = await initTestKit();
+    await seedCommunities(
+      state,
+      MULTI_TENANT_COMMUNITIES.filter((c) => c.key === 'communityA'),
+    );
+    await seedUsers(
+      state,
+      MULTI_TENANT_USERS.filter((u) => u.key === 'actorA'),
+    );
+    route = await import('../../src/app/api/v1/announcements/route');
+  });
+
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockResolvedValue('user-p0-1');
-    requireCommunityMembershipMock.mockResolvedValue({
-      userId: 'user-p0-1',
-      communityId: 1,
-      communityName: 'Test',
-      role: 'property_manager',
-      communityType: 'condo_718',
-      timezone: 'America/New_York',
-      isUnitOwner: false,
-      isAdmin: true,
-      displayTitle: 'Board Member',
-      designation: 'board_member',
-    });
-    createScopedClientMock.mockReturnValue({
-      query: vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === usersTableMock) {
-          return [{ id: 'user-p0-1', fullName: 'P0 Test User' }];
-        }
-        return [];
-      }),
-      selectFrom: vi.fn().mockImplementation(async (table: unknown) => {
-        if (table === usersTableMock) {
-          return [{ fullName: 'P0 Test User' }];
-        }
-        return [];
-      }),
-      insert: vi.fn().mockResolvedValue([
-        { id: 1, title: 'Test', body: 'body', audience: 'all', isPinned: false },
-      ]),
-      update: vi.fn().mockResolvedValue([]),
-    });
+    setActor(requireState(), 'actorA');
+  });
+
+  afterAll(async () => {
+    if (state) await teardownTestKit(state);
   });
 
   it('POST returns 403 with SUBSCRIPTION_REQUIRED when subscriptionStatus is "canceled"', async () => {
-    setupGuardDb('canceled');
+    const communityId = await setSubscription('canceled', LONG_AGO);
+    const title = `Canceled ${requireState().runSuffix}`;
 
-    const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Test Announcement',
-        body: 'Test body',
-        audience: 'all',
-        isPinned: false,
-        communityId: 1,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
+    const res = await postAnnouncement(communityId, title);
     expect(res.status).toBe(403);
 
-    const json = (await res.json()) as { error: { code: string } };
+    const json = await parseJson<{ error: { code: string } }>(res);
     expect(json.error.code).toBe('SUBSCRIPTION_REQUIRED');
+    expect(await countAnnouncementsTitled(communityId, title)).toBe(0);
   });
 
   it('POST returns 201 when subscriptionStatus is "active"', async () => {
-    setupGuardDb('active');
+    const communityId = await setSubscription('active');
+    const title = `Active ${requireState().runSuffix}`;
 
-    const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Test Announcement',
-        body: 'Test body',
-        audience: 'all',
-        isPinned: false,
-        communityId: 1,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
+    const res = await postAnnouncement(communityId, title);
     expect(res.status).toBe(200);
+    expect(await countAnnouncementsTitled(communityId, title)).toBe(1);
   });
 
   it('POST returns 403 with SUBSCRIPTION_REQUIRED when subscriptionStatus is "expired"', async () => {
-    setupGuardDb('expired');
+    const communityId = await setSubscription('expired');
+    const title = `Expired ${requireState().runSuffix}`;
 
-    const req = new NextRequest('http://localhost:3000/api/v1/announcements', {
-      method: 'POST',
-      body: JSON.stringify({
-        title: 'Test Announcement',
-        body: 'Test body',
-        audience: 'all',
-        isPinned: false,
-        communityId: 1,
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-
-    const res = await POST(req);
+    const res = await postAnnouncement(communityId, title);
     expect(res.status).toBe(403);
-    const json = (await res.json()) as { error: { code: string } };
+    const json = await parseJson<{ error: { code: string } }>(res);
     expect(json.error.code).toBe('SUBSCRIPTION_REQUIRED');
+    expect(await countAnnouncementsTitled(communityId, title)).toBe(0);
   });
 });

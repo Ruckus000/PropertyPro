@@ -19,7 +19,7 @@
  */
 import { NextRequest } from 'next/server';
 import { eq } from '@propertypro/db/filters';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
 import {
@@ -31,7 +31,6 @@ import {
   requireCommunity,
   requireUser,
   setActor,
-  requireCurrentActor,
   apiUrl,
   parseJson,
   readNumberField,
@@ -44,17 +43,8 @@ if (process.env.CI && !process.env.DATABASE_URL) {
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-// ---------------------------------------------------------------------------
-// Mocks
-// ---------------------------------------------------------------------------
-
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
+// The session comes from the shared auth double (setup-integration.ts), keyed
+// on the kit's current actor; document access policy below it is the real code.
 
 // ---------------------------------------------------------------------------
 // Route types
@@ -248,9 +238,7 @@ describeDb('p2-43 multi-tenant access policy (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'actorA');
   });
 

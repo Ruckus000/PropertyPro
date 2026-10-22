@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
@@ -18,7 +18,6 @@ import {
   initTestKit,
   parseJson,
   requireCommunity,
-  requireCurrentActor,
   seedCommunities,
   seedUsers,
   setActor,
@@ -31,13 +30,10 @@ if (process.env.CI && !process.env.DATABASE_URL) {
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
-const { requireAuthenticatedUserIdMock } = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
+// No file-local mocks: setup-integration.ts's shared providers supply the
+// session (keyed on the kit's current actor) and capture the outbound side
+// effects (notification email queue, announcement fan-out, PDF extraction).
+// Membership, permissions and tenant scoping are the real code.
 
 type OnboardingChecklistRouteModule = typeof import('../../src/app/api/v1/onboarding/checklist/route');
 
@@ -94,9 +90,7 @@ describeDb('setup checklist: apartment compliance step retirement (db-backed)', 
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
     const kit = requireState();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor(kit));
     setActor(kit, 'siteManagerC');
   });
 

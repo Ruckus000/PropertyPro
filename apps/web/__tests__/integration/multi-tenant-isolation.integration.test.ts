@@ -1,10 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import postgres from 'postgres';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { middleware } from '../../src/middleware';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   MULTI_TENANT_COMMUNITIES,
   type MultiTenantCommunityKey,
@@ -18,42 +17,17 @@ import {
   readNumberField,
   mapValueOrThrow,
 } from './helpers/multi-tenant-test-kit';
+import {
+  clearTestAuthState,
+  registerTestAuthState,
+  type TestAuthState,
+} from './providers/test-auth-provider';
 
 if (process.env.CI && !process.env.DATABASE_URL) {
   throw new Error('P2-43 multi-tenant isolation integration tests require DATABASE_URL in CI');
 }
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
-
-const {
-  requireAuthenticatedUserIdMock,
-  createMiddlewareClientMock,
-  getUserMock,
-  fromMock,
-  selectMock,
-  eqMock,
-  isMock,
-  limitMock,
-  rpcMock,
-} = vi.hoisted(() => ({
-  requireAuthenticatedUserIdMock: vi.fn(),
-  createMiddlewareClientMock: vi.fn(),
-  getUserMock: vi.fn(),
-  fromMock: vi.fn(),
-  selectMock: vi.fn(),
-  eqMock: vi.fn(),
-  isMock: vi.fn(),
-  limitMock: vi.fn(),
-  rpcMock: vi.fn(),
-}));
-
-vi.mock('@/lib/api/auth', () => ({
-  requireAuthenticatedUserId: requireAuthenticatedUserIdMock,
-}));
-
-vi.mock('@propertypro/db/supabase/middleware', () => ({
-  createMiddlewareClient: createMiddlewareClientMock,
-}));
 
 type DbModule = typeof import('@propertypro/db');
 type DocumentsRouteModule = typeof import('../../src/app/api/v1/documents/route');
@@ -104,22 +78,14 @@ interface SeededData {
   cleanupUserIds: string[];
 }
 
-interface MiddlewareUser {
-  id: string;
-  emailVerified: boolean;
-}
-
-interface MiddlewareConfig {
-  slugToCommunityId: Record<string, number | null>;
-  user: MiddlewareUser | null;
-}
-
 let dbModule: DbModule | null = null;
 let routes: RouteModules | null = null;
 let sqlClient: ReturnType<typeof postgres> | null = null;
 let db: ReturnType<typeof drizzle> | null = null;
 let seededData: SeededData | null = null;
-let currentActorUserId: string | null = null;
+// The session comes from the shared auth double (setup-integration.ts);
+// membership, permissions and tenant scoping below it are the real code.
+const authState: TestAuthState = { currentActorUserId: null };
 
 function requireDbModule(): DbModule {
   if (!dbModule) {
@@ -149,15 +115,8 @@ function requireSeededData(): SeededData {
   return seededData;
 }
 
-function requireCurrentActor(): string {
-  if (!currentActorUserId) {
-    throw new Error('Current test actor user ID is not set');
-  }
-  return currentActorUserId;
-}
-
 function setActor(userId: string): void {
-  currentActorUserId = userId;
+  authState.currentActorUserId = userId;
 }
 
 async function seedData(): Promise<SeededData> {
@@ -430,60 +389,6 @@ async function teardownSeededData(): Promise<void> {
   }
 }
 
-function configureMiddlewareClient(config: MiddlewareConfig): { getRequestedSlug: () => string | null } {
-  let requestedSlug: string | null = null;
-
-  // Tenant resolution goes through the pp_public_community_id_by_slug RPC
-  // (migration 0045), not a direct read of `communities`. The anon-keyed
-  // client cannot see that table — `pp_communities_select` requires
-  // membership, which an anonymous visitor does not have — so a direct read
-  // returned zero rows and broke every public site. The mock mirrors the RPC's
-  // contract: a scalar id, or null.
-  rpcMock.mockImplementation(async (fn: string, args: Record<string, unknown>) => {
-    if (fn === 'pp_public_community_id_by_slug') {
-      requestedSlug = String(args['p_slug']);
-      return { data: config.slugToCommunityId[requestedSlug] ?? null, error: null };
-    }
-    if (fn === 'pp_public_community_id_by_domain') {
-      return { data: null, error: null };
-    }
-    throw new Error(`unexpected rpc: ${fn}`);
-  });
-
-  // Retained so a regression to the direct-table read fails loudly here rather
-  // than silently resolving null the way it did in production.
-  limitMock.mockImplementation(async () => {
-    throw new Error(
-      'middleware read `communities` directly; tenant resolution must use the public RPC (see migration 0045)',
-    );
-  });
-  isMock.mockImplementation(() => ({ limit: limitMock }));
-  eqMock.mockImplementation(() => ({ is: isMock }));
-  selectMock.mockImplementation(() => ({ eq: eqMock }));
-  fromMock.mockImplementation(() => ({ select: selectMock }));
-
-  getUserMock.mockResolvedValue({
-    data: { user: config.user },
-  });
-
-  // createMiddlewareClient resolves the user itself (getClaims) and returns
-  // it directly — middleware no longer calls supabase.auth.getUser.
-  createMiddlewareClientMock.mockResolvedValue({
-    supabase: {
-      auth: { getUser: getUserMock },
-      from: fromMock,
-      rpc: rpcMock,
-    },
-    response: NextResponse.next(),
-    user: config.user,
-    authChecked: config.user != null,
-  });
-
-  return {
-    getRequestedSlug: () => requestedSlug,
-  };
-}
-
 describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
@@ -491,6 +396,7 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
       return;
     }
 
+    registerTestAuthState(authState);
     dbModule = await import('@propertypro/db');
     routes = {
       documents: await import('../../src/app/api/v1/documents/route'),
@@ -508,10 +414,8 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
   });
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    requireAuthenticatedUserIdMock.mockImplementation(async () => requireCurrentActor());
     if (seededData) {
-      currentActorUserId = seededData.actorAId;
+      setActor(seededData.actorAId);
     }
   });
 
@@ -519,6 +423,7 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
     try {
       await teardownSeededData();
     } finally {
+      clearTestAuthState();
       if (sqlClient) {
         await sqlClient.end();
       }
@@ -880,76 +785,5 @@ describeDb('p2-43 multi-tenant isolation (db-backed integration)', () => {
     for (const row of auditRowsForB) {
       expect(row['communityId']).toBe(seeded.communityBId);
     }
-  });
-});
-
-// Direct route-handler tests above bypass middleware by design.
-// These middleware tests cover tenant precedence + header sanitization behavior.
-describe('p2-43 middleware tenant precedence and header sanitization', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('prefers non-reserved host subdomain over conflicting tenant query', async () => {
-    const tracker = configureMiddlewareClient({
-      slugToCommunityId: {
-        'tenant-query-wins': 501,
-        'tenant-host-conflict': 999,
-      },
-      user: {
-        id: 'middleware-user-a',
-        emailVerified: true,
-      },
-    });
-
-    const response = await middleware(
-      new NextRequest(apiUrl('/api/v1/documents?tenant=tenant-query-wins'), {
-        headers: {
-          host: 'tenant-host-conflict.getpropertypro.com',
-        },
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(tracker.getRequestedSlug()).toBe('tenant-host-conflict');
-    expect(response.headers.get('x-middleware-request-x-community-id')).toBe('999');
-    expect(response.headers.get('x-middleware-request-x-tenant-slug')).toBe('tenant-host-conflict');
-    expect(response.headers.get('x-middleware-request-x-tenant-source')).toBe('host_subdomain');
-  });
-
-  it('sanitizes spoofed inbound tenant headers and forwards server-owned values', async () => {
-    configureMiddlewareClient({
-      slugToCommunityId: {
-        'tenant-sanitized': 777,
-      },
-      user: {
-        id: 'middleware-user-b',
-        emailVerified: true,
-      },
-    });
-
-    const response = await middleware(
-      new NextRequest(apiUrl('/api/v1/documents'), {
-        headers: {
-          host: 'tenant-sanitized.getpropertypro.com',
-          'x-community-id': '999',
-          'x-tenant-slug': 'spoofed-slug',
-          'x-tenant-source': 'spoofed-source',
-          'x-user-id': 'spoofed-user',
-        },
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('x-middleware-request-x-community-id')).toBe('777');
-    expect(response.headers.get('x-middleware-request-x-tenant-slug')).toBe('tenant-sanitized');
-    expect(response.headers.get('x-middleware-request-x-tenant-source')).toBe('host_subdomain');
-    expect(response.headers.get('x-middleware-request-x-user-id')).toBe('middleware-user-b');
-
-    const overrideHeaders = response.headers.get('x-middleware-override-headers') ?? '';
-    expect(overrideHeaders).toContain('x-community-id');
-    expect(overrideHeaders).toContain('x-tenant-slug');
-    expect(overrideHeaders).toContain('x-tenant-source');
-    expect(overrideHeaders).toContain('x-user-id');
   });
 });

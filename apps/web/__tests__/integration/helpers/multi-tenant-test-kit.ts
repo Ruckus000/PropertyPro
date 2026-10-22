@@ -52,6 +52,8 @@ export interface TestKitState {
   /** Community ids seeded outside `state.communities` (e.g. direct inserts). */
   runtimeCleanupCommunityIds: Set<number>;
   currentActorUserId: string | null;
+  /** See `TestAuthState.signedOut`; set via `setSignedOut`, cleared by `setActor*`. */
+  signedOut?: boolean;
 }
 
 // `compliance_audit_log_append_only_guard` is a database-wide trigger, so test
@@ -294,10 +296,22 @@ export function requireUser(state: TestKitState, key: MultiTenantUserKey): Seede
 export function setActor(state: TestKitState, userKey: MultiTenantUserKey): void {
   const user = requireUser(state, userKey);
   state.currentActorUserId = user.id;
+  state.signedOut = false;
 }
 
 export function setActorById(state: TestKitState, userId: string): void {
   state.currentActorUserId = userId;
+  state.signedOut = false;
+}
+
+/**
+ * Makes the next requests arrive with no session: the shared auth double throws
+ * `UnauthorizedError`, as the real `requireAuthenticatedUserId` does. The next
+ * `setActor*` call signs back in.
+ */
+export function setSignedOut(state: TestKitState): void {
+  state.currentActorUserId = null;
+  state.signedOut = true;
 }
 
 export function requireCurrentActor(state: TestKitState): string {
