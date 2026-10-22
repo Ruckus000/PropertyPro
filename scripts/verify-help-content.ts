@@ -496,6 +496,10 @@ function main(): void {
   console.log(
     `\nScanning ${articles.length} MDX article(s) under ${relative(repoRoot, helpRoot)}\n`,
   );
+  if (articles.length === 0) {
+    console.error('❌ help content guard could not check — found 0 .mdx articles.');
+    process.exit(2);
+  }
 
   const problems: Problem[] = [];
 
