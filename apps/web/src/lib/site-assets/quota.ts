@@ -78,6 +78,15 @@ export async function getSiteAssetsQuotaBytes(communityId: number): Promise<numb
   return PLAN_FEATURES[planId].siteAssetsQuotaBytes;
 }
 
+/**
+ * ponytail: presign passes the RAW file size, but the counter only ever holds
+ * the WebP variants finalize writes, usually far smaller than the raw file. So the
+ * gate is stricter than real usage: a community within ~10 MB (the upload cap)
+ * of its quota can be refused an upload that would have fitted. Fix it with a
+ * reserve-at-presign counter, which also closes the presign route's marker.
+ * Trigger: any community's `assetsBytesUsed` comes within 10 MB of its quota
+ * (`pnpm site-assets:reconcile` prints the counters; all were 0 on 2026-09-08).
+ */
 export async function assertWithinQuota(communityId: number, addBytes: number): Promise<void> {
   const quota = await getSiteAssetsQuotaBytes(communityId);
   if (quota === null) return;  // Fail-open per plan-guard precedent

@@ -31,6 +31,12 @@ export const POST = withErrorHandler(
       throw new ForbiddenError('Only property managers can upload site assets');
     }
     await requirePlanFeature(communityId, 'hasSiteEditor');
+    // ponytail: checks the quota but reserves nothing, and only finalize counts
+    // bytes. An upload abandoned after the PUT (tab closed, network drop) leaves
+    // a raw object of up to 10 MB that no quota counts and nothing deletes.
+    // `pnpm site-assets:reconcile` lists such orphans and deliberately does not
+    // delete them. Trigger: that report shows any orphaned object. Then read
+    // the paths and decide on a sweep or reserve-at-presign (see quota.ts).
     await assertWithinQuota(communityId, body.fileSize);
 
     const storagePath = buildSiteAssetPath(communityId, body.kind, body.filename);

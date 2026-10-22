@@ -113,6 +113,17 @@ export const POST = withErrorHandler(
     }
 
     // Quota increment (combined size of both variants)
+    //
+    // ponytail: two limits, both deliberate.
+    // - Replacing an image never deletes or uncounts the old variants. Publish
+    //   snapshots store image paths, and `revertToSnapshot` can make one live
+    //   again, so deleting on edit would break a later revert (a favicon has no
+    //   snapshot, which is why finalize-favicon does delete).
+    // - Finalize is not idempotent: a replayed call re-transforms and counts the
+    //   bytes twice.
+    // Trigger: `pnpm site-assets:reconcile` shows counter drift (fix with
+    // `--apply-counter`) or reclaimable bytes (actual minus referenced) that
+    // matter against a quota. It reported 0 communities with assets on 2026-09-08.
     const totalBytes = variants.at1600w.byteLength + variants.at800w.byteLength;
     await incrementAssetsUsage(communityId, totalBytes);
 
