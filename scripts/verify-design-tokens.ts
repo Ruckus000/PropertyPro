@@ -253,11 +253,18 @@ if (process.argv.includes('--selftest')) {
 
 // ── Scan ──
 const current = new Map<string, Counts>();
+let scanned = 0;
 for (const root of ROOTS) {
   for (const file of walk(root.dir)) {
+    scanned += 1;
     const counts = scanContent(readFileSync(file, 'utf8'), root.only);
     if (Object.keys(counts).length > 0) current.set(file, counts);
   }
+}
+// A scan that read nothing must not pass, and must not write an empty baseline.
+if (scanned === 0) {
+  console.error('guard:design-tokens could not check — the scan roots hold no .ts/.tsx/.css files.');
+  process.exit(2);
 }
 
 if (process.argv.includes('--write-baseline')) {
@@ -316,4 +323,4 @@ if (slack.length > 0) {
   slack.slice(0, 20).forEach((s) => console.log(s));
   if (slack.length > 20) console.log(`  … and ${slack.length - 20} more`);
 }
-console.log(`guard:design-tokens OK — ${current.size} files within baseline.`);
+console.log(`guard:design-tokens OK — ${scanned} files scanned, ${current.size} carry baselined violations, all within baseline.`);

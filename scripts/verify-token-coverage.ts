@@ -96,6 +96,15 @@ for (const root of DEFINITION_ROOTS) {
   }
 }
 
+// Zero on either side means the scan read nothing it was meant to, not that
+// every reference is defined.
+if (referenced.size === 0 || defined.size === 0) {
+  console.error(
+    `guard:token-coverage could not check — ${referenced.size} referenced and ${defined.size} defined properties found.`,
+  );
+  process.exit(2);
+}
+
 const missing = [...referenced.entries()].filter(
   ([v]) =>
     !defined.has(v) &&
