@@ -40,9 +40,10 @@
  *      canonical `{ data: T }` envelope first).
  *   2. Remove the entry from KNOWN_RAW_FETCH_HOOKS.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -51,7 +52,7 @@ const repoRoot = resolve(scriptDir, '..');
 // Scan scope
 // ---------------------------------------------------------------------------
 
-const SCAN_ROOTS: readonly string[] = ['apps/web/src/hooks'];
+export const SCAN_ROOTS: readonly string[] = ['apps/web/src/hooks'];
 
 const FILE_EXTENSIONS = new Set(['.ts', '.tsx']);
 
@@ -74,13 +75,13 @@ const FILE_EXTENSIONS = new Set(['.ts', '.tsx']);
  */
 const DIRECT_API_FETCH_REGEX = /\bfetch\s*\(\s*[`'"]\/api\/v1\//g;
 
-interface Violation {
+export interface Violation {
   file: string;
   line: number;
   excerpt: string;
 }
 
-function findViolations(content: string, filePath: string): Violation[] {
+export function findViolations(content: string, filePath: string): Violation[] {
   const violations: Violation[] = [];
   DIRECT_API_FETCH_REGEX.lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -101,12 +102,9 @@ function findViolations(content: string, filePath: string): Violation[] {
 // ---------------------------------------------------------------------------
 
 function walkDirectory(dir: string, files: string[]): void {
-  let entries;
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return;
-  }
+  // Roots are asserted to exist before the walk, so a read failure here is a
+  // real error and must surface rather than shrink the scan silently.
+  const entries = readdirSync(dir);
 
   for (const entry of entries) {
     const full = join(dir, entry);
@@ -188,13 +186,35 @@ const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
 // Main
 // ---------------------------------------------------------------------------
 
-function main(): void {
+/**
+ * Exit codes: 0 clean · 1 violations or a dead allowlist entry · 2 could not
+ * check (scan root missing, or no hook files in it). `root` and `allowlist`
+ * are parameters so the fixture test can point the guard at a temporary tree.
+ */
+export function checkHookRequestJson(
+  root: string = repoRoot,
+  allowlist: ReadonlySet<string> = KNOWN_RAW_FETCH_HOOKS,
+): number {
   console.log('🔍 Hook requestJson Guard (Plan B6)');
   console.log('='.repeat(60));
 
+  // A moved hooks directory used to be skipped silently — the guard then
+  // passed having scanned nothing. Refuse instead.
+  const missingRoots = SCAN_ROOTS.filter((r) => !existsSync(join(root, r)));
+  if (missingRoots.length > 0) {
+    console.error('\n❌ Could not check — scan root(s) missing:');
+    for (const r of missingRoots) console.error(`  ${r}`);
+    return 2;
+  }
+
   const files: string[] = [];
-  for (const root of SCAN_ROOTS) {
-    walkDirectory(join(repoRoot, root), files);
+  for (const scanRoot of SCAN_ROOTS) {
+    walkDirectory(join(root, scanRoot), files);
+  }
+
+  if (files.length === 0) {
+    console.error('\n❌ Could not check — the scan roots hold no .ts/.tsx hook files.');
+    return 2;
   }
 
   const newViolations: Violation[] = [];
@@ -202,7 +222,7 @@ function main(): void {
   const allowlistedHitDetails: Violation[] = [];
 
   for (const file of files) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(root, file);
     let content: string;
     try {
       content = readFileSync(file, 'utf-8');
@@ -213,7 +233,7 @@ function main(): void {
     const violations = findViolations(content, rel);
     if (violations.length === 0) continue;
 
-    if (KNOWN_RAW_FETCH_HOOKS.has(rel)) {
+    if (allowlist.has(rel)) {
       allowlistedHits.add(rel);
       allowlistedHitDetails.push(...violations);
     } else {
@@ -224,7 +244,7 @@ function main(): void {
   // Detect dead allowlist entries — files that no longer have a violation
   // (or no longer exist). Pruning keeps the drain ledger honest.
   const deadAllowlistEntries: string[] = [];
-  for (const entry of KNOWN_RAW_FETCH_HOOKS) {
+  for (const entry of allowlist) {
     if (!allowlistedHits.has(entry)) {
       deadAllowlistEntries.push(entry);
     }
@@ -232,7 +252,7 @@ function main(): void {
 
   console.log(`\nScanned ${files.length} hook files.`);
   console.log(
-    `Allowlist: ${KNOWN_RAW_FETCH_HOOKS.size} grandfathered hooks; ` +
+    `Allowlist: ${allowlist.size} grandfathered hooks; ` +
       `${allowlistedHitDetails.length} known direct fetches.`,
   );
 
@@ -267,13 +287,16 @@ function main(): void {
 
   const hasErrors = newViolations.length > 0 || deadAllowlistEntries.length > 0;
   if (hasErrors) {
-    process.exit(1);
+    return 1;
   }
 
   console.log(
     `\n✅ No new direct API calls in hooks. ` +
-      `${KNOWN_RAW_FETCH_HOOKS.size} grandfathered hooks on the regression floor.`,
+      `${allowlist.size} grandfathered hooks on the regression floor.`,
   );
+  return 0;
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  process.exit(checkHookRequestJson());
+}

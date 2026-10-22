@@ -20,9 +20,10 @@
  * grandfathered file, the author should migrate it to a hook and remove the
  * file from this list.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -31,7 +32,7 @@ const repoRoot = resolve(scriptDir, '..');
 // Scan scope
 // ---------------------------------------------------------------------------
 
-const SCAN_ROOTS: readonly string[] = [
+export const SCAN_ROOTS: readonly string[] = [
   'apps/web/src/components',
   'apps/web/src/app/(authenticated)',
   'apps/web/src/app/(marketing)',
@@ -39,7 +40,9 @@ const SCAN_ROOTS: readonly string[] = [
   'apps/web/src/app/(auth)',
   'apps/web/src/app/auth',
   'apps/web/src/app/sign',
-  'apps/web/src/app/legal',
+  // Legal pages live under (marketing)/legal since 4cb4a808, already scanned
+  // above. The bare `app/legal` root was dropped when missing roots became a
+  // refusal rather than a silent skip.
   'apps/web/src/app/demo',
   'apps/web/src/app/mobile',
 ];
@@ -57,13 +60,13 @@ const FILE_EXTENSIONS = new Set(['.ts', '.tsx']);
  */
 const DIRECT_API_FETCH_REGEX = /\bfetch\s*\(\s*[`'"]\/api\/v1\//;
 
-interface Violation {
+export interface Violation {
   file: string;
   line: number;
   excerpt: string;
 }
 
-function findViolations(content: string, filePath: string): Violation[] {
+export function findViolations(content: string, filePath: string): Violation[] {
   const lines = content.split('\n');
   const violations: Violation[] = [];
 
@@ -86,13 +89,9 @@ function findViolations(content: string, filePath: string): Violation[] {
 // ---------------------------------------------------------------------------
 
 function walkDirectory(dir: string, files: string[]): void {
-  let entries;
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    // Directory may not exist in this branch — skip silently.
-    return;
-  }
+  // Roots are asserted to exist before the walk, so a read failure here is a
+  // real error and must surface rather than shrink the scan silently.
+  const entries = readdirSync(dir);
 
   for (const entry of entries) {
     const full = join(dir, entry);
@@ -140,13 +139,36 @@ const KNOWN_DIRECT_API_CALL_FILES = new Set<string>([
 // Main
 // ---------------------------------------------------------------------------
 
-function main(): void {
+/**
+ * Exit codes: 0 clean · 1 violations or a dead allowlist entry · 2 could not
+ * check (a scan root is missing, or the roots hold no source files). `root`
+ * and `allowlist` are parameters so the fixture test can point the guard at a
+ * temporary tree.
+ */
+export function checkComponentApiCalls(
+  root: string = repoRoot,
+  allowlist: ReadonlySet<string> = KNOWN_DIRECT_API_CALL_FILES,
+): number {
   console.log('🔍 Component / Page API-call Guard (ADR-003)');
   console.log('='.repeat(60));
 
+  // A renamed or moved root used to be skipped silently, so the guard could
+  // pass having scanned nothing. Refuse instead.
+  const missingRoots = SCAN_ROOTS.filter((r) => !existsSync(join(root, r)));
+  if (missingRoots.length > 0) {
+    console.error('\n❌ Could not check — scan root(s) missing:');
+    for (const r of missingRoots) console.error(`  ${r}`);
+    return 2;
+  }
+
   const files: string[] = [];
-  for (const root of SCAN_ROOTS) {
-    walkDirectory(join(repoRoot, root), files);
+  for (const scanRoot of SCAN_ROOTS) {
+    walkDirectory(join(root, scanRoot), files);
+  }
+
+  if (files.length === 0) {
+    console.error('\n❌ Could not check — the scan roots hold no .ts/.tsx files.');
+    return 2;
   }
 
   const newViolations: Violation[] = [];
@@ -154,7 +176,7 @@ function main(): void {
   const allowlistedHitDetails: Violation[] = [];
 
   for (const file of files) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(root, file);
     let content: string;
     try {
       content = readFileSync(file, 'utf-8');
@@ -165,7 +187,7 @@ function main(): void {
     const violations = findViolations(content, rel);
     if (violations.length === 0) continue;
 
-    if (KNOWN_DIRECT_API_CALL_FILES.has(rel)) {
+    if (allowlist.has(rel)) {
       allowlistedHits.add(rel);
       allowlistedHitDetails.push(...violations);
     } else {
@@ -176,7 +198,7 @@ function main(): void {
   // Detect dead allowlist entries — files that no longer have a violation
   // (or no longer exist). Pruning these keeps the debt ledger honest.
   const deadAllowlistEntries: string[] = [];
-  for (const entry of KNOWN_DIRECT_API_CALL_FILES) {
+  for (const entry of allowlist) {
     if (!allowlistedHits.has(entry)) {
       deadAllowlistEntries.push(entry);
     }
@@ -184,7 +206,7 @@ function main(): void {
 
   console.log(`\nScanned ${files.length} files.`);
   console.log(
-    `Allowlist: ${KNOWN_DIRECT_API_CALL_FILES.size} grandfathered files; ` +
+    `Allowlist: ${allowlist.size} grandfathered files; ` +
       `${allowlistedHitDetails.length} known direct fetches.`,
   );
 
@@ -217,13 +239,16 @@ function main(): void {
 
   const hasErrors = newViolations.length > 0 || deadAllowlistEntries.length > 0;
   if (hasErrors) {
-    process.exit(1);
+    return 1;
   }
 
   console.log(
     `\n✅ No new direct API calls in components/pages. ` +
-      `${KNOWN_DIRECT_API_CALL_FILES.size} grandfathered files remain — drain over time.`,
+      `${allowlist.size} grandfathered files remain — drain over time.`,
   );
+  return 0;
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  process.exit(checkComponentApiCalls());
+}

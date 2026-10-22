@@ -35,8 +35,9 @@
  *
  * Escape hatch: `// admin-error-leak:exempt — <reason>` on the offending line.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { isMainModule } from './lib/is-main-module';
 
 const API_ROOT = 'apps/admin/src/app/api';
 const EXEMPT = 'admin-error-leak:exempt';
@@ -66,7 +67,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-interface Violation {
+export interface Violation {
   file: string;
   line: number;
   text: string;
@@ -79,7 +80,7 @@ interface Violation {
  * at most a few lines, and the `message:` / `error:` key is on the same line as
  * the `.message` read in every real case.
  */
-function isResponseBodyLine(line: string, precedingLines: string[] = []): boolean {
+export function isResponseBodyLine(line: string, precedingLines: string[] = []): boolean {
   const trimmed = line.trim();
   if (trimmed.startsWith('*') || trimmed.startsWith('//')) return false;
   if (!MESSAGE_READ.test(trimmed)) return false;
@@ -128,9 +129,11 @@ function isResponseBodyLine(line: string, precedingLines: string[] = []): boolea
   );
 }
 
-function scan(): Violation[] {
+/** Scans every `.ts` under `<root>/apps/admin/src/app/api`; paths are reported relative to `root`. */
+export function scan(root: string = '.'): { files: number; violations: Violation[] } {
   const violations: Violation[] = [];
-  for (const file of walk(API_ROOT)) {
+  const files = walk(join(root, API_ROOT));
+  for (const file of files) {
     const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (line.includes(EXEMPT)) return;
@@ -139,18 +142,18 @@ function scan(): Violation[] {
       // Four lines is enough for `if (err instanceof X) { return NextResponse.json(`
       // and never wide enough to reach an unrelated branch.
       if (isResponseBodyLine(line, lines.slice(Math.max(0, i - 4), i))) {
-        violations.push({ file: relative('.', file), line: i + 1, text: line.trim() });
+        violations.push({ file: relative(root, file), line: i + 1, text: line.trim() });
       }
     });
   }
-  return violations;
+  return { files: files.length, violations };
 }
 
 /**
  * The guard is only worth anything if it would have caught the original bug, so
  * it checks itself against the exact shape that was drained before scanning.
  */
-function selfTest(): void {
+function selfTest(): boolean {
   const shouldFlag = [
     `    return NextResponse.json({ error: { message: error.message } }, { status: 500 });`,
     `      { error: { code: 'INTERNAL_ERROR', message: error.message } },`,
@@ -172,7 +175,7 @@ function selfTest(): void {
   for (const line of shouldFlag) {
     if (!isResponseBodyLine(line)) {
       console.error(`SELFTEST FAILED — should flag but did not:\n  ${line}`);
-      process.exit(2);
+      return false;
     }
   }
   // The domain-error allowance is window-based, so exercise it as a window.
@@ -183,34 +186,58 @@ function selfTest(): void {
     ])
   ) {
     console.error('SELFTEST FAILED — RoleOpForbiddenError message should be allowed');
-    process.exit(2);
+    return false;
   }
 
   for (const line of shouldPass) {
     if (isResponseBodyLine(line)) {
       console.error(`SELFTEST FAILED — should pass but was flagged:\n  ${line}`);
-      process.exit(2);
+      return false;
     }
   }
+  return true;
 }
 
-selfTest();
+/**
+ * Exit codes: 0 clean · 1 leaks found · 2 could not check (the selftest
+ * failed, the API root is missing, or it holds no `.ts` files). `root` is a
+ * parameter so the fixture test can point the guard at a temporary tree.
+ */
+export function checkAdminErrorLeakage(root: string = '.'): number {
+  if (!selfTest()) return 2;
 
-const violations = scan();
-if (violations.length > 0) {
-  console.error(
-    `\n✗ admin error leakage: ${violations.length} response(s) return a raw error message.\n`,
-  );
-  for (const v of violations) {
-    console.error(`  ${v.file}:${v.line}\n    ${v.text}`);
+  // A moved API root used to throw an uncaught ENOENT; an empty one passed
+  // having scanned nothing. Both now refuse.
+  if (!existsSync(join(root, API_ROOT))) {
+    console.error(`✗ admin error leakage could not check — ${API_ROOT} does not exist`);
+    return 2;
   }
-  console.error(
-    `\nUse assertNoDbError(error, '<what failed>') from '@/lib/api/assert-no-db-error' so\n` +
-      `withAdminErrorHandler returns the opaque 500 and Sentry gets the real message,\n` +
-      `or throw an AppError subclass when the caller is meant to read it.\n` +
-      `Escape hatch: // ${EXEMPT} — <reason>\n`,
-  );
-  process.exit(1);
+  const { files, violations } = scan(root);
+  if (files === 0) {
+    console.error(`✗ admin error leakage could not check — no .ts files under ${API_ROOT}`);
+    return 2;
+  }
+
+  if (violations.length > 0) {
+    console.error(
+      `\n✗ admin error leakage: ${violations.length} response(s) return a raw error message.\n`,
+    );
+    for (const v of violations) {
+      console.error(`  ${v.file}:${v.line}\n    ${v.text}`);
+    }
+    console.error(
+      `\nUse assertNoDbError(error, '<what failed>') from '@/lib/api/assert-no-db-error' so\n` +
+        `withAdminErrorHandler returns the opaque 500 and Sentry gets the real message,\n` +
+        `or throw an AppError subclass when the caller is meant to read it.\n` +
+        `Escape hatch: // ${EXEMPT} — <reason>\n`,
+    );
+    return 1;
+  }
+
+  console.log(`✓ admin error leakage: no raw error messages in API responses (${files} files)`);
+  return 0;
 }
 
-console.log('✓ admin error leakage: no raw error messages in API responses');
+if (isMainModule(import.meta.url)) {
+  process.exit(checkAdminErrorLeakage());
+}

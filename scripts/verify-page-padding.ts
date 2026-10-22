@@ -42,7 +42,7 @@ import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
-const AUTH_ROOT = resolve(repoRoot, 'apps/web/src/app/(authenticated)');
+const AUTH_ROOT_REL = 'apps/web/src/app/(authenticated)';
 const BASELINE_PATH = resolve(scriptDir, 'page-padding-baseline.json');
 
 const EXEMPT_RE = /\/\/\s*page-padding:exempt\b/;
@@ -114,13 +114,32 @@ function loadBaseline(): Record<string, number> {
   }
 }
 
-function main(): void {
-  const baseline = loadBaseline();
-  const files = findAuthenticatedPages(AUTH_ROOT);
+/**
+ * Exit codes: 0 clean · 1 violations over baseline · 2 could not check (the
+ * authenticated route group is missing, or holds no page.tsx). `root` and
+ * `baseline` are parameters so the fixture test can point the guard at a
+ * temporary tree.
+ */
+export function checkPagePadding(
+  root: string = repoRoot,
+  baseline: Record<string, number> = loadBaseline(),
+): number {
+  // A moved route group used to throw (an uncaught crash) and an empty one
+  // passed with "0 authenticated pages verified". Both now refuse.
+  const authRoot = resolve(root, AUTH_ROOT_REL);
+  if (!existsSync(authRoot)) {
+    console.error(`Page-padding guard could not check — scan root missing: ${AUTH_ROOT_REL}`);
+    return 2;
+  }
+  const files = findAuthenticatedPages(authRoot);
+  if (files.length === 0) {
+    console.error(`Page-padding guard could not check — no page.tsx under ${AUTH_ROOT_REL}`);
+    return 2;
+  }
   const failures: Array<{ file: string; count: number; allowed: number; violations: Violation[] }> = [];
 
   for (const file of files) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(root, file);
     const violations = findViolations(readFileSync(file, 'utf8'));
     const allowed = baseline[rel] ?? 0;
     if (violations.length > allowed) {
@@ -141,13 +160,14 @@ function main(): void {
         ' own it, and use <PageBody width="..."> for a narrower column. If truly intentional, add' +
         ' `// page-padding:exempt — <reason>`.',
     );
-    process.exit(1);
+    return 1;
   }
 
   console.log(`Page-padding guard passed: ${files.length} authenticated pages verified.`);
+  return 0;
 }
 
 // ESM main-detection via the shared helper (symlink- and encoding-safe).
 if (isMainModule(import.meta.url)) {
-  main();
+  process.exit(checkPagePadding());
 }

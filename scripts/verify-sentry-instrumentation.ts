@@ -30,6 +30,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/is-main-module';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..');
@@ -145,27 +146,34 @@ function checkAppTags(appPath: string, app: string, problems: Problem[]): number
   return initSites;
 }
 
-function main(): void {
+/**
+ * Exit codes: 0 clean (or no app uses Sentry) · 1 problems · 2 could not check
+ * (the apps directory is missing, or holds no Next.js app at all). `apps` is a
+ * parameter so the fixture test can point the guard at a temporary tree.
+ */
+export function checkSentryInstrumentation(apps: string = appsDir): number {
   console.log('🔍 Sentry Instrumentation Presence Guard');
   console.log('='.repeat(60));
 
-  if (!existsSync(appsDir)) {
-    console.error(`❌ apps/ directory not found at ${appsDir}`);
-    process.exit(1);
+  if (!existsSync(apps)) {
+    console.error(`❌ Could not check — apps/ directory not found at ${apps}`);
+    return 2;
   }
 
-  const apps = readdirSync(appsDir).filter((name) => {
-    const p = join(appsDir, name);
+  const appNames = readdirSync(apps).filter((name) => {
+    const p = join(apps, name);
     return statSync(p).isDirectory();
   });
 
   const problems: Problem[] = [];
   let checked = 0;
+  let nextApps = 0;
 
-  for (const app of apps) {
-    const appPath = join(appsDir, app);
+  for (const app of appNames) {
+    const appPath = join(apps, app);
     const configPath = findNextConfig(appPath);
     if (!configPath) continue;
+    nextApps++;
 
     if (!referencesSentry(configPath)) {
       console.log(`  ${app}: no @sentry/nextjs reference, skipping`);
@@ -203,9 +211,18 @@ function main(): void {
     }
   }
 
+  // A next.config rename (say, to a name missing from NEXT_CONFIG_NAMES) would
+  // otherwise make every app invisible and read as "nothing to verify".
+  if (nextApps === 0) {
+    console.error(
+      `\n❌ Could not check — no app under ${apps} has a ${NEXT_CONFIG_NAMES.join(' / ')}.`,
+    );
+    return 2;
+  }
+
   if (checked === 0) {
     console.log('\nNo apps reference @sentry/nextjs. Nothing to verify.');
-    process.exit(0);
+    return 0;
   }
 
   if (problems.length > 0) {
@@ -217,14 +234,16 @@ function main(): void {
       '\nRefer to docs/audits/sentry-observability-2026-05-06.md ' +
         'for the original incident.',
     );
-    process.exit(1);
+    return 1;
   }
 
   console.log(
     `\n✅ All ${checked} Sentry-instrumented app(s) have src/instrumentation.ts ` +
       "and tag their events with 'app'.",
   );
-  process.exit(0);
+  return 0;
 }
 
-main();
+if (isMainModule(import.meta.url)) {
+  process.exit(checkSentryInstrumentation());
+}
