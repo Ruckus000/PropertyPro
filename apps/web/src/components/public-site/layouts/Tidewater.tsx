@@ -1,70 +1,14 @@
-import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
-import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { blockRendererRegistry, hasRenderer } from '@/components/public-site/blocks/registry';
-import { type BlockType, heroBlockSchema } from '@propertypro/shared';
-import type { LayoutProps, SiteBlock } from './types';
+import type { BlockType } from '@propertypro/shared';
+import { SiteChrome } from './SiteChrome';
+import { hasHeroBlock } from './has-hero-block';
+import type { LayoutProps } from './types';
 
 /**
- * Build the CommunityTheme shape that PublicSiteHeader expects from the
- * LayoutProps' separate community + ResolvedTheme objects.
- *
- * PublicSiteHeader takes CommunityTheme (from @propertypro/theme) whose field
- * names differ from ResolvedTheme:
- *   ResolvedTheme.headingFont → CommunityTheme.fontHeading
- *   ResolvedTheme.bodyFont    → CommunityTheme.fontBody
- *   community.logoUrl         → CommunityTheme.logoUrl
- *   community.name            → CommunityTheme.communityName
+ * Tidewater — the condo default. Its chrome (header, empty-state hero, footer,
+ * block-list treatment) lives in `SiteChrome`, shared with the editor canvas so
+ * the canvas shows this layout rather than a bare stack of blocks.
  */
-function toHeaderTheme(
-  community: LayoutProps['community'],
-  theme: LayoutProps['theme'],
-) {
-  return {
-    primaryColor: theme.primaryColor,
-    secondaryColor: theme.secondaryColor,
-    accentColor: theme.accentColor,
-    fontHeading: theme.headingFont,
-    fontBody: theme.bodyFont,
-    logoUrl: community.logoUrl,
-    communityName: community.name,
-    communityType: community.communityType,
-  };
-}
-
-function hasHeroBlock(blocks: SiteBlock[]): boolean {
-  // Mirror HeroBlock's own validation. If a hero row exists but its content
-  // fails the schema, HeroBlock returns null — so a presence-only check here
-  // would suppress the empty-state hero AND render nothing, leaving the
-  // page without an <h1> (violates the heading-hierarchy invariant
-  // documented in layouts/README.md and docs/design-system/templates/tidewater.md).
-  return blocks.some(
-    (b) => b.blockType === 'hero' && heroBlockSchema.safeParse(b.content).success,
-  );
-}
-
-function EmptyStateHero({ heading }: { heading: string }) {
-  return (
-    <section className="bg-primary px-4 py-20 text-center site-sm:px-6 site-lg:px-8">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="font-heading text-4xl font-bold text-content-inverse site-sm:text-5xl">
-          {heading}
-        </h1>
-        <p className="mt-4 text-lg text-content-inverse">
-          Your community portal for documents, meetings, and more.
-        </p>
-        <div className="mt-8">
-          <a
-            href="/auth/login"
-            className="inline-flex items-center rounded-md bg-surface-card px-6 py-3 text-base font-medium text-primary shadow-e2 hover:bg-surface-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse"
-          >
-            Resident Login
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function Tidewater({ community, theme, blocks, footer, nav, page }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
   // D18 — a non-home page cannot own a hero block (block_order is
@@ -74,41 +18,38 @@ export function Tidewater({ community, theme, blocks, footer, nav, page }: Layou
   const heroHeading = page && !page.isHome ? page.name : community.name;
 
   return (
-    <div className="min-h-screen flex flex-col font-body">
-      <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />
-      <main id="main-content" className="flex-1">
-        {!hasHeroBlock(ordered) && <EmptyStateHero heading={heroHeading} />}
-        {ordered.map((block) => {
-          const blockType = block.blockType as BlockType;
-          if (!hasRenderer(blockType)) {
-            // Unknown block type — skip. Reported at the page level by
-            // `reportDegradedBlocks`, which sees the whole block list and emits
-            // one `public_site_blocks_degraded` warning per request. Keep the
-            // reporting there rather than adding a capture here: all three
-            // layouts have this same branch, and one event per request beats
-            // three copies of the same call drifting apart.
-            return null;
-          }
-          // hasRenderer guard above ensures this entry exists.
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          const Renderer = blockRendererRegistry[blockType]!;
-          return (
-            <Renderer
-              key={block.id}
-              block={{ ...block, blockType }}
-              community={community}
-              theme={theme}
-              layout="tidewater"
-            />
-          );
-        })}
-      </main>
-      <PublicSiteFooter
-        communityName={community.name}
-        associationName={footer?.associationName}
-        note={footer?.note}
-        showStatutoryLine={footer?.showStatutoryLine}
-      />
-    </div>
+    <SiteChrome
+      layout="tidewater"
+      community={community}
+      theme={theme}
+      footer={footer}
+      nav={nav}
+      emptyHeroHeading={hasHeroBlock(ordered) ? null : heroHeading}
+    >
+      {ordered.map((block) => {
+        const blockType = block.blockType as BlockType;
+        if (!hasRenderer(blockType)) {
+          // Unknown block type — skip. Reported at the page level by
+          // `reportDegradedBlocks`, which sees the whole block list and emits
+          // one `public_site_blocks_degraded` warning per request. Keep the
+          // reporting there rather than adding a capture here: all three
+          // layouts have this same branch, and one event per request beats
+          // three copies of the same call drifting apart.
+          return null;
+        }
+        // hasRenderer guard above ensures this entry exists.
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        const Renderer = blockRendererRegistry[blockType]!;
+        return (
+          <Renderer
+            key={block.id}
+            block={{ ...block, blockType }}
+            community={community}
+            theme={theme}
+            layout="tidewater"
+          />
+        );
+      })}
+    </SiteChrome>
   );
 }

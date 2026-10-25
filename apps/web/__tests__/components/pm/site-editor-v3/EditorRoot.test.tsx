@@ -504,6 +504,15 @@ vi.mock('@/hooks/use-compliance-checklist', () => ({
   },
 }));
 
+// The canvas footer reads the site settings. Without a seed the real hook
+// would fetch; here it has nothing, so the canvas renders the default footer.
+vi.mock('@/hooks/use-site-settings', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/use-site-settings')>(
+    '@/hooks/use-site-settings',
+  );
+  return { ...actual, useSiteSettings: () => ({ data: undefined }) };
+});
+
 vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId],
   applyPageOrder: (pages: unknown) => pages,

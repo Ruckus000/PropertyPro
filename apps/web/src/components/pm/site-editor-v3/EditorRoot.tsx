@@ -8,7 +8,9 @@ import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { applyDesignToCanvas, applyLiveLogoToCanvas } from '@/lib/site-editor/canvas-design';
+import { navForEditor } from '@/lib/site-editor/editor-nav';
 import { useSiteDesign } from '@/hooks/use-site-design';
+import { useSiteSettings } from '@/hooks/use-site-settings';
 import { useLiveBranding } from '@/hooks/use-live-branding';
 import {
   useSiteEditorPreferences,
@@ -642,6 +644,23 @@ export function EditorRoot({
   const selectedPageIsStaged = selectedPage !== undefined && isStagedForRemoval(selectedPage);
 
   /*
+   * The site chrome the canvas and the preview render around the blocks
+   * (templates, v4): the page nav projected from the page list, the footer
+   * from the site settings, and the page's identity for the empty-state hero.
+   * The settings query shares the Settings view's key and seed, so a footer
+   * edit there repaints the canvas footer without a second request.
+   */
+  const { data: siteSettings } = useSiteSettings(communityId, initialSiteSettings);
+  const canvasNav = useMemo(
+    () => navForEditor(pages ?? initialPages, effectivePageId),
+    [pages, initialPages, effectivePageId],
+  );
+  const canvasFooter = siteSettings?.footer;
+  const canvasPage = selectedPage
+    ? { name: selectedPage.name, isHome: selectedPage.isHome }
+    : undefined;
+
+  /*
    * The preview gate below unmounts the dialog; this is what closes it.
    *
    * Without this, `previewOpen` stays true while `pagesUnavailable` suppresses
@@ -1213,6 +1232,7 @@ export function EditorRoot({
                 hasPolishBlocks={hasPolishBlocks}
                 insertBefore={insertBefore}
                 onInsertConsumed={handleInsertConsumed}
+                onGoToPages={handleGoToPages}
               />
             );
           }
@@ -1285,6 +1305,10 @@ export function EditorRoot({
             context={canvasContext}
             onAddSection={handleInsertAt}
             device={device}
+            nav={canvasNav}
+            footer={canvasFooter}
+            page={canvasPage}
+            onEditNavigation={handleGoToPages}
           />
         ) : (
           <div className="mx-auto max-w-[1000px] px-5 py-4">
@@ -1322,6 +1346,9 @@ export function EditorRoot({
           pageName={selectedPage?.name}
           // …and must not promise a page the next publish deletes.
           pageIsStaged={selectedPageIsStaged}
+          nav={canvasNav}
+          footer={canvasFooter}
+          page={canvasPage}
         />
       ) : null}
 

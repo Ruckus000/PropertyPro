@@ -2,7 +2,9 @@
 
 import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { PanelTop } from 'lucide-react';
 import { PlanBadge } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
@@ -36,6 +38,13 @@ export interface AddPanelProps {
   insertBefore: number | null;
   /** Called once an add has used `insertBefore`, so the next add appends. */
   onInsertConsumed: () => void;
+  /**
+   * Opens the Pages tool. The navigation bar is not a section — its links ARE
+   * the pages (`in_nav`), so the Add panel offers it as an entry that leads to
+   * where it is built rather than as a block to insert. Optional so the panel
+   * still renders standalone; without it the entry is not shown.
+   */
+  onGoToPages?: () => void;
 }
 
 /**
@@ -103,6 +112,7 @@ export function AddPanel({
   hasPolishBlocks,
   insertBefore,
   onInsertConsumed,
+  onGoToPages,
 }: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
   const targetPageId = useSelectedSitePage();
@@ -218,6 +228,29 @@ export function AddPanel({
           {error}
         </p>
       )}
+
+      {/* Not in the catalog: it has no block type and no slot. It is listed
+          here because this is where a PM looks for "the menu at the top", and
+          the answer — it is built from your pages — is better given than
+          discovered. */}
+      {onGoToPages ? (
+        <div
+          data-testid="add-navigation-bar"
+          className="flex items-start gap-3 rounded-md border border-dashed border-edge-strong p-3"
+        >
+          <PanelTop className="mt-0.5 h-4 w-4 shrink-0 text-content-secondary" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-content">Navigation bar</p>
+            <p className="mt-0.5 text-xs text-content-secondary">
+              Links to your pages, in the header of every page. It appears once two or more
+              pages are shown in the navigation — add a page, or show one, to build it.
+            </p>
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={onGoToPages}>
+              Manage pages
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <ul className="space-y-2">
         {ADD_CATALOG.map((entry) => {

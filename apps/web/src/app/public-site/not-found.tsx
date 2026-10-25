@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
-import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
+import { resolveTheme, toFontLinks } from '@propertypro/theme';
+import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -57,10 +58,7 @@ export default async function PublicSiteNotFound() {
 
   const branding = await getBrandingForCommunity(community.id);
   const theme = resolveTheme(branding, community.name, community.communityType as CommunityType);
-  const cssVars = {
-    ...toCssVars(theme),
-    ...customCssOverridesToCssVars(branding?.customCssOverrides),
-  };
+  const cssVars = siteThemeCssVars(theme, branding?.customCssOverrides);
 
   return (
     <>

@@ -1,7 +1,8 @@
 import { cache } from 'react';
 import { headers } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { resolveTheme, toCssVars, toFontLinks, customCssOverridesToCssVars } from '@propertypro/theme';
+import { resolveTheme, toFontLinks } from '@propertypro/theme';
+import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
 import type { Metadata } from 'next';
 import { effectiveLook, type CommunityType } from '@propertypro/shared';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
@@ -287,11 +288,11 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const headerLogoUrl = siteLogoUrl ?? theme.logoUrl;
   // PR #11 — Pro+ custom CSS overrides win over the resolved theme. The
   // helper is defensive (skips bad hex / non-allowlisted fonts) and emits only
-  // validated token CSS variables, never raw CSS.
-  const cssVars = {
-    ...toCssVars(theme),
-    ...customCssOverridesToCssVars(rawBranding?.customCssOverrides),
-  };
+  // validated token CSS variables, never raw CSS. It also re-declares the
+  // semantic aliases (`--interactive-primary` …) beside the theme values —
+  // without that, `bg-primary` and friends stay the platform coral whatever
+  // the community chose (see site-theme-css-vars.ts).
+  const cssVars = siteThemeCssVars(theme, rawBranding?.customCssOverrides);
   const fontLinks = toFontLinks(theme);
 
   // PR #9d — JSX template render branch retired. Community public sites

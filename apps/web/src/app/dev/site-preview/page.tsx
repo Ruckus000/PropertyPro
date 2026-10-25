@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toFontLinks } from '@propertypro/theme';
+import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -73,7 +74,7 @@ export default async function PreviewPage({
     community.name,
     community.communityType as CommunityType,
   );
-  const cssVars = toCssVars(theme);
+  const cssVars = siteThemeCssVars(theme);
   const fontLinks = toFontLinks(theme);
 
   return (

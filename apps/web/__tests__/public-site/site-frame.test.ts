@@ -66,6 +66,7 @@ const NOT_ROOTS: Record<string, string> = {
   'lib/public-site/preview-overrides.ts': 'types only',
   'lib/site-editor/load-canvas-context.ts': 'types only',
   'lib/site-editor/preview-data.ts': 'types only',
+  'lib/site-editor/editor-nav.ts': 'types only',
 };
 
 describe('site-frame variants', () => {

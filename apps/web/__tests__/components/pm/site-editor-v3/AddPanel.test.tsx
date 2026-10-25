@@ -100,12 +100,14 @@ function renderPanel({
   pageId = HOME_PAGE_ID,
   insertBefore = null,
   onInsertConsumed = () => {},
+  onGoToPages,
 }: {
   hasPolishBlocks?: boolean;
   onSelect?: (id: number) => void;
   pageId?: number | null;
   insertBefore?: number | null;
   onInsertConsumed?: () => void;
+  onGoToPages?: () => void;
 } = {}) {
   return render(
     <SelectedSitePageProvider pageId={pageId}>
@@ -115,6 +117,7 @@ function renderPanel({
           hasPolishBlocks={hasPolishBlocks}
           insertBefore={insertBefore}
           onInsertConsumed={onInsertConsumed}
+          onGoToPages={onGoToPages}
         />
         <Probe />
       </SiteEditorProvider>
@@ -129,6 +132,26 @@ beforeEach(() => {
   state.isError = false;
   state.upsertPending = false;
   upsertMutateAsync.mockResolvedValue(undefined);
+});
+
+describe('AddPanel — navigation bar', () => {
+  it('offers the navigation bar as a way into the Pages tool, since its links are the pages', async () => {
+    const user = userEvent.setup();
+    const onGoToPages = vi.fn();
+    renderPanel({ onGoToPages });
+
+    const entry = screen.getByTestId('add-navigation-bar');
+    expect(entry).toHaveTextContent('Navigation bar');
+    await user.click(screen.getByRole('button', { name: 'Manage pages' }));
+    expect(onGoToPages).toHaveBeenCalledTimes(1);
+    // It is not a section: nothing was written.
+    expect(upsertMutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('is not offered without somewhere to send the PM', () => {
+    renderPanel();
+    expect(screen.queryByTestId('add-navigation-bar')).toBeNull();
+  });
 });
 
 describe('AddPanel', () => {

@@ -523,6 +523,97 @@ describe('Canvas — page scope (D-C2)', () => {
   });
 });
 
+/**
+ * Templates (website builder v4). A template is a layout plus a colour set,
+ * and the canvas used to show neither: it rendered blocks without the layout's
+ * chrome, under the route layout's default theme variables. These pin that the
+ * frame paints the context's theme and renders the context's layout.
+ */
+describe('Canvas — site chrome and theme (templates)', () => {
+  function renderChrome(over: Partial<CanvasContext> = {}, props: Partial<Parameters<typeof Canvas>[0]> = {}) {
+    return render(
+      <UndoableRemoveProvider communityId={7}>
+        <Canvas communityId={7} context={{ ...CONTEXT, ...over }} now={NOW} {...props} />
+      </UndoableRemoveProvider>,
+    );
+  }
+
+  it('paints the draft theme as the custom properties the block views read', () => {
+    renderChrome({ theme: { ...CONTEXT.theme, primaryColor: '#0E3338', headingFont: 'Lora' } });
+    const frame = screen.getByTestId('canvas-frame');
+    expect(frame.getAttribute('style')).toMatch(/--theme-primary:\s*#0E3338/);
+    expect(frame.getAttribute('style')).toMatch(/--theme-font-heading:\s*Lora/);
+  });
+
+  it("renders the context's layout chrome around the sections, header and footer included", () => {
+    renderChrome({ layout: 'boulevard' });
+    const frame = screen.getByTestId('canvas-frame');
+    expect(frame.querySelector('[data-layout="boulevard"]')).not.toBeNull();
+    expect(frame.querySelector('header')).not.toBeNull();
+    expect(frame.querySelector('footer')).not.toBeNull();
+  });
+
+  it('switches chrome with the layout — the visible half of a template change', () => {
+    const { rerender } = renderChrome({ layout: 'tidewater' });
+    expect(screen.getByTestId('canvas-frame').querySelector('[data-layout="tidewater"]')).not.toBeNull();
+    rerender(
+      <UndoableRemoveProvider communityId={7}>
+        <Canvas communityId={7} context={{ ...CONTEXT, layout: 'sable' }} now={NOW} />
+      </UndoableRemoveProvider>,
+    );
+    expect(screen.getByTestId('canvas-frame').querySelector('[data-layout="sable"]')).not.toBeNull();
+    expect(screen.getByTestId('canvas-frame').querySelector('[data-layout="tidewater"]')).toBeNull();
+  });
+
+  it('shows the page nav from the nav prop, with the page being edited current', () => {
+    renderChrome(
+      {},
+      {
+        nav: {
+          items: [
+            { id: 10, name: 'Home', slug: '', isHome: true },
+            { id: 11, name: 'Amenities', slug: 'amenities', isHome: false },
+          ],
+          currentSlug: 'amenities',
+        },
+      },
+    );
+    const nav = screen.getByTestId('canvas-frame').querySelector('nav[aria-label="Site pages"]');
+    expect(nav).not.toBeNull();
+    expect(within(nav as HTMLElement).getByText('Amenities').closest('a')).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('offers the navigation bar as an editable region that opens the Pages tool', () => {
+    const onEditNavigation = vi.fn();
+    renderChrome({}, { onEditNavigation });
+    fireEvent.click(screen.getByTestId('canvas-navigation-bar'));
+    expect(onEditNavigation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the site's own links from navigating the editor tab", () => {
+    renderChrome();
+    const frame = screen.getByTestId('canvas-frame');
+    // The header's "Resident Login" is the public site's link to /auth/login
+    // (the empty-state hero carries a second one). `fireEvent` returns false
+    // when a handler called preventDefault.
+    const [headerLogin] = within(frame).getAllByRole('link', { name: 'Resident Login' });
+    expect(fireEvent.click(headerLogin!)).toBe(false);
+  });
+
+  it('has no navigation affordance without a handler to give it', () => {
+    renderChrome();
+    expect(screen.queryByTestId('canvas-navigation-bar')).toBeNull();
+  });
+
+  it('names the empty-state hero after a sub-page, and after the community on home', () => {
+    renderChrome({}, { page: { name: 'Amenities', isHome: false } });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Amenities');
+  });
+});
+
 describe('sortBlocks', () => {
   const b = (id: number, blockType: string, blockOrder: number) =>
     ({ id, pageId: HOME_PAGE_ID, blockType, blockOrder, content: {}, isDraft: false, publishedAt: null }) as never;
