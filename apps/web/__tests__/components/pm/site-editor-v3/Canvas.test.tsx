@@ -593,6 +593,22 @@ describe('Canvas — site chrome and theme (templates)', () => {
     expect(onEditNavigation).toHaveBeenCalledTimes(1);
   });
 
+  it('adds no main landmark of its own — the editor frame already owns #main-content', () => {
+    renderChrome();
+    const frame = screen.getByTestId('canvas-frame');
+    expect(frame.querySelector('main')).toBeNull();
+    expect(frame.querySelector('#main-content')).toBeNull();
+  });
+
+  it("paints its own chrome with tokens the theme aliases leave alone", () => {
+    // Inside the frame, `interactive` IS the community primary — the colour the
+    // hero and header are painted in — so editor chrome in it would vanish.
+    renderChrome({}, { onEditNavigation: vi.fn() });
+    const overlay = screen.getByTestId('canvas-navigation-bar');
+    expect(overlay.className).not.toMatch(/\bring-interactive\b/);
+    expect(overlay.className).toMatch(/hover:ring-focus/);
+  });
+
   it("keeps the site's own links from navigating the editor tab", () => {
     renderChrome();
     const frame = screen.getByTestId('canvas-frame');

@@ -246,6 +246,7 @@ function PreviewBody({ communityId, context, now, nav, footer, page }: PreviewBo
         nav={nav}
         footer={footer}
         fullHeight={false}
+        landmark={false}
         emptyHeroHeading={emptyHeroHeading}
       >
         {ordered.map((block) => (

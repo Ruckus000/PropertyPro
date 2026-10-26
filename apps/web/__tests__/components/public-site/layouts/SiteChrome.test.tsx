@@ -131,6 +131,27 @@ describe('<SiteChrome>', () => {
     expect(root(framed.container).className).not.toContain('min-h-screen');
   });
 
+  it('is the page main landmark on the public page, and a plain region inside an editor frame', () => {
+    const page = render(
+      <SiteChrome layout="tidewater" community={community} theme={theme}>
+        <span data-testid="block" />
+      </SiteChrome>,
+    );
+    expect(page.container.querySelector('main#main-content')).not.toBeNull();
+    page.unmount();
+
+    // The editor already owns `<main id="main-content">`; a second, nested one
+    // with the same id breaks skip links and landmark navigation.
+    const framed = render(
+      <SiteChrome layout="tidewater" community={community} theme={theme} fullHeight={false} landmark={false}>
+        <span data-testid="block" />
+      </SiteChrome>,
+    );
+    expect(framed.container.querySelector('main')).toBeNull();
+    expect(framed.container.querySelector('#main-content')).toBeNull();
+    expect(screen.getByTestId('block')).toBeInTheDocument();
+  });
+
   it('places a header adornment over the header', () => {
     const { container } = render(
       <SiteChrome

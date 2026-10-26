@@ -237,7 +237,10 @@ export function Canvas({
       data-testid="canvas-navigation-bar"
       onClick={onEditNavigation}
       aria-label="Navigation bar: manage the pages it links to"
-      className="group absolute inset-0 z-10 flex items-start justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus hover:ring-2 hover:ring-inset hover:ring-interactive"
+      // `ring-focus`, not `ring-interactive`: inside the frame the `interactive`
+      // token IS the community's primary (see site-theme-css-vars.ts), which is
+      // the header's own colour — a ring in it would vanish against the header.
+      className="group absolute inset-0 z-10 flex items-start justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus hover:ring-2 hover:ring-inset hover:ring-focus"
     >
       <span className="pointer-events-none mt-2 rounded-full bg-surface-card px-2.5 py-0.5 text-xs font-semibold text-content opacity-0 shadow-e2 transition-opacity duration-quick group-hover:opacity-100 group-focus-visible:opacity-100">
         Navigation · Manage pages
@@ -284,6 +287,7 @@ export function Canvas({
           nav={nav}
           footer={footer}
           fullHeight={false}
+          landmark={false}
           emptyHeroHeading={emptyHeroHeading}
           headerAdornment={navigationAdornment}
         >
@@ -307,7 +311,7 @@ export function Canvas({
                   <button
                     type="button"
                     onClick={() => insertAt(null)}
-                    className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-interactive hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-edge-focus hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
                     Add a section to the end of this page

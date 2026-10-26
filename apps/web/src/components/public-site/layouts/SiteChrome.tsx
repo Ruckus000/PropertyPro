@@ -173,6 +173,13 @@ export interface SiteChromeProps {
    */
   fullHeight?: boolean;
   /**
+   * Whether the block list is the page's `<main id="main-content">`. True on
+   * the public page. The editor canvas and the preview pass false: they sit
+   * INSIDE the editor's own main landmark, and a nested `<main>` with a
+   * duplicate id breaks skip links and landmark navigation. Default true.
+   */
+  landmark?: boolean;
+  /**
    * Rendered inside a positioned wrapper around the header, on top of it. The
    * editor uses this for the "Navigation" affordance; the public page passes
    * nothing.
@@ -190,12 +197,14 @@ export function SiteChrome({
   nav,
   emptyHeroHeading,
   fullHeight = true,
+  landmark = true,
   headerAdornment,
   children,
 }: SiteChromeProps) {
   const chrome = LAYOUT_CHROME[layout];
   const { EmptyHero } = chrome;
   const header = <PublicSiteHeader theme={toHeaderTheme(community, theme)} nav={nav} />;
+  const Main = landmark ? 'main' : 'div';
 
   return (
     <div data-layout={layout} className={cn(fullHeight && 'min-h-screen', chrome.root)}>
@@ -207,10 +216,10 @@ export function SiteChrome({
       ) : (
         header
       )}
-      <main id="main-content" className={chrome.main || undefined}>
+      <Main id={landmark ? 'main-content' : undefined} className={chrome.main || undefined}>
         {emptyHeroHeading != null ? <EmptyHero heading={emptyHeroHeading} /> : null}
         {chrome.list ? <div className={chrome.list}>{children}</div> : children}
-      </main>
+      </Main>
       <PublicSiteFooter
         communityName={community.name}
         associationName={footer?.associationName}
