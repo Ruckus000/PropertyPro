@@ -1,6 +1,5 @@
 import React from 'react';
 import { headers } from 'next/headers';
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences';
 import { SnowbirdDigestCard } from '@/components/settings/snowbird-digest-card';
@@ -15,6 +14,13 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { PageHeader } from '@/components/shared/page-header';
+import { PageBody } from '@/components/shared/page-body';
+import {
+  SettingsCard,
+  SettingsLinkRow,
+  SettingsSection,
+} from '@/components/settings/settings-layout';
+import { SettingsNav, type SettingsNavGroup } from '@/components/settings/settings-nav';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { users } from '@propertypro/db';
@@ -27,7 +33,10 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 
 /**
- * Settings page — exposes Notification Preferences (P1-26).
+ * Settings page — personal preferences for every member, community settings
+ * for managers. Laid out in the Geist settings pattern: a section menu at the
+ * left (a sideways-scrolling row on phones), and per section a heading plus one
+ * bordered card of label/control rows. See components/settings/settings-layout.tsx.
  *
  * Uses resolveCommunityContext for consistent tenant resolution
  * across all authenticated pages.
@@ -100,119 +109,152 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     phoneVerified = rows[0]?.phoneVerifiedAt != null;
   }
 
+  const features = getEffectiveFeatures(
+    membership.communityType,
+    resolvePlanId(membership.subscriptionPlan),
+  );
+  const showTenantAccess = membership.isAdmin && membership.communityType !== 'apartment';
+
+  // The menu lists exactly the sections this member will see below.
+  const navGroups: SettingsNavGroup[] = [
+    {
+      label: 'Personal',
+      items: [
+        { id: 'account', label: 'Account' },
+        { id: 'notifications', label: 'Notifications' },
+        ...(smsAvailable ? [{ id: 'sms-alerts', label: 'Text alerts' }] : []),
+        { id: 'display', label: 'Display' },
+      ],
+    },
+    ...(membership.isAdmin
+      ? [
+          {
+            label: 'Community',
+            items: [
+              { id: 'billing', label: 'Payments & billing' },
+              { id: 'email-footer', label: 'Email footer' },
+              ...(showTenantAccess ? [{ id: 'tenant-access', label: 'Tenant access' }] : []),
+              { id: 'support-access', label: 'Support access' },
+            ],
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <div className="space-y-8">
+    <PageBody>
       <PageHeader title="Settings" />
-      <div>
-        <h2 className="mb-2 text-xl font-semibold">Personal Settings</h2>
-        <p className="mb-4 text-sm text-content-secondary">
-          Manage your account and personal preferences.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Link
-            href="/settings/account"
-            className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
+      <div className="flex flex-col gap-8 xl:flex-row xl:items-start xl:gap-10">
+        <div className="min-w-0 xl:sticky xl:top-6 xl:w-52 xl:shrink-0">
+          <SettingsNav groups={navGroups} />
+        </div>
+
+        <div className="min-w-0 flex-1 space-y-12 xl:max-w-3xl">
+          <SettingsSection id="account" title="Account" description="Your sign-in details.">
+            <SettingsCard>
+              <SettingsLinkRow
+                href="/settings/account"
+                title="Account details"
+                description="Update your name, phone number, and password."
+              />
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection
+            id="notifications"
+            title="Notifications"
+            description="Choose which emails you receive and when they should be delivered."
           >
-            <h3 className="font-medium text-content">Account</h3>
-            <p className="mt-1 text-sm text-content-tertiary">
-              Update your name, phone number, and password.
-            </p>
-          </Link>
+            <NotificationPreferencesForm
+              communityId={context.communityId}
+              reminderVisibility={{
+                meetings: canReadMeetings,
+                personalAssessments:
+                  canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
+                communityAssessments: canReadFinances && membership.isAdmin,
+              }}
+              showInsuranceAlerts={membership.isAdmin && features.hasInsuranceHub}
+            />
+            {features.hasSnowbirdDigest && (
+              <SnowbirdDigestCard communityId={context.communityId} canManage={membership.isAdmin} />
+            )}
+            {/* Electronic-notice consent is an owner's statutory choice (§718.112(2)(d), §720.303). */}
+            {membership.role === 'resident' && membership.isUnitOwner && (
+              <NoticeConsentCard communityId={context.communityId} />
+            )}
+          </SettingsSection>
+
+          {smsAvailable && (
+            <SettingsSection
+              id="sms-alerts"
+              title="Text alerts"
+              description="Verify your mobile number to receive emergency alerts by text. Message and data rates may apply. Reply STOP to any message to opt out."
+            >
+              <SmsConsentCard
+                communityId={context.communityId}
+                currentPhone={currentPhone}
+                phoneVerified={phoneVerified}
+              />
+            </SettingsSection>
+          )}
+
+          <SettingsSection
+            id="display"
+            title="Display"
+            description="Adjust how PropertyPro looks on this device."
+          >
+            <AccessibilitySettings />
+          </SettingsSection>
+
+          {membership.isAdmin && (
+            <>
+              <SettingsSection
+                id="billing"
+                title="Payments & billing"
+                description="Community-level configuration. Only managers see this."
+              >
+                <SettingsCard>
+                  <SettingsLinkRow
+                    href={`/settings/payments?communityId=${context.communityId}`}
+                    title="Payment configuration"
+                    description="Connect Stripe, manage payment processing fees, and configure payment settings."
+                  />
+                  <SettingsLinkRow
+                    href={`/settings/billing?communityId=${context.communityId}`}
+                    title="Billing & subscription"
+                    description="View your current plan, manage your subscription, and access invoices."
+                  />
+                </SettingsCard>
+              </SettingsSection>
+
+              <SettingsSection id="email-footer" title="Email footer">
+                <EmailFooterCard
+                  communityId={context.communityId}
+                  communityName={membership.communityName}
+                />
+              </SettingsSection>
+
+              {showTenantAccess && (
+                <SettingsSection
+                  id="tenant-access"
+                  title="Tenant access"
+                  description="Choose whether tenants can open inspection reports. Owners always can."
+                >
+                  <AccessSettingsCard communityId={context.communityId} />
+                </SettingsSection>
+              )}
+
+              <SettingsSection
+                id="support-access"
+                title="Support access"
+                description="Control whether PropertyPro support staff can access this community for troubleshooting."
+              >
+                <SupportAccessSettings communityId={context.communityId} />
+              </SettingsSection>
+            </>
+          )}
         </div>
       </div>
-      <div>
-        <h2 className="mb-2 text-xl font-semibold">Notification Preferences</h2>
-        <p className="mb-4 text-sm text-content-secondary">
-          Choose which emails you receive and when they should be delivered.
-        </p>
-        <NotificationPreferencesForm
-          communityId={context.communityId}
-          reminderVisibility={{
-            meetings: canReadMeetings,
-            personalAssessments:
-              canReadFinances && membership.role === 'resident' && membership.isUnitOwner,
-            communityAssessments: canReadFinances && membership.isAdmin,
-          }}
-          showInsuranceAlerts={
-            membership.isAdmin
-            && getEffectiveFeatures(
-              membership.communityType,
-              resolvePlanId(membership.subscriptionPlan),
-            ).hasInsuranceHub
-          }
-        />
-        {getEffectiveFeatures(membership.communityType, resolvePlanId(membership.subscriptionPlan))
-          .hasSnowbirdDigest && (
-          <div className="mt-4">
-            <SnowbirdDigestCard communityId={context.communityId} canManage={membership.isAdmin} />
-          </div>
-        )}
-        {/* Electronic-notice consent is an owner's statutory choice (§718.112(2)(d), §720.303). */}
-        {membership.role === 'resident' && membership.isUnitOwner && (
-          <div className="mt-4">
-            <NoticeConsentCard communityId={context.communityId} />
-          </div>
-        )}
-      </div>
-      {smsAvailable && (
-        <div>
-          <h2 className="mb-2 text-xl font-semibold">Text Message Alerts</h2>
-          <p className="mb-4 text-sm text-content-secondary">
-            Verify your mobile number to receive emergency alerts by text.
-            Message and data rates may apply. Reply STOP to any message to opt
-            out.
-          </p>
-          <SmsConsentCard
-            communityId={context.communityId}
-            currentPhone={currentPhone}
-            phoneVerified={phoneVerified}
-          />
-        </div>
-      )}
-      <AccessibilitySettings />
-      {membership.isAdmin && (
-        <div>
-          <h2 className="mb-2 text-xl font-semibold">Community Settings</h2>
-          <p className="mb-4 text-sm text-content-secondary">
-            Manage community-level configuration.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Link
-              href={`/settings/payments?communityId=${context.communityId}`}
-              className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
-            >
-              <h3 className="font-medium text-content">Payment Configuration</h3>
-              <p className="mt-1 text-sm text-content-tertiary">
-                Connect Stripe, manage payment processing fees, and configure payment settings.
-              </p>
-            </Link>
-            <Link
-              href={`/settings/billing?communityId=${context.communityId}`}
-              className="block rounded-lg border border-edge p-4 transition-colors hover:border-edge-strong hover:bg-surface-hover"
-            >
-              <h3 className="font-medium text-content">Billing &amp; Subscription</h3>
-              <p className="mt-1 text-sm text-content-tertiary">
-                View your current plan, manage your subscription, and access invoices.
-              </p>
-            </Link>
-          </div>
-        </div>
-      )}
-      {membership.isAdmin && (
-        <EmailFooterCard communityId={context.communityId} communityName={membership.communityName} />
-      )}
-      {membership.isAdmin && membership.communityType !== 'apartment' && (
-        <AccessSettingsCard communityId={context.communityId} />
-      )}
-      {membership.isAdmin && (
-        <div>
-          <h2 className="mb-2 text-xl font-semibold">Support Access</h2>
-          <p className="mb-4 text-sm text-content-secondary">
-            Control whether PropertyPro support staff can access this community for troubleshooting.
-          </p>
-          <SupportAccessSettings communityId={context.communityId} />
-        </div>
-      )}
-    </div>
+    </PageBody>
   );
 }

@@ -22,8 +22,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SettingsCard, SettingsCardFooter, SettingsCardHeader } from '@/components/settings/settings-layout';
 import { useNoticeConsent, useSetNoticeConsent } from '@/hooks/use-notice-consent';
 
 interface Props {
@@ -38,16 +38,17 @@ export function NoticeConsentCard({ communityId }: Props) {
   const { data, isLoading, isError, refetch } = useNoticeConsent(communityId);
   const setConsent = useSetNoticeConsent(communityId);
 
+  const consentedWithStaleEmail = !!data?.consented && data.email !== data.currentEmail;
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Official notices by email</CardTitle>
-        <CardDescription>{NOTICE_CONSENT_RECORD_ONLY_NOTE}</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
+    <SettingsCard>
+      <SettingsCardHeader title="Official notices by email" description={NOTICE_CONSENT_RECORD_ONLY_NOTE} />
+      {isLoading ? (
+        <div className="px-5 py-4">
           <Skeleton className="h-16 w-full" />
-        ) : isError || !data || !data.currentEmail ? (
+        </div>
+      ) : isError || !data || !data.currentEmail ? (
+        <div className="px-5 py-4">
           <AlertBanner
             status="danger"
             variant="subtle"
@@ -59,8 +60,10 @@ export function NoticeConsentCard({ communityId }: Props) {
               </Button>
             }
           />
-        ) : data.consented ? (
-          <>
+        </div>
+      ) : data.consented ? (
+        <>
+          <div className="space-y-2 px-5 py-4">
             <p className="flex items-start gap-2 text-sm text-content">
               <MailCheck className="mt-0.5 h-4 w-4 shrink-0 text-status-success" aria-hidden="true" />
               <span>
@@ -68,53 +71,59 @@ export function NoticeConsentCard({ communityId }: Props) {
                 by email at <span className="font-medium">{data.email}</span>.
               </span>
             </p>
-            {data.email !== data.currentEmail ? (
+            {consentedWithStaleEmail ? (
               <p className="text-sm text-content-secondary">
                 Your sign-in email has changed since then. Consent again to cover {data.currentEmail}.
               </p>
             ) : null}
-            <div className="flex flex-wrap gap-2">
-              {data.email !== data.currentEmail ? (
-                <Button size="sm" disabled={setConsent.isPending} onClick={() => setConsent.mutate(true)}>
-                  Consent for {data.currentEmail}
+          </div>
+          <SettingsCardFooter note={<SaveErrorNote show={setConsent.isError} />}>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" disabled={setConsent.isPending}>
+                  Withdraw consent
                 </Button>
-              ) : null}
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={setConsent.isPending}>
-                    Withdraw consent
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Withdraw consent?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Your association will have a record that you no longer consent to receive official notices
-                      by email. You can consent again at any time.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Keep consent</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => setConsent.mutate(false)}>Withdraw consent</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-content-secondary">{noticeConsentText(data.currentEmail)}</p>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Withdraw consent?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your association will have a record that you no longer consent to receive official notices
+                    by email. You can consent again at any time.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep consent</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => setConsent.mutate(false)}>Withdraw consent</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {consentedWithStaleEmail ? (
+              <Button size="sm" disabled={setConsent.isPending} onClick={() => setConsent.mutate(true)}>
+                Consent for {data.currentEmail}
+              </Button>
+            ) : null}
+          </SettingsCardFooter>
+        </>
+      ) : (
+        <>
+          <p className="px-5 py-4 text-sm text-content-secondary">{noticeConsentText(data.currentEmail)}</p>
+          <SettingsCardFooter note={<SaveErrorNote show={setConsent.isError} />}>
             <Button size="sm" disabled={setConsent.isPending} onClick={() => setConsent.mutate(true)}>
               Give consent
             </Button>
-          </>
-        )}
-        {setConsent.isError ? (
-          <p className="text-sm text-status-danger" role="alert">
-            We couldn&apos;t save that. Please try again.
-          </p>
-        ) : null}
-      </CardContent>
-    </Card>
+          </SettingsCardFooter>
+        </>
+      )}
+    </SettingsCard>
+  );
+}
+
+function SaveErrorNote({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="text-status-danger" role="alert">
+      We couldn&apos;t save that. Please try again.
+    </span>
   );
 }

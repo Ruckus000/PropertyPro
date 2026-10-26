@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { ShieldCheck, Eye } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { getSupportAccessEventLabel } from '@propertypro/shared';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
+import { SettingsCard, SettingsRow } from '@/components/settings/settings-layout';
 import {
   useSupportAccess,
   useToggleSupportAccess,
@@ -73,97 +75,77 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
 
   if (loading) {
     return (
-      <div
-        className="flex items-start justify-between gap-4 rounded-lg border border-edge bg-surface-card p-5"
-        data-testid="support-access-settings-loading"
-      >
-        {/* `min-w-0` + a fluid second bar, because the LOADED state below is
-            fluid and this must match it. `w-64` is 256px fixed; at 375px the
-            card's content box is 287px, so with `gap-4` and the 44px switch
-            placeholder there are 227px to work with and the row pushed the
-            (correctly) `shrink-0` switch 63px out of the card. Only visible
-            while `loading`, which is why a sweep catches it or misses it
-            depending on how fast the fetch resolves. */}
-        <div className="min-w-0 flex-1 space-y-2">
-          <Skeleton className="h-4 w-32 max-w-full" />
-          <Skeleton className="h-3 w-64 max-w-full" />
+      <SettingsCard data-testid="support-access-settings-loading">
+        {/* `min-w-0` + fluid bars: the row must stay inside the card at 375px,
+            where the old fixed `w-64` bar pushed the switch placeholder out.
+            Only visible while `loading`, which is why a sweep catches it or
+            misses it depending on how fast the fetch resolves. */}
+        <div className="flex items-start justify-between gap-4 px-5 py-4">
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-32 max-w-full" />
+            <Skeleton className="h-3 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-5 w-9 shrink-0 rounded-full" />
         </div>
-        <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
-      </div>
+      </SettingsCard>
     );
   }
 
   if (error && !data) {
     return (
-      <div className="rounded-lg border border-status-danger-border bg-status-danger-bg p-4 text-sm text-status-danger" role="alert">
+      <div className="rounded-md border border-status-danger-border bg-status-danger-bg px-5 py-4 text-sm text-status-danger" role="alert">
         {error}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 rounded-lg border border-edge bg-surface-card p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <ShieldCheck size={20} className="mt-0.5 shrink-0 text-content-disabled" aria-hidden="true" />
-          <div>
-            <h3 className="text-sm font-semibold text-content">Support Access</h3>
-            <p className="mt-0.5 text-sm text-content-tertiary">
-              Allow PropertyPro support staff to access this community in read-only mode for
-              troubleshooting. All access is logged.
-            </p>
+    <SettingsCard>
+      <SettingsRow
+        inlineControl
+        label="Allow support access"
+        description={
+          <>
+            Allow PropertyPro support staff to access this community in read-only mode for
+            troubleshooting. All access is logged.
             {data?.consent && (
-              <p className="mt-1 text-xs text-content-disabled">
+              <span className="mt-1 block text-content-tertiary">
                 Enabled since{' '}
                 {format(new Date(data.consent.granted_at), 'MMM d, yyyy')}
-              </p>
+              </span>
             )}
-          </div>
-        </div>
-
-        {/* Toggle switch */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={data?.consentActive ?? false}
-          onClick={handleToggle}
-          disabled={toggling || loading}
-          className={[
-            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive disabled:opacity-50',
-            data?.consentActive ? 'bg-interactive' : 'bg-surface-muted',
-          ].join(' ')}
-          aria-label="Toggle support access"
-        >
-          <span
-            aria-hidden="true"
-            className={[
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-card shadow ring-0 transition duration-200 ease-in-out',
-              data?.consentActive ? 'translate-x-5' : 'translate-x-0',
-            ].join(' ')}
+          </>
+        }
+        control={
+          <Switch
+            checked={data?.consentActive ?? false}
+            onCheckedChange={() => void handleToggle()}
+            disabled={toggling || loading}
+            aria-label="Toggle support access"
           />
-        </button>
-      </div>
-
-      {error && (
-        <div className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger" role="alert">
-          {error}
-        </div>
-      )}
+        }
+      >
+        {error && (
+          <div className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger" role="alert">
+            {error}
+          </div>
+        )}
+      </SettingsRow>
 
       {/* Recent activity */}
       {data && data.recentAccess.length > 0 && (
-        <div>
-          <h4 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
+        <div className="px-5 py-4">
+          <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-content-tertiary">
             <Eye size={12} aria-hidden="true" />
             Recent Support Activity
-          </h4>
+          </h3>
           <div className="divide-y divide-edge-subtle rounded-md border border-edge">
             {data.recentAccess.map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between px-3 py-2 text-xs">
-                <span className="text-content-secondary" title={entry.event}>
+              <div key={entry.id} className="flex items-center justify-between gap-4 px-3 py-2 text-sm">
+                <span className="min-w-0 text-content-secondary" title={entry.event}>
                   {getSupportAccessEventLabel(entry.event)}
                 </span>
-                <span className="text-content-disabled">
+                <span className="shrink-0 text-content-tertiary">
                   {format(new Date(entry.created_at), 'MMM d, HH:mm')}
                 </span>
               </div>
@@ -173,8 +155,8 @@ export function SupportAccessSettings({ communityId }: { communityId: number }) 
       )}
 
       {data && data.recentAccess.length === 0 && data.consentActive && (
-        <p className="text-xs text-content-disabled">No support activity yet.</p>
+        <p className="px-5 py-4 text-sm text-content-tertiary">No support activity yet.</p>
       )}
-    </div>
+    </SettingsCard>
   );
 }

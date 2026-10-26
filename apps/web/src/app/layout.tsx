@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { LARGE_TEXT_CLASS, LARGE_TEXT_INIT_SCRIPT } from "@propertypro/ui/tokens";
 import { Toaster } from 'sonner';
 import { NavigationProgress } from '@/components/navigation/navigation-progress';
 import "./globals.css";
@@ -64,11 +65,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      // Large text is the default; LARGE_TEXT_INIT_SCRIPT removes the class for
+      // a browser that chose "standard", which is why hydration is told to
+      // tolerate a className mismatch here.
+      className={`${inter.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
+      suppressHydrationWarning
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem('propertypro.large-text')==='true')document.documentElement.classList.add('large-text')}catch(e){}`,
+            __html: LARGE_TEXT_INIT_SCRIPT,
           }}
         />
       </head>

@@ -16,11 +16,11 @@
         },
         {
           "type": "scrollTo",
-          "selector": "text=Tenant access"
+          "selector": "role=heading[name=\"Tenant access\"]"
         }
       ],
       "clipTo": [
-        "text=Tenant access",
+        "role=heading[name=\"Tenant access\"]",
         "text=has decided to share them"
       ],
       "highlight": "role=switch[name=\"Tenants can view inspection reports\"]",
