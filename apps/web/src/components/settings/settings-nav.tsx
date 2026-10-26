@@ -43,9 +43,13 @@ export function SettingsNav({ groups }: { groups: SettingsNavGroup[] }) {
       if (pinnedRef.current) return;
       const top = scroller ? scroller.getBoundingClientRect().top : 0;
       const height = scroller ? scroller.clientHeight : window.innerHeight;
+      // A page too short to scroll is not "at the bottom": it would otherwise
+      // highlight the last section on first paint and never move.
       const atBottom = scroller
-        ? scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2
-        : window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        ? scroller.scrollHeight > scroller.clientHeight
+          && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2
+        : document.documentElement.scrollHeight > window.innerHeight
+          && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
       // Current = the last section whose top has passed a line a little below
       // the top of the scroll area. At the very bottom, the last section that
       // is on screen at all, since it may never reach that line.
@@ -75,6 +79,8 @@ export function SettingsNav({ groups }: { groups: SettingsNavGroup[] }) {
   }, [ids]);
 
   function handleClick(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+    // Leave Cmd/Ctrl/Shift/middle clicks to the browser (new tab, new window).
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = document.getElementById(id);
     if (!target) return;
     event.preventDefault();
