@@ -17,6 +17,14 @@ import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
+import { canvasThemeVars } from '@/lib/site-editor/canvas-theme';
+import { preventLinkNavigation } from '@/lib/site-editor/inert-links';
+import { SiteChrome } from '@/components/public-site/layouts/SiteChrome';
+import type {
+  SiteFooter,
+  SiteNav,
+  SitePageContext,
+} from '@/components/public-site/layouts/types';
 import { CanvasBlock } from './canvas/CanvasBlock';
 import { sortBlocks } from './canvas/Canvas';
 
@@ -52,6 +60,10 @@ export interface PreviewDialogProps {
   pageIsStaged: boolean;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
+  /** The page nav, footer and page identity — the same values the canvas gets. */
+  nav?: SiteNav;
+  footer?: SiteFooter;
+  page?: SitePageContext;
 }
 
 /**
@@ -103,6 +115,9 @@ export function PreviewDialog({
   pageName,
   pageIsStaged,
   now,
+  nav,
+  footer,
+  page,
 }: PreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -128,7 +143,14 @@ export function PreviewDialog({
         {/* Mounted only while open, so the blocks query fires on demand rather
             than for every PM who never opens the preview. */}
         {open ? (
-          <PreviewBody communityId={communityId} context={context} now={now} />
+          <PreviewBody
+            communityId={communityId}
+            context={context}
+            now={now}
+            nav={nav}
+            footer={footer}
+            page={page}
+          />
         ) : null}
       </DialogContent>
     </Dialog>
@@ -139,15 +161,20 @@ interface PreviewBodyProps {
   communityId: number;
   context: CanvasContext;
   now?: number;
+  nav?: SiteNav;
+  footer?: SiteFooter;
+  page?: SitePageContext;
 }
 
-function PreviewBody({ communityId, context, now }: PreviewBodyProps) {
+function PreviewBody({ communityId, context, now, nav, footer, page }: PreviewBodyProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   const selectedPageId = useSelectedSitePage();
 
   // One timestamp for the whole render pass, matching the canvas — two blocks
   // sharing a time window must not disagree about where the cutoff falls.
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
+  // The draft look as custom properties, the same way the canvas paints it.
+  const { cssVars, fontLinks } = useMemo(() => canvasThemeVars(context), [context]);
 
   // Narrowed to the selected page (D-C2), then filtered before the empty check
   // for the same reason the canvas does: the PM blocks endpoint returns
@@ -196,19 +223,44 @@ function PreviewBody({ communityId, context, now }: PreviewBodyProps) {
     );
   }
 
+  const hasHero = ordered.some((b) => b.blockType === 'hero');
+  const emptyHeroHeading = hasHero ? null : page && !page.isHome ? page.name : context.community.name;
+
   return (
-    <div className="site-frame overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card">
-      {ordered.map((block) => (
-        <CanvasBlock
-          key={block.id}
-          block={block}
-          community={context.community}
-          theme={context.theme}
-          layout={context.layout}
-          preview={context.preview}
-          now={renderedAt}
-        />
+    <div
+      style={cssVars}
+      data-testid="preview-frame"
+      // Read-only means the site's links must not navigate the editor either.
+      onClickCapture={preventLinkNavigation}
+      className="site-frame overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card"
+    >
+      {fontLinks.map((href) => (
+        <link key={href} rel="stylesheet" href={href} precedence="site-fonts" />
       ))}
+      {/* The same chrome the public page and the canvas render — the layout IS
+          the template, and a preview without it would show every template alike. */}
+      <SiteChrome
+        layout={context.layout}
+        community={context.community}
+        theme={context.theme}
+        nav={nav}
+        footer={footer}
+        fullHeight={false}
+        landmark={false}
+        emptyHeroHeading={emptyHeroHeading}
+      >
+        {ordered.map((block) => (
+          <CanvasBlock
+            key={block.id}
+            block={block}
+            community={context.community}
+            theme={context.theme}
+            layout={context.layout}
+            preview={context.preview}
+            now={renderedAt}
+          />
+        ))}
+      </SiteChrome>
     </div>
   );
 }

@@ -121,11 +121,17 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
         />
       )}
 
-      {/* Drawer */}
+      {/*
+        A floating panel, not a full-height drawer. It used to span the whole
+        viewport height whatever it held, so two contextual articles sat above a
+        screen of empty space. Now it is as tall as its content (header, search,
+        results, footer) up to the viewport, and its width follows the viewport.
+        Only the results list scrolls, so the search box and the footer stay put.
+      */}
       <aside
         className={cn(
-          'fixed right-0 top-0 z-[70] flex h-full w-full max-w-md flex-col border-l border-edge bg-surface-page shadow-xl transition-transform duration-200',
-          isOpen ? 'translate-x-0' : 'translate-x-full',
+          'fixed right-4 top-4 z-[70] flex max-h-[calc(100dvh-2rem)] w-[min(100vw-2rem,28rem)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-edge bg-surface-page shadow-e3 transition-[transform,opacity] duration-200',
+          isOpen ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0',
         )}
         aria-label="Help panel"
         aria-hidden={!isOpen}
@@ -157,8 +163,8 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        {/* Content — the only scroll container */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {/* Search error — explicit AlertBanner instead of silent stale-cache fallback */}
           {isSearching && searchError && (
             <AlertBanner

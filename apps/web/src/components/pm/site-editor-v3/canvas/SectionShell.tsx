@@ -87,13 +87,20 @@ export function SectionShell({ block, communityId, children }: SectionShellProps
         'group relative cursor-pointer outline-none ring-inset transition-shadow',
         'hover:ring-2 hover:ring-edge-strong',
         'focus-visible:ring-2 focus-visible:ring-focus',
-        selected && 'ring-2 ring-interactive hover:ring-interactive',
+        // `ring-focus` / `bg-interactive-active`, NOT `ring-interactive` /
+        // `bg-interactive`: this shell sits inside the canvas frame, where the
+        // `interactive` token IS the community's primary colour (the frame
+        // re-points it so the site's `bg-primary` follows the chosen template —
+        // see site-theme-css-vars.ts). The hero paints with that very colour,
+        // so a selection ring in it disappeared against a selected hero. The
+        // focus-ring and active tokens are constants the frame leaves alone.
+        selected && 'ring-2 ring-focus hover:ring-focus',
       )}
     >
       {selected && !isHidden ? (
         <span
           data-testid="selected-section-label"
-          className="pointer-events-none absolute left-2.5 top-2.5 z-10 rounded-[var(--radius-sm)] bg-interactive px-2.5 py-1 text-xs font-semibold text-content-inverse"
+          className="pointer-events-none absolute left-2.5 top-2.5 z-10 rounded-[var(--radius-sm)] bg-interactive-active px-2.5 py-1 text-xs font-semibold text-content-inverse"
         >
           {label}
         </span>

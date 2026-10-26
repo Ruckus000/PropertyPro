@@ -34,12 +34,8 @@
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import {
-  resolveTheme,
-  toCssVars,
-  toFontLinks,
-  customCssOverridesToCssVars,
-} from '@propertypro/theme';
+import { resolveTheme, toFontLinks } from '@propertypro/theme';
+import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
 import { effectiveLook, type CommunityType } from '@propertypro/shared';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -128,10 +124,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   // the live site. Consequence worth knowing rather than "fixing": for a community
   // that has overrides, switching preset in the wizard will NOT move the
   // overridden tokens here — because it will not move them in production either.
-  const cssVars = {
-    ...toCssVars(theme),
-    ...customCssOverridesToCssVars(rawBranding?.customCssOverrides),
-  };
+  const cssVars = siteThemeCssVars(theme, rawBranding?.customCssOverrides);
   const fontLinks = toFontLinks(theme);
 
   const layoutId = resolvePreviewLayoutId(rawBranding, asString(params['layout']), communityType);

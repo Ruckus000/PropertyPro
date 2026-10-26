@@ -2,7 +2,7 @@
  * The in-editor preview dialog — draft content, no editing chrome, Radix a11y.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PreviewDialog } from '@/components/pm/site-editor-v3/PreviewDialog';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
@@ -232,6 +232,71 @@ describe('PreviewDialog — open state', () => {
     renderDialog();
     await user.click(screen.getByRole('button', { name: 'Close' }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('PreviewDialog — site chrome (templates)', () => {
+  const withSections = () => {
+    blocksState.value = {
+      data: [block(10, 'text', 2, { heading: 'About us', body: 'A community.' })],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+  };
+
+  it("renders the context's layout chrome and theme around the sections, like the canvas", () => {
+    withSections();
+    render(
+      <PreviewDialog
+        open
+        onOpenChange={onOpenChange}
+        communityId={7}
+        context={{ ...CONTEXT, layout: 'sable', theme: { ...CONTEXT.theme, primaryColor: '#0E3338' } }}
+        pageIsStaged={false}
+        now={NOW}
+        nav={{
+          items: [
+            { id: HOME_PAGE_ID, name: 'Home', slug: '', isHome: true },
+            { id: ABOUT_PAGE_ID, name: 'About', slug: 'about', isHome: false },
+          ],
+          currentSlug: '',
+        }}
+      />,
+    );
+    const frame = screen.getByTestId('preview-frame');
+    expect(frame.getAttribute('style')).toMatch(/--theme-primary:\s*#0E3338/);
+    expect(frame.querySelector('[data-layout="sable"]')).not.toBeNull();
+    expect(frame.querySelector('header')).not.toBeNull();
+    expect(frame.querySelector('footer')).not.toBeNull();
+    expect(within(frame).getByRole('link', { name: 'About' })).toBeInTheDocument();
+  });
+
+  it("keeps the site's links from navigating the editor tab", () => {
+    withSections();
+    render(
+      <PreviewDialog
+        open
+        onOpenChange={onOpenChange}
+        communityId={7}
+        context={CONTEXT}
+        pageIsStaged={false}
+        now={NOW}
+        nav={{
+          items: [
+            { id: HOME_PAGE_ID, name: 'Home', slug: '', isHome: true },
+            { id: ABOUT_PAGE_ID, name: 'About', slug: 'about', isHome: false },
+          ],
+          currentSlug: '',
+        }}
+      />,
+    );
+    const frame = screen.getByTestId('preview-frame');
+    // `fireEvent` returns false when a handler called preventDefault.
+    expect(fireEvent.click(within(frame).getByRole('link', { name: 'About' }))).toBe(false);
+    // The header's; the empty-state hero carries a second one.
+    const [headerLogin] = within(frame).getAllByRole('link', { name: 'Resident Login' });
+    expect(fireEvent.click(headerLogin!)).toBe(false);
   });
 });
 

@@ -10,6 +10,14 @@ import { useContentBlocks, type SiteBlockSummary } from '@/hooks/use-content-blo
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
+import { canvasThemeVars } from '@/lib/site-editor/canvas-theme';
+import { preventLinkNavigation } from '@/lib/site-editor/inert-links';
+import { SiteChrome } from '@/components/public-site/layouts/SiteChrome';
+import type {
+  SiteFooter,
+  SiteNav,
+  SitePageContext,
+} from '@/components/public-site/layouts/types';
 import { CanvasBlock } from './CanvasBlock';
 import { SectionShell } from './SectionShell';
 import { SectionInserter } from './SectionInserter';
@@ -37,6 +45,22 @@ export interface CanvasProps {
    * tablet or phone layout — they respond to the frame, not the window.
    */
   device?: PreviewDevice;
+  /**
+   * The page nav the header shows — the editor's page list projected the way
+   * the public nav is (`navForEditor`). Absent means no page nav, which is also
+   * what a one-page site renders.
+   */
+  nav?: SiteNav;
+  /** The PM-authored footer fields, from the site settings. */
+  footer?: SiteFooter;
+  /** The page being edited; names the empty-state hero on a sub-page (D18). */
+  page?: SitePageContext;
+  /**
+   * Opens the Pages tool. When given, the header is an editable region of the
+   * canvas — the navigation bar — the way each block is a section. Nav links
+   * come from pages, so "edit the navigation" means "manage the pages".
+   */
+  onEditNavigation?: () => void;
 }
 
 const FRAME_WIDTH: Record<PreviewDevice, string> = {
@@ -75,8 +99,28 @@ const FRAME_WIDTH: Record<PreviewDevice, string> = {
  * community-wide list. It no longer is: migration 0048 dropped the 3-column
  * index, so `nextContentSlot` is page-scoped too and `AddPanel` narrows before
  * calling it.
+ *
+ * ## The chrome and the theme (website builder v4, templates)
+ *
+ * The blocks render inside `SiteChrome` — the layout's header, nav, footer and
+ * block-list treatment — and the frame sets the `--theme-*` custom properties
+ * the block views' classes read (`canvasThemeVars`). Both used to be missing:
+ * the canvas was a bare stack of blocks under the route layout's DEFAULT theme
+ * variables, so choosing a template in the Design panel (a layout plus a
+ * colour set) changed `context` and nothing visible. No block view reads the
+ * `layout` prop, and none reads `theme` for colour.
  */
-export function Canvas({ communityId, context, onAddSection, now, device = 'desktop' }: CanvasProps) {
+export function Canvas({
+  communityId,
+  context,
+  onAddSection,
+  now,
+  device = 'desktop',
+  nav,
+  footer,
+  page,
+  onEditNavigation,
+}: CanvasProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   const selectedPageId = useSelectedSitePage();
   // One timestamp for the whole render pass — otherwise two blocks with the
@@ -146,6 +190,10 @@ export function Canvas({ communityId, context, onAddSection, now, device = 'desk
     [ordered, communityId, context, renderedAt, onAddSection, insertAt],
   );
 
+  // Recomputed only when the Design panel changes the look (`context` is a
+  // new object then, and only then — see `applyDesignToCanvas`).
+  const { cssVars, fontLinks } = useMemo(() => canvasThemeVars(context), [context]);
+
   if (isPending) {
     return (
       <div className="mx-auto max-w-[1000px] space-y-4 px-5 py-4" aria-busy="true">
@@ -174,6 +222,32 @@ export function Canvas({ communityId, context, onAddSection, now, device = 'desk
     );
   }
 
+  // The layout's empty-state hero, exactly when the public page would show it:
+  // no hero on this page. Presence is the right test on the canvas — a hero
+  // whose content is mid-edit still occupies the slot and shows as a section.
+  const hasHero = ordered.some((b) => b.blockType === 'hero');
+  const emptyHeroHeading = hasHero ? null : page && !page.isHome ? page.name : context.community.name;
+
+  // The navigation bar as an editable region. An overlay rather than a wrapper
+  // around the header's own controls: the header is the public site's markup
+  // and its links must not navigate the editor away.
+  const navigationAdornment = onEditNavigation ? (
+    <button
+      type="button"
+      data-testid="canvas-navigation-bar"
+      onClick={onEditNavigation}
+      aria-label="Navigation bar: manage the pages it links to"
+      // `ring-focus`, not `ring-interactive`: inside the frame the `interactive`
+      // token IS the community's primary (see site-theme-css-vars.ts), which is
+      // the header's own colour — a ring in it would vanish against the header.
+      className="group absolute inset-0 z-10 flex items-start justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus hover:ring-2 hover:ring-inset hover:ring-focus"
+    >
+      <span className="pointer-events-none mt-2 rounded-full bg-surface-card px-2.5 py-0.5 text-xs font-semibold text-content opacity-0 shadow-e2 transition-opacity duration-quick group-hover:opacity-100 group-focus-visible:opacity-100">
+        Navigation · Manage pages
+      </span>
+    </button>
+  ) : undefined;
+
   return (
     <div
       data-device={device}
@@ -189,8 +263,16 @@ export function Canvas({ communityId, context, onAddSection, now, device = 'desk
           {duplicateError}
         </p>
       ) : null}
+      {/* The chosen fonts. React hoists a `precedence`d stylesheet link into
+          <head> and de-duplicates it, so a template switch loads its font once. */}
+      {fontLinks.map((href) => (
+        <link key={href} rel="stylesheet" href={href} precedence="site-fonts" />
+      ))}
       <div
         data-testid="canvas-frame"
+        style={cssVars}
+        // The site's own links must not navigate the editor — see inert-links.ts.
+        onClickCapture={preventLinkNavigation}
         className={cn(
           'site-frame overflow-hidden border bg-surface-card',
           device === 'phone'
@@ -198,35 +280,47 @@ export function Canvas({ communityId, context, onAddSection, now, device = 'desk
             : 'rounded-[var(--radius-md)] border-edge',
         )}
       >
-        {ordered.length === 0 ? (
-          <EmptyState
-            title="This page is empty"
-            description="Add a section to give visitors something to read."
-            action={
-              onAddSection && (
-                <Button type="button" onClick={() => insertAt(null)}>
-                  Add a section
-                </Button>
-              )
-            }
-          />
-        ) : (
-          <>
-            {sections}
-            {onAddSection ? (
-              <div className="px-6 py-5">
-                <button
-                  type="button"
-                  onClick={() => insertAt(null)}
-                  className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-interactive hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                >
-                  <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
-                  Add a section to the end of this page
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
+        <SiteChrome
+          layout={context.layout}
+          community={context.community}
+          theme={context.theme}
+          nav={nav}
+          footer={footer}
+          fullHeight={false}
+          landmark={false}
+          emptyHeroHeading={emptyHeroHeading}
+          headerAdornment={navigationAdornment}
+        >
+          {ordered.length === 0 ? (
+            <EmptyState
+              title="This page is empty"
+              description="Add a section to give visitors something to read."
+              action={
+                onAddSection && (
+                  <Button type="button" onClick={() => insertAt(null)}>
+                    Add a section
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <>
+              {sections}
+              {onAddSection ? (
+                <div className="px-6 py-5">
+                  <button
+                    type="button"
+                    onClick={() => insertAt(null)}
+                    className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-edge-focus hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                  >
+                    <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
+                    Add a section to the end of this page
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </SiteChrome>
       </div>
     </div>
   );

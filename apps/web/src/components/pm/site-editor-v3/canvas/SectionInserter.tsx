@@ -31,7 +31,10 @@ export function SectionInserter({ beforeLabel, onInsert }: SectionInserterProps)
         aria-label={`Add a section above ${beforeLabel}`}
         className={cn(
           'absolute left-1/2 top-0 flex h-9 -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border border-edge-strong bg-surface-card pl-2.5 pr-3.5 text-xs font-semibold text-content-secondary shadow-sm',
-          'opacity-60 transition-opacity duration-quick hover:border-interactive hover:text-content hover:opacity-100',
+          // `border-edge-focus`, not `border-interactive`: inside the canvas frame
+          // the `interactive` token is the community's primary colour (see
+          // site-theme-css-vars.ts), so editor chrome must not depend on it.
+          'opacity-60 transition-opacity duration-quick hover:border-edge-focus hover:text-content hover:opacity-100',
           'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
         )}
       >

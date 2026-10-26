@@ -92,6 +92,22 @@ beforeEach(() => {
 });
 
 describe('SectionShell — selection', () => {
+  it('paints the selection ring and chip with tokens the canvas frame does not re-point', () => {
+    // The frame sets `--interactive-primary` to the community's primary so the
+    // site's `bg-primary` follows the chosen template — which is the colour a
+    // hero is painted in. A selection ring in `ring-interactive` vanished
+    // against a selected hero; `ring-focus` and `bg-interactive-active` are
+    // constants the frame leaves alone.
+    editor.selectedId = 2;
+    renderShell();
+    const shell = screen.getByRole('group', { name: /text section/i });
+    expect(shell.className).toMatch(/\bring-focus\b/);
+    expect(shell.className).not.toMatch(/\bring-interactive\b/);
+    const chip = screen.getByTestId('selected-section-label');
+    expect(chip.className).toMatch(/\bbg-interactive-active\b/);
+    expect(chip.className).not.toMatch(/\bbg-interactive(?![\w-])/);
+  });
+
   it('selects on click', async () => {
     const user = userEvent.setup();
     renderShell();

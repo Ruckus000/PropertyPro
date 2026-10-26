@@ -10,6 +10,18 @@
  * While the media lightbox is open (nested dialog), outside-pointer and
  * escape dismissal of THIS dialog are suppressed: lightbox overlay clicks
  * land outside our DialogContent and would otherwise close everything.
+ *
+ * ## Sizing
+ *
+ * The box is sized by its content, not by a constant. It used to be a fixed
+ * 440px × 85vh panel, which left a short contextual list floating in empty
+ * space and gave a long article no more room on a wide screen. Now:
+ *
+ *  - width follows the viewport (`min(100vw - 2rem, 30rem)`, 36rem from `xl`),
+ *  - height is whatever the content needs, capped at 85dvh (90dvh for the
+ *    phone sheet) with a small floor so the search view never collapses,
+ *  - the body is the only scroll container, so header and Up-next stay put,
+ *  - on desktop the reader can drag the corner to resize it further.
  */
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -217,7 +229,7 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
       <Sheet open={isOpen} onOpenChange={(o) => !o && close()}>
         <SheetContent
           side="bottom"
-          className="flex h-[85vh] flex-col p-0"
+          className="flex max-h-[90dvh] flex-col gap-0 p-0"
           onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
           onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
         >
@@ -234,7 +246,10 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
   return (
     <Dialog open={isOpen} onOpenChange={(o) => !o && close()}>
       <DialogContent
-        className="flex h-[85vh] w-[440px] flex-col p-0 sm:max-w-[440px]"
+        resizable
+        minWidth={360}
+        minHeight={320}
+        className="flex max-h-[85dvh] min-h-[16rem] w-[min(100vw-2rem,30rem)] max-w-[min(100vw-2rem,30rem)] flex-col gap-0 p-0 sm:max-w-[min(100vw-2rem,30rem)] xl:w-[36rem] xl:max-w-[36rem]"
         onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
         onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
       >
