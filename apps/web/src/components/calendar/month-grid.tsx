@@ -111,8 +111,18 @@ export function MonthGrid({
             holds "Mon" with 3px to spare only if you do not count the trailing
             letter-space that `tracking-[0.16em]` adds after the last glyph. */}
         <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-tertiary)] sm:gap-2">
+          {/* One letter below `sm`, the usual narrow-calendar convention. At
+              375px a column is ~36px, and with large text (the default) "WED"
+              plus its letter-spacing is wider than that, so the three-letter
+              label spilled out of every header cell. The full name stays for
+              screen readers. */}
           {WEEKDAY_LABELS.map((label) => (
-            <div key={label}>{label}</div>
+            <div key={label}>
+              <span aria-hidden="true" className="sm:hidden">
+                {label.charAt(0)}
+              </span>
+              <span className="sr-only sm:not-sr-only">{label}</span>
+            </div>
           ))}
         </div>
 

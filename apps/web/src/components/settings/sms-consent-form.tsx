@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { CircleCheck } from 'lucide-react';
 import { formatPhoneDisplay } from '@/lib/utils/phone';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -200,12 +199,16 @@ export function SmsConsentForm({
           </p>
 
           <div className="flex items-start gap-3">
-            <Checkbox
+            {/* Native, not the Radix Checkbox: the same control the
+                notification form uses, and it keeps Radix's 13 KiB checkbox
+                chunk off a route that sits close to its JS budget. */}
+            <input
               id="sms-consent"
+              type="checkbox"
               checked={smsEnabled}
-              onCheckedChange={(next) => handleConsentToggle(next === true)}
+              onChange={(e) => handleConsentToggle(e.target.checked)}
               disabled={loading}
-              className="mt-1"
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-interactive disabled:cursor-not-allowed"
             />
             <Label htmlFor="sms-consent" className="cursor-pointer text-sm font-normal text-content">
               By enabling SMS notifications, I consent to receive emergency and community

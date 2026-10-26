@@ -1,7 +1,12 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+// From the file, not `@/lib/utils` (which re-exports the `@propertypro/ui`
+// barrel). This module is imported by the server page, and a server component
+// importing the barrel puts every 'use client' module it re-exports (Dialog,
+// Sheet, cmdk, …) into the route's client bundle: measured +40 KiB on
+// /settings, over its hard perf budget. See components/ui/skeleton.tsx.
+import { cn } from '@propertypro/ui/utils/cn';
 
 /**
  * Building blocks for the Settings page, in the Geist settings pattern:
