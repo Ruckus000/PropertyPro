@@ -231,7 +231,12 @@ export function AnnouncementComposer({
           </div>
         </div>
 
-        <div className="space-y-2">
+        {/* Both columns at `md:`. It is the third item, so it already sits on a
+            row of its own, but in the first track only: that track is whatever
+            the `auto` track (the pin box, sized to its description) leaves, and
+            with large text that was 10px less than the date fields need at
+            768px (responsive-overflow e2e). */}
+        <div className="space-y-2 md:col-span-2">
           <Label htmlFor="announcement-expires-at">Stop showing on (optional)</Label>
           <Input
             id="announcement-expires-at"
