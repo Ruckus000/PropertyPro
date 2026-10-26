@@ -21,7 +21,9 @@
  *  - height is whatever the content needs, capped at 85dvh (90dvh for the
  *    phone sheet) with a small floor so the search view never collapses,
  *  - the body is the only scroll container, so header and Up-next stay put,
- *  - on desktop the reader can drag the corner to resize it further.
+ *  - on desktop the reader can drag any edge, or the corner, to resize it.
+ *    `overflow-visible` lets the edge strips reach past the border, so they
+ *    stay off the body's scrollbar; the body is the scroller, not the box.
  */
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -249,7 +251,7 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
         resizable
         minWidth={360}
         minHeight={320}
-        className="flex max-h-[85dvh] min-h-[16rem] w-[min(100vw-2rem,30rem)] max-w-[min(100vw-2rem,30rem)] flex-col gap-0 p-0 sm:max-w-[min(100vw-2rem,30rem)] xl:w-[36rem] xl:max-w-[36rem]"
+        className="flex max-h-[85dvh] min-h-[16rem] w-[min(100vw-2rem,30rem)] overflow-visible max-w-[min(100vw-2rem,30rem)] flex-col gap-0 p-0 sm:max-w-[min(100vw-2rem,30rem)] xl:w-[36rem] xl:max-w-[36rem]"
         onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
         onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
       >

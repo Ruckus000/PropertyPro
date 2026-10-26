@@ -222,6 +222,15 @@ describe('<HelpDocsModal/>', () => {
       );
     });
 
+    it('on desktop, does not clip its edges, so the resize strips reach past the border', async () => {
+      // The strips straddle the border so they stay off the body's scrollbar.
+      // The Dialog's default `overflow-y-auto` would clip their outer half.
+      reportViewport('desktop');
+      const dialog = await openedDialog();
+      expect(dialog.className).toMatch(/\boverflow-visible\b/);
+      expect(dialog.className).not.toMatch(/\boverflow-y-auto\b/);
+    });
+
     it('on mobile, the bottom sheet is as tall as its content up to a viewport cap', async () => {
       reportViewport('phone');
       const dialog = await openedDialog();
