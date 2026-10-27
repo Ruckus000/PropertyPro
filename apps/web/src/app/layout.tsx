@@ -57,6 +57,17 @@ const fraunces = localFont({
 export const metadata: Metadata = {
   title: "PropertyPro Florida",
   description: "Compliance and community management platform for Florida condominium associations",
+  // Declared here, not as `app/icon.svg`: a file-based icon outranks config
+  // metadata and would override the favicon a community sets for its public
+  // website (lib/seo/community-metadata.ts), which replaces this `icons` key.
+  // Rendered by scripts/generate-web-icons.mjs.
+  icons: {
+    icon: [
+      { url: "/brand/icon.svg", type: "image/svg+xml" },
+      { url: "/brand/icon-32.png", sizes: "32x32", type: "image/png" },
+    ],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

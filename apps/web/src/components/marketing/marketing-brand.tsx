@@ -1,32 +1,14 @@
 import React from 'react';
+import { PropertyProMark } from '@/components/brand/property-pro-mark';
 
 /**
- * The PropertyPro wordmark. Shared by the nav and the footer so the two can
- * never drift; the footer recolours the accent bar via
+ * The PropertyPro house mark as the marketing nav and footer draw it. The paths
+ * live in `components/brand/property-pro-mark.tsx`, shared with the app chrome
+ * and the favicons; the footer recolours the accent bar via
  * `.mk-footer .mk-logo .mk-logomark-a` rather than taking a prop.
  */
 export function Logomark() {
-  return (
-    <svg className="mk-logomark" viewBox="0 0 32 32" aria-hidden="true">
-      <path
-        d="M4 11.8L16 4.4l12 7.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M6.6 14.9V25.6a2.6 2.6 0 0 0 2.6 2.6h13.6a2.6 2.6 0 0 0 2.6-2.6V14.9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.4"
-        strokeLinecap="round"
-      />
-      <rect x="10" y="18.5" width="12" height="2.3" rx="1.15" fill="currentColor" />
-      <rect x="10" y="23.1" width="6" height="2.3" rx="1.15" className="mk-logomark-a" />
-    </svg>
-  );
+  return <PropertyProMark className="mk-logomark" accentClassName="mk-logomark-a" />;
 }
 
 /** `07 —— PRICING` section marker. `index` is the ordinal or a statute cite. */
