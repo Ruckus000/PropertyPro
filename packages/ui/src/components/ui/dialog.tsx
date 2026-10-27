@@ -172,6 +172,7 @@ const DialogContent = React.forwardRef<
       startWidth: number
       startHeight: number
       axis: ResizeAxis
+      dir: 1 | -1
     } | null>(null)
 
     const applyResize = React.useCallback(
@@ -192,7 +193,9 @@ const DialogContent = React.forwardRef<
       [minWidth, minHeight]
     )
 
-    const handlePointerDown = (axis: ResizeAxis) => (event: React.PointerEvent) => {
+    // `dir` is -1 for the left and top edges: dragging them outward is a
+    // negative delta, and the box is centred, so it grows the same either way.
+    const handlePointerDown = (axis: ResizeAxis, dir: 1 | -1 = 1) => (event: React.PointerEvent) => {
       if (!enableResize) return
       const rect = contentRef.current?.getBoundingClientRect()
       if (!rect) return
@@ -203,6 +206,7 @@ const DialogContent = React.forwardRef<
         startWidth: rect.width,
         startHeight: rect.height,
         axis,
+        dir,
       }
       event.currentTarget.setPointerCapture(event.pointerId)
     }
@@ -211,8 +215,8 @@ const DialogContent = React.forwardRef<
       const drag = dragState.current
       if (!drag) return
       applyResize(
-        event.clientX - drag.startX,
-        event.clientY - drag.startY,
+        (event.clientX - drag.startX) * drag.dir,
+        (event.clientY - drag.startY) * drag.dir,
         drag.axis,
         drag.startWidth,
         drag.startHeight
@@ -266,6 +270,8 @@ const DialogContent = React.forwardRef<
 
     const commonHandleClasses =
       "absolute z-10 hidden touch-none select-none text-content-tertiary transition-colors hover:text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ring-offset-surface-card focus-visible:ring-offset-2 md:block"
+    // An inset ring: an outside one is clipped by a dialog that scrolls.
+    const edgeClasses = "focus-visible:ring-inset focus-visible:ring-offset-0"
 
     return (
       <DialogPortal>
@@ -287,7 +293,20 @@ const DialogContent = React.forwardRef<
 
           {enableResize && (
             <>
-              {/* Right edge — width */}
+              {/* Each edge is resizable along its whole length, and a strip never
+                  takes more than 4px inside the border, so it stays off a scrollbar
+                  running down that edge. A dialog that clips (the default
+                  `overflow-y-auto`) gets a 4px strip inside the border: a strip
+                  poking out would add scroll overflow. One that sets
+                  `overflow-visible` (the help modal) gets 8px straddling it.
+                  Right and bottom take keyboard focus; left and top are
+                  pointer-only, since the box is centred and the keyboard pair
+                  already reaches every size.
+                  ponytail: the strips are children of the dialog, so in a dialog
+                  whose own content scrolls they scroll with it and the right one
+                  sits inside its scrollbar. Trigger: a scrolling resizable dialog
+                  that cannot be resized from an edge; move its scroll to an inner
+                  body and set `overflow-visible`, as the help modal does. */}
               <div
                 role="separator"
                 aria-label="Resize dialog width"
@@ -297,12 +316,8 @@ const DialogContent = React.forwardRef<
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onKeyDown={handleKeyDown("x")}
-                className={cn(
-                  commonHandleClasses,
-                  "right-0 top-1/2 h-10 w-2 -translate-y-1/2 cursor-ew-resize rounded-full hover:bg-surface-hover"
-                )}
+                className={cn(commonHandleClasses, edgeClasses, "right-0 inset-y-0 w-1 cursor-ew-resize [.overflow-visible>&]:-right-1 [.overflow-visible>&]:w-2")}
               />
-              {/* Bottom edge — height */}
               <div
                 role="separator"
                 aria-label="Resize dialog height"
@@ -312,12 +327,25 @@ const DialogContent = React.forwardRef<
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onKeyDown={handleKeyDown("y")}
-                className={cn(
-                  commonHandleClasses,
-                  "bottom-0 left-1/2 h-2 w-10 -translate-x-1/2 cursor-ns-resize rounded-full hover:bg-surface-hover"
-                )}
+                className={cn(commonHandleClasses, edgeClasses, "bottom-0 inset-x-0 h-1 cursor-ns-resize [.overflow-visible>&]:-bottom-1 [.overflow-visible>&]:h-2")}
               />
-              {/* Bottom-right corner — both */}
+              <div
+                aria-hidden="true"
+                data-resize-edge="left"
+                onPointerDown={handlePointerDown("x", -1)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                className={cn(commonHandleClasses, edgeClasses, "left-0 inset-y-0 w-1 cursor-ew-resize [.overflow-visible>&]:-left-1 [.overflow-visible>&]:w-2")}
+              />
+              <div
+                aria-hidden="true"
+                data-resize-edge="top"
+                onPointerDown={handlePointerDown("y", -1)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                className={cn(commonHandleClasses, edgeClasses, "top-0 inset-x-0 h-1 cursor-ns-resize [.overflow-visible>&]:-top-1 [.overflow-visible>&]:h-2")}
+              />
+              {/* Bottom-right corner — both. Last, so it wins where the edges meet. */}
               <div
                 role="separator"
                 aria-label="Resize dialog"
