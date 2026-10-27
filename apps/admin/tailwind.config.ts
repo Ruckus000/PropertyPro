@@ -246,14 +246,18 @@ const config: Config = {
         mono: ['var(--font-mono)', 'JetBrains Mono', 'SF Mono', 'ui-monospace', 'monospace'],
         display: ['var(--font-display)', 'Fraunces', 'Georgia', 'serif'],
       },
+      // Read through the token vars, exactly as apps/web does, so the
+      // `.large-text` class on <html> (the default — see
+      // packages/ui/src/tokens/text-size.ts) scales every size. Fixed rem
+      // values here would make large text a no-op in the console.
       fontSize: {
-        xs: '0.6875rem',
-        sm: '0.8125rem',
-        base: '1rem',
-        lg: '1.125rem',
-        xl: '1.25rem',
-        '2xl': '1.5rem',
-        '3xl': '1.875rem',
+        xs: 'var(--font-size-xs, 0.6875rem)',
+        sm: 'var(--font-size-sm, 0.8125rem)',
+        base: 'var(--font-size-base, 1rem)',
+        lg: 'var(--font-size-lg, 1.125rem)',
+        xl: 'var(--font-size-xl, 1.25rem)',
+        '2xl': 'var(--font-size-2xl, 1.5rem)',
+        '3xl': 'var(--font-size-3xl, 1.875rem)',
       },
       spacing: {
         '1': '4px',

@@ -3,10 +3,10 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { SettingsCard, SettingsCardFooter } from '@/components/settings/settings-layout';
 import { useLiveBranding, useSaveLiveBranding } from '@/hooks/use-live-branding';
 
 /** Mirrors `customEmailFooter`'s `.max(500)` in the branding route contract. */
@@ -45,47 +45,51 @@ export function EmailFooterCard({ communityId, communityName }: Props) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Email footer</CardTitle>
-        <CardDescription>
-          Shown at the bottom of every email from {communityName}, such as office hours or a phone
-          number.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isError ? (
-          <p className="text-sm text-status-danger">Couldn’t load the email footer. Refresh to try again.</p>
-        ) : !data ? (
+    <SettingsCard>
+      {isError ? (
+        <p className="px-5 py-4 text-sm text-status-danger">Couldn’t load the email footer. Refresh to try again.</p>
+      ) : !data ? (
+        <div className="px-5 py-4">
           <Skeleton className="h-24 w-full" />
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div className="space-y-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <Label htmlFor="email-footer">Footer text</Label>
-                <span className="text-xs text-content-tertiary">
-                  {value.length}/{MAX_LENGTH}
-                </span>
-              </div>
-              <Textarea
-                id="email-footer"
-                value={value}
-                maxLength={MAX_LENGTH}
-                rows={3}
-                readOnly={save.isPending}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Office hours: Monday to Friday, 9am to 5pm."
-              />
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div className="space-y-2 px-5 py-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <Label htmlFor="email-footer">Footer text</Label>
+              <span className="text-sm text-content-tertiary">
+                {value.length}/{MAX_LENGTH}
+              </span>
             </div>
-            {save.isError && (
-              <p className="text-sm text-status-danger">That change didn’t save. Try again.</p>
-            )}
+            <p className="text-sm text-content-secondary">
+              Shown at the bottom of every email from {communityName}, such as office hours or a
+              phone number.
+            </p>
+            <Textarea
+              id="email-footer"
+              value={value}
+              maxLength={MAX_LENGTH}
+              rows={3}
+              readOnly={save.isPending}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="Office hours: Monday to Friday, 9am to 5pm."
+            />
+          </div>
+          <SettingsCardFooter
+            note={
+              save.isError ? (
+                <span className="text-status-danger">That change didn’t save. Try again.</span>
+              ) : (
+                'Leave it empty to remove the footer.'
+              )
+            }
+          >
             <Button type="submit" size="sm" disabled={!changed || save.isPending}>
               {save.isPending ? 'Saving…' : 'Save footer'}
             </Button>
-          </form>
-        )}
-      </CardContent>
-    </Card>
+          </SettingsCardFooter>
+        </form>
+      )}
+    </SettingsCard>
   );
 }

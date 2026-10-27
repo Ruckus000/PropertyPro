@@ -16,14 +16,14 @@
         },
         {
           "type": "scrollTo",
-          "selector": "role=heading[name=\"Notification Preferences\"s]"
+          "selector": "role=heading[name=\"Notifications\"s]"
         }
       ],
       "clipTo": [
-        "role=heading[name=\"Notification Preferences\"s]",
+        "role=heading[name=\"Notifications\"s]",
         "role=button[name=\"Save Preferences\"s]"
       ],
-      "highlight": "role=heading[name=\"Notification Preferences\"s]",
+      "highlight": "role=heading[name=\"Notifications\"s]",
       "step": 1
     },
     {
@@ -39,11 +39,11 @@
         },
         {
           "type": "scrollTo",
-          "selector": "role=heading[name=\"Notification Preferences\"s]"
+          "selector": "role=heading[name=\"Notifications\"s]"
         }
       ],
       "clipTo": [
-        "role=heading[name=\"Notification Preferences\"s]",
+        "role=heading[name=\"Notifications\"s]",
         "role=checkbox[name=\"Announcements\"s]"
       ],
       "highlight": "role=combobox[name=\"Email frequency\"]",

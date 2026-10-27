@@ -12,6 +12,7 @@ import {
 import { Badge, Button, Input, PageBody } from '@propertypro/ui';
 import { AdminPageHeader } from '@/components/shell/AdminPageHeader';
 import { AlertPrefsSection } from '@/components/settings/AlertPrefsSection';
+import { DisplaySection } from '@/components/settings/DisplaySection';
 import { InstallAppSection } from '@/components/settings/InstallAppSection';
 import {
   IntegrationsSection,
@@ -261,6 +262,8 @@ export function PlatformSettings({
           is worth telling this operator, this one chooses whether THIS browser
           is one of the places they are told. */}
       <PushToggle />
+
+      <DisplaySection />
 
       <InstallAppSection />
 

@@ -31,3 +31,12 @@ export type { ComponentTokens } from "./components";
 // Compliance tokens
 export { complianceEscalation } from "./compliance";
 export type { EscalationTier } from "./compliance";
+
+// Text size (large text is the default)
+export {
+  LARGE_TEXT_CLASS,
+  LARGE_TEXT_INIT_SCRIPT,
+  TEXT_SIZE_STORAGE_KEY,
+  LEGACY_LARGE_TEXT_STORAGE_KEY,
+} from "./text-size";
+export type { TextSize } from "./text-size";

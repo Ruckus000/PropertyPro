@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -12,6 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SettingsCard, SettingsCardHeader, SettingsRow } from '@/components/settings/settings-layout';
 import {
   useSetSnowbirdCadence,
   useSetSnowbirdCommunityEnabled,
@@ -36,44 +36,48 @@ export function SnowbirdDigestCard({ communityId, canManage }: Props) {
   const setEnabled = useSetSnowbirdCommunityEnabled(communityId);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Community digest</CardTitle>
-        <CardDescription>
-          An occasional email recap of board decisions, new documents, and upcoming deadlines — handy
-          if you&apos;re away from the community.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        {isLoading || !data ? (
-          <Skeleton className="h-10 w-full" />
-        ) : (
+    <SettingsCard>
+      <SettingsCardHeader
+        title="Community digest"
+        description={
           <>
-            {canManage && (
-              <div className="flex items-center justify-between gap-4">
-                <div className="space-y-0.5">
-                  <Label htmlFor="snowbird-enabled">Send the digest to owners</Label>
-                  <p className="text-sm text-content-tertiary">
-                    When on, owners receive it weekly by default and can change their own cadence.
-                  </p>
-                </div>
+            An occasional email recap of board decisions, new documents, and upcoming deadlines —
+            handy if you&apos;re away from the community.
+          </>
+        }
+      />
+      {isLoading || !data ? (
+        <div className="px-5 py-4">
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : (
+        <>
+          {canManage && (
+            <SettingsRow
+              inlineControl
+              label={<Label htmlFor="snowbird-enabled" className="text-base">Send the digest to owners</Label>}
+              description="When on, owners receive it weekly by default and can change their own cadence."
+              control={
                 <Switch
                   id="snowbird-enabled"
                   checked={data.communityEnabled}
                   disabled={setEnabled.isPending}
                   onCheckedChange={(v) => setEnabled.mutate(v)}
                 />
-              </div>
-            )}
+              }
+            />
+          )}
 
-            {data.communityEnabled ? (
-              <div className="space-y-2">
-                <Label htmlFor="snowbird-cadence">How often you receive it</Label>
+          {data.communityEnabled ? (
+            <SettingsRow
+              label={<Label htmlFor="snowbird-cadence" className="text-base">How often you receive it</Label>}
+              description="Saved as soon as you choose."
+              control={
                 <Select
                   value={data.cadence}
                   onValueChange={(v) => setCadence.mutate(v as SnowbirdCadence)}
                 >
-                  <SelectTrigger id="snowbird-cadence" className="max-w-xs">
+                  <SelectTrigger id="snowbird-cadence" className="w-full sm:w-56">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -82,17 +86,17 @@ export function SnowbirdDigestCard({ communityId, canManage }: Props) {
                     <SelectItem value="off">Off</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            ) : (
-              <p className="text-sm text-content-tertiary">
-                {canManage
-                  ? 'Turn the digest on above to let owners receive it.'
-                  : "The community digest isn't turned on yet."}
-              </p>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+              }
+            />
+          ) : (
+            <p className="px-5 py-4 text-sm text-content-secondary">
+              {canManage
+                ? 'Turn the digest on above to let owners receive it.'
+                : "The community digest isn't turned on yet."}
+            </p>
+          )}
+        </>
+      )}
+    </SettingsCard>
   );
 }

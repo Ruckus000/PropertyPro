@@ -95,7 +95,7 @@ describe('SupportAccessSettings', () => {
     setToggle();
     render(<SupportAccessSettings communityId={42} />);
 
-    expect(screen.getByText('Support Access')).toBeDefined();
+    expect(screen.getByText('Allow support access')).toBeDefined();
     expect(screen.getByText(/Enabled since/)).toBeDefined();
     expect(screen.getByText('Recent Support Activity')).toBeDefined();
     // Events render as labels (raw name kept in the title attribute).

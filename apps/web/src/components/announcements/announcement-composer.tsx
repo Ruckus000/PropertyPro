@@ -160,7 +160,7 @@ export function AnnouncementComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-6 rounded-xl border border-edge bg-surface-card p-6 shadow-sm"
+      className="space-y-6 rounded-xl border border-edge bg-surface-card p-4 shadow-sm sm:p-6"
     >
       {error ? (
         <AlertBanner
@@ -231,7 +231,12 @@ export function AnnouncementComposer({
           </div>
         </div>
 
-        <div className="space-y-2">
+        {/* Both columns at `md:`. It is the third item, so it already sits on a
+            row of its own, but in the first track only: that track is whatever
+            the `auto` track (the pin box, sized to its description) leaves, and
+            with large text that was 10px less than the date fields need at
+            768px (responsive-overflow e2e). */}
+        <div className="space-y-2 md:col-span-2">
           <Label htmlFor="announcement-expires-at">Stop showing on (optional)</Label>
           <Input
             id="announcement-expires-at"
@@ -240,6 +245,14 @@ export function AnnouncementComposer({
             onChange={(event) => setExpiresAtInput(event.target.value)}
             disabled={isSubmitting}
             aria-describedby="announcement-expires-at-hint"
+            // The browser's "mm/dd/yyyy, --:-- --" fields have a fixed text
+            // width. With large text (the default) the Input's phone-size
+            // `text-base` is 20.25px, and the fields needed 17px more than a
+            // 375px phone leaves (responsive-overflow e2e). One step down only
+            // while `.large-text` is on: 18px, still above the 16px at which
+            // iOS Safari zooms a focused field, and ~25px narrower; the form's
+            // `p-4` below `sm` gives 16px more. Standard text already fit.
+            className="[.large-text_&]:text-sm"
           />
           <p id="announcement-expires-at-hint" className="text-sm text-content-secondary">
             {expiryIsInThePast

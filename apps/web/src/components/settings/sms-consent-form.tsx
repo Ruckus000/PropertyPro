@@ -1,7 +1,16 @@
 "use client";
 import React, { useState, type FormEvent } from 'react';
 import Link from 'next/link';
+import { CircleCheck } from 'lucide-react';
 import { formatPhoneDisplay } from '@/lib/utils/phone';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  SettingsCard,
+  SettingsCardFooter,
+  SettingsCardHeader,
+} from '@/components/settings/settings-layout';
 import {
   useSendPhoneVerification,
   useConfirmPhoneVerification,
@@ -94,149 +103,141 @@ export function SmsConsentForm({
   }
 
   return (
-    <div className="space-y-4 rounded-md border border-edge bg-surface-card p-4">
-      <h3 className="text-sm font-semibold text-content">SMS Emergency Notifications</h3>
+    <SettingsCard>
+      <SettingsCardHeader
+        title="Emergency text alerts"
+        description="Life-safety alerts by text message, such as hurricanes, evacuations and gas leaks."
+      />
 
       {error && (
-        <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
+        <div role="alert" className="bg-status-danger-bg px-5 py-3 text-sm text-status-danger">
           {error}
         </div>
       )}
 
       {/* Step 1: Phone not verified yet */}
       {step === 'idle' && (
-        <div className="space-y-3">
-          <p className="text-sm text-content-secondary">
+        <>
+          <p className="px-5 py-4 text-sm text-content-secondary">
             Verify your phone number to receive emergency SMS alerts. This is required before
             you can opt in to SMS notifications.
           </p>
-          <button
-            type="button"
-            onClick={() => setStep('enter_phone')}
-            className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover"
-          >
-            Verify Phone Number
-          </button>
-        </div>
+          <SettingsCardFooter>
+            <Button type="button" size="sm" onClick={() => setStep('enter_phone')}>
+              Verify Phone Number
+            </Button>
+          </SettingsCardFooter>
+        </>
       )}
 
       {/* Step 2: Enter phone number */}
       {step === 'enter_phone' && (
-        <form onSubmit={handleSendOtp} className="space-y-3">
-          <label className="block text-sm text-content-secondary" htmlFor="phone-input">
-            Phone number (US)
-          </label>
-          <input
-            id="phone-input"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="(305) 555-1234"
-            className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={loading || !phone.trim()}
-              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
-            >
-              {loading ? 'Sending...' : 'Send Verification Code'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setStep('idle')}
-              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-hover"
-            >
-              Cancel
-            </button>
+        <form onSubmit={handleSendOtp}>
+          <div className="space-y-2 px-5 py-4">
+            <Label htmlFor="phone-input">Phone number (US)</Label>
+            <Input
+              id="phone-input"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="(305) 555-1234"
+              className="sm:max-w-xs"
+            />
           </div>
+          <SettingsCardFooter note="We'll text you a code to confirm the number.">
+            <Button type="button" variant="outline" size="sm" onClick={() => setStep('idle')}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={loading || !phone.trim()}>
+              {loading ? 'Sending...' : 'Send Verification Code'}
+            </Button>
+          </SettingsCardFooter>
         </form>
       )}
 
       {/* Step 3: Enter OTP */}
       {step === 'verify_otp' && (
-        <form onSubmit={handleVerifyOtp} className="space-y-3">
-          <p className="text-sm text-content-secondary">
-            We sent a verification code to <strong>{formatPhoneDisplay(phone)}</strong>.
-          </p>
-          <label className="block text-sm text-content-secondary" htmlFor="otp-input">
-            Verification code
-          </label>
-          <input
-            id="otp-input"
-            type="text"
-            inputMode="numeric"
-            value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value)}
-            placeholder="123456"
-            maxLength={10}
-            className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={loading || !otpCode.trim()}
-              className="rounded bg-interactive px-4 py-2 text-sm text-content-inverse hover:bg-interactive-hover disabled:opacity-50"
-            >
-              {loading ? 'Verifying...' : 'Verify'}
-            </button>
-            <button
+        <form onSubmit={handleVerifyOtp}>
+          <div className="space-y-2 px-5 py-4">
+            <p className="text-sm text-content-secondary">
+              We sent a verification code to <strong>{formatPhoneDisplay(phone)}</strong>.
+            </p>
+            <Label htmlFor="otp-input">Verification code</Label>
+            <Input
+              id="otp-input"
+              type="text"
+              inputMode="numeric"
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value)}
+              placeholder="123456"
+              maxLength={10}
+              className="sm:max-w-xs"
+            />
+          </div>
+          <SettingsCardFooter>
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => { setStep('enter_phone'); setOtpCode(''); }}
-              className="rounded border border-edge-strong px-4 py-2 text-sm text-content-secondary hover:bg-surface-hover"
             >
               Resend Code
-            </button>
-          </div>
+            </Button>
+            <Button type="submit" size="sm" disabled={loading || !otpCode.trim()}>
+              {loading ? 'Verifying...' : 'Verify'}
+            </Button>
+          </SettingsCardFooter>
         </form>
       )}
 
       {/* Step 4: Consent toggle */}
       {step === 'consent' && verified && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm text-status-success">
-            <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-            </svg>
+        <div className="space-y-4 px-5 py-4">
+          <p className="flex items-center gap-2 text-sm text-status-success">
+            <CircleCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
             Phone verified: {formatPhoneDisplay(phone)}
-          </div>
+          </p>
 
-          <label className="flex items-start gap-3">
+          <div className="flex items-start gap-3">
+            {/* Native, not the Radix Checkbox: the same control the
+                notification form uses, and it keeps Radix's 13 KiB checkbox
+                chunk off a route that sits close to its JS budget. */}
             <input
+              id="sms-consent"
               type="checkbox"
               checked={smsEnabled}
               onChange={(e) => handleConsentToggle(e.target.checked)}
               disabled={loading}
-              className="h-4 w-4 shrink-0 mt-1"
+              className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-interactive disabled:cursor-not-allowed"
             />
-            <span className="text-sm text-content-secondary">
+            <Label htmlFor="sms-consent" className="cursor-pointer text-sm font-normal text-content">
               By enabling SMS notifications, I consent to receive emergency and community
               alerts via text message from this community.
-            </span>
-          </label>
+            </Label>
+          </div>
 
-          <p className="text-xs text-content-tertiary">
+          <p className="text-sm text-content-tertiary">
             Message and data rates may apply. You can opt out at any time by replying STOP
             to any message or by disabling SMS in your settings. Emergency notifications
             are sent only for life-safety events (hurricanes, evacuations, gas leaks, etc.).
             See our{' '}
-            <Link href="/legal/terms" className="text-content-link underline hover:text-content-link">
+            <Link href="/legal/terms" className="text-content-link underline hover:text-content-link-hover">
               Terms of Service
             </Link>{' '}
             and{' '}
-            <Link href="/legal/privacy" className="text-content-link underline hover:text-content-link">
+            <Link href="/legal/privacy" className="text-content-link underline hover:text-content-link-hover">
               Privacy Policy
             </Link>
             .
           </p>
 
           {smsConsentGivenAt && smsEnabled && (
-            <p className="text-xs text-content-disabled">
+            <p className="text-sm text-content-tertiary">
               Consent given: {new Date(smsConsentGivenAt).toLocaleDateString()}
             </p>
           )}
         </div>
       )}
-    </div>
+    </SettingsCard>
   );
 }

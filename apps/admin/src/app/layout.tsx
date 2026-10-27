@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
+import { LARGE_TEXT_CLASS, LARGE_TEXT_INIT_SCRIPT } from '@propertypro/ui/tokens';
 import { NavigationProgress } from '@/components/NavigationProgress';
 import { ServiceWorkerRegistration } from '@/components/shell/ServiceWorkerRegistration';
 import '../styles/globals.css';
@@ -66,7 +67,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
+    <html
+      lang="en"
+      // Large text is the default, as in apps/web; LARGE_TEXT_INIT_SCRIPT
+      // removes the class for a browser that chose "standard", so hydration
+      // must tolerate a className mismatch on this one element.
+      className={`${inter.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: LARGE_TEXT_INIT_SCRIPT }} />
+      </head>
       <body className="bg-surface-page text-content">
         <NavigationProgress />
         <ServiceWorkerRegistration />

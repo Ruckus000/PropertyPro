@@ -4,6 +4,13 @@ import {
   type CalendarReminderPreset,
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  SettingsCard,
+  SettingsCardFooter,
+  SettingsRow,
+} from '@/components/settings/settings-layout';
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
@@ -72,187 +79,216 @@ export function NotificationPreferencesForm({
     });
   }
 
-  if (loading) return <div>Loading preferences...</div>;
+  if (loading) {
+    return (
+      <SettingsCard>
+        <p className="px-5 py-4 text-sm text-content-secondary">Loading preferences...</p>
+      </SettingsCard>
+    );
+  }
+
+  const showReminders =
+    reminderVisibility.meetings
+    || reminderVisibility.personalAssessments
+    || reminderVisibility.communityAssessments;
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="rounded border border-status-success-border bg-status-success-bg p-2 text-sm text-status-success">
-          Preferences saved.
-        </div>
-      )}
+    <form onSubmit={handleSubmit}>
+      <SettingsCard>
+        {error && (
+          <div
+            role="alert"
+            className="bg-status-danger-bg px-5 py-3 text-sm text-status-danger"
+          >
+            {error}
+          </div>
+        )}
+        {success && (
+          <div
+            role="status"
+            className="bg-status-success-bg px-5 py-3 text-sm text-status-success"
+          >
+            Preferences saved.
+          </div>
+        )}
 
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-content-secondary" htmlFor="emailFrequency">
-          Email frequency
-        </label>
-        <select
-          id="emailFrequency"
-          value={values.emailFrequency}
-          onChange={(e) =>
-            setValues((v) => ({
-              ...v,
-              emailFrequency: e.target.value as EmailFrequency,
-            }))
-          }
-          className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
-        >
-          <option value="immediate">Immediate</option>
-          <option value="daily_digest">Daily digest</option>
-          <option value="weekly_digest">Weekly digest</option>
-          <option value="never">Never</option>
-        </select>
-      </div>
-
-      {(reminderVisibility.meetings
-        || reminderVisibility.personalAssessments
-        || reminderVisibility.communityAssessments) ? (
-          <div className="space-y-3 rounded border border-edge-strong p-4">
-            <div className="space-y-1">
-              <label
-                className="block text-sm font-medium text-content-secondary"
-                htmlFor="calendarReminderPreset"
-              >
-                Calendar event reminder timing
-              </label>
-              <p className="text-xs text-content-secondary">
-                Meeting reminders send relative to the meeting start time. Assessment reminders
-                send at 9:00 AM in your community&apos;s timezone on the selected day.
-              </p>
-            </div>
+        <SettingsRow
+          label={<Label htmlFor="emailFrequency" className="text-base">Email frequency</Label>}
+          description="Get each email as it happens, or bundled into a digest."
+          control={
             <select
-              id="calendarReminderPreset"
-              value={values.calendarReminderPreset}
+              id="emailFrequency"
+              value={values.emailFrequency}
               onChange={(e) =>
                 setValues((v) => ({
                   ...v,
-                  calendarReminderPreset: e.target.value as CalendarReminderPreset,
+                  emailFrequency: e.target.value as EmailFrequency,
                 }))
               }
-              className="w-full rounded border border-edge-strong px-3 py-2 text-sm"
+              className={SELECT_CLASS}
             >
-              <option value="morning_of">Morning of</option>
-              <option value="1_day_before">1 day before</option>
-              <option value="3_days_before">3 days before</option>
-              <option value="7_days_before">7 days before</option>
-              <option value="off">Off</option>
+              <option value="immediate">Immediate</option>
+              <option value="daily_digest">Daily digest</option>
+              <option value="weekly_digest">Weekly digest</option>
+              <option value="never">Never</option>
             </select>
+          }
+        />
 
-            <div className="space-y-2">
+        <SettingsRow
+          label="Email me about"
+          description="Choose the kinds of email you receive from this community."
+        >
+          <div className="space-y-1">
+            <PreferenceCheckbox
+              id="pref-email-announcements"
+              label="Announcements"
+              checked={values.emailAnnouncements}
+              onChange={(checked) => setValues((v) => ({ ...v, emailAnnouncements: checked }))}
+            />
+            <PreferenceCheckbox
+              id="pref-email-meetings"
+              label="Meeting notices"
+              checked={values.emailMeetings}
+              onChange={(checked) => setValues((v) => ({ ...v, emailMeetings: checked }))}
+            />
+            {showInsuranceAlerts ? (
+              <PreferenceCheckbox
+                id="pref-email-insurance"
+                label="Insurance alerts"
+                description="Reminders when the master policy or wind-mitigation report is nearing expiry."
+                checked={values.emailInsuranceAlerts}
+                onChange={(checked) => setValues((v) => ({ ...v, emailInsuranceAlerts: checked }))}
+              />
+            ) : null}
+          </div>
+        </SettingsRow>
+
+        <SettingsRow
+          label="In the app"
+          description="Show a notification in PropertyPro as well as by email."
+        >
+          <PreferenceCheckbox
+            id="pref-in-app"
+            label="In-app notifications"
+            checked={values.inAppEnabled}
+            onChange={(checked) => setValues((v) => ({ ...v, inAppEnabled: checked }))}
+          />
+        </SettingsRow>
+
+        {showReminders ? (
+          <SettingsRow
+            label={
+              <Label htmlFor="calendarReminderPreset" className="text-base">
+                Calendar event reminder timing
+              </Label>
+            }
+            description={
+              <>
+                Meeting reminders send relative to the meeting start time. Assessment reminders
+                send at 9:00 AM in your community&apos;s timezone on the selected day.
+              </>
+            }
+            control={
+              <select
+                id="calendarReminderPreset"
+                value={values.calendarReminderPreset}
+                onChange={(e) =>
+                  setValues((v) => ({
+                    ...v,
+                    calendarReminderPreset: e.target.value as CalendarReminderPreset,
+                  }))
+                }
+                className={SELECT_CLASS}
+              >
+                <option value="morning_of">Morning of</option>
+                <option value="1_day_before">1 day before</option>
+                <option value="3_days_before">3 days before</option>
+                <option value="7_days_before">7 days before</option>
+                <option value="off">Off</option>
+              </select>
+            }
+          >
+            <div className="space-y-1">
               {reminderVisibility.meetings ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-                  <input
-                    className="h-4 w-4 shrink-0"
-                    type="checkbox"
-                    checked={values.calendarReminderMeetings}
-                    onChange={(e) =>
-                      setValues((v) => ({
-                        ...v,
-                        calendarReminderMeetings: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="text-sm text-content">Meetings</span>
-                </label>
+                <PreferenceCheckbox
+                  id="pref-reminder-meetings"
+                  label="Meetings"
+                  checked={values.calendarReminderMeetings}
+                  onChange={(checked) =>
+                    setValues((v) => ({ ...v, calendarReminderMeetings: checked }))
+                  }
+                />
               ) : null}
               {reminderVisibility.personalAssessments ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-                  <input
-                    className="h-4 w-4 shrink-0"
-                    type="checkbox"
-                    checked={values.calendarReminderPersonalAssessments}
-                    onChange={(e) =>
-                      setValues((v) => ({
-                        ...v,
-                        calendarReminderPersonalAssessments: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="text-sm text-content">My assessment due dates</span>
-                </label>
+                <PreferenceCheckbox
+                  id="pref-reminder-personal"
+                  label="My assessment due dates"
+                  checked={values.calendarReminderPersonalAssessments}
+                  onChange={(checked) =>
+                    setValues((v) => ({ ...v, calendarReminderPersonalAssessments: checked }))
+                  }
+                />
               ) : null}
               {reminderVisibility.communityAssessments ? (
-                <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-                  <input
-                    className="h-4 w-4 shrink-0"
-                    type="checkbox"
-                    checked={values.calendarReminderCommunityAssessments}
-                    onChange={(e) =>
-                      setValues((v) => ({
-                        ...v,
-                        calendarReminderCommunityAssessments: e.target.checked,
-                      }))
-                    }
-                  />
-                  <span className="text-sm text-content">Community assessment due dates</span>
-                </label>
+                <PreferenceCheckbox
+                  id="pref-reminder-community"
+                  label="Community assessment due dates"
+                  checked={values.calendarReminderCommunityAssessments}
+                  onChange={(checked) =>
+                    setValues((v) => ({ ...v, calendarReminderCommunityAssessments: checked }))
+                  }
+                />
               ) : null}
             </div>
-          </div>
+          </SettingsRow>
         ) : null}
 
-      <div className="space-y-2">
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-          <input
-            className="h-4 w-4 shrink-0"
-            type="checkbox"
-            checked={values.emailAnnouncements}
-            onChange={(e) =>
-              setValues((v) => ({ ...v, emailAnnouncements: e.target.checked }))
-            }
-          />
-          <span className="text-sm text-content">Announcements</span>
-        </label>
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-          <input
-            className="h-4 w-4 shrink-0"
-            type="checkbox"
-            checked={values.emailMeetings}
-            onChange={(e) => setValues((v) => ({ ...v, emailMeetings: e.target.checked }))}
-          />
-          <span className="text-sm text-content">Meeting notices</span>
-        </label>
-        <label className="flex min-h-[44px] cursor-pointer items-center gap-2">
-          <input
-            className="h-4 w-4 shrink-0"
-            type="checkbox"
-            checked={values.inAppEnabled}
-            onChange={(e) => setValues((v) => ({ ...v, inAppEnabled: e.target.checked }))}
-          />
-          <span className="text-sm text-content">In-app notifications</span>
-        </label>
-        {showInsuranceAlerts ? (
-          <label className="flex min-h-[44px] cursor-pointer items-start gap-2">
-            <input
-              type="checkbox"
-              className="h-4 w-4 shrink-0 mt-1"
-              checked={values.emailInsuranceAlerts}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, emailInsuranceAlerts: e.target.checked }))
-              }
-            />
-            <span className="text-sm text-content">
-              Insurance alerts
-              <span className="block text-xs text-content-secondary">
-                Reminders when the master policy or wind-mitigation report is nearing expiry.
-              </span>
-            </span>
-          </label>
-        ) : null}
-      </div>
-
-      <button
-        type="submit"
-        className="rounded bg-interactive px-4 py-2 text-content-inverse disabled:opacity-50"
-        disabled={saving}
-      >
-        {saving ? 'Saving...' : 'Save Preferences'}
-      </button>
+        <SettingsCardFooter note="These choices apply to this community only.">
+          <Button type="submit" size="sm" disabled={saving}>
+            {saving ? 'Saving...' : 'Save Preferences'}
+          </Button>
+        </SettingsCardFooter>
+      </SettingsCard>
     </form>
+  );
+}
+
+/** Native select, sized and bordered like the shared Input. */
+const SELECT_CLASS =
+  'h-10 w-full rounded-sm border border-edge-strong bg-surface-card px-3 text-sm text-content focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus sm:w-56';
+
+function PreferenceCheckbox({
+  id,
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex min-h-11 items-start gap-3 py-2">
+      {/* Native, not Radix: inside a <form> Radix renders a hidden bubble
+          input sized by ResizeObserver, and a plain checkbox already submits
+          and labels itself correctly. Tinted to the brand via accent-color. */}
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-1 h-4 w-4 shrink-0 cursor-pointer accent-interactive"
+      />
+      <div className="space-y-0.5">
+        <Label htmlFor={id} className="cursor-pointer text-sm font-normal text-content">
+          {label}
+        </Label>
+        {description ? <p className="text-sm text-content-secondary">{description}</p> : null}
+      </div>
+    </div>
   );
 }
