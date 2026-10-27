@@ -37,11 +37,11 @@ const OUT_DIR = join(repoRoot, 'apps/admin/public/icons');
 const VIEWBOX = 32;
 
 /**
- * gray-900 (`packages/tokens/src/primitives.ts`) — the same fill `icon.svg`
+ * coral-600 (`packages/tokens/src/primitives.ts`) — the same fill `icon.svg`
  * paints its rounded plate with, so the maskable padding is invisible against
  * the mark rather than a visible border around it.
  */
-const PLATE = '#111827';
+const PLATE = '#C2533A';
 
 /**
  * Fraction of the maskable canvas the mark occupies. The safe zone is a circle

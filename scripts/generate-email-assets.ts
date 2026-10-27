@@ -11,7 +11,7 @@
  *   circle-check in an email is the circle-check in the app. Email clients
  *   strip inline SVG, so each glyph is rasterised once per semantic colour.
  *   The path data below is copied from lucide-react 0.575 (ISC licence).
- * - The LOGOMARK is the house lockup from `marketing-brand.tsx`: ink strokes,
+ * - The LOGOMARK is the house mark from `apps/web/src/components/brand/property-pro-mark.tsx`: ink strokes,
  *   coral lower bar.
  * - PHOTOS are the marketing site's own imagery, re-encoded webp → JPEG
  *   because Outlook desktop (and several webmail clients) cannot show webp.

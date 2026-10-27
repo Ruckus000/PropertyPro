@@ -18,7 +18,8 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Building, ChevronsUpDown } from 'lucide-react';
+import { ChevronsUpDown } from 'lucide-react';
+import { PropertyProTile } from '@/components/brand/property-pro-mark';
 import { useUserCommunities } from '@/hooks/use-user-communities';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -59,11 +60,7 @@ export function SidebarTenantSwitcher({
   const canSwitch = !staticOnly && communities.length >= 2;
   const showSearch = communities.length > SEARCH_THRESHOLD;
 
-  const brandMark = (
-    <div className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--interactive-primary)]">
-      <Building size={20} color="white" aria-hidden="true" />
-    </div>
-  );
+  const brandMark = <PropertyProTile />;
 
   const labelBlock = (
     <div
