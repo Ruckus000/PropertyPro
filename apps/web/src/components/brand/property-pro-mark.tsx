@@ -1,5 +1,3 @@
-import { cn } from '@/lib/utils';
-
 /**
  * The PropertyPro house mark: a roof line over a house outline holding two
  * bars, the shorter one an accent. It is the single source for the mark in the
@@ -7,6 +5,10 @@ import { cn } from '@/lib/utils';
  * favicons (`apps/web/public/brand/icon.svg` and `apps/admin/src/app/icon.svg`
  * draw the same paths; keep them in step with this file, then re-run
  * `scripts/generate-web-icons.mjs` and `scripts/generate-admin-icons.mjs`).
+ *
+ * This module imports nothing on purpose. The marketing page renders the mark,
+ * and importing `cn` here pulled tailwind-merge into that bundle (+92 KiB,
+ * failing perf-check's aggregate budget), so classes are joined by hand.
  *
  * Every stroke and the long bar paint in `currentColor`. The accent bar paints
  * in `currentColor` too unless `accentClassName` recolours it; a CSS `fill`
@@ -59,10 +61,9 @@ export function PropertyProMark({
 export function PropertyProTile({ size = 'md' }: { size?: 'sm' | 'md' }) {
   return (
     <span
-      className={cn(
-        'flex shrink-0 items-center justify-center rounded-md bg-interactive text-content-inverse',
-        size === 'sm' ? 'size-8' : 'size-9',
-      )}
+      className={`flex shrink-0 items-center justify-center rounded-md bg-interactive text-content-inverse ${
+        size === 'sm' ? 'size-8' : 'size-9'
+      }`}
     >
       <PropertyProMark
         className={size === 'sm' ? 'size-5' : 'size-6'}
