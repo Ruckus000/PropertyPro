@@ -19,6 +19,20 @@ const BUILT_IN_EMPTY_COPY: Record<string, string> = {
   meetings: 'No upcoming meetings.',
 };
 
+/**
+ * What the live site does with a section that has nothing to list, as the first
+ * half of the hint. Meetings and Announcements are left out of the live site.
+ * Documents shows the owners' records summary in its slot, and is left out only
+ * when no record is posted either (`DocumentsBlock`). Either way the message
+ * this form edits is only ever seen on the editor canvas.
+ */
+const LIVE_SITE_HINT: Record<string, string> = {
+  documents:
+    "When there are no public documents to list, your website shows a summary of the owners' records here, or hides this section if there are none. This message only shows here in the editor.",
+};
+const HIDDEN_LIVE_SITE_HINT =
+  'Your website hides this section while it has nothing to list. This message only shows here in the editor.';
+
 interface SorDraft {
   emptyText: string;
   /**
@@ -83,6 +97,12 @@ export function SorEmptyTextForm({ communityId, blockType, blockOrder, content }
   const fieldId = `sor-empty-${blockType}-${blockOrder}`;
   const hintId = `${fieldId}-hint`;
   const builtIn = BUILT_IN_EMPTY_COPY[blockType] ?? '';
+  const liveSiteHint = LIVE_SITE_HINT[blockType] ?? HIDDEN_LIVE_SITE_HINT;
+  // The built-in copy ends in a full stop of its own; closing the sentence after
+  // the quotation mark as well would double it.
+  const usedWhenBlank = builtIn
+    ? `“${builtIn}”${builtIn.endsWith('.') ? '' : '.'}`
+    : 'the default.';
 
   return (
     <div className="space-y-4">
@@ -97,9 +117,7 @@ export function SorEmptyTextForm({ communityId, blockType, blockOrder, content }
           onChange={(event) => setDraft((prev) => ({ ...prev, emptyText: event.target.value }))}
         />
         <p id={hintId} className="text-xs text-content-secondary">
-          Your website hides this section while it has nothing to list. This message only shows
-          here in the editor. Leave blank to use
-          {builtIn ? ` “${builtIn}”` : ' the default'}.
+          {liveSiteHint} Leave blank to use {usedWhenBlank}
         </p>
       </div>
     </div>

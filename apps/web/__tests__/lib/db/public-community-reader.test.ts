@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock @propertypro/db (schema + client exports) BEFORE importing the helper.
 // This prevents drizzle.ts from being evaluated (which requires DATABASE_URL).
 vi.mock('@propertypro/db', () => ({
+  // The gate every documents-UI read shares (library + authored, never
+  // violation_evidence). A sentinel here, so the reader's use of it can be
+  // asserted; what the real one does is proved against Postgres in
+  // __tests__/integration/public-owner-record-groups.integration.test.ts.
+  buildSourceTypeFilter: vi.fn(() => ({ __sourceTypeFilter: 'owner-visible' })),
   siteBlocks: {
     id: 'siteBlocks.id',
     communityId: 'siteBlocks.communityId',
@@ -33,6 +38,7 @@ vi.mock('@propertypro/db', () => ({
     filePath: 'documents.filePath',
     fileName: 'documents.fileName',
     publicAccess: 'documents.publicAccess',
+    sourceType: 'documents.sourceType',
     createdAt: 'documents.createdAt',
     updatedAt: 'documents.updatedAt',
     deletedAt: 'documents.deletedAt',
@@ -160,6 +166,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => mockDb,
 }));
 
+import { buildSourceTypeFilter } from '@propertypro/db';
 import { BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '../../../src/lib/db/public-community-reader';
 
@@ -1219,6 +1226,20 @@ describe('getPublicCommunityScopedReader', () => {
         .filter((c) => c.col.endsWith('.communityId'))
         .map((c) => c.val);
       expect(communityIds).toEqual([99, 99]);
+    });
+
+    it('counts only records an owner can reach, never violation evidence', async () => {
+      // A checklist item can be hand-linked to ANY document in its community,
+      // including a violation photo (source_type = violation_evidence). Owners
+      // never reach those through the documents UI, so a public count of the
+      // records they can sign in to see must not include them. The reader uses
+      // the same gate every documents-UI read uses, with its default set.
+      const reader = getPublicCommunityScopedReader(42);
+
+      await reader.listOwnerRecordGroups();
+
+      expect(vi.mocked(buildSourceTypeFilter)).toHaveBeenCalledWith();
+      expect(whereClauses()).toContainEqual({ __sourceTypeFilter: 'owner-visible' });
     });
 
     it('keeps only the five record groups, in the order the editor lists them', async () => {

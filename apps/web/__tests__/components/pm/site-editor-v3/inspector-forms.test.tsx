@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { BlockType } from '@propertypro/shared';
 import { ImageForm } from '@/components/pm/site-editor-v3/inspector/forms/ImageForm';
 import { AmenitiesForm } from '@/components/pm/site-editor-v3/inspector/forms/AmenitiesForm';
 import { SorEmptyTextForm } from '@/components/pm/site-editor-v3/inspector/forms/SorEmptyTextForm';
@@ -289,20 +290,54 @@ describe('SorEmptyTextForm', () => {
     );
   });
 
-  it('says the live site hides an empty section and the message shows only in the editor', () => {
-    // The public shells render nothing for a section with nothing to list, so a
-    // manager's message is only ever seen on the editor canvas. The hint is the
-    // field's accessible description; it must not promise the website shows it.
-    render(
-      <SorEmptyTextForm
-        communityId={1}
-        blockType="documents"
-        blockOrder={6}
-        content={{ limit: 5 }}
-      />,
-    );
-    expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
-      'Your website hides this section while it has nothing to list. This message only shows here in the editor. Leave blank to use “No documents available.”.',
-    );
+  describe('the hint says what the live site does with an empty section', () => {
+    // The hint is the field's accessible description. The public shells render
+    // nothing for an empty Meetings or Announcements section. A Documents
+    // section shows the owners' records summary in its slot when any record is
+    // posted, and hides itself only when none is. Either way the manager's
+    // message is only ever seen on the editor canvas, and the hint must not
+    // promise the website shows it.
+    it("documents: the site shows the owners' summary in its place, or hides the section", () => {
+      render(
+        <SorEmptyTextForm
+          communityId={1}
+          blockType="documents"
+          blockOrder={6}
+          content={{ limit: 5 }}
+        />,
+      );
+      // Ends at the closing quote: the built-in copy already ends in a full stop.
+      expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
+        "When there are no public documents to list, your website shows a summary of the owners' records here, or hides this section if there are none. This message only shows here in the editor. Leave blank to use “No documents available.”",
+      );
+    });
+
+    it.each<[BlockType, string]>([
+      ['meetings', 'No upcoming meetings.'],
+      ['announcements', 'No announcements yet.'],
+    ])('%s: the site hides the section while it is empty', (blockType, builtIn) => {
+      render(
+        <SorEmptyTextForm
+          communityId={1}
+          blockType={blockType}
+          blockOrder={6}
+          content={{ limit: 5 }}
+        />,
+      );
+      expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
+        `Your website hides this section while it has nothing to list. This message only shows here in the editor. Leave blank to use “${builtIn}”`,
+      );
+    });
+
+    it('without built-in copy to quote: ends the sentence once', () => {
+      // `faq` has no empty-state copy: the default wording, and the full stop
+      // that the quoted copy would otherwise have supplied.
+      render(
+        <SorEmptyTextForm communityId={1} blockType="faq" blockOrder={6} content={{}} />,
+      );
+      expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
+        'Your website hides this section while it has nothing to list. This message only shows here in the editor. Leave blank to use the default.',
+      );
+    });
   });
 });

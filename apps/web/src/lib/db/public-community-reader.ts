@@ -25,7 +25,7 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, complianceChecklistItems, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
+import { announcements, buildSourceTypeFilter, communities, complianceChecklistItems, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from '@propertypro/db/filters';
@@ -322,13 +322,15 @@ export interface PublicScopedReader {
    * file path never leaves this method.
    *
    * Counts the community's applicable, undeleted checklist items whose linked
-   * document is posted (`posted_at` set) and undeleted, grouped by the item's
-   * category, keeping the five groups the editor names (`RECORD_GROUP_LABELS`)
-   * in that order. A group with nothing posted is absent.
+   * document is posted (`posted_at` set), undeleted and of a source type owners
+   * can reach (`library` or `authored`, never `violation_evidence`), grouped by
+   * the item's category, keeping the five groups the editor names
+   * (`RECORD_GROUP_LABELS`) in that order. A group with nothing posted is absent.
    *
    * Deliberately NOT gated on `documents.public_access`. The section tells
    * visitors that owners can sign in to see the records, so what it counts is
-   * what owners can see: posted, not deleted, and linked to a requirement.
+   * what owners can see: posted, not deleted, reachable, and linked to a
+   * requirement.
    */
   listOwnerRecordGroups(): Promise<PublicOwnerRecordGroup[]>;
 }
@@ -842,6 +844,10 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             // A draft is not posted, and a deleted file is not a record.
             isNotNull(documents.postedAt),
             isNull(documents.deletedAt),
+            // Owners reach library and authored documents only. A requirement can
+            // be hand-linked to a violation photo, which the documents UI never
+            // shows them, so it is not a record they can sign in to see.
+            buildSourceTypeFilter(),
           ),
         )
         .groupBy(complianceChecklistItems.category);
