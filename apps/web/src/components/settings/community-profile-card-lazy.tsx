@@ -1,8 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { SettingsCard } from '@/components/settings/settings-layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { CommunityProfileCardSkeleton } from '@/components/settings/community-profile-card-skeleton';
 
 /**
  * The Community profile card, fetched as a chunk of its own.
@@ -16,19 +15,13 @@ import { Skeleton } from '@/components/ui/skeleton';
  * the card as well. So the call lives here, and the page imports this.
  *
  * `ssr: false`, because on the server the card could only render its loading
- * state; it reads its data in the browser. The skeleton here is the same height
- * as the card's own, so the swap moves nothing below it.
+ * state; it reads its data in the browser. The placeholder is the card's own
+ * loading state, so the swap moves nothing and is announced once.
  */
 export const LazyCommunityProfileCard = dynamic(
   () => import('@/components/settings/community-profile-card').then((mod) => mod.CommunityProfileCard),
   {
     ssr: false,
-    loading: () => (
-      <SettingsCard>
-        <div className="px-5 py-4">
-          <Skeleton className="h-96 w-full" />
-        </div>
-      </SettingsCard>
-    ),
+    loading: () => <CommunityProfileCardSkeleton />,
   },
 );

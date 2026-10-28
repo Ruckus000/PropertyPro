@@ -6,16 +6,18 @@
  * (`GET`/`PATCH /api/v1/community/profile`, `PATCH /api/v1/community/unit-count`)
  * and keeps what was last saved, so a test can also see the card follow the
  * server after a save. A test makes a route fail by replacing its handler.
+ * The router is faked too: the card refreshes the page after a rename.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CommunityType } from '@propertypro/shared';
 import type { CommunityProfilePayload } from '@/app/api/v1/community/profile/contract';
 
-const { toastSuccess } = vi.hoisted(() => ({ toastSuccess: vi.fn() }));
+const { toastSuccess, refreshMock } = vi.hoisted(() => ({ toastSuccess: vi.fn(), refreshMock: vi.fn() }));
 vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: vi.fn() } }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: refreshMock }) }));
 
 import { CommunityProfileCard } from '@/components/settings/community-profile-card';
 
@@ -99,6 +101,7 @@ beforeEach(() => {
   sent = [];
   handlers = serverHandlers();
   toastSuccess.mockClear();
+  refreshMock.mockClear();
   vi.stubGlobal('fetch', fetchStub);
 });
 
@@ -112,12 +115,19 @@ interface RenderOptions {
   communityType?: CommunityType;
   /** Fill the query cache before the card mounts. */
   seed?: (client: QueryClient) => void;
+  /**
+   * `instant` (the default): a failing read is retried as the app retries it, but
+   * without the wait. `library`: TanStack Query's own defaults, backoff included,
+   * which is what production runs, for a test about how long a failure takes to show.
+   */
+  retries?: 'instant' | 'library';
 }
 
-function renderCard({ communityType = 'condo_718', seed }: RenderOptions = {}) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+function renderCard({ communityType = 'condo_718', seed, retries = 'instant' }: RenderOptions = {}) {
+  const client =
+    retries === 'library'
+      ? new QueryClient()
+      : new QueryClient({ defaultOptions: { queries: { retryDelay: 0 }, mutations: { retry: false } } });
   seed?.(client);
   const user = userEvent.setup();
   const tree = (communityId: number) => (
@@ -136,7 +146,7 @@ function renderCard({ communityType = 'condo_718', seed }: RenderOptions = {}) {
 /** The card once its profile has loaded. */
 async function loaded(options?: RenderOptions) {
   const view = renderCard(options);
-  await screen.findByLabelText('Association name');
+  await screen.findByLabelText('Community name');
   return view;
 }
 
@@ -155,7 +165,7 @@ describe('CommunityProfileCard', () => {
   it('shows saved values', async () => {
     await loaded();
 
-    expect(screen.getByLabelText('Association name')).toHaveValue(SAVED.name);
+    expect(screen.getByLabelText('Community name')).toHaveValue(SAVED.name);
     expect(screen.getByLabelText('Short name')).toHaveValue(SAVED.shortName);
     expect(screen.getByLabelText('Street address')).toHaveValue(SAVED.addressLine1);
     expect(screen.getByLabelText('Address line 2')).toHaveValue(SAVED.addressLine2);
@@ -168,7 +178,7 @@ describe('CommunityProfileCard', () => {
     expect(screen.getByLabelText('Contact phone')).toHaveValue(SAVED.contactPhone);
     expect(screen.getByLabelText('Office hours')).toHaveValue(SAVED.officeHours);
     // The name is the one box that cannot be left empty.
-    expect(screen.getByLabelText('Association name')).toBeRequired();
+    expect(screen.getByLabelText('Community name')).toBeRequired();
     expect(screen.getByLabelText('Short name')).not.toBeRequired();
     // Nothing to save yet.
     expect(saveButton()).toBeDisabled();
@@ -197,6 +207,37 @@ describe('CommunityProfileCard', () => {
     // section always shows the address.
     expect(screen.getAllByText('Leave a field blank to hide it on your website.')).toHaveLength(1);
     expect(screen.getByText('Changes show on your website right away.')).toBeInTheDocument();
+  });
+
+  it('names each group and ties its description to the boxes inside it', async () => {
+    await loaded();
+
+    const name = screen.getByRole('group', { name: 'Name' });
+    const address = screen.getByRole('group', { name: 'Address' });
+    const contact = screen.getByRole('group', { name: 'Shown on your website' });
+
+    expect(address).toHaveAccessibleDescription('Shown in the Contact section of your website.');
+    expect(contact).toHaveAccessibleDescription('Leave a field blank to hide it on your website.');
+    // The title says all there is to say about the name group.
+    expect(name).not.toHaveAccessibleDescription();
+
+    for (const label of ['Community name', 'Short name']) {
+      expect(within(name).getByLabelText(label)).toBeInTheDocument();
+    }
+    for (const label of ['Street address', 'Address line 2', 'City', 'State', 'ZIP code']) {
+      expect(within(address).getByLabelText(label)).toBeInTheDocument();
+    }
+    for (const label of ['Contact name', 'Contact email', 'Contact phone', 'Office hours']) {
+      expect(within(contact).getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
+  it('describes a box by its help text', async () => {
+    await loaded();
+
+    expect(screen.getByLabelText('Short name')).toHaveAccessibleDescription(
+      'Used on your website instead of the full name. Leave blank to use the full name.',
+    );
   });
 
   it('sends only changed fields', async () => {
@@ -231,10 +272,10 @@ describe('CommunityProfileCard', () => {
     });
   });
 
-  it('sends a renamed association trimmed', async () => {
+  it('sends a renamed community trimmed', async () => {
     const { user } = await loaded();
 
-    await replaceText(user, 'Association name', '  Sunset Condominiums  ');
+    await replaceText(user, 'Community name', '  Sunset Condominiums  ');
     await user.click(saveButton());
 
     await waitFor(() => expect(patchesTo(PROFILE_PATH)).toHaveLength(1));
@@ -303,13 +344,13 @@ describe('CommunityProfileCard', () => {
   it('refuses a blank name without sending anything', async () => {
     const { user } = await loaded();
 
-    await replaceText(user, 'Association name', '   ');
+    await replaceText(user, 'Community name', '   ');
     await user.click(saveButton());
 
-    const message = await screen.findByText('Enter the association’s name.');
-    const box = screen.getByLabelText('Association name');
+    const message = await screen.findByText('Enter your community’s name.');
+    const box = screen.getByLabelText('Community name');
     expect(box).toHaveAttribute('aria-invalid', 'true');
-    expect(box).toHaveAccessibleDescription('Enter the association’s name.');
+    expect(box).toHaveAccessibleDescription('Enter your community’s name.');
     expect(box).toHaveFocus();
     expect(patchesTo(PROFILE_PATH)).toHaveLength(0);
 
@@ -330,6 +371,8 @@ describe('CommunityProfileCard', () => {
     expect(banner).toHaveTextContent("We couldn't save your changes. Please try again.");
     // The danger variant of AlertBanner.
     expect(banner).toHaveClass('text-status-danger');
+    // Nothing but the title: the server's "unexpected error" is not for the reader, and nothing else was saved.
+    expect(banner.textContent).toBe("We couldn't save your changes. Please try again.");
     expect(toastSuccess).not.toHaveBeenCalled();
     // The edit is still there and can be sent again.
     expect(screen.getByLabelText('City')).toHaveValue('Surfside');
@@ -351,6 +394,20 @@ describe('CommunityProfileCard', () => {
     const banner = await screen.findByRole('alert');
     expect(banner).toHaveTextContent("We couldn't save your changes. Please try again.");
     expect(banner).toHaveTextContent('Use a 5-digit ZIP code, like 33139, or ZIP+4, like 33139-1234.');
+  });
+
+  it('passes on a refusal that is not about a value', async () => {
+    // A demo past its trial: nothing the person types will change the answer.
+    handlers[`PATCH ${PROFILE_PATH}`] = () =>
+      refuse(403, 'DEMO_GRACE_READ_ONLY', 'Your trial has ended. Subscribe to regain full access.');
+    const { user } = await loaded();
+
+    await replaceText(user, 'City', 'Surfside');
+    await user.click(saveButton());
+
+    const banner = await screen.findByRole('alert');
+    expect(banner).toHaveTextContent("We couldn't save your changes. Please try again.");
+    expect(banner).toHaveTextContent('Your trial has ended. Subscribe to regain full access.');
   });
 
   it('sends once, and locks the boxes, while a save is in flight', async () => {
@@ -388,6 +445,40 @@ describe('CommunityProfileCard', () => {
     expect(saveButton()).toBeDisabled();
   });
 
+  describe('the rest of the page', () => {
+    it('refreshes it after a rename, so the sidebar shows the new name', async () => {
+      const { user } = await loaded();
+
+      await replaceText(user, 'Community name', 'Sunset Condominiums');
+      expect(refreshMock).not.toHaveBeenCalled();
+      await user.click(saveButton());
+
+      await waitFor(() => expect(refreshMock).toHaveBeenCalledTimes(1));
+      expect(patchesTo(PROFILE_PATH)).toHaveLength(1);
+    });
+
+    it('leaves it alone when the name did not change', async () => {
+      const { user } = await loaded();
+
+      await replaceText(user, 'City', 'Surfside');
+      await user.click(saveButton());
+
+      await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
+      expect(refreshMock).not.toHaveBeenCalled();
+    });
+
+    it('leaves it alone when the rename did not save', async () => {
+      handlers[`PATCH ${PROFILE_PATH}`] = FAIL_500;
+      const { user } = await loaded();
+
+      await replaceText(user, 'Community name', 'Sunset Condominiums');
+      await user.click(saveButton());
+
+      await screen.findByRole('alert');
+      expect(refreshMock).not.toHaveBeenCalled();
+    });
+  });
+
   describe('unit count', () => {
     const FOR_CONDO = 'Florida law (§718.111(12)(g)) applies to associations of 25 or more units.';
     const FOR_HOA = 'Florida law (§720.303) applies to associations of 100 or more parcels.';
@@ -422,6 +513,8 @@ describe('CommunityProfileCard', () => {
 
       expect(screen.getByLabelText(label)).toHaveValue(unitCount);
       expect(screen.getByText(line)).toBeInTheDocument();
+      // And a screen reader hears it with the box.
+      expect(screen.getByLabelText(label)).toHaveAccessibleDescription(line);
     });
 
     it('has no rule to explain for an apartment community', async () => {
@@ -430,6 +523,7 @@ describe('CommunityProfileCard', () => {
 
       expect(screen.getByLabelText('Number of units')).toHaveValue(120);
       expect(screen.queryByText(/Florida law/)).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Number of units')).not.toHaveAccessibleDescription();
     });
 
     it('saves a changed count on its own route, and the rule follows the saved count', async () => {
@@ -472,6 +566,9 @@ describe('CommunityProfileCard', () => {
       const box = screen.getByLabelText('Number of units');
       expect(await screen.findByText('Enter a whole number of units, from 1 to 100,000.')).toBeInTheDocument();
       expect(box).toHaveAttribute('aria-invalid', 'true');
+      expect(box).toHaveAccessibleDescription(
+        `${FOR_CONDO} Yours has 40. Enter a whole number of units, from 1 to 100,000.`,
+      );
       expect(box).toHaveFocus();
       expect(sent.filter((request) => request.method === 'PATCH')).toHaveLength(0);
     });
@@ -499,7 +596,9 @@ describe('CommunityProfileCard', () => {
       await replaceText(user, 'Number of units', '20');
       await user.click(saveButton());
 
-      expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save your changes.");
+      const banner = await screen.findByRole('alert');
+      expect(banner).toHaveTextContent("We couldn't save your changes. Please try again.");
+      expect(banner).toHaveTextContent('Your other changes were saved.');
       expect(patchesTo(PROFILE_PATH)).toHaveLength(1);
       expect(patchesTo(COUNT_PATH)).toHaveLength(1);
       expect(toastSuccess).not.toHaveBeenCalled();
@@ -518,13 +617,28 @@ describe('CommunityProfileCard', () => {
     });
   });
 
+  describe('when only part of a save goes through', () => {
+    it('still refreshes the page when the rename saved and the count then failed', async () => {
+      handlers[`PATCH ${COUNT_PATH}`] = FAIL_500;
+      const { user } = await loaded();
+
+      await replaceText(user, 'Community name', 'Sunset Condominiums');
+      await replaceText(user, 'Number of units', '20');
+      await user.click(saveButton());
+
+      await screen.findByRole('alert');
+      expect(patchesTo(PROFILE_PATH)).toHaveLength(1);
+      expect(refreshMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('when the profile cannot be shown', () => {
     it('shows a placeholder while it loads, and no fields', async () => {
       handlers[`GET ${PROFILE_PATH}`] = () => new Promise<Reply>(() => {});
       renderCard();
 
       expect(await screen.findByRole('status')).toHaveTextContent('Loading community profile');
-      expect(screen.queryByLabelText('Association name')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Community name')).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Save profile' })).not.toBeInTheDocument();
     });
 
@@ -535,7 +649,7 @@ describe('CommunityProfileCard', () => {
       const banner = await screen.findByRole('alert');
       expect(banner).toHaveTextContent("We couldn't load your community profile.");
       expect(banner).toHaveTextContent('Please refresh the page to try again.');
-      expect(screen.queryByLabelText('Association name')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Community name')).not.toBeInTheDocument();
     });
 
     it('keeps showing a profile it already has when a refresh of it fails', async () => {
@@ -548,23 +662,34 @@ describe('CommunityProfileCard', () => {
       await waitFor(() =>
         expect(client.getQueryState(['community-profile', COMMUNITY_ID])?.status).toBe('error'),
       );
-      expect(screen.getByLabelText('Association name')).toHaveValue(SAVED.name);
+      expect(screen.getByLabelText('Community name')).toHaveValue(SAVED.name);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('gives the server’s reason when the subscription has lapsed', async () => {
+    it('gives the server’s reason at once, without retrying, when the subscription has lapsed', async () => {
       handlers[`GET ${PROFILE_PATH}`] = () =>
         refuse(
           403,
           'SUBSCRIPTION_REQUIRED',
           'This community’s subscription has lapsed. Reactivate to restore access.',
         );
-      renderCard();
+      // The library's own retry and backoff: retrying a 403 would keep the skeleton up for about seven seconds.
+      renderCard({ retries: 'library' });
 
       const banner = await screen.findByRole('alert');
       expect(banner).toHaveTextContent("We couldn't load your community profile.");
       expect(banner).toHaveTextContent('This community’s subscription has lapsed. Reactivate to restore access.');
       expect(banner).not.toHaveTextContent('Please refresh the page');
+      expect(sent.filter((request) => request.method === 'GET')).toHaveLength(1);
+    });
+
+    it('still retries a read that fails for a reason that may pass', async () => {
+      handlers[`GET ${PROFILE_PATH}`] = FAIL_500;
+      renderCard();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't load your community profile.");
+      // The first attempt, and the app's usual three retries.
+      expect(sent.filter((request) => request.method === 'GET')).toHaveLength(4);
     });
   });
 });

@@ -213,7 +213,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <SettingsSection
                 id="community-profile"
                 title="Community profile"
-                description="Your association's name, address and contact details."
+                description="Your community’s name, address and contact details."
               >
                 <LazyCommunityProfileCard
                   communityId={context.communityId}

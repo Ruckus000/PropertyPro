@@ -1,9 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CircleAlert } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   requiredSectionStatute,
   requirementLevel,
@@ -16,7 +16,6 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
   SettingsCard,
@@ -24,8 +23,8 @@ import {
   SettingsCardHeader,
   SettingsRow,
 } from '@/components/settings/settings-layout';
+import { CommunityProfileCardSkeleton } from '@/components/settings/community-profile-card-skeleton';
 import {
-  communityProfileQueryKey,
   useCommunityProfile,
   useUpdateCommunityProfile,
   type CommunityProfilePatch,
@@ -49,6 +48,8 @@ import type { CommunityProfilePayload } from '@/app/api/v1/community/profile/con
  *   - Each box is compared with what the server holds, not with what it held when
  *     the page loaded. If the second request fails, the first stays saved, Save
  *     stays on for what is left, and sending again repeats only that.
+ *   - A saved rename refreshes the page's server-rendered parts, so the sidebar
+ *     shows the new name at once.
  *
  * Nothing is published: the public site is rendered on each request, so a saved
  * change shows on its next load. The limits on the boxes mirror the route
@@ -81,7 +82,8 @@ const CLEARABLE_FIELDS = (Object.keys(MAX_LENGTH) as TextField[]).filter(
 /** Bound of `PATCH /api/v1/community/unit-count` (its contract's UNIT_COUNT_MAX). */
 const UNIT_COUNT_MAX = 100_000;
 
-const NAME_REQUIRED = 'Enter the association’s name.';
+const NAME_REQUIRED = 'Enter your community’s name.';
+const OTHERS_SAVED = 'Your other changes were saved.';
 
 /**
  * The boxes that differ from the saved profile, as the PATCH body wants them:
@@ -133,10 +135,16 @@ function unitCountLine(communityType: CommunityType, unitCount: number | null): 
     : `${law} Yours has ${unitCount}.`;
 }
 
-/** The server's own words, when it refused a value (a 400 carries one message per field). */
+/**
+ * The server's own words, when it said why it turned a save down: a message per
+ * value for a 400, or the one sentence of a 403 (a demo past its trial, a role that
+ * may not change this), for which "try again" alone could never help. Any other
+ * failure has nothing a reader should be shown.
+ */
 function refusalReasons(error: unknown): string | undefined {
-  if (!(error instanceof ApiRequestError) || !error.fields) return undefined;
-  return error.fields.map((field) => field.message).join(' ');
+  if (!(error instanceof ApiRequestError)) return undefined;
+  if (error.fields) return error.fields.map((field) => field.message).join(' ');
+  return error.status === 403 ? error.message : undefined;
 }
 
 export interface CommunityProfileCardProps {
@@ -176,14 +184,7 @@ export function CommunityProfileCard({ communityId, communityType }: CommunityPr
     );
   }
 
-  return (
-    <SettingsCard>
-      <div role="status" className="px-5 py-4">
-        <span className="sr-only">Loading community profile…</span>
-        <Skeleton className="h-96 w-full" />
-      </div>
-    </SettingsCard>
-  );
+  return <CommunityProfileCardSkeleton />;
 }
 
 interface FormProps extends CommunityProfileCardProps {
@@ -191,14 +192,14 @@ interface FormProps extends CommunityProfileCardProps {
 }
 
 function ProfileForm({ communityId, communityType, profile }: FormProps) {
-  const queryClient = useQueryClient();
+  const router = useRouter();
   const updateProfile = useUpdateCommunityProfile(communityId);
   const updateUnitCount = useUpdateCommunityUnitCount(communityId);
 
   const [drafts, setDrafts] = React.useState<Drafts>({});
   const [countDraft, setCountDraft] = React.useState<string | null>(null);
   const [errors, setErrors] = React.useState<{ name?: string; unitCount?: string }>({});
-  const [failure, setFailure] = React.useState<{ reasons: string | undefined } | null>(null);
+  const [failure, setFailure] = React.useState<{ description: string | undefined } | null>(null);
   const [saving, setSaving] = React.useState(false);
   const nameRef = React.useRef<HTMLInputElement>(null);
   const countRef = React.useRef<HTMLInputElement>(null);
@@ -240,22 +241,25 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
 
     setFailure(null);
     setSaving(true);
+    let profileSaved = false;
     try {
       if (Object.keys(patch).length > 0) {
         await updateProfile.mutateAsync(patch);
+        profileSaved = true;
         setDrafts({});
+        // The sidebar shows the community's name and is rendered on the server.
+        if (patch.name !== undefined) router.refresh();
       }
       if (countEdit.kind === 'set') {
-        const saved = await updateUnitCount.mutateAsync(countEdit.value);
-        // The count lives in the profile read too; keep it in step with the server.
-        queryClient.setQueryData<CommunityProfilePayload>(communityProfileQueryKey(communityId), (old) =>
-          old ? { ...old, unitCount: saved.unitCount } : old,
-        );
+        await updateUnitCount.mutateAsync(countEdit.value);
         setCountDraft(null);
       }
       toast.success('Community profile saved.');
     } catch (cause) {
-      setFailure({ reasons: refusalReasons(cause) });
+      const description = [refusalReasons(cause), profileSaved ? OTHERS_SAVED : undefined]
+        .filter(Boolean)
+        .join(' ');
+      setFailure({ description: description || undefined });
     } finally {
       setSaving(false);
     }
@@ -270,10 +274,10 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
   return (
     <form onSubmit={handleSubmit} noValidate>
       <SettingsCard>
-        <FieldGroup title="Name">
+        <FieldGroup id="community-profile-group-name" title="Name">
           <ProfileField
             {...bind('name')}
-            label="Association name"
+            label="Community name"
             required
             error={errors.name}
             inputRef={nameRef}
@@ -285,7 +289,11 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
           />
         </FieldGroup>
 
-        <FieldGroup title="Address" description="Shown in the Contact section of your website.">
+        <FieldGroup
+          id="community-profile-group-address"
+          title="Address"
+          description="Shown in the Contact section of your website."
+        >
           <ProfileField {...bind('addressLine1')} label="Street address" />
           <ProfileField {...bind('addressLine2')} label="Address line 2" />
           <ProfileField {...bind('city')} label="City" className="sm:col-span-3" />
@@ -328,7 +336,11 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
           {errors.unitCount ? <FieldError id={`${countId}-error`}>{errors.unitCount}</FieldError> : null}
         </SettingsRow>
 
-        <FieldGroup title="Shown on your website" description="Leave a field blank to hide it on your website.">
+        <FieldGroup
+          id="community-profile-group-contact"
+          title="Shown on your website"
+          description="Leave a field blank to hide it on your website."
+        >
           <ProfileField {...bind('contactName')} label="Contact name" className="sm:col-span-3" />
           <ProfileField {...bind('contactEmail')} label="Contact email" type="email" className="sm:col-span-3" />
           <ProfileField {...bind('contactPhone')} label="Contact phone" type="tel" className="sm:col-span-3" />
@@ -345,7 +357,7 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
             <AlertBanner
               status="danger"
               title="We couldn't save your changes. Please try again."
-              description={failure.reasons}
+              description={failure.description}
             />
           </div>
         ) : null}
@@ -360,19 +372,34 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
   );
 }
 
-/** A titled run of boxes inside the card. On wide screens a six-column grid, so a field says how many it takes. */
+/**
+ * A titled run of boxes inside the card, named and described as a group so a
+ * screen reader says what the boxes are for as it enters them. On wide screens a
+ * six-column grid, so a field says how many columns it takes.
+ */
 function FieldGroup({
+  id,
   title,
   description,
   children,
 }: {
+  id: string;
   title: string;
   description?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <SettingsCardHeader title={title} description={description} />
+    <div
+      role="group"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={description ? `${id}-description` : undefined}
+    >
+      <SettingsCardHeader
+        title={title}
+        description={description}
+        titleId={`${id}-title`}
+        descriptionId={`${id}-description`}
+      />
       <div className="grid gap-4 px-5 pb-5 sm:grid-cols-6">{children}</div>
     </div>
   );

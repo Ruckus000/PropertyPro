@@ -378,7 +378,7 @@ describe('PATCH /api/v1/community/profile', () => {
 
       expect(res.status).toBe(400);
       expect(((await res.json()) as ErrorJson).error.details?.fields).toEqual([
-        { field: 'name', message: 'Enter the association’s name.' },
+        { field: 'name', message: 'Enter your community’s name.' },
       ]);
       expect(updateCommunityProfileMock).not.toHaveBeenCalled();
     });

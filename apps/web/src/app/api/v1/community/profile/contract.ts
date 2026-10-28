@@ -79,7 +79,7 @@ function clearable(text: z.ZodType<string>) {
 const profilePatchBodySchema = z
   .object({
     communityId: z.number().int().positive(),
-    name: z.string().trim().min(1, 'Enter the association’s name.').max(120).optional(),
+    name: z.string().trim().min(1, 'Enter your community’s name.').max(120).optional(),
     shortName: clearable(z.string().max(60)),
     addressLine1: clearable(z.string().max(120)),
     addressLine2: clearable(z.string().max(120)),
