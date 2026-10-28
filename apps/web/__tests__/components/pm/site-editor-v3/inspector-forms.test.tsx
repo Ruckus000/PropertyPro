@@ -288,4 +288,21 @@ describe('SorEmptyTextForm', () => {
       'No documents available.',
     );
   });
+
+  it('says the live site hides an empty section and the message shows only in the editor', () => {
+    // The public shells render nothing for a section with nothing to list, so a
+    // manager's message is only ever seen on the editor canvas. The hint is the
+    // field's accessible description; it must not promise the website shows it.
+    render(
+      <SorEmptyTextForm
+        communityId={1}
+        blockType="documents"
+        blockOrder={6}
+        content={{ limit: 5 }}
+      />,
+    );
+    expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
+      'Your website hides this section while it has nothing to list. This message only shows here in the editor. Leave blank to use “No documents available.”.',
+    );
+  });
 });

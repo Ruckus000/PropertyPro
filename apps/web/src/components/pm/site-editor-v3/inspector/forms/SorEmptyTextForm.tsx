@@ -97,7 +97,8 @@ export function SorEmptyTextForm({ communityId, blockType, blockOrder, content }
           onChange={(event) => setDraft((prev) => ({ ...prev, emptyText: event.target.value }))}
         />
         <p id={hintId} className="text-xs text-content-secondary">
-          Shown on your website when this section has nothing to list. Leave blank to use
+          Your website hides this section while it has nothing to list. This message only shows
+          here in the editor. Leave blank to use
           {builtIn ? ` “${builtIn}”` : ' the default'}.
         </p>
       </div>
