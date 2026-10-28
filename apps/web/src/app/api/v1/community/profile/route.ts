@@ -12,8 +12,11 @@
  * The community id is resolved first, by the runner, from the contract's
  * `tenantScope` (the `x-community-id` header is authoritative).
  *
- * The service writes the audit row (`community_profile`), and only for the keys
- * that changed; see `updateCommunityProfile`.
+ * PATCH is all or nothing. The service saves in ONE transaction: the writes and
+ * the audit rows (one `community_profile` row for the keys that changed, plus
+ * the rename's own) commit together or not at all, so a save that fails part-way
+ * leaves nothing behind and the same request can simply be sent again. See
+ * `updateCommunityProfile`.
  */
 import { runRoute } from '@/lib/api/run-route';
 import { withErrorHandler } from '@/lib/api/error-handler';

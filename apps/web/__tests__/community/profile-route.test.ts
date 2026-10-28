@@ -66,7 +66,11 @@ const PROFILE = {
 };
 
 interface ErrorJson {
-  error: { code: string; message: string; details?: { fields?: Array<{ field: string }> } };
+  error: {
+    code: string;
+    message: string;
+    details?: { fields?: Array<{ field: string; message: string }> };
+  };
 }
 
 function get(query = 'communityId=42', headers?: Record<string, string>): NextRequest {
@@ -365,6 +369,16 @@ describe('PATCH /api/v1/community/profile', () => {
       expect(res.status).toBe(400);
       expect(((await res.json()) as ErrorJson).error.details?.fields?.map((f) => f.field)).toEqual([
         'shortName',
+      ]);
+      expect(updateCommunityProfileMock).not.toHaveBeenCalled();
+    });
+
+    it('tells the user what to enter when the name is blank', async () => {
+      const res = await PATCH(patch({ communityId: 42, name: '   ' }));
+
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as ErrorJson).error.details?.fields).toEqual([
+        { field: 'name', message: 'Enter the association’s name.' },
       ]);
       expect(updateCommunityProfileMock).not.toHaveBeenCalled();
     });

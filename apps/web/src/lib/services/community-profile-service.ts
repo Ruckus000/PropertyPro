@@ -14,12 +14,28 @@
  */
 import { communities, createScopedClient, logAuditEvent } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+// The profile save opens one transaction, so the name, the contact columns, the
+// profile columns and their audit rows commit or roll back as one.
+// AUTHZ: opens a transaction only; every statement in it runs through createScopedClient(communityId, tx) or logAuditEvent(..., tx), and the route requires a community admin.
+import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { NotFoundError } from '@/lib/api/errors';
 import { updateCommunityContact } from '@/lib/services/community-contact-service';
 
-/** Read the community's current display name, or null if the row is missing. */
-export async function getCommunityName(communityId: number): Promise<string | null> {
-  const scoped = createScopedClient(communityId);
+/**
+ * A database handle: the pool's, or an open transaction's. Taken from
+ * `createScopedClient`'s own signature so the two cannot drift.
+ */
+type Executor = NonNullable<Parameters<typeof createScopedClient>[1]>;
+
+/**
+ * Read the community's current display name, or null if the row is missing.
+ * Pass `executor` to read inside a transaction.
+ */
+export async function getCommunityName(
+  communityId: number,
+  executor?: Executor,
+): Promise<string | null> {
+  const scoped = createScopedClient(communityId, executor);
   const rows = await scoped.query(communities);
   return ((rows[0] as Record<string, unknown> | undefined)?.['name'] as string | null) ?? null;
 }
@@ -37,18 +53,24 @@ export interface UpdateCommunityNameResult {
  * audit) when the name is unchanged. Caller is responsible for authorization
  * (property_manager / root_manager) before invoking — the onboarding-website
  * route does this via `ensurePmAccess`.
+ *
+ * Pass `executor` (the handle of a `db.transaction` callback) to read, write and
+ * audit through that transaction, so the rename and its audit row commit or roll
+ * back with the caller's other writes. Left out, everything runs on the pool as
+ * before.
  */
 export async function updateCommunityName(
   communityId: number,
   name: string,
   opts: { actorUserId: string },
+  executor?: Executor,
 ): Promise<UpdateCommunityNameResult> {
-  const previous = await getCommunityName(communityId);
+  const previous = await getCommunityName(communityId, executor);
   if (name === previous) {
     return { name: previous, changed: false };
   }
 
-  const scoped = createScopedClient(communityId);
+  const scoped = createScopedClient(communityId, executor);
   const updated = await scoped.update(
     communities,
     { name },
@@ -57,7 +79,7 @@ export async function updateCommunityName(
   const persisted =
     ((updated as unknown as Record<string, unknown>[])[0]?.['name'] as string | undefined) ?? name;
 
-  await logAuditEvent({
+  const entry: Parameters<typeof logAuditEvent>[0] = {
     userId: opts.actorUserId,
     communityId,
     action: 'update',
@@ -65,7 +87,10 @@ export async function updateCommunityName(
     resourceId: String(communityId),
     oldValues: { name: previous },
     newValues: { name: persisted },
-  });
+  };
+  // With no executor the call keeps its original one-argument shape; the default
+  // is the pool's db.
+  await (executor ? logAuditEvent(entry, executor) : logAuditEvent(entry));
 
   return { name: persisted, changed: true };
 }
@@ -132,7 +157,12 @@ export interface CommunityProfile {
 /** What {@link updateCommunityProfile} accepts: a key that is absent is left alone, `null` clears it. */
 type CommunityProfilePatch = Partial<Omit<CommunityProfile, 'unitCount'>>;
 
-/** The columns the profile writes itself. The name and the contact columns have their own writers. */
+/**
+ * The columns the profile writes itself. The name and the contact columns have
+ * their own writers. `satisfies` ties every key to a real column of
+ * `communities`, so a misspelt or renamed one is a compile error here instead
+ * of a column Drizzle quietly ignores.
+ */
 const OWN_KEYS = [
   'shortName',
   'addressLine1',
@@ -141,16 +171,43 @@ const OWN_KEYS = [
   'state',
   'zipCode',
   'officeHours',
-] as const;
+] as const satisfies readonly (keyof typeof communities.$inferInsert)[];
 
-/** The columns {@link updateCommunityContact} owns. */
-const CONTACT_KEYS = ['contactName', 'contactEmail', 'contactPhone'] as const;
+/** The columns {@link updateCommunityContact} owns; tied to the table the same way. */
+const CONTACT_KEYS = [
+  'contactName',
+  'contactEmail',
+  'contactPhone',
+] as const satisfies readonly (keyof typeof communities.$inferInsert)[];
 
 type TextKey = (typeof OWN_KEYS)[number] | (typeof CONTACT_KEYS)[number];
 type TextChanges = Partial<Record<TextKey, string | null>>;
 
-function textOrNull(value: unknown): string | null {
-  return (value as string | null | undefined) ?? null;
+/**
+ * The profile as the table holds it. Typed from the table, so a misspelt column
+ * on the read side is a compile error too. `unitCount` is the only one that is
+ * not text.
+ */
+async function loadProfile(communityId: number, executor?: Executor): Promise<CommunityProfile> {
+  const scoped = createScopedClient(communityId, executor);
+  const rows = await scoped.query(communities);
+  const row = rows[0] as unknown as typeof communities.$inferSelect | undefined;
+  if (!row) throw new NotFoundError('Community not found');
+
+  return {
+    name: row.name,
+    shortName: row.shortName ?? null,
+    addressLine1: row.addressLine1 ?? null,
+    addressLine2: row.addressLine2 ?? null,
+    city: row.city ?? null,
+    state: row.state ?? null,
+    zipCode: row.zipCode ?? null,
+    unitCount: row.unitCount ?? null,
+    officeHours: row.officeHours ?? null,
+    contactName: row.contactName ?? null,
+    contactEmail: row.contactEmail ?? null,
+    contactPhone: row.contactPhone ?? null,
+  };
 }
 
 /**
@@ -161,25 +218,7 @@ function textOrNull(value: unknown): string | null {
  * return, and every caller has already resolved the community by then.
  */
 export async function getCommunityProfile(communityId: number): Promise<CommunityProfile> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.query(communities);
-  const row = rows[0] as Record<string, unknown> | undefined;
-  if (!row) throw new NotFoundError('Community not found');
-
-  return {
-    name: row['name'] as string,
-    shortName: textOrNull(row['shortName']),
-    addressLine1: textOrNull(row['addressLine1']),
-    addressLine2: textOrNull(row['addressLine2']),
-    city: textOrNull(row['city']),
-    state: textOrNull(row['state']),
-    zipCode: textOrNull(row['zipCode']),
-    unitCount: (row['unitCount'] as number | null | undefined) ?? null,
-    officeHours: textOrNull(row['officeHours']),
-    contactName: textOrNull(row['contactName']),
-    contactEmail: textOrNull(row['contactEmail']),
-    contactPhone: textOrNull(row['contactPhone']),
-  };
+  return loadProfile(communityId);
 }
 
 /** The entries of `patch` under `keys` whose value is given (not undefined) and differs from what is stored. */
@@ -215,9 +254,21 @@ function changedText(
  * A rename alone adds none, and nothing is written or audited when nothing
  * changed.
  *
- * That row is written straight after the last write, from the values held here;
- * the profile handed back is read afterwards, so a failed read-back cannot leave
- * a committed change with no audit entry.
+ * **The save is all or nothing.** The reads, the three writers and both audit
+ * rows run in ONE transaction, every statement on its handle: if any of them
+ * throws (a dropped connection, a pooler or function timeout, a failed audit
+ * insert, a failed read-back), the whole save rolls back and the caller gets the
+ * error. A committed change therefore always has its audit row, and a failed
+ * save leaves nothing behind that a retry cannot simply do again. Nothing in
+ * the transaction may touch the pool: an instance's pool holds only three
+ * connections (`POOL_MAX`, packages/db/src/drizzle.ts), and a statement that
+ * waits for a second one while this one is held can starve it.
+ *
+ * Two admins saving at the same instant are not serialized (no row lock). Each
+ * field is written by absolute value, so neither save can undo a different
+ * field the other changed; if both change the SAME field, both writes land and
+ * the later audit row may record, as its old value, the one from before the
+ * other admin's save.
  *
  * The caller authorizes (community admin) and rejects a demo in its grace
  * window before invoking.
@@ -227,36 +278,42 @@ export async function updateCommunityProfile(
   patch: CommunityProfilePatch,
   opts: { actorUserId: string },
 ): Promise<CommunityProfile> {
-  const before = await getCommunityProfile(communityId);
+  return createUnscopedClient().transaction(async (tx) => {
+    const executor = tx as unknown as Executor;
+    const before = await loadProfile(communityId, executor);
 
-  if (patch.name !== undefined) {
-    await updateCommunityName(communityId, patch.name, opts);
-  }
+    if (patch.name !== undefined) {
+      await updateCommunityName(communityId, patch.name, opts, executor);
+    }
 
-  const contactChanges = changedText(CONTACT_KEYS, patch, before);
-  if (Object.keys(contactChanges).length > 0) {
-    await updateCommunityContact(communityId, contactChanges);
-  }
+    const contactChanges = changedText(CONTACT_KEYS, patch, before);
+    if (Object.keys(contactChanges).length > 0) {
+      await updateCommunityContact(communityId, contactChanges, executor);
+    }
 
-  const ownChanges = changedText(OWN_KEYS, patch, before);
-  if (Object.keys(ownChanges).length > 0) {
-    const scoped = createScopedClient(communityId);
-    await scoped.update(communities, ownChanges, eq(communities.id, communityId));
-  }
+    const ownChanges = changedText(OWN_KEYS, patch, before);
+    if (Object.keys(ownChanges).length > 0) {
+      const scoped = createScopedClient(communityId, executor);
+      await scoped.update(communities, ownChanges, eq(communities.id, communityId));
+    }
 
-  const audited: TextChanges = { ...contactChanges, ...ownChanges };
-  const auditedKeys = Object.keys(audited) as TextKey[];
-  if (auditedKeys.length > 0) {
-    await logAuditEvent({
-      userId: opts.actorUserId,
-      communityId,
-      action: 'update',
-      resourceType: 'community_profile',
-      resourceId: String(communityId),
-      oldValues: Object.fromEntries(auditedKeys.map((key) => [key, before[key]])),
-      newValues: audited,
-    });
-  }
+    const audited: TextChanges = { ...contactChanges, ...ownChanges };
+    const auditedKeys = Object.keys(audited) as TextKey[];
+    if (auditedKeys.length > 0) {
+      await logAuditEvent(
+        {
+          userId: opts.actorUserId,
+          communityId,
+          action: 'update',
+          resourceType: 'community_profile',
+          resourceId: String(communityId),
+          oldValues: Object.fromEntries(auditedKeys.map((key) => [key, before[key]])),
+          newValues: audited,
+        },
+        executor,
+      );
+    }
 
-  return getCommunityProfile(communityId);
+    return loadProfile(communityId, executor);
+  });
 }

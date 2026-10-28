@@ -20,7 +20,8 @@
  * characters, and cannot be cleared. Every other field is clearable: send
  * `null`, or a string that is blank once trimmed, and the stored value becomes
  * NULL; leave a field out and it is left alone. Unknown keys are refused, so a
- * misspelt field cannot pass silently.
+ * misspelt field cannot pass silently. A save is all or nothing: if it fails,
+ * none of it is applied.
  *
  * The limits mirror the columns: `short_name` and `office_hours` carry DB
  * CHECKs of 60 and 200 characters (migration 0095), and a state is the
@@ -78,7 +79,7 @@ function clearable(text: z.ZodType<string>) {
 const profilePatchBodySchema = z
   .object({
     communityId: z.number().int().positive(),
-    name: z.string().trim().min(1).max(120).optional(),
+    name: z.string().trim().min(1, 'Enter the association’s name.').max(120).optional(),
     shortName: clearable(z.string().max(60)),
     addressLine1: clearable(z.string().max(120)),
     addressLine2: clearable(z.string().max(120)),

@@ -63,6 +63,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // old, set the new) commits or rolls back together. Writes go only through
   // createScopedClient(communityId, tx); the route requires the root manager.
   resolve(repoRoot, 'apps/web/src/lib/services/role-management-service.ts'),
+  // Community profile save: opens a transaction so the name, the contact columns,
+  // the profile columns and their audit rows commit or roll back as one. Writes
+  // and reads go only through createScopedClient(communityId, tx), and the audit
+  // rows through logAuditEvent(..., tx); the route requires a community admin.
+  resolve(repoRoot, 'apps/web/src/lib/services/community-profile-service.ts'),
   resolve(repoRoot, 'apps/web/src/lib/tenant/community-resolution.ts'),
   // Cross-tenant guard for the add-resident-by-email paths: compares the actor's
   // community memberships against the target's. "Do these two people share any
