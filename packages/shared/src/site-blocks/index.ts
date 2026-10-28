@@ -82,3 +82,11 @@ export {
   type StarterPackFieldError,
   type ValidateStarterPackBlocksResult,
 } from './starter-pack';
+export {
+  LINKED_FIELDS,
+  resolveLinkedText,
+  parseLinkedText,
+  type LinkedField,
+  type LinkedFacts,
+  type LinkedSegment,
+} from './linked-fields';
