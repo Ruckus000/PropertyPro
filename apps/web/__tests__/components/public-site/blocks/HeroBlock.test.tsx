@@ -367,7 +367,12 @@ describe('<HeroBlock> — linked fields (D4)', () => {
     expect(container.querySelector('p')).toBeNull();
   });
 
-  it('hero renders no heading when the whole headline drops, and keeps its other content', () => {
+  // A hero on the page owes the page its <h1>. The layouts skip their own
+  // empty-state hero whenever a hero block validates, so a hero whose headline
+  // resolved to nothing and drew no heading would leave the page with none. The
+  // community's display name stands in: what {{name}} resolves to, the short name
+  // when it has one, else the full name.
+  it('hero keeps its heading, showing the short name, when the whole headline drops', () => {
     const { container } = render(
       <HeroBlock
         {...makeProps(
@@ -377,14 +382,74 @@ describe('<HeroBlock> — linked fields (D4)', () => {
             ctaText: 'Resident Login',
             ctaTarget: '/auth/login',
           },
-          { city: null },
+          { name: 'Sunset Condominium Association, Inc.', shortName: 'Sunset', city: null },
         )}
       />,
     );
 
-    expect(container.querySelector('h1')).toBeNull();
+    const headings = container.querySelectorAll('h1');
+    expect(headings).toHaveLength(1);
+    expect(headings[0]!.textContent).toBe('Sunset');
+    // The rest of the hero is untouched.
     expect(screen.getByText('Welcome home.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Resident Login' })).toHaveAttribute('href', '/auth/login');
+  });
+
+  it('hero keeps its heading, showing the full name, when the headline drops and there is no short name', () => {
+    // A blank short name counts as none, exactly as it does for {{name}}.
+    for (const shortName of [null, '   ']) {
+      const { container, unmount } = render(
+        <HeroBlock
+          {...makeProps(
+            { headline: '{{city}}' },
+            { name: 'Sunset Condominium Association, Inc.', shortName, city: null },
+          )}
+        />,
+      );
+
+      const headings = container.querySelectorAll('h1');
+      expect(headings).toHaveLength(1);
+      expect(headings[0]!.textContent).toBe('Sunset Condominium Association, Inc.');
+      unmount();
+    }
+  });
+
+  it('hero shows its own headline, not the name, when the headline resolves', () => {
+    render(
+      <HeroBlock
+        {...makeProps({ headline: '{{city}}' }, { shortName: 'Sunset', city: 'Miami' })}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Miami');
+  });
+
+  it('hero shows the name that stands in for a dropped headline as typed, not as markup', () => {
+    // The stand-in is the name value inserted as text, never read again: its own
+    // {{city}} is not resolved (city is missing, which would drop it), and its <b>
+    // is not an element.
+    const name = 'Pointe <b>Bold</b> {{city}}';
+    const { container } = render(
+      <HeroBlock {...makeProps({ headline: '{{city}}' }, { name, shortName: null, city: null })} />,
+    );
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(name);
+    expect(container.querySelector('b')).toBeNull();
+  });
+
+  it('hero keeps its heading but still draws no subtitle when both drop', () => {
+    const { container } = render(
+      <HeroBlock
+        {...makeProps(
+          { headline: '{{city}}', subtitle: '{{units}} homes.' },
+          { shortName: 'Sunset', city: null, unitCount: null },
+        )}
+      />,
+    );
+
+    expect(container.querySelectorAll('h1')).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Sunset');
+    expect(container.querySelector('p')).toBeNull();
   });
 
   it('hero drops the {{units}} sentence for a unit count of zero rather than printing "0"', () => {

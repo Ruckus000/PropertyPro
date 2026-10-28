@@ -7,10 +7,12 @@
  * The headline and subtitle are templates: `{{name}}`, `{{city}}` and `{{units}}`
  * stand for facts the community already gave us and are filled in here, at
  * render (`resolveLinkedText`), so a rename in Settings shows with no publish. A
- * sentence whose fact is missing is dropped; when nothing is left of the headline
- * or the subtitle, that element is not rendered at all. Both go in as React text
- * children, never as markup: a community name holding `<b>` or `{{city}}` is
- * shown exactly as typed.
+ * sentence whose fact is missing is dropped. When nothing is left of the subtitle,
+ * no <p> is rendered. When nothing is left of the headline, the community's display
+ * name stands in, so the page keeps its <h1>: the layouts skip their own empty-state
+ * hero whenever a hero block validates, which makes this the page's only heading.
+ * Both go in as React text children, never as markup: a community name holding
+ * `<b>` or `{{city}}` is shown exactly as typed.
  *
  * Note: uses a plain <img> element instead of next/image because the test
  * environment (jsdom) cannot configure a Next.js image loader. The image
@@ -56,7 +58,11 @@ export function HeroBlock(props: BlockRendererProps) {
     city: community.city,
     unitCount: community.unitCount,
   };
-  const headline = resolveLinkedText(content.headline, facts);
+  // A headline that drops whole (only `{{city}}`, and no city) falls back to the
+  // display name, resolved by the same rule as the `{{name}}` token itself: the
+  // short name when it is not blank, else the full name.
+  const headline =
+    resolveLinkedText(content.headline, facts) || resolveLinkedText('{{name}}', facts);
   const subtitle = content.subtitle ? resolveLinkedText(content.subtitle, facts) : '';
 
   return (

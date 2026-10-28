@@ -623,4 +623,29 @@ describe('PublicSitePage — real community facts', () => {
     expect(container.textContent).toContain('120 homes in Miami.');
     expect(container.textContent).not.toContain('{{');
   });
+
+  it('keeps exactly one <h1> on the page when the hero headline resolves to nothing', async () => {
+    // The layout skips its own empty-state hero because a hero block is present,
+    // so the hero has to supply the page's heading itself. A headline that is only
+    // {{city}} on a community with no city is the case that used to leave none.
+    getCommunityPublicInfoMock.mockResolvedValue({ ...INFO, city: null });
+    listSiteBlocksMock.mockResolvedValue([
+      {
+        id: 1,
+        blockType: 'hero',
+        blockOrder: 1,
+        content: { headline: '{{city}}', subtitle: 'Welcome home.' },
+        isDraft: false,
+        publishedAt: null,
+        pageId: 1,
+      },
+    ]);
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
+    const { container } = render(ui as React.ReactElement);
+
+    const headings = container.querySelectorAll('h1');
+    expect(headings).toHaveLength(1);
+    expect(headings[0]?.textContent).toBe('Sunset');
+    expect(container.textContent).toContain('Welcome home.');
+  });
 });
