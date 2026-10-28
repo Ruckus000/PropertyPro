@@ -5,13 +5,14 @@
  * Rendered first on every public site; carries the strongest visual weight.
  */
 import { z } from 'zod';
+import { STOCK_PHOTO_IDS } from './stock-photos';
 import { altTextSchema, ctaTargetSchema, imagePathSchema } from './types';
 
 /** Hero galleries are a highlight reel, not an album. */
 export const MAX_HERO_PHOTOS = 8;
 
 /**
- * One hero photo.
+ * One hero photo the manager uploaded.
  *
  * `path` is the BASE storage path; the renderer appends `.1600w.webp` /
  * `.800w.webp`. See `stripVariantSuffix` in ./hero-photos for why, and for how
@@ -20,7 +21,7 @@ export const MAX_HERO_PHOTOS = 8;
  * The alt/decorative rule mirrors `imageBlockSchema` exactly rather than
  * inventing a second accessibility contract.
  */
-export const heroPhotoSchema = z
+const uploadedHeroPhotoSchema = z
   .object({
     path: imagePathSchema,
     alt: altTextSchema.optional(),
@@ -34,6 +35,32 @@ export const heroPhotoSchema = z
         'alt is required unless decorative:true is set. decorative:true and alt cannot coexist.',
     },
   );
+
+/**
+ * One of our stock photos: an id and a description, never a path (see
+ * ./stock-photos). `.strict()` is what keeps the two shapes apart, so a photo
+ * carrying both `stock` and `path` fails both and is refused, and a stock photo
+ * cannot be marked `decorative`.
+ */
+const stockHeroPhotoSchema = z
+  .object({
+    stock: z.enum(STOCK_PHOTO_IDS),
+    alt: altTextSchema,
+  })
+  .strict();
+
+/**
+ * A hero photo is either an upload or a stock photo. Consumers tell them apart
+ * with `'stock' in photo`.
+ *
+ * A union, not a discriminated union: the two shapes share no key to
+ * discriminate on. When a photo matches neither, zod keeps one branch's own
+ * messages only if the other branch failed on SHAPE, so an upload with no
+ * description still says "alt is required…" (pinned in hero-photos.test.ts).
+ * A photo that fails both on shape, such as an unknown stock id, comes out as
+ * one generic "Invalid input".
+ */
+export const heroPhotoSchema = z.union([uploadedHeroPhotoSchema, stockHeroPhotoSchema]);
 
 export const heroBlockSchema = z
   .object({

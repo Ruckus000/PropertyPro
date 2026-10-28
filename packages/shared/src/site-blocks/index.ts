@@ -18,6 +18,8 @@ import { faqBlockSchema } from './faq';
 import { galleryBlockSchema } from './gallery';
 import { amenitiesBlockSchema } from './amenities';
 import { paymentsBlockSchema } from './payments';
+import { quicklinksBlockSchema } from './quicklinks';
+import { boardBlockSchema } from './board';
 
 export const blockSchemaRegistry = {
   hero: heroBlockSchema,
@@ -31,6 +33,8 @@ export const blockSchemaRegistry = {
   gallery: galleryBlockSchema,
   amenities: amenitiesBlockSchema,
   payments: paymentsBlockSchema,
+  quicklinks: quicklinksBlockSchema,
+  board: boardBlockSchema,
 } satisfies Record<BlockType, z.ZodType>;
 
 export {
@@ -68,6 +72,14 @@ export {
   type GalleryImage,
 } from './gallery';
 export { paymentsBlockSchema, type PaymentsBlockContent } from './payments';
+export { quicklinksBlockSchema, type QuicklinksBlockContent } from './quicklinks';
+export { boardBlockSchema, type BoardBlockContent } from './board';
+export {
+  STOCK_PHOTO_IDS,
+  STOCK_PHOTO_SRC,
+  type StockPhotoId,
+  type StockHeroPhoto,
+} from './stock-photos';
 export {
   amenitiesBlockSchema,
   amenityItemSchema,

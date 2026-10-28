@@ -14,6 +14,8 @@ const VALID: Record<string, unknown> = {
   gallery: { images: [{ imagePath: '1/content/a-pool.jpg', altText: 'Pool' }] },
   amenities: { items: [{ name: 'Pool' }] },
   payments: {},
+  quicklinks: {},
+  board: {},
 };
 
 const HIDEABLE = BLOCK_TYPES.filter((t) => t !== 'hero');

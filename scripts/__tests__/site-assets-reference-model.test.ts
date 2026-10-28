@@ -57,6 +57,22 @@ describe('referencedBasePaths', () => {
     ).toEqual(['1/hero/one.jpg', '1/hero/two.jpg']);
   });
 
+  it('finds no stored object behind a stock hero photo, and keeps the uploaded ones', () => {
+    // A stock photo is a file in the web app's public folder, not an object in
+    // the bucket. Reporting it (or throwing on its missing `path`) would put a
+    // phantom reference in the set the orphan report is judged against.
+    expect(
+      referencedBasePaths('hero', {
+        headline: 'Hi',
+        photos: [
+          { stock: 'sunset', alt: 'Sunset over the water' },
+          { path: '1/hero/one.jpg', alt: 'One' },
+          { stock: 'palms', alt: 'A palm-lined street' },
+        ],
+      }),
+    ).toEqual(['1/hero/one.jpg']);
+  });
+
   it('returns nothing for block types that carry no assets', () => {
     expect(referencedBasePaths('text', { body: 'hello' })).toEqual([]);
     expect(referencedBasePaths('payments', { ctaTarget: 'https://x.test/pay' })).toEqual([]);
@@ -180,6 +196,9 @@ describe('block-type coverage', () => {
     faq: false,
     amenities: false,
     payments: false,
+    // Neither stores a path: Quick links stores nothing, Board members a heading.
+    quicklinks: false,
+    board: false,
   };
 
   /**

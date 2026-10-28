@@ -37,6 +37,8 @@ const SECTION_TITLES: Record<string, string> = {
   gallery: 'Gallery',
   amenities: 'Amenities',
   payments: 'Payments',
+  quicklinks: 'Quick links',
+  board: 'Board members',
 };
 
 /**

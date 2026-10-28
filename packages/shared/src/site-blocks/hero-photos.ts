@@ -8,13 +8,21 @@
  * "it looked right in the editor" bugs.
  */
 import type { HeroBlockContent } from './hero';
+import type { StockHeroPhoto } from './stock-photos';
 
-export interface ResolvedHeroPhoto {
-  /** Base storage path — variant suffixes are appended at render time. */
-  path: string;
-  alt?: string;
-  decorative?: true;
-}
+/**
+ * One photo of a hero, whichever way it was stored: an upload (it has a `path`)
+ * or one of our stock photos (it has `stock` and no `path`). Tell them apart
+ * with `'stock' in photo`.
+ */
+export type ResolvedHeroPhoto =
+  | {
+      /** Base storage path — variant suffixes are appended at render time. */
+      path: string;
+      alt?: string;
+      decorative?: true;
+    }
+  | StockHeroPhoto;
 
 /**
  * Storage variant suffixes written by the image finalize endpoint.
@@ -53,22 +61,29 @@ export function stripVariantSuffix(path: string): string {
  * The hero's photos, whichever shape they were stored in.
  *
  * Order of precedence:
- *   1. `photos` — the current shape.
+ *   1. `photos` — the current shape, uploads and stock photos alike, in the
+ *      order they are stored.
  *   2. `heroImagePath` — upgraded to a one-element array, with any variant
  *      suffix stripped. This is why the change needs no backfill and has no
  *      window in which existing heroes render empty.
  *   3. neither — no photos.
+ *
+ * A stock photo only ever comes from `photos`: nothing here makes one out of the
+ * legacy fields or adds one to a hero that has none.
  *
  * `heroBlockSchema` refuses content carrying both, so the precedence here is
  * defence in depth rather than a policy decision made in two places.
  */
 export function resolveHeroPhotos(content: HeroBlockContent): ResolvedHeroPhoto[] {
   if (content.photos && content.photos.length > 0) {
-    return content.photos.map((photo) => ({
-      path: photo.path,
-      ...(photo.alt !== undefined ? { alt: photo.alt } : {}),
-      ...(photo.decorative === true ? { decorative: true as const } : {}),
-    }));
+    return content.photos.map((photo): ResolvedHeroPhoto => {
+      if ('stock' in photo) return { stock: photo.stock, alt: photo.alt };
+      return {
+        path: photo.path,
+        ...(photo.alt !== undefined ? { alt: photo.alt } : {}),
+        ...(photo.decorative === true ? { decorative: true as const } : {}),
+      };
+    });
   }
 
   if (content.heroImagePath) {

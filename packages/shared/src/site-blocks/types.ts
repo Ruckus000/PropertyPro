@@ -10,11 +10,19 @@ import { z } from 'zod';
  * All supported block types. The first 7 are v1 (Essentials+); `faq`,
  * `gallery` and `amenities` are the Pro+ "polish blocks" added in PR #10,
  * gated to the `hasSitePolishBlocks` plan feature at the write path;
- * `payments` was added in website-editor-v3 Phase 9.
+ * `payments` was added in website-editor-v3 Phase 9; `quicklinks` and `board`
+ * came with the website builder's looks, as a read release first (readers and
+ * the CHECK constraint accept them before any code writes one).
  *
  * This list is duplicated, without a compile-time link, in the
- * `site_blocks_block_type_check` CHECK constraint (migration 0044) and in the
- * upsert contract's z.enum. Adding a type means touching all three.
+ * `site_blocks_block_type_check` CHECK constraint (migration 0044, widened since
+ * by 0096) and in the upsert contract's z.enum. Adding a type means touching all
+ * three. The upsert contract is the write path and also leaves out `hero`, which
+ * has its own endpoint, so a type that ships read-first joins it only in the
+ * release that ships its writers.
+ *
+ * Keep the array literal below in this exact shape: a scripts test reads it out
+ * of this file's source to check every type is classified.
  */
 export const BLOCK_TYPES = [
   'hero',
@@ -28,6 +36,8 @@ export const BLOCK_TYPES = [
   'gallery',
   'amenities',
   'payments',
+  'quicklinks',
+  'board',
 ] as const;
 
 export type BlockType = (typeof BLOCK_TYPES)[number];
