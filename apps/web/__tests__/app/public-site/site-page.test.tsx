@@ -98,6 +98,25 @@ vi.mock('@/lib/utils/html-sanitizer', () => ({
   sanitizeHtml: (html: string) => html,
 }));
 
+// Reads the props the page hands its layout. The REAL layouts still render, so
+// every case below sees the markup visitors get; the spy only records what was
+// passed in.
+const { layoutPropsSpy } = vi.hoisted(() => ({ layoutPropsSpy: vi.fn() }));
+vi.mock('@/components/public-site/layouts/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/public-site/layouts/registry')>();
+  return {
+    ...actual,
+    getLayout: (id: Parameters<typeof actual.getLayout>[0]) => {
+      const Real = actual.getLayout(id);
+      if (!Real) return Real;
+      return function SpiedLayout(props: Parameters<typeof Real>[0]) {
+        layoutPropsSpy(props);
+        return Real(props);
+      };
+    },
+  };
+});
+
 // Spy on render-health telemetry (see reportDegradedBlocksMock above) instead
 // of letting the real implementation run against @sentry/nextjs.
 vi.mock('@/lib/telemetry/site-block-render', () => ({
@@ -516,5 +535,92 @@ describe('PublicSitePage — nav [11b-2]', () => {
     const current = links.filter((a) => a.getAttribute('aria-current') === 'page');
     expect(current).toHaveLength(1);
     expect(current[0]?.textContent).toBe('Welcome');
+  });
+});
+
+describe('PublicSitePage — real community facts', () => {
+  // `getCommunityPublicInfo` used to leave city and state out, and the page filled
+  // the gap with nulls, so a linked field such as {{city}} had nothing to resolve.
+  const INFO = {
+    id: 42,
+    slug: 'sunset-condos',
+    name: 'Sunset Condominium Association, Inc.',
+    shortName: 'Sunset',
+    communityType: 'condo_718',
+    city: 'Miami',
+    state: 'FL',
+    unitCount: 120,
+    sitePublishedAt: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    headersGetMock.mockImplementation((key: string) =>
+      key === 'x-community-id' ? '42' : null,
+    );
+    getCommunityPublicInfoMock.mockResolvedValue(INFO);
+    getBrandingForCommunityMock.mockResolvedValue({});
+    listSiteBlocksMock.mockResolvedValue([]);
+    getHomePageIdMock.mockResolvedValue(1);
+    getPageBySlugMock.mockResolvedValue(null);
+    resolveRedirectMock.mockResolvedValue(null);
+    listNavPagesMock.mockResolvedValue([]);
+  });
+
+  it("public page passes the community's real city to the layout", async () => {
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
+    render(ui as React.ReactElement);
+
+    expect(layoutPropsSpy).toHaveBeenCalledTimes(1);
+    const { community } = layoutPropsSpy.mock.calls[0]![0] as {
+      community: Record<string, unknown>;
+    };
+    expect(community).toMatchObject({
+      name: 'Sunset Condominium Association, Inc.',
+      shortName: 'Sunset',
+      city: 'Miami',
+      state: 'FL',
+      unitCount: 120,
+    });
+  });
+
+  it('passes nulls through for a community that has not given a city or a unit count', async () => {
+    getCommunityPublicInfoMock.mockResolvedValue({
+      ...INFO,
+      shortName: null,
+      city: null,
+      state: null,
+      unitCount: null,
+    });
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
+    render(ui as React.ReactElement);
+
+    const { community } = layoutPropsSpy.mock.calls[0]![0] as {
+      community: Record<string, unknown>;
+    };
+    expect(community).toMatchObject({ shortName: null, city: null, state: null, unitCount: null });
+  });
+
+  it('resolves a linked hero from those facts, so a rename shows with no publish', async () => {
+    listSiteBlocksMock.mockResolvedValue([
+      {
+        id: 1,
+        blockType: 'hero',
+        blockOrder: 1,
+        content: {
+          headline: 'Welcome to {{name}}',
+          subtitle: '{{units}} homes in {{city}}.',
+        },
+        isDraft: false,
+        publishedAt: null,
+        pageId: 1,
+      },
+    ]);
+    const ui = await PublicSitePage({ params: Promise.resolve({}) });
+    const { container } = render(ui as React.ReactElement);
+
+    expect(container.querySelector('h1')?.textContent).toBe('Welcome to Sunset');
+    expect(container.textContent).toContain('120 homes in Miami.');
+    expect(container.textContent).not.toContain('{{');
   });
 });

@@ -378,12 +378,14 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
               id: community.id,
               slug: community.slug,
               name: community.name,
+              shortName: community.shortName,
               logoUrl: headerLogoUrl,
               communityType: community.communityType as 'condo_718' | 'hoa_720' | 'apartment',
-              // city / state / timezone not yet in getCommunityPublicInfo; all FL
-              // communities are America/New_York. A later PR extends the SELECT.
-              city: null,
-              state: null,
+              city: community.city,
+              state: community.state,
+              unitCount: community.unitCount,
+              // timezone is not in getCommunityPublicInfo; Florida sites have
+              // always been rendered in America/New_York.
               timezone: 'America/New_York',
             }}
             theme={{

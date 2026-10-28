@@ -119,7 +119,8 @@ export function ContactForm({ communityId, blockOrder, content }: BlockFormProps
 
       {!draft.showBoard && !draft.showManagement && (
         <p className="text-xs text-content-secondary">
-          With both hidden this section shows nothing. Remove it from Sections if you
+          With both hidden this section still shows your address and office hours when
+          they&apos;re in your Community profile. Remove it from Sections if you
           don&apos;t want it on the page.
         </p>
       )}

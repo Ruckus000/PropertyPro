@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { HeroBlock } from '@/components/public-site/blocks/HeroBlock';
-import type { BlockRendererProps } from '@/components/public-site/blocks/types';
+import type { BlockRendererProps, PublicCommunity } from '@/components/public-site/blocks/types';
 
-const communityFixture = {
+const communityFixture: PublicCommunity = {
   id: 1,
   slug: 'sunset-condos',
   name: 'Sunset Condos',
+  shortName: null,
   logoUrl: null,
-  communityType: 'condo_718' as const,
+  communityType: 'condo_718',
   city: 'Miami',
   state: 'FL',
+  unitCount: null,
   timezone: 'America/New_York',
 };
 
@@ -22,10 +24,10 @@ const themeFixture = {
   bodyFont: 'Manrope',
 };
 
-function makeProps(content: unknown): BlockRendererProps {
+function makeProps(content: unknown, community: Partial<PublicCommunity> = {}): BlockRendererProps {
   return {
     block: { id: 10, blockType: 'hero', blockOrder: 1, content },
-    community: communityFixture,
+    community: { ...communityFixture, ...community },
     theme: themeFixture,
     layout: 'tidewater',
   };
@@ -240,5 +242,162 @@ describe('<HeroBlock> — hero photos (Phase 9)', () => {
   it('renders no imagery at all for a hero with none', () => {
     const { container } = render(<HeroBlock {...makeProps({ headline: 'X' })} />);
     expect(container.querySelector('img')).toBeNull();
+  });
+});
+
+describe('<HeroBlock> — linked fields (D4)', () => {
+  // Copy such as "Welcome to {{name}}" is stored with the token and resolved
+  // here, at render, from the facts the community already gave us. A rename in
+  // Settings therefore reaches the page with no republish.
+
+  it('hero shows the community name in place of {{name}}', () => {
+    render(<HeroBlock {...makeProps({ headline: 'Welcome to {{name}}' })} />);
+
+    // Exact text: `toHaveTextContent('…')` with a string is a substring match.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome to Sunset Condos');
+    expect(screen.queryByText(/\{\{/)).not.toBeInTheDocument();
+  });
+
+  it('prefers the short name for {{name}} when the community has one', () => {
+    render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'Welcome to {{name}}' },
+          { name: 'Sunset Condominium Association, Inc.', shortName: 'Sunset' },
+        )}
+      />,
+    );
+
+    // Exact text, not a substring: "Welcome to Sunset Condominium Association, Inc."
+    // contains "Welcome to Sunset", so a substring match cannot tell the short
+    // name from the full one.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome to Sunset');
+  });
+
+  it('fills {{city}} and {{units}} in the subtitle from the community facts', () => {
+    render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'X', subtitle: '{{units}} homes in {{city}}.' },
+          { city: 'Miami', unitCount: 1200 },
+        )}
+      />,
+    );
+
+    expect(screen.getByText('1,200 homes in Miami.')).toBeInTheDocument();
+  });
+
+  // Review Focus 1: an odd community name is shown as typed. It is a fact the
+  // copy is built from, not more copy, so it is never resolved a second time and
+  // never read as markup.
+  it('hero renders a name with {{city}} in it literally', () => {
+    render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'Welcome to {{name}}', subtitle: 'Home of {{name}}.' },
+          { name: 'Harbor {{city}} Condos', city: 'Miami' },
+        )}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(
+      'Welcome to Harbor {{city}} Condos',
+    );
+    expect(screen.getByText('Home of Harbor {{city}} Condos.')).toBeInTheDocument();
+    expect(screen.queryByText(/Harbor Miami/)).not.toBeInTheDocument();
+  });
+
+  it('hero renders a name with HTML in it as text and creates no element', () => {
+    const name = 'Pointe <b>Bold</b> {{city}}';
+    const { container } = render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'Welcome to {{name}}', subtitle: 'Home of {{name}}.' },
+          { name, city: 'Miami' },
+        )}
+      />,
+    );
+
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1.textContent).toBe(`Welcome to ${name}`);
+    expect(container.querySelector('p')?.textContent).toBe(`Home of ${name}.`);
+    // The markup is escaped, so there is a text node and no <b>.
+    expect(container.querySelector('b')).toBeNull();
+    expect(h1.innerHTML).toContain('&lt;b&gt;Bold&lt;/b&gt;');
+  });
+
+  it('hero shows a 120-character name whole', () => {
+    const name =
+      'The Harbor Pointe at Bayshore Condominium Association of Greater Miami-Dade County, a Florida Not-for-Profit Corp., Inc.';
+    expect(name).toHaveLength(120);
+
+    render(<HeroBlock {...makeProps({ headline: '{{name}}' }, { name })} />);
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(name);
+  });
+
+  // Review Focus 2: a missing fact costs its own sentence and nothing else.
+  it('hero drops only the sentence whose fact is missing', () => {
+    render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'X', subtitle: 'Homes in {{city}}. {{units}} units. Welcome home.' },
+          { city: null, unitCount: 40 },
+        )}
+      />,
+    );
+
+    expect(screen.getByText('40 units. Welcome home.')).toBeInTheDocument();
+    expect(screen.queryByText(/Homes in/)).not.toBeInTheDocument();
+  });
+
+  it('hero renders no subtitle paragraph when every sentence drops', () => {
+    const { container } = render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}. {{units}} units.' },
+          { city: null, unitCount: null },
+        )}
+      />,
+    );
+
+    // The headline is untouched, and nothing stands where the subtitle was: no
+    // empty <p> for a screen reader to announce, and no leftover margin box.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Welcome to Sunset Condos');
+    expect(container.querySelector('p')).toBeNull();
+  });
+
+  it('hero renders no heading when the whole headline drops, and keeps its other content', () => {
+    const { container } = render(
+      <HeroBlock
+        {...makeProps(
+          {
+            headline: '{{city}}',
+            subtitle: 'Welcome home.',
+            ctaText: 'Resident Login',
+            ctaTarget: '/auth/login',
+          },
+          { city: null },
+        )}
+      />,
+    );
+
+    expect(container.querySelector('h1')).toBeNull();
+    expect(screen.getByText('Welcome home.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Resident Login' })).toHaveAttribute('href', '/auth/login');
+  });
+
+  it('hero drops the {{units}} sentence for a unit count of zero rather than printing "0"', () => {
+    render(
+      <HeroBlock
+        {...makeProps(
+          { headline: 'X', subtitle: 'A community of {{units}} homes. Welcome.' },
+          { unitCount: 0 },
+        )}
+      />,
+    );
+
+    expect(screen.getByText('Welcome.')).toBeInTheDocument();
+    expect(screen.queryByText(/community of/)).not.toBeInTheDocument();
   });
 });

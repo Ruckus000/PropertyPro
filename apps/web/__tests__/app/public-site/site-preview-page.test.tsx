@@ -220,4 +220,29 @@ describe('SitePreviewPage — the props it hands <Layout>', () => {
 
     expect(capturedProps[0]!.page).toBeUndefined();
   });
+
+  it("hands the layout the community's real city, state, short name and unit count", async () => {
+    // The preview must resolve a linked field ({{city}}) exactly as the live
+    // site does, so it needs the same facts the live route passes.
+    getCommunityPublicInfoMock.mockResolvedValue({
+      id: 1,
+      slug: 'sunset-condos',
+      name: 'Sunset Condominium Association, Inc.',
+      shortName: 'Sunset',
+      communityType: 'condo_718',
+      city: 'Miami',
+      state: 'FL',
+      unitCount: 120,
+    });
+
+    await renderPreview();
+
+    expect(capturedProps[0]!.community).toMatchObject({
+      name: 'Sunset Condominium Association, Inc.',
+      shortName: 'Sunset',
+      city: 'Miami',
+      state: 'FL',
+      unitCount: 120,
+    });
+  });
 });

@@ -68,12 +68,15 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
       id: community.id,
       slug: community.slug,
       name: community.name,
+      shortName: community.shortName,
       logoUrl: siteLogoUrl ?? resolved.logoUrl,
       communityType: community.communityType as PublicCommunity['communityType'],
-      // Not yet in getCommunityPublicInfo; the public page makes the same
-      // assumption. Both change together when that SELECT is widened.
-      city: null,
-      state: null,
+      // The same facts the public page hands its layout, so a linked field in a
+      // section resolves to the same text on the canvas as on the live site.
+      city: community.city,
+      state: community.state,
+      unitCount: community.unitCount,
+      // Not in getCommunityPublicInfo; the public page makes the same assumption.
       timezone: 'America/New_York',
     },
     theme: {

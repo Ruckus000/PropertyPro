@@ -55,10 +55,12 @@ const COMMUNITY: PublicCommunity = {
   id: 1,
   slug: 'sunset-condos',
   name: 'Sunset Condos',
+  shortName: null,
   logoUrl: null,
   communityType: 'condo_718',
   city: 'Miami',
   state: 'FL',
+  unitCount: 120,
   timezone: 'America/New_York',
 };
 
@@ -194,6 +196,10 @@ const DATA: Record<string, unknown> = {
   contact: {
     management: { name: 'Acme Property Group', email: 'pm@example.test', phone: '305-555-0100' },
     board: [{ name: 'Dana Reyes', title: 'President' }],
+    // The Community profile's office card. Without these the registry-driven run
+    // below would audit a Contact section that never renders it.
+    address: '100 Palm Way, Miami, FL 33101',
+    officeHours: 'Mon-Fri, 9-5',
   },
 };
 
@@ -254,6 +260,12 @@ describe('public site — block views', () => {
     const { container } = renderBlock(blockType);
     expect(container.querySelectorAll('*').length).toBeGreaterThan(3);
     expect(container.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+  });
+
+  it('the contact block renders the office card, so its axe run covers it', () => {
+    const { container } = renderBlock('contact');
+    expect(container.textContent).toContain('100 Palm Way, Miami, FL 33101');
+    expect(container.textContent).toContain('Mon-Fri, 9-5');
   });
 
   it.each(BLOCK_TYPES)('%s block has no axe violations', async (blockType) => {

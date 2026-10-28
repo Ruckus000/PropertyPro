@@ -73,6 +73,12 @@ vi.mock('@propertypro/db', () => ({
     contactName: 'communities.contactName',
     contactEmail: 'communities.contactEmail',
     contactPhone: 'communities.contactPhone',
+    officeHours: 'communities.officeHours',
+    addressLine1: 'communities.addressLine1',
+    addressLine2: 'communities.addressLine2',
+    city: 'communities.city',
+    state: 'communities.state',
+    zipCode: 'communities.zipCode',
     deletedAt: 'communities.deletedAt',
   },
   users: {
@@ -1077,6 +1083,8 @@ describe('getPublicCommunityScopedReader', () => {
         { name: 'Ava Nguyen', title: 'Board President' },
         { name: 'Miles Carter', title: 'Board Member' },
       ],
+      address: null,
+      officeHours: null,
     });
     expect(result.board[0]).not.toHaveProperty('email');
     expect(result.board[0]).not.toHaveProperty('phone');
@@ -1092,7 +1100,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     const result = await reader.getContactInfo({ showBoard: true, showManagement: true });
 
-    expect(result).toEqual({ management: null, board: [] });
+    expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
   });
 
   // ---------------------------------------------------------------------------
@@ -1104,7 +1112,9 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.getContactInfo({ showBoard: true, showManagement: false });
 
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    // Call 0 is the community row (office address and hours, read whichever
+    // toggles are on); the board query is call 1.
+    const whereCall = mockSelectChain.where.mock.calls[1]![0];
     expect(whereCall).toHaveProperty('__and');
     // designation inArray predicate present with BOARD_DESIGNATIONS values
     const designationClause = whereCall.__and.find(
@@ -1129,9 +1139,9 @@ describe('getPublicCommunityScopedReader', () => {
   });
 
   it('getContactInfo title falls back from designation when displayTitle is null (no presetKey)', async () => {
-    // showManagement=false → the board query is the only query issued,
-    // so its rows are the FIRST queued result.
-    queueQueryResults([
+    // The community row (office address and hours) is read whichever toggles are
+    // on, so it takes the FIRST queued result and the board rows are the second.
+    queueQueryResults([], [
       { fullName: 'Pat Prez', displayTitle: null, designation: 'board_president' },
       { fullName: 'Mel Member', displayTitle: null, designation: 'board_member' },
       { fullName: 'Tia Treasurer', displayTitle: 'Treasurer', designation: 'board_member' },
@@ -1147,12 +1157,230 @@ describe('getPublicCommunityScopedReader', () => {
     ]);
   });
 
-  it('getContactInfo skips disabled sections without issuing their queries', async () => {
+  it('getContactInfo skips the board query when the board is off, but still reads the office details', async () => {
     const reader = getPublicCommunityScopedReader(42);
     const result = await reader.getContactInfo({ showBoard: false, showManagement: false });
 
-    expect(result).toEqual({ management: null, board: [] });
-    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
+    // One read: the community row (address and hours). No roster join.
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+    expect(mockSelectChain.innerJoin).not.toHaveBeenCalled();
+  });
+
+  describe('getContactInfo — the Community profile', () => {
+    // The Contact section shows the association's address and office hours from the
+    // Community profile, each only when set. Management details stay behind their
+    // toggle; these two do not, because they are the association's, not a person's.
+    type ProfileRow = Record<
+      | 'contactName'
+      | 'contactEmail'
+      | 'contactPhone'
+      | 'officeHours'
+      | 'addressLine1'
+      | 'addressLine2'
+      | 'city'
+      | 'state'
+      | 'zipCode',
+      string | null
+    >;
+    const PROFILE_ROW: ProfileRow = {
+      contactName: null,
+      contactEmail: null,
+      contactPhone: null,
+      officeHours: null,
+      addressLine1: null,
+      addressLine2: null,
+      city: null,
+      state: null,
+      zipCode: null,
+    };
+
+    async function addressFor(row: Partial<ProfileRow>): Promise<string | null> {
+      queueQueryResults([{ ...PROFILE_ROW, ...row }]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+      return result.address;
+    }
+
+    it('builds one address line from line 1, line 2, city, state and ZIP', async () => {
+      queueQueryResults([
+        {
+          ...PROFILE_ROW,
+          addressLine1: '100 Palm Way',
+          addressLine2: 'Suite 4',
+          city: 'Miami',
+          state: 'FL',
+          zipCode: '33101',
+          officeHours: 'Mon-Fri, 9-5',
+        },
+      ]);
+
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+
+      expect(result.address).toBe('100 Palm Way, Suite 4, Miami, FL 33101');
+      expect(result.officeHours).toBe('Mon-Fri, 9-5');
+    });
+
+    it('leaves out a line it was not given and joins the rest', async () => {
+      expect(
+        await addressFor({ addressLine1: '100 Palm Way', city: 'Miami', state: 'FL', zipCode: '33101' }),
+      ).toBe('100 Palm Way, Miami, FL 33101');
+      expect(await addressFor({ addressLine1: '100 Palm Way', city: 'Miami', state: 'FL' })).toBe(
+        '100 Palm Way, Miami, FL',
+      );
+      expect(await addressFor({ addressLine1: '100 Palm Way', city: 'Miami' })).toBe(
+        '100 Palm Way, Miami',
+      );
+      expect(await addressFor({ addressLine1: '100 Palm Way' })).toBe('100 Palm Way');
+      // A city alone is enough to place the association; the rule asks for a
+      // street line or a city, not both.
+      expect(await addressFor({ city: 'Miami', state: 'FL', zipCode: '33101' })).toBe(
+        'Miami, FL 33101',
+      );
+    });
+
+    it('is null when there is no street line and no city', async () => {
+      // A state, a ZIP or a "Suite 4" on their own do not tell a visitor where to go.
+      expect(await addressFor({})).toBeNull();
+      expect(await addressFor({ state: 'FL', zipCode: '33101' })).toBeNull();
+      expect(await addressFor({ addressLine2: 'Suite 4', state: 'FL' })).toBeNull();
+    });
+
+    it('treats blank and whitespace-only fields as not set, and trims the rest', async () => {
+      expect(await addressFor({ addressLine1: '   ', city: '', state: 'FL', zipCode: ' ' })).toBeNull();
+      expect(
+        await addressFor({
+          addressLine1: '  100 Palm Way ',
+          addressLine2: '   ',
+          city: ' Miami',
+          state: 'FL ',
+          zipCode: ' 33101 ',
+        }),
+      ).toBe('100 Palm Way, Miami, FL 33101');
+    });
+
+    it('returns office hours trimmed, and null when they are blank', async () => {
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: '  Mon-Fri, 9-5  ' }]);
+      const reader = getPublicCommunityScopedReader(42);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBe(
+        'Mon-Fri, 9-5',
+      );
+
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: '   ' }]);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBeNull();
+
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: null }]);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBeNull();
+    });
+
+    it('keeps the management contact behind its toggle while the address and hours show', async () => {
+      const row = {
+        ...PROFILE_ROW,
+        contactName: 'Jane Manager',
+        contactEmail: 'jane@example.com',
+        contactPhone: '555-0100',
+        addressLine1: '100 Palm Way',
+        city: 'Miami',
+        officeHours: 'Mon-Fri, 9-5',
+      };
+      queueQueryResults([row]);
+      const off = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+
+      expect(off.management).toBeNull();
+      expect(JSON.stringify(off)).not.toContain('jane@example.com');
+      expect(JSON.stringify(off)).not.toContain('Jane Manager');
+      expect(off.address).toBe('100 Palm Way, Miami');
+      expect(off.officeHours).toBe('Mon-Fri, 9-5');
+
+      queueQueryResults([row]);
+      const on = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+      expect(on.management).toEqual({
+        name: 'Jane Manager',
+        email: 'jane@example.com',
+        phone: '555-0100',
+      });
+    });
+
+    it('treats a blank contact email as not set rather than passing the blank on', async () => {
+      queueQueryResults([
+        { ...PROFILE_ROW, contactName: 'Jane Manager', contactEmail: '   ', contactPhone: '555-0100' },
+      ]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result.management).toEqual({ name: 'Jane Manager', email: null, phone: '555-0100' });
+    });
+
+    it('has no management contact when every field is blank', async () => {
+      queueQueryResults([
+        { ...PROFILE_ROW, contactName: ' ', contactEmail: '', contactPhone: '  ' },
+      ]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result.management).toBeNull();
+    });
+
+    it("shows no one's email but the community's public contact email", async () => {
+      // Pinned at the projection, where a second email column would have to appear:
+      // the community query reads `contact_email` and nothing else that is an
+      // address, and the board roster reads a name and a title.
+      queueQueryResults([PROFILE_ROW], []);
+      await getPublicCommunityScopedReader(42).getContactInfo({ showBoard: true, showManagement: true });
+
+      const communityProjection = mockDb.select.mock.calls[0]![0] as Record<string, unknown>;
+      const boardProjection = mockDb.select.mock.calls[1]![0] as Record<string, unknown>;
+
+      expect(communityProjection).toEqual({
+        contactName: 'communities.contactName',
+        contactEmail: 'communities.contactEmail',
+        contactPhone: 'communities.contactPhone',
+        officeHours: 'communities.officeHours',
+        addressLine1: 'communities.addressLine1',
+        addressLine2: 'communities.addressLine2',
+        city: 'communities.city',
+        state: 'communities.state',
+        zipCode: 'communities.zipCode',
+      });
+      expect(Object.keys(boardProjection).sort()).toEqual(['designation', 'displayTitle', 'fullName']);
+    });
+
+    it('reads the community row for its own, undeleted community only', async () => {
+      queueQueryResults([PROFILE_ROW]);
+      await getPublicCommunityScopedReader(42).getContactInfo({ showBoard: false, showManagement: false });
+
+      // With the toggles off this is the ONLY query, so it is where call 0.
+      const where = mockSelectChain.where.mock.calls[0]![0] as { __and: unknown[] };
+      expect(where.__and).toEqual([
+        { __eq: { col: 'communities.id', val: 42 } },
+        { __isNull: 'communities.deletedAt' },
+      ]);
+    });
+
+    it('returns nothing for a community that is gone', async () => {
+      queueQueryResults([]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
+    });
   });
 
   describe('listOwnerRecordGroups', () => {
