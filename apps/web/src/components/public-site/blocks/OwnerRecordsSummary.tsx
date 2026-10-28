@@ -17,14 +17,23 @@ export interface OwnerRecordsSummaryProps {
    * the section is simply left unnamed.
    */
   blockId?: number;
+  /**
+   * The Documents section's anchor id, when this summary is all that section
+   * shows (see `BlockRendererProps.anchorId`).
+   */
+  anchorId?: string;
 }
 
-export function OwnerRecordsSummary({ groups, blockId }: OwnerRecordsSummaryProps) {
+export function OwnerRecordsSummary({ groups, blockId, anchorId }: OwnerRecordsSummaryProps) {
   const headingId = blockId === undefined ? undefined : `owner-records-${blockId}`;
   const posted = groups.filter((group) => group.postedCount > 0);
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={headingId}>
+    <section
+      id={anchorId}
+      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
+      aria-labelledby={headingId}
+    >
       <div className="mx-auto max-w-3xl">
         <h2 id={headingId} className="font-heading text-2xl font-semibold text-content mb-6">
           Association documents

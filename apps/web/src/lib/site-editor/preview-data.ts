@@ -39,6 +39,9 @@ import type {
   PublicMeeting,
 } from '@/lib/db/public-community-reader';
 import type { AnnouncementViewItem } from '@/components/public-site/blocks/AnnouncementsBlockView';
+import type { BoardData } from '@/components/public-site/blocks/BoardBlockView';
+import { contactHasContent } from '@/components/public-site/blocks/ContactBlockView';
+import type { QuickLinksData } from '@/components/public-site/blocks/QuickLinksBlockView';
 
 /** Rows per SoR type in the superset. Well above the per-block cap of 20. */
 export const PREVIEW_LIMIT = 100;
@@ -54,6 +57,9 @@ export interface CanvasPreviewData {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The Meetings and Announcements sections' default window, per their schemas. */
+const DEFAULT_SECTION_WINDOW_DAYS = 30;
 
 /** Empty preview data — used before the fetch resolves and in tests. */
 export const EMPTY_PREVIEW_DATA: CanvasPreviewData = {
@@ -135,4 +141,36 @@ export function selectContact(
     address: all.address,
     officeHours: all.officeHours,
   };
+}
+
+/**
+ * The Quick links the canvas previews.
+ *
+ * An approximation, on purpose. On the live site a link shows only when its
+ * section is on the same page and has something in it, read with that
+ * section's own settings (see QuickLinksBlock). The canvas renders one section
+ * at a time and cannot see the rest of the page, so it shows each link the
+ * community's data supports, as it would look beside Meetings, News and Contact
+ * sections with their default settings, which are what the looks use. The live
+ * site also leaves out a link whose section is not on the page.
+ */
+export function selectQuickLinks(preview: CanvasPreviewData, now: number): QuickLinksData {
+  const firstInDefaultWindow = { limit: 1, timeWindowDays: DEFAULT_SECTION_WINDOW_DAYS };
+  const nextMeeting = selectMeetings(firstInDefaultWindow, preview.meetings, now)[0];
+  return {
+    nextMeeting: nextMeeting ? { startsAt: nextMeeting.startsAt.toISOString() } : null,
+    showMeetings: nextMeeting !== undefined,
+    showNews: selectAnnouncements(firstInDefaultWindow, preview.announcements, now).length > 0,
+    showContact: contactHasContent(
+      selectContact({ showManagement: true, showBoard: true }, preview.contact),
+    ),
+  };
+}
+
+/**
+ * The Board members section's rows: the board from the contact superset, which
+ * is always fetched with the board on. Name and title only, as on the live site.
+ */
+export function selectBoard(contact: PublicContactInfo): BoardData {
+  return { members: contact.board.map(({ name, title }) => ({ name, title })) };
 }

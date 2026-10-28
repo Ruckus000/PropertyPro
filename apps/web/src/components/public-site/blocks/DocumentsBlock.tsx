@@ -22,6 +22,9 @@
  * when both) when any group has one posted, and renders nothing when it has
  * neither. The view keeps its "No documents available." text, because the editor
  * canvas renders the view directly and a manager needs to see the empty section.
+ *
+ * The section's anchor id (`#documents`) goes on the first part it renders: the
+ * list when there is one, otherwise the summary.
  */
 import { documentsBlockSchema, type DocumentsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
@@ -60,10 +63,15 @@ export async function DocumentsBlock(props: BlockRendererProps) {
           content={config}
           data={items}
           community={props.community}
+          anchorId={props.anchorId}
         />
       ) : null}
       {hasOwnerRecords ? (
-        <OwnerRecordsSummary blockId={props.block.id} groups={recordGroups} />
+        <OwnerRecordsSummary
+          blockId={props.block.id}
+          groups={recordGroups}
+          anchorId={hasPublicDocuments ? undefined : props.anchorId}
+        />
       ) : null}
     </>
   );

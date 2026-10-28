@@ -2,15 +2,16 @@
  * Block VIEW registry — the client-safe counterpart to `./registry.ts`.
  *
  * `blockRendererRegistry` maps a block type to the component the *public site*
- * renders. Four of those entries are async server components that query the DB
- * inside themselves (announcements, documents, meetings, contact), so that
- * registry cannot be used from the editor canvas, which is a client tree that
- * re-renders on every keystroke.
+ * renders. Six of those entries are async server components that query the DB
+ * inside themselves (announcements, documents, meetings, contact, quicklinks,
+ * board), so that registry cannot be used from the editor canvas, which is a
+ * client tree that re-renders on every keystroke.
  *
  * This registry maps the same block types to their **pure, synchronous view**:
  *
- *   - the four system-of-record types resolve to the `*BlockView` component
- *     extracted in Phase 2a, which takes its rows as a prop;
+ *   - the six data-driven types resolve to their `*BlockView` component, which
+ *     takes its rows as a prop (`CanvasBlock` narrows them from the preview
+ *     superset);
  *   - the six authored types (hero, text, image, faq, gallery, amenities) were
  *     already pure and resolve to the very same component the public site uses.
  *
@@ -61,6 +62,8 @@ import { AnnouncementsBlockView } from './AnnouncementsBlockView';
 import { DocumentsBlockView } from './DocumentsBlockView';
 import { MeetingsBlockView } from './MeetingsBlockView';
 import { ContactBlockView } from './ContactBlockView';
+import { QuickLinksBlockView } from './QuickLinksBlockView';
+import { BoardBlockView } from './BoardBlockView';
 
 /**
  * Which shape a block type's view expects.
@@ -82,6 +85,8 @@ export const BLOCK_VIEW_KINDS = {
   documents: 'view',
   meetings: 'view',
   contact: 'view',
+  quicklinks: 'view',
+  board: 'view',
 } as const satisfies Partial<Record<BlockType, 'renderer' | 'view'>>;
 
 export type BlockViewKind = (typeof BLOCK_VIEW_KINDS)[keyof typeof BLOCK_VIEW_KINDS];
@@ -138,6 +143,8 @@ export const blockViewRegistry: Partial<Record<BlockType, ComponentType<any>>> =
   documents: DocumentsBlockView,
   meetings: MeetingsBlockView,
   contact: ContactBlockView,
+  quicklinks: QuickLinksBlockView,
+  board: BoardBlockView,
 };
 
 /** Whether the canvas can render this block type at all. */

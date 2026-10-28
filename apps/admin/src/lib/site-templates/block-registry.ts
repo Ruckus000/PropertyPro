@@ -109,6 +109,20 @@ const BLOCK_META: Record<BlockType, BlockMeta> = {
     summary:
       'Links residents to a payment page — the community portal by default, or a PM-supplied processor URL. Renders a link only; no card details are entered on the website.',
   },
+  quicklinks: {
+    label: 'Quick links',
+    tier: 'essentials',
+    rendererPath: `${RENDERER_DIR}/QuickLinksBlock.tsx`,
+    summary:
+      'Shortcuts to the Meetings (with the next meeting date), News and Contact sections on the same page, each shown only when that section has something to show, plus Owner documents (sign in), always. Stores nothing but hidden.',
+  },
+  board: {
+    label: 'Board members',
+    tier: 'essentials',
+    rendererPath: `${RENDERER_DIR}/BoardBlock.tsx`,
+    summary:
+      'Names and titles of the current board seat holders, read when the page renders. Never contact details; renders nothing while no one holds a seat.',
+  },
 };
 
 const DOC_BASE = 'docs/design-system/blocks';

@@ -37,6 +37,7 @@ export async function MeetingsBlock(props: BlockRendererProps) {
       content={config}
       data={items}
       community={props.community}
+      anchorId={props.anchorId}
     />
   );
 }

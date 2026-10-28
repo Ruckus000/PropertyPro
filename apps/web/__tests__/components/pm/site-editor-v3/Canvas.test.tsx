@@ -385,6 +385,33 @@ describe('Canvas — rendering blocks', () => {
     expect(screen.getByRole('heading', { name: 'Announcements' })).toBeInTheDocument();
   });
 
+  it('renders Quick links and Board members from the preview data, with no anchors', () => {
+    // The superset holds one recent announcement and no meetings, contact
+    // details or board seats — so News and Owner documents are the only links,
+    // and Board members shows the placeholder the live site never reaches.
+    blocksState.value = {
+      data: [
+        { id: 30, pageId: HOME_PAGE_ID, blockType: 'quicklinks', blockOrder: 2, content: {}, isDraft: true, publishedAt: null },
+        { id: 31, pageId: HOME_PAGE_ID, blockType: 'board', blockOrder: 3, content: {}, isDraft: true, publishedAt: null },
+        { id: 32, pageId: HOME_PAGE_ID, blockType: 'announcements', blockOrder: 4, content: {}, isDraft: true, publishedAt: null },
+      ],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    const { container } = renderCanvas();
+
+    expect(screen.getByRole('link', { name: 'News' })).toHaveAttribute('href', '#announcements');
+    expect(screen.getByRole('link', { name: 'Owner documents' })).toHaveAttribute('href', '/auth/login');
+    expect(screen.queryByRole('link', { name: /Meetings/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Board of Directors' })).toBeInTheDocument();
+    expect(screen.getByText('No one holds a board seat yet.')).toBeInTheDocument();
+    // The canvas sits inside the editor's own page, so no section takes an id.
+    expect(
+      container.querySelector('#quicklinks, #board, #announcements, #meetings, #contact, #documents'),
+    ).toBeNull();
+  });
+
   it('shows the empty state when every block is unrenderable', () => {
     // The PM blocks endpoint returns tombstone rows (staged deletions). Counting
     // them before filtering left a bare bordered box with no explanation.

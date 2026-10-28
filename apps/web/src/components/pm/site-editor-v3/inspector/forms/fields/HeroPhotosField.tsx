@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Trash2, X } from 'lucide-react';
-import { MAX_HERO_PHOTOS, type HeroPhoto } from '@propertypro/shared';
+import { MAX_HERO_PHOTOS, STOCK_PHOTO_SRC, type HeroPhoto } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,12 @@ export interface HeroPhotosFieldProps {
 
 /**
  * Hero photo list: upload, describe, reorder, remove.
+ *
+ * A stock photo (D3: one of ours, served from public/site-looks/, with no path)
+ * shows its thumbnail and its description read-only, and moves and removes like
+ * any other photo; it can never be decorative. It is carried through every
+ * change unchanged. Choosing, replacing and describing stock photos arrives with
+ * the looks' writers.
  *
  * Reordering is buttons only — no drag library. Phase 2b-2 already declined
  * `@dnd-kit` for the section list ("native HTML5 drag plus the required
@@ -243,20 +249,28 @@ export function HeroPhotosField({
           {photos.map((photo, index) => {
             const altId = `hero-photo-alt-${blockOrder}-${index}`;
             const decorativeId = `hero-photo-decorative-${blockOrder}-${index}`;
-            const isDecorative = photo.decorative === true;
+            const isStock = 'stock' in photo;
+            const isDecorative = !isStock && photo.decorative === true;
             return (
               <li
                 // Keyed by path, NOT index. With an index key React reuses the
                 // DOM node at each position, so focus stays on the POSITION
-                // after a move instead of following the photo the PM moved.
-                key={photo.path}
+                // after a move instead of following the photo the PM moved. A
+                // stock photo has no path and the same one may appear twice, so
+                // its key takes its position: a move remounts its row, and the
+                // focus effect above puts focus back on it.
+                key={isStock ? `stock-${photo.stock}-${index}` : photo.path}
                 data-photo-row
                 className="space-y-2 rounded-md border border-edge p-3"
               >
                 <div className="flex items-start gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={buildPublicAssetUrl(`${photo.path}.800w.webp`)}
+                    src={
+                      isStock
+                        ? STOCK_PHOTO_SRC[photo.stock]
+                        : buildPublicAssetUrl(`${photo.path}.800w.webp`)
+                    }
                     alt=""
                     className="h-14 w-20 shrink-0 rounded-sm object-cover"
                   />
@@ -264,35 +278,44 @@ export function HeroPhotosField({
                     <Label htmlFor={altId} className="text-xs">
                       Alt text
                     </Label>
-                    <Input
-                      id={altId}
-                      value={photo.alt ?? ''}
-                      maxLength={ALT_MAX}
-                      disabled={isDecorative}
-                      onChange={(event) => setPhoto(index, { alt: event.target.value })}
-                    />
+                    {isStock ? (
+                      <Input id={altId} value={photo.alt} readOnly />
+                    ) : (
+                      <Input
+                        id={altId}
+                        value={photo.alt ?? ''}
+                        maxLength={ALT_MAX}
+                        disabled={isDecorative}
+                        onChange={(event) => setPhoto(index, { alt: event.target.value })}
+                      />
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id={decorativeId}
-                    checked={isDecorative}
-                    className="h-4 w-4 rounded-sm border-edge text-interactive focus-visible:ring-2 focus-visible:ring-interactive"
-                    onChange={(event) => {
-                      const next = photos.slice();
-                      // The schema forbids alt and decorative coexisting, so
-                      // this is the model rather than a convenience.
-                      next[index] = event.target.checked
-                        ? { path: photo.path, decorative: true }
-                        : { path: photo.path, alt: photo.alt ?? '' };
-                      onChange(next);
-                    }}
-                  />
-                  <Label htmlFor={decorativeId} className="text-xs font-normal">
-                    Decorative
-                  </Label>
+                  {/* The schema has no decorative stock photo: ours are described. */}
+                  {!isStock && (
+                    <>
+                      <input
+                        type="checkbox"
+                        id={decorativeId}
+                        checked={isDecorative}
+                        className="h-4 w-4 rounded-sm border-edge text-interactive focus-visible:ring-2 focus-visible:ring-interactive"
+                        onChange={(event) => {
+                          const next = photos.slice();
+                          // The schema forbids alt and decorative coexisting, so
+                          // this is the model rather than a convenience.
+                          next[index] = event.target.checked
+                            ? { path: photo.path, decorative: true }
+                            : { path: photo.path, alt: photo.alt ?? '' };
+                          onChange(next);
+                        }}
+                      />
+                      <Label htmlFor={decorativeId} className="text-xs font-normal">
+                        Decorative
+                      </Label>
+                    </>
+                  )}
 
                   <div className="ml-auto flex gap-1">
                     <Button

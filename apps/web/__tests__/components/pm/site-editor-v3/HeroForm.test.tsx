@@ -146,6 +146,40 @@ describe('HeroForm — reconciliation', () => {
     expect(headline().value).toBe('PM is typing this');
   });
 
+  it('keeps a stock photo through a save, unchanged and in its place', async () => {
+    // D3. A stock photo has no path; a form that rebuilt every photo as an
+    // upload would write `{ path: undefined, alt }`, which the schema refuses,
+    // or drop it, which loses the hero's picture.
+    const SUNSET = { stock: 'sunset', alt: 'Sunset over the water, with palm trees in silhouette' };
+    const POOL = { path: '7/hero/pool.jpg', alt: 'The pool' };
+    renderHero({ headline: 'Welcome to Sunset Condos', photos: [SUNSET, POOL] });
+
+    await act(async () => {
+      const input = headline();
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )!.set!;
+      setter.call(input, 'Welcome home');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settleAutosave();
+
+    expect(updateHeroMock).toHaveBeenCalledTimes(1);
+    const sent = updateHeroMock.mock.calls[0]![0];
+    expect(sent.headline).toBe('Welcome home');
+    expect(sent.photos).toEqual([SUNSET, POOL]);
+  });
+
+  it('does not write anything on mount for a hero with a stock photo', async () => {
+    renderHero({
+      headline: 'Welcome to Sunset Condos',
+      photos: [{ stock: 'palms', alt: 'A quiet street lined with tall palm trees' }],
+    });
+    await settleAutosave();
+    expect(updateHeroMock).not.toHaveBeenCalled();
+  });
+
   it('migrates the legacy pair to photos when the PM actually edits', async () => {
     const { rerender: _ } = renderHero(LEGACY);
 

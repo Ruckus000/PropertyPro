@@ -28,9 +28,7 @@
  * motion is a better answer than building it and then suppressing it.
  */
 import type { ResolvedHeroPhoto } from '@propertypro/shared';
-// ./public-url, NOT ./storage-paths — the latter pulls `node:crypto` and
-// cannot be bundled into the editor's client tree.
-import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
+import { heroPhotoImgAttributes, heroPhotoKey } from './hero-photo-img';
 
 export interface HeroPhotoStripProps {
   photos: readonly ResolvedHeroPhoto[];
@@ -55,38 +53,40 @@ export function HeroPhotoStrip({ photos, blockId }: HeroPhotoStripProps) {
         tabIndex={0}
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse"
       >
-        {photos.map((photo, index) => (
-          <figure
-            key={photo.path}
-            id={slideId(index)}
-            role="group"
-            aria-roledescription="slide"
-            aria-label={`Photo ${index + 1} of ${photos.length}`}
-            className="w-full shrink-0 snap-center"
-          >
-            {/* Plain <img> rather than next/image — see HeroBlock's file
-                comment. Variants are siblings of the base path; finalize
-                deletes the raw upload, so the base path itself would 404. */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={buildPublicAssetUrl(`${photo.path}.1600w.webp`)}
-              srcSet={`${buildPublicAssetUrl(`${photo.path}.800w.webp`)} 800w, ${buildPublicAssetUrl(`${photo.path}.1600w.webp`)} 1600w`}
-              sizes="(min-width: 1024px) 768px, 100vw"
-              alt={photo.decorative === true ? '' : (photo.alt ?? '')}
-              width={1600}
-              height={900}
-              className="w-full rounded-md shadow-e1"
-              // Only the first photo is above the fold; the rest are a scroll
-              // away and must not compete with it for bandwidth.
-              loading={index === 0 ? 'eager' : 'lazy'}
-            />
-          </figure>
-        ))}
+        {photos.map((photo, index) => {
+          // An upload or a stock photo alike: see ./hero-photo-img.
+          const img = heroPhotoImgAttributes(photo);
+          return (
+            <figure
+              key={heroPhotoKey(photo, index)}
+              id={slideId(index)}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`Photo ${index + 1} of ${photos.length}`}
+              className="w-full shrink-0 snap-center"
+            >
+              {/* Plain <img> rather than next/image — see HeroBlock's file comment. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img.src}
+                srcSet={img.srcSet}
+                sizes={img.sizes}
+                alt={img.alt}
+                width={img.width}
+                height={img.height}
+                className="w-full rounded-md shadow-e1"
+                // Only the first photo is above the fold; the rest are a scroll
+                // away and must not compete with it for bandwidth.
+                loading={index === 0 ? 'eager' : 'lazy'}
+              />
+            </figure>
+          );
+        })}
       </div>
 
       <ul className="mt-4 flex justify-center gap-2">
         {photos.map((photo, index) => (
-          <li key={photo.path}>
+          <li key={heroPhotoKey(photo, index)}>
             <a
               href={`#${slideId(index)}`}
               // The dots are the only labelled way to reach a specific photo,

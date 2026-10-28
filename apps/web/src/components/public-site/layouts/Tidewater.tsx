@@ -1,4 +1,5 @@
 import { blockRendererRegistry, hasRenderer } from '@/components/public-site/blocks/registry';
+import { sectionAnchorIds } from '@/components/public-site/blocks/page-sections';
 import type { BlockType } from '@propertypro/shared';
 import { SiteChrome } from './SiteChrome';
 import { hasHeroBlock } from './has-hero-block';
@@ -11,6 +12,9 @@ import type { LayoutProps } from './types';
  */
 export function Tidewater({ community, theme, blocks, footer, nav, page }: LayoutProps) {
   const ordered = [...blocks].sort((a, b) => a.blockOrder - b.blockOrder);
+  // Quick links: every section gets the page's sections, and the first section
+  // of each data type an id to land on (`#meetings`). See page-sections.ts.
+  const anchors = sectionAnchorIds(ordered);
   // D18 — a non-home page cannot own a hero block (block_order is
   // community-wide until 11c, so slot 1 belongs to the home page), which means
   // the empty-state hero is the only <h1> a sub-page gets. Headline it with the
@@ -47,6 +51,8 @@ export function Tidewater({ community, theme, blocks, footer, nav, page }: Layou
             community={community}
             theme={theme}
             layout="tidewater"
+            anchorId={anchors.get(block.id)}
+            pageSections={ordered}
           />
         );
       })}

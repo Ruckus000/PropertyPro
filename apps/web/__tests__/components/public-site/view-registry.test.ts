@@ -52,9 +52,24 @@ describe('view registry — coverage', () => {
     }
   });
 
-  it('marks exactly the four system-of-record types as data-driven', () => {
+  it('marks exactly the data-driven types: the four system-of-record ones, Quick links and Board members', () => {
     const dataDriven = BLOCK_TYPES.filter((t) => hasView(t) && isDataDrivenBlock(t)).sort();
-    expect(dataDriven).toEqual(['announcements', 'contact', 'documents', 'meetings']);
+    expect(dataDriven).toEqual([
+      'announcements',
+      'board',
+      'contact',
+      'documents',
+      'meetings',
+      'quicklinks',
+    ]);
+  });
+
+  it('covers every block type there is, Quick links and Board members included', () => {
+    // A type the database accepts but the canvas cannot show is a hole in the
+    // preview; for the read release it would also be a hole on the live site.
+    for (const type of BLOCK_TYPES) {
+      expect(hasView(type), `${type} has no canvas view`).toBe(true);
+    }
   });
 
   it('treats the authored types as prop-complete', () => {
@@ -78,6 +93,8 @@ describe('view registry — client-safety invariants', () => {
     'DocumentsBlockView.tsx',
     'MeetingsBlockView.tsx',
     'ContactBlockView.tsx',
+    'QuickLinksBlockView.tsx',
+    'BoardBlockView.tsx',
     'HeroBlock.tsx',
     'TextBlock.tsx',
     'ImageBlock.tsx',
@@ -87,6 +104,7 @@ describe('view registry — client-safety invariants', () => {
     // Reached from HeroBlock, so it inherits every one of these constraints
     // even though it is not itself a registry entry.
     'HeroPhotoStrip.tsx',
+    'hero-photo-img.ts',
   ];
 
   it.each(viewFiles)('%s imports no Node built-in', (file) => {

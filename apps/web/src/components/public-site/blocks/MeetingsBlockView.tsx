@@ -34,9 +34,19 @@ function formatMeetingType(meetingType: string): string {
 
 export type MeetingsBlockViewProps = BlockViewProps<MeetingsBlockContent, PublicMeeting[]>;
 
-export function MeetingsBlockView({ content, blockId, data, community }: MeetingsBlockViewProps) {
+export function MeetingsBlockView({
+  content,
+  blockId,
+  data,
+  community,
+  anchorId,
+}: MeetingsBlockViewProps) {
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`meetings-${blockId}`}>
+    <section
+      id={anchorId}
+      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
+      aria-labelledby={`meetings-${blockId}`}
+    >
       <div className="mx-auto max-w-3xl">
         <h2
           id={`meetings-${blockId}`}

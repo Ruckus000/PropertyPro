@@ -108,6 +108,10 @@ export function collectBlockAssetPaths(blockType: string, content: unknown): Sco
         // the tenant segment this file exists to check is untouched.
         paths.push({ field: 'heroImagePath', value: stripVariantSuffix(heroImagePath) });
       }
+      // A stock photo (`{ stock, alt }`, D3) carries no path: it is served from
+      // the web app's own public/site-looks/, not from storage, so there is no
+      // tenant segment to check and it adds nothing here. Uploads beside it keep
+      // their own index.
       const photos = record['photos'];
       if (Array.isArray(photos)) {
         photos.forEach((photo, index) => {

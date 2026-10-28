@@ -1,17 +1,19 @@
 'use client';
 
 /**
- * Edits a starter pack's blocks array. Compact fields for the six simple block
- * types (hero, text, announcements, documents, meetings, contact); a validated
- * JSON textarea for image/gallery/faq/amenities (see spec §8). Server-side
- * validateStarterPackBlocks is authoritative regardless of input path.
+ * Edits a starter pack's blocks array. Every block type is offered, from the
+ * shared BLOCK_TYPES, so a pack's row always shows its real type. Compact
+ * fields for the six simple block types (hero, text, announcements, documents,
+ * meetings, contact); a validated JSON textarea for image/gallery/faq/amenities
+ * (see spec §8); payments, quicklinks and board have no fields here, and their
+ * schemas accept empty content. Server-side validateStarterPackBlocks is
+ * authoritative regardless of input path.
  */
 import { useState } from 'react';
-import { DOCUMENT_CATEGORIES } from '@propertypro/shared';
+import { BLOCK_TYPES, DOCUMENT_CATEGORIES } from '@propertypro/shared';
 
 export interface EditorBlock { blockType: string; blockOrder: number; content: Record<string, unknown>; }
 
-const BLOCK_TYPES = ['hero', 'text', 'announcements', 'documents', 'meetings', 'contact', 'image', 'gallery', 'faq', 'amenities'] as const;
 const JSON_TYPES = new Set(['image', 'gallery', 'faq', 'amenities']);
 
 interface Props {

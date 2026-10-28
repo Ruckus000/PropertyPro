@@ -45,6 +45,7 @@ export async function AnnouncementsBlock(props: BlockRendererProps) {
       content={config}
       data={sanitized}
       community={props.community}
+      anchorId={props.anchorId}
     />
   );
 }

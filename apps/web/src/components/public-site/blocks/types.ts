@@ -38,6 +38,13 @@ export interface ResolvedTheme {
 export const LAYOUT_IDS = ['tidewater', 'boulevard', 'sable'] as const;
 export type LayoutId = (typeof LAYOUT_IDS)[number];
 
+/** One section of the page being rendered, as the layouts hand it to each block. */
+export interface PageSection {
+  id: number;
+  blockType: string;
+  content: unknown;
+}
+
 export interface BlockRendererProps<TContent = unknown> {
   block: {
     id: number;
@@ -48,6 +55,19 @@ export interface BlockRendererProps<TContent = unknown> {
   community: PublicCommunity;
   theme: ResolvedTheme;
   layout: LayoutId;
+  /**
+   * The id this section's root element takes, so a Quick links link can land
+   * on it (`#meetings`). Set by the layouts on the first section of each data
+   * type only, so an id never repeats on a page (see `./page-sections`). The
+   * editor canvas never sets it: it renders no anchors.
+   */
+  anchorId?: string;
+  /**
+   * Every section on this page, in the order visitors see them. Set by the
+   * layouts; Quick links reads it to tell which of its links have a section to
+   * land on. Absent anywhere else, where Quick links shows only Owner documents.
+   */
+  pageSections?: readonly PageSection[];
 }
 
 /** A block renderer is a React server component. */
@@ -58,9 +78,9 @@ export type BlockRenderer<TContent = unknown> = (
 /**
  * Props for a presentational block *view*.
  *
- * The four system-of-record blocks (announcements, documents, meetings,
- * contact) are split in two: an async server shell that validates content and
- * fetches, and a pure view that renders what it is given. The split exists so
+ * The data-driven blocks (announcements, documents, meetings, contact, quick
+ * links, board members) are split in two: an async server shell that validates
+ * content and fetches, and a pure view that renders what it is given. The split exists so
  * the editor canvas can render the real published markup — a view is a plain
  * synchronous component, an async server component is not renderable inside a
  * client tree that updates on every keystroke.
@@ -77,4 +97,6 @@ export interface BlockViewProps<TContent, TData> {
   content: TContent;
   data: TData;
   community: PublicCommunity;
+  /** The root `<section>`'s id on the public site; see `BlockRendererProps.anchorId`. */
+  anchorId?: string;
 }
