@@ -9,6 +9,7 @@ import { NoticeConsentCard } from '@/components/settings/notice-consent-card';
 import { SupportAccessSettings } from '@/components/settings/SupportAccessSettings';
 import { AccessSettingsCard } from '@/components/settings/access-settings-card';
 import { EmailFooterCard } from '@/components/settings/email-footer-card';
+import { LazyCommunityProfileCard } from '@/components/settings/community-profile-card-lazy';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -131,6 +132,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {
             label: 'Community',
             items: [
+              { id: 'community-profile', label: 'Community profile' },
               { id: 'billing', label: 'Payments & billing' },
               { id: 'email-footer', label: 'Email footer' },
               ...(showTenantAccess ? [{ id: 'tenant-access', label: 'Tenant access' }] : []),
@@ -208,6 +210,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
           {membership.isAdmin && (
             <>
+              <SettingsSection
+                id="community-profile"
+                title="Community profile"
+                description="Your association's name, address and contact details."
+              >
+                <LazyCommunityProfileCard
+                  communityId={context.communityId}
+                  communityType={membership.communityType}
+                />
+              </SettingsSection>
+
               <SettingsSection
                 id="billing"
                 title="Payments & billing"
