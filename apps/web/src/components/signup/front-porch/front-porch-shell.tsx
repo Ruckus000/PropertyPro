@@ -24,6 +24,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
+import { PropertyProTile } from '@/components/brand/property-pro-mark';
 import { cn } from '@/lib/utils';
 import { TYPE_ICONS } from './front-porch-data';
 import './front-porch.css';
@@ -57,14 +58,7 @@ const ROW_LABELS = { addr: 'Address', units: 'Size', url: 'Web address', plan: '
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex flex-none items-center gap-2">
-      <span
-        className={cn(
-          'flex items-center justify-center rounded-md bg-interactive text-content-inverse',
-          compact ? 'h-8 w-8' : 'h-9 w-9',
-        )}
-      >
-        <Building className={compact ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden="true" />
-      </span>
+      <PropertyProTile size={compact ? 'sm' : 'md'} />
       <span className={cn('font-semibold text-content', compact ? 'text-base' : 'text-lg')}>
         PropertyPro <span className="text-content-link">Florida</span>
       </span>

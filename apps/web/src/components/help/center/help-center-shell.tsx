@@ -6,7 +6,8 @@
  */
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Building, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
+import { PropertyProTile } from '@/components/brand/property-pro-mark';
 import { cn } from '@/lib/utils';
 import type { HelpTypeBar } from '@/lib/help/center';
 
@@ -70,9 +71,7 @@ export function HelpCenterShell({
             href={homeHref}
             className={cn('flex shrink-0 items-center gap-[0.625rem] rounded-md text-content no-underline', HELP_FOCUS)}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-interactive">
-              <Building size={20} className="text-content-inverse" aria-hidden="true" />
-            </span>
+            <PropertyProTile />
             <span className="flex flex-col leading-[1.2]">
               <span className="text-base font-semibold">
                 PropertyPro <span className="text-content-link">Help</span>
