@@ -43,6 +43,15 @@ vi.mock('@propertypro/db', () => ({
     communityId: 'documentCategories.communityId',
     name: 'documentCategories.name',
   },
+  complianceChecklistItems: {
+    id: 'complianceChecklistItems.id',
+    communityId: 'complianceChecklistItems.communityId',
+    category: 'complianceChecklistItems.category',
+    documentId: 'complianceChecklistItems.documentId',
+    title: 'complianceChecklistItems.title',
+    isApplicable: 'complianceChecklistItems.isApplicable',
+    deletedAt: 'complianceChecklistItems.deletedAt',
+  },
   meetings: {
     id: 'meetings.id',
     communityId: 'meetings.communityId',
@@ -111,6 +120,12 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
   or: (...args: unknown[]) => ({ __or: args }),
+  // A tagged template, as drizzle's `sql` is. Keeps the text so the aggregate
+  // in listOwnerRecordGroups can be asserted by what it computes.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    __sql: strings.join('?'),
+    values,
+  }),
 }));
 
 // Mock the unscoped client BEFORE importing the helper
@@ -119,6 +134,7 @@ const mockSelectChain = {
   leftJoin: vi.fn().mockReturnThis(),
   innerJoin: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
+  groupBy: vi.fn().mockReturnThis(),
   orderBy: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   // Terminal — returns a Promise of an array
@@ -157,6 +173,7 @@ describe('getPublicCommunityScopedReader', () => {
     mockSelectChain.leftJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.innerJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.where.mockReturnValue(mockSelectChain);
+    mockSelectChain.groupBy.mockReturnValue(mockSelectChain);
     mockSelectChain.orderBy.mockReturnValue(mockSelectChain);
     mockSelectChain.limit.mockReturnValue(mockSelectChain);
     mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
@@ -191,6 +208,11 @@ describe('getPublicCommunityScopedReader', () => {
   it('exposes getContactInfo method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.getContactInfo).toBe('function');
+  });
+
+  it('exposes listOwnerRecordGroups method', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    expect(typeof reader.listOwnerRecordGroups).toBe('function');
   });
 
   it('rejects non-positive communityId', () => {
@@ -1124,6 +1146,117 @@ describe('getPublicCommunityScopedReader', () => {
 
     expect(result).toEqual({ management: null, board: [] });
     expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  describe('listOwnerRecordGroups', () => {
+    /**
+     * The public Documents section tells an anonymous visitor how many official
+     * records the association has posted for its owners, per group. It is the one
+     * read that turns the owner-only checklist into public output, so each
+     * predicate is asserted by name and the projection is pinned to a label and a
+     * number — a title, a document id or a file path leaving here would expose
+     * what the owners' sign-in exists to protect.
+     */
+    type Clause = { __eq?: { col: string; val: unknown }; __isNull?: string; __isNotNull?: string };
+
+    function whereClauses(): Clause[] {
+      return mockSelectChain.where.mock.calls[0]![0].__and as Clause[];
+    }
+
+    function equalities(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__eq !== undefined ? [c.__eq] : []));
+    }
+
+    function nullChecks(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__isNull !== undefined ? [c.__isNull] : []));
+    }
+
+    function notNullChecks(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__isNotNull !== undefined ? [c.__isNotNull] : []));
+    }
+
+    it('counts only posted, undeleted, linked records of applicable items', async () => {
+      queueQueryResults([{ category: 'financial_records', postedCount: 3 }]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      const groups = await reader.listOwnerRecordGroups();
+
+      expect(groups).toEqual([
+        { category: 'financial_records', label: 'Financial records', postedCount: 3 },
+      ]);
+
+      const clauses = whereClauses();
+      // Items: this community's, applicable, not deleted.
+      expect(equalities(clauses)).toEqual(
+        expect.arrayContaining([
+          { col: 'complianceChecklistItems.communityId', val: 42 },
+          { col: 'complianceChecklistItems.isApplicable', val: true },
+        ]),
+      );
+      expect(nullChecks(clauses)).toContain('complianceChecklistItems.deletedAt');
+      // Their record: in the same community, posted (not a draft), not deleted.
+      expect(equalities(clauses)).toContainEqual({ col: 'documents.communityId', val: 42 });
+      expect(notNullChecks(clauses)).toContain('documents.postedAt');
+      expect(nullChecks(clauses)).toContain('documents.deletedAt');
+      // Linked: the document is joined on the item's own document_id, so an item
+      // with no record has nothing to count.
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledTimes(1);
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'documents.id' }),
+        { __eq: { col: 'documents.id', val: 'complianceChecklistItems.documentId' } },
+      );
+      // One count per category.
+      expect(mockSelectChain.groupBy).toHaveBeenCalledTimes(1);
+      expect(mockSelectChain.groupBy).toHaveBeenCalledWith('complianceChecklistItems.category');
+    });
+
+    it('binds the query to the reader\'s community, not a caller-supplied one', async () => {
+      const reader = getPublicCommunityScopedReader(99);
+
+      await reader.listOwnerRecordGroups();
+
+      const communityIds = equalities(whereClauses())
+        .filter((c) => c.col.endsWith('.communityId'))
+        .map((c) => c.val);
+      expect(communityIds).toEqual([99, 99]);
+    });
+
+    it('keeps only the five record groups, in the order the editor lists them', async () => {
+      queueQueryResults([
+        { category: 'operations', postedCount: 1 },
+        { category: 'something_else', postedCount: 9 },
+        { category: 'governing_documents', postedCount: 5 },
+        { category: 'meeting_records', postedCount: 0 },
+        { category: 'insurance', postedCount: 2 },
+      ]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      const groups = await reader.listOwnerRecordGroups();
+
+      expect(groups).toEqual([
+        { category: 'governing_documents', label: 'Governing documents', postedCount: 5 },
+        { category: 'insurance', label: 'Insurance', postedCount: 2 },
+        { category: 'operations', label: 'Contracts and inspections', postedCount: 1 },
+      ]);
+    });
+
+    it('returns no groups when no applicable item has a posted record', async () => {
+      queueQueryResults([]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      await expect(reader.listOwnerRecordGroups()).resolves.toEqual([]);
+    });
+
+    it('selects a category and a count only — never a title, id or file path', async () => {
+      const reader = getPublicCommunityScopedReader(42);
+
+      await reader.listOwnerRecordGroups();
+
+      const projection = mockDb.select.mock.calls[0]![0] as Record<string, unknown>;
+      expect(Object.keys(projection).sort()).toEqual(['category', 'postedCount']);
+      expect(projection['category']).toBe('complianceChecklistItems.category');
+      expect(projection['postedCount']).toMatchObject({ __sql: expect.stringContaining('count(*)') });
+    });
   });
 
   describe('getPublicDocumentFile', () => {

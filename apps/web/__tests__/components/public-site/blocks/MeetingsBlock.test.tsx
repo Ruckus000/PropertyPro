@@ -39,11 +39,12 @@ function makeProps(content: unknown): BlockRendererProps {
 describe('<MeetingsBlock>', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders the empty state when no upcoming meetings exist', async () => {
+  it('renders nothing when no upcoming meetings exist', async () => {
     listMeetingsMock.mockResolvedValueOnce([]);
     const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 30 }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText(/No upcoming meetings/i)).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No upcoming meetings/i)).toBeNull();
   });
 
   it('renders a list of upcoming meetings with title, type, and location', async () => {

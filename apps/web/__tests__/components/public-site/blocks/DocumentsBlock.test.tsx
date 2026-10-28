@@ -4,11 +4,13 @@ import { DocumentsBlock } from '@/components/public-site/blocks/DocumentsBlock';
 import type { BlockRendererProps } from '@/components/public-site/blocks/types';
 
 const listDocumentsMock = vi.fn();
+const listOwnerRecordGroupsMock = vi.fn();
 vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
     listAnnouncements: vi.fn(),
     listDocuments: listDocumentsMock,
     listMeetings: vi.fn(),
+    listOwnerRecordGroups: listOwnerRecordGroupsMock,
     listSiteBlocks: vi.fn(),
     getContactInfo: vi.fn(),
   }),
@@ -37,13 +39,19 @@ function makeProps(content: unknown): BlockRendererProps {
 }
 
 describe('<DocumentsBlock>', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // No owner records posted unless a case says otherwise. The summary itself
+    // is covered in empty-sections.test.tsx.
+    listOwnerRecordGroupsMock.mockResolvedValue([]);
+  });
 
-  it('renders the empty state when no documents match the category filter', async () => {
+  it('renders nothing when no documents match the category filter and no records are posted', async () => {
     listDocumentsMock.mockResolvedValueOnce([]);
     const ui = await DocumentsBlock(makeProps({ limit: 5, includeCategories: ['budget'] }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText(/No documents available/i)).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No documents available/i)).toBeNull();
   });
 
   it('renders a list of documents with title and download link', async () => {
@@ -106,11 +114,11 @@ describe('<DocumentsBlock>', () => {
     warnSpy.mockRestore();
   });
 
-  it('renders empty state when no includeCategories are configured (returns [])', async () => {
+  it('renders nothing when no includeCategories are configured (returns []) and no records are posted', async () => {
     listDocumentsMock.mockResolvedValueOnce([]);
     const ui = await DocumentsBlock(makeProps({ limit: 5 }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText(/No documents available/i)).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    expect(container).toBeEmptyDOMElement();
     expect(listDocumentsMock).toHaveBeenCalledWith({ limit: 5, includeCategories: undefined });
   });
 

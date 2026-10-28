@@ -4,6 +4,10 @@
  * Async server component: validates, fetches, and hands the result to the pure
  * view. Markup lives in MeetingsBlockView so the editor canvas renders exactly
  * what the public site renders — see BlockViewProps in ./types.
+ *
+ * With no upcoming meeting it renders nothing: the live site never shows an
+ * empty box (D14). The view keeps its placeholder text, because the editor
+ * canvas renders the view directly and a manager needs to see the empty section.
  */
 import { meetingsBlockSchema, type MeetingsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
@@ -25,6 +29,7 @@ export async function MeetingsBlock(props: BlockRendererProps) {
     limit: config.limit,
     timeWindowDays: config.timeWindowDays,
   });
+  if (items.length === 0) return null;
 
   return (
     <MeetingsBlockView

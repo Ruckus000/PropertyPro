@@ -28,11 +28,12 @@ function makeProps(content: unknown): BlockRendererProps {
 describe('<AnnouncementsBlock>', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders an empty state when no announcements exist', async () => {
+  it('renders nothing when no announcements exist', async () => {
     listAnnouncementsMock.mockResolvedValueOnce([]);
     const ui = await AnnouncementsBlock(makeProps({ limit: 5, timeWindowDays: 30 }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText(/No announcements yet/i)).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No announcements yet/i)).toBeNull();
   });
 
   it('renders a list of announcements', async () => {

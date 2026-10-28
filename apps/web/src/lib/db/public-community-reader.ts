@@ -25,10 +25,10 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
+import { announcements, communities, complianceChecklistItems, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from '@propertypro/db/filters';
 import {
   BOARD_DESIGNATIONS,
   TOMBSTONE_BLOCK_TYPE,
@@ -37,6 +37,7 @@ import {
   type DocumentCategory,
 } from '@propertypro/shared';
 import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
+import { RECORD_GROUP_LABELS } from '@/lib/site-editor/records-status';
 
 export interface PublicAnnouncement {
   id: number;
@@ -160,6 +161,16 @@ export interface PublicContactInfo {
     name: string;
     title: string;
   }>;
+}
+
+/**
+ * One group of the association's official records and how many are posted for
+ * owners. A count and a label, deliberately nothing that identifies a record.
+ */
+export interface PublicOwnerRecordGroup {
+  category: keyof typeof RECORD_GROUP_LABELS;
+  label: string;
+  postedCount: number;
 }
 
 export interface PublicScopedReader {
@@ -304,6 +315,22 @@ export interface PublicScopedReader {
 
   /** PR #4 follow-up — community management contact + public board roster. */
   getContactInfo(opts: { showBoard: boolean; showManagement: boolean }): Promise<PublicContactInfo>;
+
+  /**
+   * How many official records are posted for owners, per group — the public
+   * Documents section's owner summary. COUNTS ONLY: a title, document id or
+   * file path never leaves this method.
+   *
+   * Counts the community's applicable, undeleted checklist items whose linked
+   * document is posted (`posted_at` set) and undeleted, grouped by the item's
+   * category, keeping the five groups the editor names (`RECORD_GROUP_LABELS`)
+   * in that order. A group with nothing posted is absent.
+   *
+   * Deliberately NOT gated on `documents.public_access`. The section tells
+   * visitors that owners can sign in to see the records, so what it counts is
+   * what owners can see: posted, not deleted, and linked to a requirement.
+   */
+  listOwnerRecordGroups(): Promise<PublicOwnerRecordGroup[]>;
 }
 
 /**
@@ -790,6 +817,44 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           title: row.displayTitle ?? (isBoardPresident(row.designation) ? 'Board President' : 'Board Member'),
         })),
       };
+    },
+
+    async listOwnerRecordGroups() {
+      // AUTHZ: public read of aggregate counts only — one number per record group,
+      // no title, id or path. The anonymous visitor learns how many records exist,
+      // never which; the records themselves stay behind owner sign-in.
+      const rows = await db
+        .select({
+          category: complianceChecklistItems.category,
+          postedCount: sql<number>`count(*)::int`,
+        })
+        .from(complianceChecklistItems)
+        .innerJoin(documents, eq(documents.id, complianceChecklistItems.documentId))
+        .where(
+          and(
+            eq(complianceChecklistItems.communityId, communityId),
+            eq(complianceChecklistItems.isApplicable, true),
+            isNull(complianceChecklistItems.deletedAt),
+            // The record itself. Its community is checked on its own: nothing in
+            // the schema stops an item linking another community's document, and
+            // this count is public.
+            eq(documents.communityId, communityId),
+            // A draft is not posted, and a deleted file is not a record.
+            isNotNull(documents.postedAt),
+            isNull(documents.deletedAt),
+          ),
+        )
+        .groupBy(complianceChecklistItems.category);
+
+      const countByCategory = new Map(rows.map((row) => [row.category, row.postedCount]));
+      return (Object.keys(RECORD_GROUP_LABELS) as Array<keyof typeof RECORD_GROUP_LABELS>).flatMap(
+        (category) => {
+          const postedCount = countByCategory.get(category) ?? 0;
+          return postedCount > 0
+            ? [{ category, label: RECORD_GROUP_LABELS[category], postedCount }]
+            : [];
+        },
+      );
     },
   };
 }
