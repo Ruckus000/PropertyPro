@@ -12,7 +12,7 @@
  *   {{units}}  the unit count, only for a positive whole number, written with
  *              thousands separators ("1,200")
  *
- * Three rules, each there for a reason:
+ * Four rules, each there for a reason:
  *
  *   1. A missing fact drops its SENTENCE. Dropping only the token would leave
  *      "homes in ." on a public page; dropping the whole text would lose the
@@ -21,11 +21,21 @@
  *   2. The drop is decided on the TEMPLATE, before any value goes in. So a name
  *      such as "Harbor Pointe Condo. Assn." cannot split a sentence in two or
  *      make half of one disappear.
- *   3. Values are inserted as text and never looked at again. A name containing
- *      "{{city}}", markup or "$&" is shown exactly as typed.
+ *   3. Values are inserted as text, with the whitespace around them trimmed, and
+ *      never looked at again. A name containing "{{city}}", markup or "$&" is
+ *      shown exactly as typed.
+ *   4. A full stop is not doubled. A value that ends in one (the full name
+ *      "Harbor Pointe Condominium Association, Inc.") takes the "." that follows
+ *      its token in the template as its own, so "{{name}}." ends in "Inc." and not
+ *      "Inc..", and "{{name}}..." ends in "Inc..." (three dots in all). The value
+ *      itself is never changed.
  *
  * Anything else in double braces ("{{phone}}") is not a token and is left as
  * written.
+ *
+ * Known limit: there is no list of abbreviations, so a full stop after one ends a
+ * sentence like any other. "Dr. Smith Condominium: {{units}} homes." with the unit
+ * count unknown becomes "Dr.", because "Dr." stands as a sentence of its own.
  */
 
 export const LINKED_FIELDS = ['name', 'city', 'units'] as const;
@@ -48,14 +58,12 @@ export type LinkedSegment =
 
 /**
  * What each token stands for, or null when that fact is missing. A Record over
- * LinkedField, so a token cannot be added to the list without a resolver.
+ * LinkedField, so a token cannot be added to the list without a resolver. Text
+ * comes back trimmed, the same way "blank" is judged.
  */
 const RESOLVERS: Record<LinkedField, (facts: LinkedFacts) => string | null> = {
-  name: ({ shortName, name }) => {
-    if (hasText(shortName)) return shortName;
-    return hasText(name) ? name : null;
-  },
-  city: ({ city }) => (hasText(city) ? city : null),
+  name: ({ shortName, name }) => trimmedOrNull(shortName) ?? trimmedOrNull(name),
+  city: ({ city }) => trimmedOrNull(city),
   units: ({ unitCount }) => {
     if (unitCount === null || !Number.isInteger(unitCount) || unitCount <= 0) return null;
     // An explicit locale, so the server and the browser print the same digits.
@@ -63,8 +71,11 @@ const RESOLVERS: Record<LinkedField, (facts: LinkedFacts) => string | null> = {
   },
 };
 
-function hasText(value: string | null | undefined): value is string {
-  return typeof value === 'string' && value.trim() !== '';
+/** The value without the whitespace around it, or null when that leaves nothing. */
+function trimmedOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
 }
 
 function isLinkedField(value: string | undefined): value is LinkedField {
@@ -114,16 +125,23 @@ export function parseLinkedText(text: string): LinkedSegment[] {
 /** The sentence with its tokens replaced, or null if any token's fact is missing. */
 function resolveSentence(sentence: string, facts: LinkedFacts): string | null {
   let resolved = '';
+  let endsInStop = false; // the last thing written is a value that ends in "."
 
   for (const segment of parseLinkedText(sentence)) {
     if (segment.kind === 'text') {
-      resolved += segment.value;
+      let text = segment.value;
+      // The value's own full stop is already there: writing the template's one too
+      // would give "Inc..". Giving up one of the template's keeps an ellipsis at three.
+      if (endsInStop && text.startsWith('.')) text = text.slice(1);
+      resolved += text;
+      endsInStop = false;
       continue;
     }
     const value = RESOLVERS[segment.field](facts);
     if (value === null) return null;
     // Appended to the output only, so a value is never read as a token again.
     resolved += value;
+    endsInStop = value.endsWith('.');
   }
 
   return resolved;

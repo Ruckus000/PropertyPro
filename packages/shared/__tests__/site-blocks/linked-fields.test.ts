@@ -2,12 +2,14 @@
  * Linked fields: the `{{name}}`, `{{city}}` and `{{units}}` tokens that site
  * copy can carry, so a sign-up fact shows on the site without anyone retyping it.
  *
- * Two behaviours carry the weight, and each has tests that fail without it:
+ * Three behaviours carry the weight, and each has tests that fail without it:
  *   - A missing fact removes ONE sentence. Never the whole text, and never half a
  *     sentence ("homes in ." is the failure this prevents).
- *   - Values are data. A community named "{{city}}" or "<b>" shows as typed:
- *     nothing in a value is split into sentences, scanned for tokens or
- *     interpreted.
+ *   - Values are data. A community named "{{city}}" or "<b>" shows as typed, less
+ *     the whitespace around it: nothing in a value is split into sentences,
+ *     scanned for tokens or interpreted.
+ *   - A full stop is never doubled. The full name usually ends in "Inc.", and
+ *     copy such as "Welcome to {{name}}." must not read "Inc..".
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -122,6 +124,22 @@ describe('linked fields', () => {
     ).toBe('News.');
   });
 
+  it('trims the whitespace around an inserted value', () => {
+    // Mid-sentence, where the final trim of the result cannot help: "In  Miami ."
+    // is the failure this prevents.
+    expect(resolveLinkedText('In {{city}}.', facts({ city: ' Miami ' }))).toBe('In Miami.');
+    expect(resolveLinkedText('In {{city}}, FL.', facts({ city: '\n\tMiami\n' }))).toBe(
+      'In Miami, FL.',
+    );
+    // Both names, and only their ends: spacing inside a name is the manager's own.
+    expect(resolveLinkedText('Hi {{name}}.', facts({ shortName: '\n Harbor Pointe\t' }))).toBe(
+      'Hi Harbor Pointe.',
+    );
+    expect(resolveLinkedText('Hi {{name}}!', facts({ name: '  Harbor  Pointe ' }))).toBe(
+      'Hi Harbor  Pointe!',
+    );
+  });
+
   it('writes the unit count with thousands separators', () => {
     expect(resolveLinkedText('{{units}} homes', facts({ unitCount: 1200 }))).toBe('1,200 homes');
     expect(resolveLinkedText('{{units}} homes', facts({ unitCount: 120 }))).toBe('120 homes');
@@ -156,6 +174,19 @@ describe('linked fields', () => {
     );
   });
 
+  it.each(['.', '!', '?'])('ends a sentence at "%s" followed by whitespace', (stop) => {
+    // The mixed text above cannot tell the terminators apart: the sentence ending
+    // in "!" holds a missing fact and drops whether or not "!" ends it. Alone, the
+    // sentence after the stop survives only if the stop really ended the one before.
+    expect(resolveLinkedText(`Hello {{city}}${stop} Welcome.`, facts())).toBe('Welcome.');
+  });
+
+  it('also ends a sentence after an abbreviation, a known limit', () => {
+    // There is no list of abbreviations, so "Dr." is a sentence of its own: it stays
+    // while the rest of the line drops. The module docblock states this limit.
+    expect(resolveLinkedText('Dr. Smith Condominium: {{units}} homes.', facts())).toBe('Dr.');
+  });
+
   it('does not end a sentence at punctuation that is not followed by whitespace', () => {
     // "9.30" and "5.00" must not split the sentence; if they did, only the tail
     // "00 in {{city}}." would drop and "Open 9.30 to 5." would be left behind.
@@ -173,6 +204,71 @@ describe('linked fields', () => {
     expect(
       resolveLinkedText('  Welcome to {{name}}.  ', facts({ shortName: 'Harbor Pointe' })),
     ).toBe('Welcome to Harbor Pointe.');
+  });
+
+  // A value that ends in a full stop ("..., Inc.") meeting the template's own.
+
+  it('shows one full stop where a name ending in one meets the template full stop', () => {
+    // The plan's heritage subtitle. With no short name the value is the full name,
+    // which ends in "Inc.", so the template's full stop must not be written again.
+    expect(
+      resolveLinkedText(
+        'The website of {{name}}. Notices, meetings and records for owners and residents.',
+        facts(),
+      ),
+    ).toBe(
+      'The website of Harbor Pointe Condominium Association, Inc. Notices, meetings and records for owners and residents.',
+    );
+  });
+
+  it('shows one full stop when the name ends the text', () => {
+    expect(resolveLinkedText('Welcome to {{name}}.', facts())).toBe(`Welcome to ${FULL_NAME}`);
+    // Every occurrence, each sentence on its own.
+    expect(resolveLinkedText('{{name}}. Again, {{name}}.', facts())).toBe(
+      `${FULL_NAME} Again, ${FULL_NAME}`,
+    );
+    // The value is judged as inserted, so a stray space after its full stop does not defeat it.
+    expect(resolveLinkedText('Welcome to {{name}}.', facts({ name: `${FULL_NAME} ` }))).toBe(
+      `Welcome to ${FULL_NAME}`,
+    );
+  });
+
+  it('keeps a template ellipsis at three dots after a name ending in a full stop', () => {
+    // The value's own full stop is the first dot, so the template gives up one of its three.
+    expect(resolveLinkedText('Welcome to {{name}}...', facts())).toBe(
+      'Welcome to Harbor Pointe Condominium Association, Inc...',
+    );
+  });
+
+  // Controls for the three above. The template's full stop is given up only when the
+  // value ends in one AND the template's follows the token directly, and the value
+  // itself is never changed.
+
+  it('keeps the template full stop after a name that has none', () => {
+    // A short name has no full stop in it, so there is nothing to absorb.
+    expect(
+      resolveLinkedText(
+        'The website of {{name}}. Notices, meetings and records for owners and residents.',
+        facts({ shortName: 'Harbor Pointe' }),
+      ),
+    ).toBe('The website of Harbor Pointe. Notices, meetings and records for owners and residents.');
+    expect(resolveLinkedText('Welcome to {{name}}.', facts({ shortName: 'Harbor Pointe' }))).toBe(
+      'Welcome to Harbor Pointe.',
+    );
+  });
+
+  it('keeps all three dots of an ellipsis after a name that has no full stop', () => {
+    expect(resolveLinkedText('Welcome to {{name}}...', facts({ shortName: 'Harbor Pointe' }))).toBe(
+      'Welcome to Harbor Pointe...',
+    );
+  });
+
+  it('leaves the name untouched when something other than a full stop follows it', () => {
+    // The value keeps its own full stop. Only the template's one is ever given up,
+    // so stripping the value's instead would show here ("Inc, friends.").
+    expect(resolveLinkedText('Welcome to {{name}}, friends.', facts())).toBe(
+      `Welcome to ${FULL_NAME}, friends.`,
+    );
   });
 
   // Odd values: they are data, whatever they look like.
