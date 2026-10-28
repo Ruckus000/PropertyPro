@@ -652,6 +652,13 @@
       "when": 1792599038713,
       "tag": "0094_drop_dead_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1793205517384,
+      "tag": "0095_website_builder_columns",
+      "breakpoints": true
     }
   ]
 }
