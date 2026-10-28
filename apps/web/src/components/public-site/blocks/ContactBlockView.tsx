@@ -5,7 +5,10 @@
  *
  * Three cards, each shown only when it has something to say:
  *   - Management: the name, email and phone from `communities.contact_*`;
- *   - Office: the address and office hours from the Community profile;
+ *   - Address, or Office once office hours are set: the address and hours from the
+ *     Community profile. The address on file is the property's location, and a card
+ *     called "Office" can read as "there is an office here"; hours are what make it
+ *     one;
  *   - Board: the roster.
  * Every row inside a card is left out when its value is blank. The management
  * section shows only `communities.contact_*` fields (`contact_email` is the only
@@ -54,8 +57,12 @@ export type ContactBlockViewProps = BlockViewProps<ContactBlockContent, PublicCo
 
 export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
   const management = managementWithDetails(data.management);
-  const hasOffice = hasContact(data.address) || hasContact(data.officeHours);
+  const hasAddress = hasContact(data.address);
+  const hasOfficeHours = hasContact(data.officeHours);
+  const hasOffice = hasAddress || hasOfficeHours;
   const hasBoard = data.board.length > 0;
+  // "Office" only once there are hours; until then the card is just the address.
+  const officeTitle = hasOfficeHours ? 'Office' : 'Address';
 
   return (
     <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`contact-${blockId}`}>
@@ -66,7 +73,7 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
         >
           Contact
         </h2>
-        {!management && !hasOffice && !hasBoard ? (
+        {!contactHasContent(data) ? (
           <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
             Contact information will be posted here soon.
           </p>
@@ -117,24 +124,27 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
             {hasOffice && (
               <section
                 className="rounded-md border border-edge bg-surface-card p-5"
-                aria-label="Office"
+                aria-label={officeTitle}
               >
-                <h3 className="text-lg font-medium text-content">Office</h3>
-                <dl className="mt-3 space-y-2 text-sm text-content-secondary">
-                  {hasContact(data.address) && (
-                    <div>
-                      <dt className="font-medium text-content">Address</dt>
-                      <dd>{data.address}</dd>
-                    </div>
-                  )}
-                  {hasContact(data.officeHours) && (
+                <h3 className="text-lg font-medium text-content">{officeTitle}</h3>
+                {hasOfficeHours ? (
+                  <dl className="mt-3 space-y-2 text-sm text-content-secondary">
+                    {hasAddress && (
+                      <div>
+                        <dt className="font-medium text-content">Address</dt>
+                        <dd>{data.address}</dd>
+                      </div>
+                    )}
                     <div>
                       <dt className="font-medium text-content">Office hours</dt>
                       {/* A manager may type a line per day; keep their breaks. */}
                       <dd className="whitespace-pre-line">{data.officeHours}</dd>
                     </div>
-                  )}
-                </dl>
+                  </dl>
+                ) : (
+                  // Titled "Address" already, so no row label repeats it.
+                  <p className="mt-3 text-sm text-content-secondary">{data.address}</p>
+                )}
               </section>
             )}
             {hasBoard && (

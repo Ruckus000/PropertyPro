@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { ContactBlock } from '@/components/public-site/blocks/ContactBlock';
 import { ContactBlockView } from '@/components/public-site/blocks/ContactBlockView';
 import type { BlockRendererProps, PublicCommunity } from '@/components/public-site/blocks/types';
@@ -137,7 +137,6 @@ describe('<ContactBlock> — what the Community profile adds', () => {
     );
     const withAddress = render((await ContactBlock(makeProps(BOTH))) as React.ReactElement);
 
-    expect(screen.getByText('Address')).toBeInTheDocument();
     expect(screen.getByText('100 Palm Way, Suite 4, Miami, FL 33101')).toBeInTheDocument();
     expect(screen.queryByText('Office hours')).toBeNull();
     withAddress.unmount();
@@ -193,7 +192,7 @@ describe('<ContactBlock> — what the Community profile adds', () => {
     expect(ui).not.toBeNull();
     expect(screen.getByRole('region', { name: 'Board roster' })).toBeInTheDocument();
     expect(screen.getByText('Sam President')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Office' })).toBeNull();
+    expect(screen.queryByRole('region', { name: /^(Office|Address)$/ })).toBeNull();
   });
 
   it('contact renders nothing when the only management details are blank', async () => {
@@ -204,6 +203,66 @@ describe('<ContactBlock> — what the Community profile adds', () => {
     const ui = await ContactBlock(makeProps(BOTH));
 
     expect(ui).toBeNull();
+  });
+});
+
+describe('<ContactBlock> — the heading of the address card', () => {
+  // The street address already on file is the property's location. A card called
+  // "Office" can read as "there is an office here", so it says "Address" until the
+  // manager has set office hours, which are what make it an office.
+  beforeEach(() => vi.clearAllMocks());
+
+  it('contact titles its card "Address" when no office hours are set', async () => {
+    getContactInfoMock.mockResolvedValueOnce(
+      contactInfo({ address: '100 Palm Way, Miami, FL 33101' }),
+    );
+    render((await ContactBlock(makeProps(BOTH))) as React.ReactElement);
+
+    const card = screen.getByRole('region', { name: 'Address' });
+    expect(within(card).getByRole('heading', { level: 3, name: 'Address' })).toBeInTheDocument();
+    expect(within(card).getByText('100 Palm Way, Miami, FL 33101')).toBeInTheDocument();
+    // The heading already says it, so the card does not repeat it as a row label.
+    expect(within(card).getAllByText('Address')).toHaveLength(1);
+    // Nothing on the page calls this an office.
+    expect(screen.queryByRole('region', { name: 'Office' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Office' })).toBeNull();
+  });
+
+  it('contact still titles its card "Address" when the office hours are blank', async () => {
+    for (const officeHours of [null, '', '   ']) {
+      getContactInfoMock.mockResolvedValueOnce(
+        contactInfo({ address: '100 Palm Way, Miami, FL 33101', officeHours }),
+      );
+      const { unmount } = render((await ContactBlock(makeProps(BOTH))) as React.ReactElement);
+
+      expect(screen.getByRole('region', { name: 'Address' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Office' })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('contact titles its card "Office" once office hours are set', async () => {
+    getContactInfoMock.mockResolvedValueOnce(
+      contactInfo({ address: '100 Palm Way, Miami, FL 33101', officeHours: 'Mon-Fri, 9-5' }),
+    );
+    const withBoth = render((await ContactBlock(makeProps(BOTH))) as React.ReactElement);
+
+    const card = screen.getByRole('region', { name: 'Office' });
+    expect(within(card).getByRole('heading', { level: 3, name: 'Office' })).toBeInTheDocument();
+    // Under "Office" the rows are labelled, since the heading no longer says "Address".
+    expect(within(card).getByText('Address')).toBeInTheDocument();
+    expect(within(card).getByText('100 Palm Way, Miami, FL 33101')).toBeInTheDocument();
+    expect(within(card).getByText('Office hours')).toBeInTheDocument();
+    expect(within(card).getByText('Mon-Fri, 9-5')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Address' })).toBeNull();
+    withBoth.unmount();
+
+    // Hours are what make it an office, with or without an address.
+    getContactInfoMock.mockResolvedValueOnce(contactInfo({ officeHours: 'Mon-Fri, 9-5' }));
+    render((await ContactBlock(makeProps(BOTH))) as React.ReactElement);
+
+    expect(screen.getByRole('region', { name: 'Office' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Address' })).toBeNull();
   });
 });
 

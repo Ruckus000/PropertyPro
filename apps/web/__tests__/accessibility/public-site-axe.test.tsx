@@ -268,6 +268,26 @@ describe('public site — block views', () => {
     expect(container.textContent).toContain('Mon-Fri, 9-5');
   });
 
+  it('the contact block with only an address (a card titled "Address") has no axe violations', async () => {
+    // The registry-driven run above renders the card with hours, titled "Office".
+    // With no hours it is titled "Address" and holds plain text rather than a list,
+    // which is different markup and needs its own audit.
+    const View = blockViewRegistry.contact!;
+    const { container } = render(
+      <View
+        blockId={1}
+        content={CONTENT.contact}
+        data={{ management: null, board: [], address: '100 Palm Way, Miami, FL 33101', officeHours: null }}
+        community={COMMUNITY}
+      />,
+    );
+
+    // Anti-vacuity: the variant under test is the one on screen.
+    expect(container.querySelector('h3')?.textContent).toBe('Address');
+    expect(container.textContent).toContain('100 Palm Way, Miami, FL 33101');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it.each(BLOCK_TYPES)('%s block has no axe violations', async (blockType) => {
     const { container } = renderBlock(blockType);
     expect(await axe(container)).toHaveNoViolations();
