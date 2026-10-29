@@ -59,6 +59,16 @@ machine-readable reporter and assert against the report.
   `Scope: N of M workspace projects`. This is how 403 tests across three packages ran nowhere in CI.
   If you add a package with tests, give it a `test` script *and* add it to `vitest.workspace.ts`.
 - A green suite does not prove an absence. To assert something is gone, grep for it directly.
+- **Tests must not create, delete or rename files inside the repo — not even briefly.** Guard tests
+  scan `apps/` and `packages/` in parallel workers, so a fixture planted and then removed in `afterEach`
+  can be listed by one guard and gone before it reads it (ENOENT → exit 2 in an unrelated test). This
+  was fixed three times, one test at a time. The `scripts` project's global setup
+  (`scripts/vitest.global-setup.ts`) now snapshots every directory's mtime and fails the run if any
+  moved; a creation followed by a deletion still moves its parent's mtime. Build fixtures under
+  `os.tmpdir()` and give the guard a `--root` option or root parameter. It is off in watch mode,
+  does not see in-place rewrites of existing files, and in a root `pnpm test` it also sees other
+  projects' writes, which race the guards just the same. The error lists directories, not the
+  test; grep `scripts/__tests__` for the path it names.
 
 ## Deliberate shortcuts: `ponytail:` markers
 
