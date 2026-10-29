@@ -17,7 +17,8 @@
  *    candidates, and choosing between them is for a person.
  * 3. The guarded UPDATE lands: it only writes a row whose `document_id` is
  *    still NULL, so a link a person (or another request) made in the meantime
- *    is never replaced.
+ *    is never replaced, and only while the document is still eligible, so a
+ *    document taken back to a draft or deleted in the meantime is never linked.
  *
  * Otherwise nothing is written, and every eligible match is offered to a person
  * by `listRecordCandidates`.
@@ -31,12 +32,15 @@
  * statement as `document_id`, and audited as `link_document` with
  * `metadata: { linkedBy: 'auto_match', templateKey }`.
  *
- * `document_posted_at` is the document's own `posted_at`, not the time of
- * linking: a set of minutes posted two years ago must not read as current.
+ * `document_posted_at` is the document's own `posted_at`, read in the same
+ * statement, not the time of linking: a set of minutes posted two years ago
+ * must not read as current.
  *
  * The callers (document upload, posting a draft, publishing an authored
  * document, PM bulk upload) wrap every call in try/catch: linking is
- * bookkeeping, and a failure here must never fail the user's request.
+ * bookkeeping, and a failure here must never fail the user's request. Each
+ * links only the documents it posted: linking the documents a community
+ * already had is a backfill, and a person reviews its dry run first.
  */
 import {
   communities,
@@ -45,7 +49,7 @@ import {
   documents,
   logAuditEvent,
 } from '@propertypro/db';
-import { and, eq, inArray, isNotNull, isNull } from '@propertypro/db/filters';
+import { and, eq, inArray, isNotNull, isNull, sql } from '@propertypro/db/filters';
 import {
   RECORD_MATCH_RULES,
   getComplianceTemplate,
@@ -88,7 +92,6 @@ interface CandidateDocument {
   title: string;
   fileName: string;
   categoryKey: DocumentCategoryKey;
-  postedAt: Date;
 }
 
 interface OpenItem {
@@ -96,32 +99,26 @@ interface OpenItem {
   templateKey: string;
 }
 
+/** The checklist half of a decision: one read of the community's items. */
+interface OpenItems {
+  /** Whether the community keeps these records at all: a condominium or an HOA. */
+  keepsRecords: boolean;
+  items: OpenItem[];
+  /** documents already linked to some item, so neither a candidate nor linkable */
+  linkedDocumentIds: Set<number>;
+}
+
 /**
  * Everything one decision needs: the open items, the eligible unlinked
  * documents, which keys each document matches and which documents each item
  * matches. Read once; every public function decides from it.
  */
-interface LinkingState {
-  /** Whether the community keeps these records at all: a condominium or an HOA. */
-  keepsRecords: boolean;
-  items: OpenItem[];
-  documentsById: Map<number, CandidateDocument>;
+interface LinkingState extends OpenItems {
   /** document id → the open-item keys it matches */
   keysByDocument: Map<number, string[]>;
   /** item id → the eligible, unlinked documents matching it */
   candidatesByItem: Map<number, CandidateDocument[]>;
-  /** documents already linked to some item, so neither a candidate nor linkable */
-  linkedDocumentIds: Set<number>;
 }
-
-const EMPTY_STATE: LinkingState = {
-  keepsRecords: false,
-  items: [],
-  documentsById: new Map(),
-  keysByDocument: new Map(),
-  candidatesByItem: new Map(),
-  linkedDocumentIds: new Set(),
-};
 
 function hasRule(templateKey: string): boolean {
   // Own keys only: an inherited name such as `constructor` is not a rule.
@@ -174,12 +171,11 @@ async function readCommunityType(communityId: number): Promise<CommunityType | n
   return rows[0]?.communityType ?? null;
 }
 
-async function readLinkingState(communityId: number): Promise<LinkingState> {
+async function readOpenItems(communityId: number): Promise<OpenItems> {
   const communityType = await readCommunityType(communityId);
   // Only condominiums and HOAs keep these records: an item counts only when its key
   // is in its community's statute template, and an apartment's template is empty.
   const template = communityType ? getComplianceTemplate(communityType) : [];
-  const keepsRecords = template.length > 0;
   const templateKeys = new Set(template.map((t) => t.templateKey));
 
   const scoped = createScopedClient(communityId);
@@ -202,11 +198,40 @@ async function readLinkingState(communityId: number): Promise<LinkingState> {
     if (!templateKeys.has(templateKey) || !hasRule(templateKey)) continue;
     items.push({ id: Number(row['id']), templateKey });
   }
+  return { keepsRecords: template.length > 0, items, linkedDocumentIds };
+}
+
+/** The documents as the rules read them, their category names resolved in one read. */
+async function toCandidates(communityId: number, rows: DocumentRow[]): Promise<CandidateDocument[]> {
+  const categoryIds = [
+    ...new Set(rows.map((row) => row.categoryId).filter((id): id is number => id != null)),
+  ];
+  const categoryNames = await getDocumentCategoryNames(communityId, categoryIds);
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    fileName: row.fileName,
+    categoryKey: normalizeCategoryName(
+      row.categoryId == null ? null : categoryNames.get(row.categoryId),
+    ),
+  }));
+}
+
+async function readLinkingState(communityId: number, open?: OpenItems): Promise<LinkingState> {
+  const { keepsRecords, items, linkedDocumentIds } = open ?? (await readOpenItems(communityId));
+  const state: LinkingState = {
+    keepsRecords,
+    items,
+    linkedDocumentIds,
+    keysByDocument: new Map(),
+    candidatesByItem: new Map(),
+  };
   // Nothing to fill (every apartment, or every record already linked): skip the documents.
-  if (items.length === 0) return { ...EMPTY_STATE, keepsRecords, linkedDocumentIds };
+  if (items.length === 0) return state;
 
   // Filtered in SQL for size, and again in JS (`isEligibleDocument`) so the
   // eligibility rule is one readable predicate that holds whatever the query.
+  const scoped = createScopedClient(communityId);
   const documentRows = (
     (await scoped.selectFrom(
       documents,
@@ -223,62 +248,37 @@ async function readLinkingState(communityId: number): Promise<LinkingState> {
     (row) => isEligibleDocument(row) && !linkedDocumentIds.has(row.id),
   );
 
-  const categoryIds = [
-    ...new Set(eligibleRows.map((row) => row.categoryId).filter((id): id is number => id != null)),
-  ];
-  const categoryNames = await getDocumentCategoryNames(communityId, categoryIds);
-
-  const documentsById = new Map<number, CandidateDocument>();
-  const keysByDocument = new Map<number, string[]>();
-  const candidatesByItem = new Map<number, CandidateDocument[]>();
   const itemByKey = new Map(items.map((item) => [item.templateKey, item]));
   const openKeys = items.map((item) => item.templateKey);
-
-  for (const row of eligibleRows) {
-    const doc: CandidateDocument = {
-      id: row.id,
-      title: row.title,
-      fileName: row.fileName,
-      categoryKey: normalizeCategoryName(
-        row.categoryId == null ? null : categoryNames.get(row.categoryId),
-      ),
-      postedAt: row.postedAt as Date,
-    };
-    documentsById.set(doc.id, doc);
+  for (const doc of await toCandidates(communityId, eligibleRows)) {
     const keys = matchingTemplateKeys(doc, openKeys);
-    keysByDocument.set(doc.id, keys);
+    state.keysByDocument.set(doc.id, keys);
     for (const key of keys) {
       const item = itemByKey.get(key);
       if (!item) continue;
-      const list = candidatesByItem.get(item.id) ?? [];
+      const list = state.candidatesByItem.get(item.id) ?? [];
       list.push(doc);
-      candidatesByItem.set(item.id, list);
+      state.candidatesByItem.set(item.id, list);
     }
   }
-
-  return { keepsRecords, items, documentsById, keysByDocument, candidatesByItem, linkedDocumentIds };
+  return state;
 }
 
-interface InternalPlan {
-  links: Array<PlannedRecordLink & { postedAt: Date }>;
+interface Plan {
+  links: PlannedRecordLink[];
   ambiguous: AmbiguousRecordItem[];
 }
 
 /** Rules 1 and 2: the item's only candidate matches only this item. */
-function planFromState(state: LinkingState): InternalPlan {
-  const links: InternalPlan['links'] = [];
+function planFromState(state: LinkingState): Plan {
+  const links: PlannedRecordLink[] = [];
   const ambiguous: AmbiguousRecordItem[] = [];
   for (const item of state.items) {
     const candidates = state.candidatesByItem.get(item.id) ?? [];
     if (candidates.length === 0) continue;
     const only = candidates.length === 1 ? candidates[0] : undefined;
     if (only && state.keysByDocument.get(only.id)?.length === 1) {
-      links.push({
-        itemId: item.id,
-        templateKey: item.templateKey,
-        documentId: only.id,
-        postedAt: only.postedAt,
-      });
+      links.push({ itemId: item.id, templateKey: item.templateKey, documentId: only.id });
     } else {
       ambiguous.push({
         itemId: item.id,
@@ -291,26 +291,36 @@ function planFromState(state: LinkingState): InternalPlan {
 }
 
 /**
- * Rule 3: write the link only while the item is still unlinked, and record it
- * as automatic in the same statement. Zero rows means someone got there first;
- * that is not an error, and nothing is audited.
+ * Rule 3: write the link only while the item is still unlinked AND the document
+ * is still eligible (same community, posted, not deleted, a library upload or an
+ * authored document), and record it as automatic in the same statement. Zero
+ * rows means something changed after the read; that is not an error, and
+ * nothing is audited.
  */
 async function applyLink(
   communityId: number,
-  link: PlannedRecordLink & { postedAt: Date },
+  link: PlannedRecordLink,
   actorUserId: string | null,
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
+  // The document's own posting date, read by the statement that writes the link.
+  const documentPostedAt = sql`(select d.posted_at from documents d where d.id = ${link.documentId} and d.community_id = ${communityId})`;
+  // ELIGIBLE_SOURCE_TYPES, spelled out: an enum list cannot be a bound parameter here.
+  const documentStillEligible = sql`exists (select 1 from documents d where d.id = ${link.documentId} and d.community_id = ${communityId} and d.posted_at is not null and d.deleted_at is null and d.source_type in ('library', 'authored'))`;
   // The scoped client adds `community_id = $community AND deleted_at IS NULL`.
   const updated = (await scoped.update(
     complianceChecklistItems,
     {
       documentId: link.documentId,
-      documentPostedAt: link.postedAt,
+      documentPostedAt,
       autoLinkedDocumentId: link.documentId,
       lastModifiedBy: actorUserId,
     },
-    and(eq(complianceChecklistItems.id, link.itemId), isNull(complianceChecklistItems.documentId)),
+    and(
+      eq(complianceChecklistItems.id, link.itemId),
+      isNull(complianceChecklistItems.documentId),
+      documentStillEligible,
+    ),
   )) as Array<Record<string, unknown>>;
   if (updated.length === 0) return false;
 
@@ -336,7 +346,10 @@ async function applyLink(
  * - `no_match`: it fits no open item.
  * - `not_eligible`: not a condo or HOA, the document is missing, a draft,
  *   deleted, violation evidence or already linked, or the guarded update found
- *   the item already linked.
+ *   the item already linked or the document no longer eligible.
+ *
+ * Most uploads fit no open item, so that is decided from the checklist and this
+ * one document before the community's other documents are read.
  */
 export async function autoLinkDocument(
   communityId: number,
@@ -349,25 +362,20 @@ export async function autoLinkDocument(
     documentColumns(),
     eq(documents.id, documentId),
   )) as unknown as Array<Record<string, unknown>>;
-  if (!rawDoc || !isEligibleDocument(toDocumentRow(rawDoc))) {
+  const row = rawDoc ? toDocumentRow(rawDoc) : null;
+  if (!row || !isEligibleDocument(row)) return { templateKey: null, outcome: 'not_eligible' };
+
+  const open = await readOpenItems(communityId);
+  if (!open.keepsRecords || open.linkedDocumentIds.has(documentId)) {
     return { templateKey: null, outcome: 'not_eligible' };
   }
-
-  const state = await readLinkingState(communityId);
-  const doc = state.documentsById.get(documentId);
-  if (!doc) {
-    // Not a condominium or HOA, or the document already fills an item: not
-    // eligible. Otherwise no open item can take it (none is open, or it has no
-    // category).
-    const notEligible = !state.keepsRecords || state.linkedDocumentIds.has(documentId);
-    return { templateKey: null, outcome: notEligible ? 'not_eligible' : 'no_match' };
-  }
-
-  const keys = state.keysByDocument.get(documentId) ?? [];
+  const [doc] = await toCandidates(communityId, [row]);
+  const keys = matchingTemplateKeys(doc as CandidateDocument, open.items.map((item) => item.templateKey));
   if (keys.length === 0) return { templateKey: null, outcome: 'no_match' };
   if (keys.length > 1) return { templateKey: null, outcome: 'ambiguous' };
 
   const templateKey = keys[0] as string;
+  const state = await readLinkingState(communityId, open);
   const link = planFromState(state).links.find((l) => l.documentId === documentId);
   if (!link) return { templateKey, outcome: 'ambiguous' };
 
@@ -377,34 +385,54 @@ export async function autoLinkDocument(
 
 /**
  * The links `autoLinkCommunityRecords` would write, and the items it would
- * leave to a person, without writing anything. A dry run reads this.
+ * leave to a person, without writing anything. A dry run reads this, and
+ * `applyRecordLinks` writes what it approves.
  */
-export async function planCommunityRecordLinks(communityId: number): Promise<{
-  links: PlannedRecordLink[];
-  ambiguous: AmbiguousRecordItem[];
-}> {
-  const plan = planFromState(await readLinkingState(communityId));
-  return {
-    links: plan.links.map(({ itemId, templateKey, documentId }) => ({ itemId, templateKey, documentId })),
-    ambiguous: plan.ambiguous,
-  };
+export async function planCommunityRecordLinks(communityId: number): Promise<Plan> {
+  return planFromState(await readLinkingState(communityId));
 }
 
 /**
- * Link every open item in the community whose evidence is unambiguous, e.g.
- * after a bulk upload. Returns how many links landed and how many items were
- * left to a person.
+ * Write planned links, each through the guarded UPDATE: a link whose item was
+ * linked, or whose document stopped being eligible, since the plan was read is
+ * skipped. Returns how many landed.
+ */
+export async function applyRecordLinks(
+  communityId: number,
+  links: readonly PlannedRecordLink[],
+  actorUserId: string | null,
+): Promise<number> {
+  let linked = 0;
+  for (const link of links) {
+    if (await applyLink(communityId, link, actorUserId)) linked++;
+  }
+  return linked;
+}
+
+/**
+ * Link the open items whose evidence is unambiguous, after a bulk upload.
+ *
+ * `documentIds` limits the writes to links that use those documents (the ones
+ * the upload created). The decision still weighs every eligible document, so a
+ * new budget beside an older unlinked one is ambiguous, and the older one is
+ * never linked by an upload that did not post it. Without `documentIds` every
+ * unambiguous link is written: a backfill.
+ *
+ * Returns how many links landed, and how many items those documents left to a
+ * person.
  */
 export async function autoLinkCommunityRecords(
   communityId: number,
   actorUserId: string | null,
+  options: { documentIds?: readonly number[] } = {},
 ): Promise<{ linked: number; ambiguous: number }> {
   const plan = planFromState(await readLinkingState(communityId));
-  let linked = 0;
-  for (const link of plan.links) {
-    if (await applyLink(communityId, link, actorUserId)) linked++;
-  }
-  return { linked, ambiguous: plan.ambiguous.length };
+  const only = options.documentIds ? new Set(options.documentIds) : null;
+  const links = only ? plan.links.filter((link) => only.has(link.documentId)) : plan.links;
+  const ambiguous = only
+    ? plan.ambiguous.filter((item) => item.documentIds.some((id) => only.has(id)))
+    : plan.ambiguous;
+  return { linked: await applyRecordLinks(communityId, links, actorUserId), ambiguous: ambiguous.length };
 }
 
 /**

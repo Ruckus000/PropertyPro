@@ -4,15 +4,18 @@
  * The unit test pins the decision on an in-memory fake. Only a real database
  * can show that the eligibility filters are real SQL (a draft, violation
  * evidence or a deleted budget is not a competing candidate), that the guarded
- * UPDATE leaves an existing link alone, and that the audit row lands.
+ * UPDATE leaves a link made after the plan alone and never links a document
+ * taken back to a draft after the plan, and that the audit row lands.
  *
  * Nothing is mocked: no-mock-guard forbids it under __tests__/integration/.
  */
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { and, eq } from '@propertypro/db/filters';
 import {
+  applyRecordLinks,
   autoLinkDocument,
   listRecordCandidates,
+  planCommunityRecordLinks,
 } from '@/lib/services/record-auto-link-service';
 import {
   type TestKitState,
@@ -106,6 +109,22 @@ describeDb('record auto-link (db-backed integration)', () => {
     return row;
   }
 
+  async function autoMatchAuditRows(communityId: number) {
+    const { complianceAuditLog } = state.dbModule;
+    const rows = await state.db
+      .select()
+      .from(complianceAuditLog)
+      .where(
+        and(
+          eq(complianceAuditLog.communityId, communityId),
+          eq(complianceAuditLog.action, 'link_document'),
+        ),
+      );
+    return rows.filter(
+      (row) => (row.metadata as { linkedBy?: string } | null)?.linkedBy === 'auto_match',
+    );
+  }
+
   beforeAll(async () => {
     state = await initTestKit();
   });
@@ -150,7 +169,7 @@ describeDb('record auto-link (db-backed integration)', () => {
     const second = await seedBudget(communityId, categoryId, '2027 Proposed Annual Budget');
     const result = await autoLinkDocument(communityId, second, null);
 
-    expect(result.outcome).not.toBe('linked');
+    expect(result).toEqual({ templateKey: null, outcome: 'no_match' });
     const after = await readItem(itemId);
     expect(after?.documentId).toBe(first);
     expect(after?.autoLinkedDocumentId).toBe(first);
@@ -174,5 +193,46 @@ describeDb('record auto-link (db-backed integration)', () => {
         { documentId: older, title: '2025 Annual Budget' },
       ],
     });
+  });
+
+  it('a link a person makes between the plan and the write is never replaced', async () => {
+    const { communityId, categoryId, itemId } = await seedCondoWithBudgetItem('race-link');
+    const budget = await seedBudget(communityId, categoryId, '2026 Annual Budget');
+    const chosen = await seedBudget(communityId, categoryId, 'Budget chosen by hand', {
+      sourceType: 'violation_evidence',
+    });
+
+    const plan = await planCommunityRecordLinks(communityId);
+    expect(plan.links).toEqual([{ itemId, templateKey: '718_budget', documentId: budget }]);
+
+    // A person links the item by hand after the plan was read.
+    const { complianceChecklistItems } = state.dbModule;
+    await state.db
+      .update(complianceChecklistItems)
+      .set({ documentId: chosen })
+      .where(eq(complianceChecklistItems.id, itemId));
+
+    await expect(applyRecordLinks(communityId, plan.links, null)).resolves.toBe(0);
+    const after = await readItem(itemId);
+    expect(after?.documentId).toBe(chosen);
+    expect(after?.autoLinkedDocumentId).toBeNull();
+    expect(await autoMatchAuditRows(communityId)).toHaveLength(0);
+  });
+
+  it('a document taken back to a draft between the plan and the write is never linked', async () => {
+    const { communityId, categoryId, itemId } = await seedCondoWithBudgetItem('race-unpost');
+    const budget = await seedBudget(communityId, categoryId, '2026 Annual Budget');
+
+    const plan = await planCommunityRecordLinks(communityId);
+    expect(plan.links).toEqual([{ itemId, templateKey: '718_budget', documentId: budget }]);
+
+    const { documents } = state.dbModule;
+    await state.db.update(documents).set({ postedAt: null }).where(eq(documents.id, budget));
+
+    await expect(applyRecordLinks(communityId, plan.links, null)).resolves.toBe(0);
+    const after = await readItem(itemId);
+    expect(after?.documentId).toBeNull();
+    expect(after?.autoLinkedDocumentId).toBeNull();
+    expect(await autoMatchAuditRows(communityId)).toHaveLength(0);
   });
 });

@@ -35,16 +35,16 @@ const DOCS = [
 describe('insertBulkDocumentsForCommunity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    insertMock.mockResolvedValue([{ id: 1 }]);
+    insertMock.mockResolvedValueOnce([{ id: 501 }]).mockResolvedValueOnce([{ id: 502 }]);
     autoLinkCommunityRecordsMock.mockResolvedValue({ linked: 1, ambiguous: 0 });
   });
 
-  it('links records once, after every row is inserted', async () => {
+  it('links records once, after every row is inserted, and only with the rows it created', async () => {
     const result = await insertBulkDocumentsForCommunity({ communityId: 10, uploadedBy: 'pm-1', docs: DOCS });
 
     expect(result).toEqual({ created: 2 });
     expect(autoLinkCommunityRecordsMock).toHaveBeenCalledTimes(1);
-    expect(autoLinkCommunityRecordsMock).toHaveBeenCalledWith(10, 'pm-1');
+    expect(autoLinkCommunityRecordsMock).toHaveBeenCalledWith(10, 'pm-1', { documentIds: [501, 502] });
     expect(insertMock.mock.invocationCallOrder.at(-1)).toBeLessThan(
       autoLinkCommunityRecordsMock.mock.invocationCallOrder[0]!,
     );

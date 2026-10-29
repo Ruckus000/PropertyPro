@@ -3,8 +3,10 @@
  * on its own (D12), and what is left to a person.
  *
  * The database is a small in-memory fake: `selectFrom` answers by table, and
- * `update` honours an `isNull(document_id)` guard only when the statement
- * carries one, so the guard is tested rather than assumed. The SQL filters themselves are covered by
+ * `update` honours an `isNull(document_id)` guard and a document `exists (...)`
+ * guard only when the statement carries them, so the guards are tested rather
+ * than assumed. It reads the document's `posted_at` subquery the same way. The
+ * real SQL is covered by the integration test. The SQL filters themselves are covered by
  * `__tests__/integration/record-auto-link.integration.test.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -80,6 +82,7 @@ vi.mock('@propertypro/db/filters', () => ({
   inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
   isNull: (col: unknown) => ({ __isNull: col }),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: strings.join('$'), values }),
 }));
 
 vi.mock('@/lib/services/document-category-service', () => ({
@@ -87,6 +90,7 @@ vi.mock('@/lib/services/document-category-service', () => ({
 }));
 
 import {
+  applyRecordLinks,
   autoLinkCommunityRecords,
   autoLinkDocument,
   listRecordCandidates,
@@ -111,6 +115,23 @@ function idFilter(where: unknown, column: string): number | undefined {
   return undefined;
 }
 
+interface FakeSql {
+  __sql: string;
+  values: unknown[];
+}
+
+function asSql(value: unknown): FakeSql | null {
+  return value != null && typeof value === 'object' && '__sql' in value ? (value as FakeSql) : null;
+}
+
+/** The fake's reading of the document subqueries: `d.id = $1 and d.community_id = $2 ...`. */
+function subqueryDocument(fragment: FakeSql): FakeDoc | undefined {
+  return db.docs.find((doc) => doc.id === fragment.values[0]);
+}
+
+/** Every `documents` read that is not the one-document read by id: the community-wide read. */
+let communityDocumentReads = 0;
+
 function fakeScopedClient() {
   return {
     selectFrom: vi.fn(async (table: { __table: string }, _cols: unknown, where?: unknown) => {
@@ -119,6 +140,7 @@ function fakeScopedClient() {
       // documents: soft-deleted rows never come back from the scoped client.
       const live = db.docs.filter((doc) => doc.deletedAt == null);
       const id = idFilter(where, tables.documents.id);
+      if (id === undefined) communityDocumentReads++;
       return (id === undefined ? live : live.filter((doc) => doc.id === id)).map((doc) => ({ ...doc }));
     }),
     update: vi.fn(async (_table: unknown, values: Record<string, unknown>, where: unknown) => {
@@ -130,7 +152,23 @@ function fakeScopedClient() {
         (clause) => (clause as { __isNull?: unknown })?.__isNull === tables.complianceChecklistItems.documentId,
       );
       if (guardsUnlinked && item.documentId != null) return [];
-      Object.assign(item, values);
+      const existsGuard = clausesOf(where).map(asSql).find((f) => f?.__sql.startsWith('exists'));
+      if (existsGuard) {
+        const target = subqueryDocument(existsGuard);
+        const stillEligible =
+          target != null &&
+          target.postedAt != null &&
+          target.deletedAt == null &&
+          ['library', 'authored'].includes(target.sourceType);
+        if (!stillEligible) return [];
+      }
+      const resolved = Object.fromEntries(
+        Object.entries(values).map(([key, value]) => {
+          const fragment = asSql(value);
+          return [key, fragment ? (subqueryDocument(fragment)?.postedAt ?? null) : value];
+        }),
+      );
+      Object.assign(item, resolved);
       return [{ ...item }];
     }),
   };
@@ -161,6 +199,7 @@ beforeEach(() => {
   db.items = [item(10, '718_budget'), item(11, '718_bylaws'), item(12, '718_declaration')];
   db.docs = [];
   db.beforeUpdate = null;
+  communityDocumentReads = 0;
   createScopedClientMock.mockImplementation(() => fakeScopedClient());
   logAuditEventMock.mockResolvedValue(undefined);
   getDocumentCategoryNamesMock.mockImplementation(async (_communityId: number, ids: number[]) => {
@@ -240,6 +279,28 @@ describe('autoLinkDocument', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  it('never links a document taken back to a draft after the read', async () => {
+    db.docs = [doc(100, '2026 Annual Budget')];
+    db.beforeUpdate = () => {
+      db.docs.find((row) => row.id === 100)!.postedAt = null;
+    };
+
+    const result = await autoLinkDocument(42, 100, 'user-1');
+
+    expect(result).toEqual({ templateKey: '718_budget', outcome: 'not_eligible' });
+    expect(db.items.find((row) => row.id === 10)!.documentId).toBeNull();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('answers no_match for an upload that fits no open item without reading the other documents', async () => {
+    db.docs = [doc(99, '2026 Annual Budget'), doc(100, 'Pool Hours', { categoryId: 2 })];
+
+    const result = await autoLinkDocument(42, 100, 'user-1');
+
+    expect(result).toEqual({ templateKey: null, outcome: 'no_match' });
+    expect(communityDocumentReads).toBe(0);
+  });
+
   it('does not count a document that already fills one item as a candidate for another', async () => {
     // A person linked the combined document to the declaration.
     db.items = [item(11, '718_bylaws'), item(12, '718_declaration', { documentId: 100 })];
@@ -314,6 +375,32 @@ describe('autoLinkDocument', () => {
 });
 
 describe('autoLinkCommunityRecords', () => {
+  it('a bulk upload links only the documents it created', async () => {
+    // An older budget, posted before automatic linking existed, and an upload of an unrelated paper.
+    db.docs = [doc(101, '2025 Annual Budget'), doc(200, 'Pool Hours', { categoryId: 2 })];
+    // Unfiltered, the older budget would link: only the filter keeps it out.
+    await expect(planCommunityRecordLinks(42)).resolves.toEqual({
+      links: [{ itemId: 10, templateKey: '718_budget', documentId: 101 }],
+      ambiguous: [],
+    });
+
+    const result = await autoLinkCommunityRecords(42, 'pm-1', { documentIds: [200] });
+
+    expect(result).toEqual({ linked: 0, ambiguous: 0 });
+    expect(db.items.find((row) => row.id === 10)!.documentId).toBeNull();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('applyRecordLinks skips a planned link whose item a person linked after the plan', async () => {
+    db.docs = [doc(100, '2026 Annual Budget')];
+    const plan = await planCommunityRecordLinks(42);
+    db.items.find((row) => row.id === 10)!.documentId = 77;
+
+    await expect(applyRecordLinks(42, plan.links, null)).resolves.toBe(0);
+    expect(db.items.find((row) => row.id === 10)!.documentId).toBe(77);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
   it('applies every unambiguous link and counts the items left to a person', async () => {
     db.docs = [
       doc(100, 'Bylaws', { categoryId: 2 }),
