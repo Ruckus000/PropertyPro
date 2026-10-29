@@ -375,7 +375,7 @@ export function planLookSwitchWithCounts({
  * their live order, each edit the manager made since kept in its place, the
  * drafted look's untouched defaults dropped. It needs the live rows, not a live
  * look, so it also takes a drafted look back off a site whose live layout is a
- * legacy one ("Keep this look" in the look picker, `withdrawDraftedLook`).
+ * legacy one ("Keep my current look" in the look picker, `withdrawDraftedLook`).
  */
 export function planReturnToLive(
   current: readonly SiteSection[],

@@ -93,7 +93,10 @@ describe('loadWebsiteLiveCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getSiteOnboardingCompletedAtMock.mockResolvedValue(null);
-    getCommunityPublicInfoMock.mockResolvedValue({ slug: 'sunset-condos' });
+    getCommunityPublicInfoMock.mockResolvedValue({
+      slug: 'sunset-condos',
+      sitePublishedAt: new Date('2026-09-01T00:00:00Z'),
+    });
   });
   const load = async (role: Parameters<typeof LoadWebsiteLiveCard>[1], features = condoFeatures) => {
     const real = await vi.importActual<typeof import('@/lib/dashboard/load-website-live-card')>(
@@ -111,6 +114,11 @@ describe('loadWebsiteLiveCard', () => {
     getSiteOnboardingCompletedAtMock.mockClear();
     await load('resident');
     expect(getSiteOnboardingCompletedAtMock).not.toHaveBeenCalled();
+  });
+
+  it('never says the website is live for a site that is not published', async () => {
+    getCommunityPublicInfoMock.mockResolvedValue({ slug: 'sunset-condos', sitePublishedAt: null });
+    expect(await load('root_manager')).toBeNull();
   });
 
   it('the card hides once onboarding is complete', async () => {

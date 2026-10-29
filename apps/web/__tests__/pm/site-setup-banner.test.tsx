@@ -65,12 +65,23 @@ describe('<SiteSetupBanner>', () => {
 });
 
 describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
-  it('deep-links the CTA into the first incomplete community website home', async () => {
+  it('deep-links "Pick a look" into the first such community\'s look picker', async () => {
     mockStatus(false);
     render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
     const cta = await screen.findByTestId('site-setup-banner-cta');
-    expect(cta).toHaveAttribute('href', '/pm/website?communityId=7');
-    expect(cta).toHaveTextContent(/set up your website/i);
+    expect(cta).toHaveAttribute('href', '/pm/website/looks?communityId=7');
+    expect(cta).toHaveTextContent('Pick a look');
+  });
+
+  it('says the website is already live, never that it is unpublished', async () => {
+    mockStatus(false);
+    render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
+    const banner = await screen.findByTestId('site-setup-banner');
+    expect(banner).toHaveTextContent('Pick a look for your community website');
+    expect(banner).toHaveTextContent(
+      'Your community website is already live. Choose how it looks, or keep the one it has.',
+    );
+    expect(banner).not.toHaveTextContent(/hasn't published|finish setting up/i);
   });
 
   it('falls back to the website editor hub when no community id is supplied', async () => {

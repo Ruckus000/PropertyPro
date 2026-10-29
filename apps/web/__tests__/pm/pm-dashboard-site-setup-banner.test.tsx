@@ -109,7 +109,7 @@ describe('PmDashboardClient → SiteSetupBanner wiring', () => {
     render(<PmDashboardClient />);
     expect(screen.getByTestId('site-setup-banner-cta')).toHaveAttribute(
       'href',
-      '/pm/website?communityId=9',
+      '/pm/website/looks?communityId=9',
     );
   });
 

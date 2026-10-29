@@ -652,7 +652,7 @@ describe('planLookSwitch', () => {
       expect(tombstones).toEqual([]);
     });
 
-    it('a drafted look comes back off a legacy live page, keeping the edit made since (Keep this look)', () => {
+    it('a drafted look comes back off a legacy live page, keeping the edit made since (Keep my current look)', () => {
       // A site still on a legacy layout, showing a starter pack. No card can
       // return to it (its live layout is no look), so the picker's Keep this
       // look plans the way back from the live rows alone.

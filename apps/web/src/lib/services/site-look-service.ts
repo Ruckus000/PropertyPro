@@ -10,7 +10,7 @@
  *   as draft rows and tombstones, and the look as `branding.draftLook`. The
  *   editor's Publish makes it live and its Discard throws it away, both
  *   unchanged. Picking the live look again restores what is live.
- * - `withdrawDraftedLook`: the manager keeps the live look (Keep this look): a
+ * - `withdrawDraftedLook`: the manager keeps the live look (Keep my current look): a
  *   drafted look is taken back off, on any live layout, keeping their edits.
  * - `loadLookSwitchInput`: what a switch is planned from, read without writing.
  *   The switch and the look previews share it, so they cannot plan from
@@ -384,7 +384,7 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
 }
 
 /**
- * Take a drafted look back off the site, keeping the live one ("Keep this look"
+ * Take a drafted look back off the site, keeping the live one ("Keep my current look"
  * in the look picker): the home page returns to its live rows, keeping every
  * edit the manager made since (`planReturnToLive`, the same rule as picking the
  * live look's card), and the drafted look's layout, colour set, colours and

@@ -1,8 +1,10 @@
 'use client';
 
 /**
- * PM dashboard "finish your site" nudge. Shows when the PM has at least one
- * community whose public-site onboarding is incomplete
+ * PM dashboard "pick a look" nudge. Every community's website is live from the
+ * day it is created, wearing the suggested look for its type, so this never
+ * says a site is unpublished: it offers the look picker. Shows when the PM has
+ * at least one community that hasn't chosen or kept a look yet
  * (siteOnboardingCompletedAt === null) AND the PM hasn't dismissed it.
  * Dismissal is persisted per-user (user_preferences) so it stays dismissed
  * across devices/sessions.
@@ -31,13 +33,12 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { useSiteSetupBannerDismissed, useDismissSiteSetupBanner } from '@/hooks/use-site-setup-banner';
 
 interface Props {
-  /** True when any of the PM's communities has an incomplete public site. */
+  /** True when any of the PM's communities hasn't chosen or kept a look yet. */
   hasIncompleteSite: boolean;
   /**
-   * The first incomplete community's id — deep-links the CTA into that
-   * community's website home. Falls back to the website editor
-   * when absent (shouldn't happen when hasIncompleteSite is true, but the
-   * nudge must never be a dead end).
+   * The first such community's id — deep-links the CTA into that community's
+   * look picker. Falls back to the website editor when absent (shouldn't happen
+   * when hasIncompleteSite is true, but the nudge must never be a dead end).
    */
   firstIncompleteCommunityId?: number | null;
 }
@@ -55,24 +56,24 @@ export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId 
       role="status"
       data-testid="site-setup-banner"
       status="brand"
-      title="Finish setting up your community website"
-      description="One or more of your communities hasn't published its public site yet. Pick a layout, colors, and a welcome message so residents have somewhere to land."
+      title="Pick a look for your community website"
+      description="Your community website is already live. Choose how it looks, or keep the one it has."
       action={
         <Button asChild size="sm">
           {/*
             A plain <a>, not next/link: this leaves the PM portal for the
-            community-scoped website home, and the destination reads
+            community-scoped look picker, and the destination reads
             `communityId` server-side to resolve tenancy.
           */}
           <a
             href={
               firstIncompleteCommunityId
-                ? `/pm/website?communityId=${firstIncompleteCommunityId}`
+                ? `/pm/website/looks?communityId=${firstIncompleteCommunityId}`
                 : '/pm/website-editor'
             }
             data-testid="site-setup-banner-cta"
           >
-            Set up your website
+            Pick a look
           </a>
         </Button>
       }

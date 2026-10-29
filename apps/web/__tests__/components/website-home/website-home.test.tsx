@@ -504,7 +504,7 @@ describe('other sections', () => {
     expect(screen.queryByText(offer)).not.toBeInTheDocument();
     cleanup();
 
-    // A site live from creation with no publish in the log yet (Keep this look):
+    // A site live from creation with no publish in the log yet (Keep my current look):
     // the offer shows, because the site IS public.
     renderHome(data({ liveNotice: live, sitePublished: true, lastPublish: null }));
     expect(screen.getByText(offer)).toBeInTheDocument();
@@ -592,6 +592,27 @@ describe('other sections', () => {
 
     expect(screen.getByText('An older look')).toBeInTheDocument();
   });
+
+  it('a look chosen but not published says so, and links to the picker to publish it or keep the live one', () => {
+    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'palm-grove' } }));
+
+    expect(screen.getByText('Palm Grove is chosen but not published yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Publish it or keep Bayfront' })).toHaveAttribute(
+      'href',
+      `/pm/website/looks?communityId=${COMMUNITY_ID}`,
+    );
+    cleanup();
+
+    // Over a legacy layout there is no look name to keep.
+    renderHome(data({ facts: { ...data().facts, liveLookId: null, draftLookId: 'heritage' } }));
+    expect(screen.getByText('Heritage is chosen but not published yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Publish it or keep your current look' })).toBeInTheDocument();
+    cleanup();
+
+    // No draft, or a draft of the look already live: nothing to say.
+    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'bayfront' } }));
+    expect(screen.queryByText(/is chosen but not published yet/)).not.toBeInTheDocument();
+  });
 });
 
 describe('restore', () => {
@@ -649,6 +670,21 @@ describe('restore', () => {
       ['POST', '/api/v1/pm/site/publish/revert', { communityId: COMMUNITY_ID, snapshotId: 29 }],
       ['POST', '/api/v1/pm/site/publish', { communityId: COMMUNITY_ID, expectedPublishedAt: '2026-10-26T16:00:00.000Z' }],
     ]);
+  });
+
+  it('the confirm counts the unpublished edits a restore discards', async () => {
+    let user = renderHome(data({ facts: { ...data().facts, pendingDraftCount: 3 } }));
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'Your site goes back to how it was before the last publish. 3 unpublished edits are discarded.',
+    );
+    cleanup();
+
+    user = renderHome(data({ facts: { ...data().facts, pendingDraftCount: 1 } }));
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'Your site goes back to how it was before the last publish. 1 unpublished edit is discarded.',
+    );
   });
 
   it('refuses, writing nothing, when someone published since the page opened', async () => {

@@ -159,7 +159,7 @@ export async function getSiteOnboardingCompletedAt(
  *
  * Once, because the column is WHEN a manager first finished choosing a look:
  * "time to choose a look" is `site_onboarding_completed_at - communities.created_at`,
- * and every later call (a second wizard publish, "Keep this look" again) would
+ * and every later call (a second wizard publish, "Keep my current look" again) would
  * move it. Every other reader only asks whether it is set.
  *
  * Called from the publish route when the wizard's final-step "Publish my

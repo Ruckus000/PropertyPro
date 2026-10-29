@@ -348,6 +348,9 @@ describe('LookPicker — choosing and publishing', () => {
     expect(pushMock).not.toHaveBeenCalled();
     // Published elsewhere: the page reloads its facts and the publish token.
     expect(refreshMock).toHaveBeenCalledTimes(1);
+    // The token is React Query's, which a page refresh does not touch: it is read again.
+    const tokenReads = () => fetchMock.mock.calls.filter(([, init]) => !init?.method || init.method === 'GET').length;
+    await waitFor(() => expect(tokenReads()).toBe(2));
   });
 
   it('does not reload the page for a refusal that is not a conflict', async () => {
@@ -369,22 +372,22 @@ describe('LookPicker — choosing and publishing', () => {
 
   const KEEP = { communityId: COMMUNITY_ID, keepCurrent: true, withdrawDraftedLook: true };
 
-  it('Keep this look keeps the live look, taking a chosen card back off, and opens the website home', async () => {
+  it('Keep my current look keeps the live look, taking a chosen card back off, and opens the website home', async () => {
     const user = userEvent.setup();
     renderPicker(facts({ draftLookId: 'heritage' }));
 
-    await user.click(screen.getByRole('button', { name: 'Keep this look' }));
+    await user.click(screen.getByRole('button', { name: 'Keep my current look' }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/pm/website?communityId=${COMMUNITY_ID}`));
     expect(writes()).toEqual([{ method: 'PATCH', url: '/api/v1/pm/site/look', body: KEEP }]);
   });
 
-  it('Keep this look over an older layout with a look drafted takes the look back off too', async () => {
+  it('Keep my current look over an older layout with a look drafted takes the look back off too', async () => {
     // No card stands for the live layout, so the withdraw is asked of the server,
     // which plans the way back from the live rows rather than from a look.
     const user = userEvent.setup();
     renderPicker(facts({ liveLookId: null, draftLookId: 'heritage' }));
-    const keepButton = screen.getByRole('button', { name: 'Keep this look' });
+    const keepButton = screen.getByRole('button', { name: 'Keep my current look' });
     expect(keepButton).toBeEnabled();
 
     await user.click(keepButton);
@@ -407,7 +410,7 @@ describe('LookPicker — choosing and publishing', () => {
     renderPicker(facts({ draftLookId: 'heritage' }));
     await waitFor(() => expect(publishButton()).toBeEnabled());
 
-    await user.click(screen.getByRole('button', { name: 'Keep this look' }));
+    await user.click(screen.getByRole('button', { name: 'Keep my current look' }));
 
     expect(publishButton()).toBeDisabled();
     for (const name of [/^Bayfront/, /^Heritage/, /^Palm Grove/, /^Plain & Simple/]) {
@@ -429,7 +432,7 @@ describe('LookPicker — choosing and publishing', () => {
     });
     renderPicker(facts({ draftLookId: 'heritage' }));
 
-    await user.click(screen.getByRole('button', { name: 'Keep this look' }));
+    await user.click(screen.getByRole('button', { name: 'Keep my current look' }));
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Not allowed'));
     expect(card(/^Bayfront/)).toBeEnabled();

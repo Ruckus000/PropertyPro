@@ -21,7 +21,7 @@ const PUBLIC_URL = 'https://sunset-condos.getpropertypro.com/';
 
 const fetchMock = vi.fn();
 
-function renderCard() {
+function renderCard(after?: ReactNode) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -29,7 +29,10 @@ function renderCard() {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return render(
-    <WebsiteLiveCard communityId={COMMUNITY_ID} communityName="Sunset Condos" publicUrl={PUBLIC_URL} />,
+    <main id="main-content">
+      <WebsiteLiveCard communityId={COMMUNITY_ID} communityName="Sunset Condos" publicUrl={PUBLIC_URL} />
+      {after}
+    </main>,
     { wrapper },
   );
 }
@@ -95,6 +98,55 @@ describe('WebsiteLiveCard', () => {
       communityId: COMMUNITY_ID,
       keepCurrent: true,
     });
+  });
+
+  it('after Dismiss, focus moves to the next heading on the page, never to the page itself', async () => {
+    const user = userEvent.setup();
+    renderCard(
+      <section aria-labelledby="checklist-heading">
+        <h2 id="checklist-heading">Get your community set up</h2>
+      </section>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    await waitFor(() => expect(screen.queryByTestId('website-live-card')).toBeNull());
+    const heading = screen.getByRole('heading', { name: 'Get your community set up' });
+    expect(document.activeElement).toBe(heading);
+    expect(heading).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('with nothing after the card, focus goes to the main region', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    await waitFor(() => expect(screen.queryByTestId('website-live-card')).toBeNull());
+    expect(document.activeElement).toBe(document.getElementById('main-content'));
+  });
+
+  it('while Dismiss is pending the button stays focused, says it is unavailable and ignores clicks', async () => {
+    let finish: (value: unknown) => void = () => {};
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const user = userEvent.setup();
+    renderCard();
+    const button = screen.getByRole('button', { name: 'Dismiss' });
+
+    await user.click(button);
+    await waitFor(() => expect(button).toHaveAttribute('aria-disabled', 'true'));
+    expect(button).not.toBeDisabled();
+    expect(document.activeElement).toBe(button);
+    await user.click(button);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    finish({ ok: true, status: 200, json: async () => ({ data: { ok: true } }) });
+    await waitFor(() => expect(screen.queryByTestId('website-live-card')).toBeNull());
   });
 
   it('keeps the card and says so when Dismiss fails', async () => {

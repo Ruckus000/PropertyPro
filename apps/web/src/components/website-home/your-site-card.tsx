@@ -5,9 +5,13 @@
  * **Edit your site**, **Change look**, when the site was last published and by
  * whom, and Restore.
  *
+ * A look chosen in the picker but not published yet is said in one line, with
+ * a link back to the picker to publish it or keep the live one.
+ *
  * - **Restore previous version** (every plan) puts the site back to how it was
  *   before the last publish. It asks first, because a restore replaces the
- *   draft layer: unpublished edits are discarded.
+ *   draft layer: unpublished edits are discarded, and the confirm says how many
+ *   when there are any.
  * - **See earlier versions** lists the latest publishes, each with **Restore**.
  *   Only on plans with `hasSitePolishBlocks`; the loader sends no list
  *   otherwise.
@@ -23,16 +27,25 @@ import { CircleAlert, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RestoreError, useRestorePreviousSite } from '@/hooks/use-restore-previous-site';
 import { LOOK_SUMMARIES } from '@/lib/site-looks/look-summaries';
+import { cn } from '@/lib/utils';
 import type { LookId } from '@/lib/site-looks/looks';
 import { TOUCH } from './touch';
 import { LazyConfirmDialog } from './website-home-lazy';
 
-export const RESTORE_PREVIOUS_COPY =
-  'Your site goes back to how it was before the last publish. Unpublished edits are discarded.';
+/** What a restore discards, counted when the count is known to be more than none. */
+export function discardedEditsSentence(pendingDraftCount: number): string {
+  if (pendingDraftCount === 1) return '1 unpublished edit is discarded.';
+  if (pendingDraftCount > 1) return `${pendingDraftCount} unpublished edits are discarded.`;
+  return 'Unpublished edits are discarded.';
+}
 
 export interface YourSiteCardProps {
   communityId: number;
   liveLookId: LookId | null;
+  /** A look chosen in the picker but not published yet (`SiteFacts.draftLookId`). */
+  draftLookId: LookId | null;
+  /** Unpublished edits a restore would discard (`SiteFacts.pendingDraftCount`). */
+  pendingDraftCount: number;
   lastPublish: { publishedAt: string; byName: string | null } | null;
   history: Array<{ snapshotId: number; publishedAt: string; byName: string | null; restorable: boolean }> | null;
   /** The version before the last publish, when it can be restored (`WebsiteHomeData.previousSnapshotId`). */
@@ -70,6 +83,8 @@ function restoreFailure(error: unknown): string {
 export function YourSiteCard({
   communityId,
   liveLookId,
+  draftLookId,
+  pendingDraftCount,
   lastPublish,
   history,
   previousSnapshotId,
@@ -90,6 +105,12 @@ export function YourSiteCard({
   const opener = useRef<HTMLElement | null>(null);
 
   const lookName = LOOK_SUMMARIES.find((look) => look.id === liveLookId)?.name ?? 'An older look';
+  const draftLookName =
+    draftLookId !== null && draftLookId !== liveLookId
+      ? (LOOK_SUMMARIES.find((look) => look.id === draftLookId)?.name ?? null)
+      : null;
+  const keepLabel = liveLookId === null ? 'keep your current look' : `keep ${lookName}`;
+  const discarded = discardedEditsSentence(pendingDraftCount);
 
   function ask(next: Pending, event: MouseEvent<HTMLElement>) {
     opener.current = event.currentTarget;
@@ -123,6 +144,17 @@ export function YourSiteCard({
         <p className="text-sm text-content-secondary">
           Look: <span className="font-medium text-content">{lookName}</span>
         </p>
+        {draftLookName && (
+          <div className="flex flex-wrap items-center gap-x-2">
+            <p className="text-sm text-content-secondary">{draftLookName} is chosen but not published yet.</p>
+            <Link
+              href={`/pm/website/looks?communityId=${communityId}`}
+              className={cn('inline-flex items-center text-sm font-medium text-content-link underline', TOUCH)}
+            >
+              Publish it or {keepLabel}
+            </Link>
+          </div>
+        )}
         {lastPublish && (
           <p className="text-sm text-content-secondary">
             Last published{' '}
@@ -227,8 +259,8 @@ export function YourSiteCard({
           title={pending.kind === 'previous' ? 'Restore the previous version?' : 'Restore this version?'}
           description={
             pending.kind === 'previous'
-              ? RESTORE_PREVIOUS_COPY
-              : `Your site goes back to how it was on ${formatDateTime(pending.publishedAt)}. Unpublished edits are discarded.`
+              ? `Your site goes back to how it was before the last publish. ${discarded}`
+              : `Your site goes back to how it was on ${formatDateTime(pending.publishedAt)}. ${discarded}`
           }
           confirmLabel="Restore"
           pending={restoring}

@@ -8,15 +8,20 @@
  *
  * The page shows it to managers whose plan has the site editor while
  * `site_onboarding_completed_at` is still null. **Dismiss** and the picker's
- * **Keep this look** end that state the same way (`keepCurrent`), with one
+ * **Keep my current look** end that state the same way (`keepCurrent`), with one
  * difference: Dismiss sends the plain form, so a look the manager drafted in
  * the editor is never discarded by closing a card.
+ *
+ * The card goes once Dismiss succeeds, and focus goes with it to the next
+ * heading or region on the page (the onboarding checklist, usually), never to
+ * the page itself. While Dismiss is pending the button is `aria-disabled` and
+ * ignores clicks rather than `disabled`, so it keeps focus.
  *
  * The preview is the signed-in `/pm/site-preview` frame the look picker uses:
  * lazy, inert, hidden from assistive tech. It is a picture of the site, not a
  * second copy of the links in it.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { ExternalLink } from 'lucide-react';
@@ -34,18 +39,44 @@ interface WebsiteLiveCardProps {
 /** The page the preview lays out, before it is scaled down to the card. */
 const PREVIEW = { width: 1120, height: 800 } as const;
 
+const NEXT_LANDMARK = 'h1, h2, h3, [role="region"]';
+
+/** The first heading or region after the card, else the page's main region. */
+function focusTargetAfter(card: HTMLElement): HTMLElement | null {
+  for (const candidate of Array.from(document.querySelectorAll<HTMLElement>(NEXT_LANDMARK))) {
+    if (card.contains(candidate)) continue;
+    if (card.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING) return candidate;
+  }
+  return document.getElementById('main-content');
+}
+
 export function WebsiteLiveCard({ communityId, communityName, publicUrl }: WebsiteLiveCardProps) {
   const keepCurrent = useKeepCurrentLook(communityId);
   const [dismissed, setDismissed] = useState(false);
+  const card = useRef<HTMLElement>(null);
+  // Chosen while the card is still on the page, focused once it has gone.
+  const focusNext = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const target = focusNext.current;
+    if (!dismissed || !target) return;
+    focusNext.current = null;
+    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus();
+  }, [dismissed]);
 
   if (dismissed) return null;
 
   function dismiss() {
+    if (keepCurrent.isPending) return;
     // The plain form: Dismiss closes the card and never touches a drafted look.
     keepCurrent.mutate(
       { withdrawDraftedLook: false },
       {
-        onSuccess: () => setDismissed(true),
+        onSuccess: () => {
+          focusNext.current = card.current ? focusTargetAfter(card.current) : null;
+          setDismissed(true);
+        },
         onError: () => toast.error("We couldn't dismiss this just now. Please try again."),
       },
     );
@@ -55,6 +86,7 @@ export function WebsiteLiveCard({ communityId, communityName, publicUrl }: Websi
 
   return (
     <section
+      ref={card}
       aria-labelledby="website-live-heading"
       data-testid="website-live-card"
       className="grid gap-5 rounded-md border border-edge bg-surface-card p-5 shadow-sm md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-center"
@@ -84,7 +116,7 @@ export function WebsiteLiveCard({ communityId, communityName, publicUrl }: Websi
           <Button asChild variant="outline">
             <Link href={`/pm/website/looks?communityId=${communityId}`}>Pick a different look</Link>
           </Button>
-          <Button type="button" variant="ghost" onClick={dismiss} disabled={keepCurrent.isPending}>
+          <Button type="button" variant="ghost" onClick={dismiss} aria-disabled={keepCurrent.isPending}>
             Dismiss
           </Button>
         </div>

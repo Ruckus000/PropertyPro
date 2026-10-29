@@ -371,6 +371,22 @@ describe('posting', () => {
     expect(linkedItemsOf(100)).toEqual([BYLAWS.itemId]);
   });
 
+  it('removing a file that posted but could not be linked keeps saying where it is', async () => {
+    linkMock.mockRejectedValueOnce(new Error('PATCH failed: 500'));
+    const { user } = renderDrawer({ missing: [BYLAWS] });
+    await drop(user, pdf('bylaws.pdf'));
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+    await screen.findByText(/bylaws.pdf is posted, but we couldn't link it/);
+
+    await user.click(screen.getByRole('button', { name: 'Remove bylaws.pdf' }));
+
+    expect(screen.queryByRole('list', { name: 'Files to post' })).not.toBeInTheDocument();
+    expect(screen.getByText(/bylaws.pdf is posted, but we couldn't link it/)).toBeInTheDocument();
+    expect(
+      screen.getByText("A file that posted but couldn't be linked stays in Documents, so nothing is lost."),
+    ).toBeInTheDocument();
+  });
+
   it('a link-only retry asks for no attestation again', async () => {
     linkMock.mockRejectedValueOnce(new Error('PATCH failed: 500'));
     const { user } = renderDrawer({ missing: [REPORT] });
