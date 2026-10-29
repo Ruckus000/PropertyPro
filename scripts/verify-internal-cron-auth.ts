@@ -59,14 +59,14 @@ const repoRoot = resolve(scriptDir, '..');
 
 /** A deliberately unauthenticated route, with the reason it is safe. */
 export interface RootExemption {
-  /** Repo-relative path to the route handler. */
+  /** Path to the route handler, relative to `scanRoot`'s `base` (the repo outside tests). */
   file: string;
   reason: string;
 }
 
 /** One middleware prefix rule, and the routes it waves past the session gate. */
 export interface InternalRoot {
-  /** Repo-relative directory every route handler below is scanned from. */
+  /** Directory every route handler below is scanned from, relative to `scanRoot`'s `base` (the repo outside tests). */
   dir: string;
   /** The middleware prefix this root is reachable under, for the message. */
   urlPrefix: string;

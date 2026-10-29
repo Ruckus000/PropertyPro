@@ -122,11 +122,40 @@ describe('guard:audit-log-trigger-overrides', () => {
     expect(status).not.toBe(0);
   }, 60_000);
 
-  // A bare `--root` must refuse, not fall back to scanning the repo and pass.
-  it('refuses (exit 2) a --root with no directory', () => {
-    const { status, output } = runGuard(['--root']);
+  // The `=` spelling must scan the fixture too, not fall back to the repo:
+  // the unapproved override is only in the fixture, so a pass here would mean
+  // the real tree was scanned instead.
+  it('honours --root=<dir> as well as --root <dir>', () => {
+    const relPath = 'apps/web/src/lib/__audit-log-guard-fixture__.ts';
+    plant(relPath, OVERRIDE_SOURCE);
+
+    const { status, output } = runGuard([`--root=${fixtureRoot}`]);
+    expect(output).toContain(join(fixtureRoot, relPath));
+    expect(status).toBe(1);
+  }, 60_000);
+
+  // Every mistyped --root must refuse (exit 2, "could not check"), never fall
+  // back to scanning the repo and pass, and never report a violation (exit 1).
+  it.each([
+    ['a bare --root', ['--root']],
+    ['an empty value', ['--root', '']],
+    ['an empty = value', ['--root=']],
+    ['a flag in place of the value', ['--root', '--verbose']],
+    ['an unrecognised argument', ['--roots', '/tmp']],
+    ['a directory that does not exist', ['--root', join(tmpdir(), 'no-such-dir-4c1e9b')]],
+  ])('refuses (exit 2) %s', (_label, args) => {
+    const { status, output } = runGuard(args);
     expect(output).toContain('Usage:');
     expect(output).not.toContain('guard passed');
+    expect(status).toBe(2);
+  }, 60_000);
+
+  // A root that exists but lacks apps/ (or packages/) is the same "could not
+  // check": an empty walk must not read as clean.
+  it('refuses (exit 2) a root with no apps/ directory', () => {
+    rmSync(join(fixtureRoot, 'apps'), { recursive: true, force: true });
+    const { status, output } = runGuard(['--root', fixtureRoot]);
+    expect(output).toContain('Cannot check');
     expect(status).toBe(2);
   }, 60_000);
 });
