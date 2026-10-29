@@ -65,11 +65,11 @@ describe('<SiteSetupBanner>', () => {
 });
 
 describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
-  it('deep-links the CTA into the first incomplete community wizard', async () => {
+  it('deep-links the CTA into the first incomplete community website home', async () => {
     mockStatus(false);
     render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
     const cta = await screen.findByTestId('site-setup-banner-cta');
-    expect(cta).toHaveAttribute('href', '/pm/onboarding/website?communityId=7');
+    expect(cta).toHaveAttribute('href', '/pm/website?communityId=7');
     expect(cta).toHaveTextContent(/set up your website/i);
   });
 

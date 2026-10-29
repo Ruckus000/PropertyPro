@@ -73,7 +73,7 @@ export interface NavItemConfig {
 }
 
 /** Counts the sidebar can show on an item. Resolved in `AppSidebar`. */
-export type NavBadgeSignal = 'pendingJoinRequests';
+export type NavBadgeSignal = 'pendingJoinRequests' | 'missingRecords';
 
 export interface NavSection {
   label: string | null;
@@ -188,22 +188,27 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/payments'],
   },
   {
-    // Launcher into the public-site / landing-page editor (which lives at
-    // /pm/website-editor). Surfaced in the community sidebar so management-tier
+    // Launcher into the website home (/pm/website): the site's status, its
+    // look, the Florida records it still lacks, and the way into the editor
+    // (/pm/website-editor). Surfaced in the community sidebar so management-tier
     // members can reach it without first going to the PM portal. Gated to the
-    // management tier the editor route allows so the link never lands on a
+    // management tier the website routes allow so the link never lands on a
     // redirect. (v3: `designation` is orthogonal — a manager who also holds a
     // board seat still sees this, unlike the old legacy-name gate.)
     id: 'website',
     label: 'Website',
     icon: Paintbrush,
-    href: (cid) => `/pm/website-editor?communityId=${cid}`,
+    href: (cid) => `/pm/website?communityId=${cid}`,
     visibility: 'admin',
     featureKey: 'hasSiteEditor',
-    // `/pm/settings` is kept alongside the editor's own path so the item still
-    // highlights for anyone arriving on the retired /pm/settings/website URL
-    // during the redirect hop, and for /pm/settings/branding.
-    matchPrefixes: ['/pm/website-editor', '/pm/settings'],
+    // The badge counts the Florida records the website still lacks (D11).
+    badgeSignal: 'missingRecords',
+    // The editor and the look picker sit under /pm/website-editor and
+    // /pm/website/looks, so the home's own prefix covers the picker.
+    // `/pm/settings` is kept alongside so the item still highlights for anyone
+    // arriving on the retired /pm/settings/website URL during the redirect hop,
+    // and for /pm/settings/branding.
+    matchPrefixes: ['/pm/website', '/pm/website-editor', '/pm/settings'],
   },
   {
     id: 'violations-report',
@@ -422,8 +427,8 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  * and the shell resolves a real tenant for it (/pm is in
  * PROTECTED_PATH_PREFIXES, defined in lib/middleware/public-host-routes.ts, so
  * the query param is forwarded as x-community-id).
- * Those pages — /pm/website-editor, /pm/settings/website (now a redirect into
- * it), /pm/settings/branding, /pm/onboarding/website,
+ * Those pages — /pm/website, /pm/website-editor, /pm/settings/website (now a
+ * redirect into the editor), /pm/settings/branding,
  * /pm/dashboard/[community_id] — must keep the normal community nav. Testing the bare '/pm/' prefix instead
  * conflated the two and made the "Website" tab replace the whole sidebar.
  *

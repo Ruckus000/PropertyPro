@@ -23,12 +23,23 @@ export function recordsAlertQueryKey(communityId: number) {
   return ['pm', 'site', 'records-alert', communityId] as const;
 }
 
-export function useRecordsAlert(communityId: number) {
+export interface UseRecordsAlertOptions {
+  /** False sends no request. The sidebar badge asks only where the answer can be non-zero. */
+  enabled?: boolean;
+  /** How long an answer counts as fresh, in ms; the query client's default when omitted. */
+  staleTime?: number;
+}
+
+export function useRecordsAlert(communityId: number, { enabled = true, staleTime }: UseRecordsAlertOptions = {}) {
   const qc = useQueryClient();
 
   const query = useQuery<RecordsAlert>({
     queryKey: recordsAlertQueryKey(communityId),
     queryFn: () => requestJson<RecordsAlert>(`${ALERT_URL}?communityId=${communityId}`),
+    enabled,
+    // Spread, not `staleTime,`: an explicit undefined would override the query
+    // client's default (the website home passes none and keeps it).
+    ...(staleTime === undefined ? {} : { staleTime }),
   });
 
   const snooze = useMutation<{ snoozedUntil: string }, Error, void>({

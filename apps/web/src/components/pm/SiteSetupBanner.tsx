@@ -24,7 +24,7 @@
  *
  * `role="status"` overrides AlertBanner's default `role="alert"`: this is a
  * standing nudge, not something that just went wrong, so it is announced
- * politely rather than interrupting. Same call as [[WizardEntryBanner]].
+ * politely rather than interrupting.
  */
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -35,7 +35,7 @@ interface Props {
   hasIncompleteSite: boolean;
   /**
    * The first incomplete community's id — deep-links the CTA into that
-   * community's website-onboarding wizard. Falls back to the website editor
+   * community's website home. Falls back to the website editor
    * when absent (shouldn't happen when hasIncompleteSite is true, but the
    * nudge must never be a dead end).
    */
@@ -61,13 +61,13 @@ export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId 
         <Button asChild size="sm">
           {/*
             A plain <a>, not next/link: this leaves the PM portal for the
-            community-scoped wizard, and the destination reads `communityId`
-            server-side to resolve tenancy. Matches WizardEntryBanner.
+            community-scoped website home, and the destination reads
+            `communityId` server-side to resolve tenancy.
           */}
           <a
             href={
               firstIncompleteCommunityId
-                ? `/pm/onboarding/website?communityId=${firstIncompleteCommunityId}`
+                ? `/pm/website?communityId=${firstIncompleteCommunityId}`
                 : '/pm/website-editor'
             }
             data-testid="site-setup-banner-cta"

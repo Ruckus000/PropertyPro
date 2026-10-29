@@ -12,6 +12,9 @@
  * - `keepCurrent()`: PATCH `{ keepCurrent: true, withdrawDraftedLook: true }`.
  *   Keeps the live look, taking a drafted one back off on any live layout (the
  *   manager's own edits stay), and marks the website setup done.
+ *   `keepCurrent({ withdrawDraftedLook: false })` sends the plain form, which
+ *   leaves a drafted look alone: the dashboard card's Dismiss uses it, so a look
+ *   drafted in the editor is never discarded by closing a card.
  *
  * All three share one mutation scope, so they run one at a time, in the order
  * they were asked for: clicking two cards quickly drafts them in that order
@@ -33,13 +36,51 @@ export interface PublishLookResult {
   lookId: LookId;
 }
 
-export function useSiteLook(communityId: number) {
+export interface KeepCurrentInput {
+  /** Take a drafted look back off (the default). False sends `keepCurrent` alone. */
+  withdrawDraftedLook?: boolean;
+}
+
+/** One scope per community, so every look action waits its turn behind the others. */
+const lookScope = (communityId: number) => ({ id: `site-look-${communityId}` });
+
+/**
+ * A look switch rewrites draft sections and the draft look together, and a
+ * publish rewrites everything, so every site query goes stale at once.
+ */
+function useInvalidateSite() {
   const qc = useQueryClient();
+  return () => qc.invalidateQueries({ queryKey: ['pm', 'site'] });
+}
+
+/**
+ * Keep the live look and mark the website setup done. Apart from `useSiteLook`
+ * so a caller that only dismisses (the dashboard card) does not also load the
+ * site's blocks for a publish token it never uses. Shares the picker's mutation
+ * scope.
+ */
+export function useKeepCurrentLook(communityId: number) {
+  const invalidateSite = useInvalidateSite();
+  return useMutation<unknown, Error, KeepCurrentInput | void>({
+    scope: lookScope(communityId),
+    mutationFn: (input) =>
+      requestJson(LOOK_URL, {
+        method: 'PATCH',
+        headers: JSON_HEADERS,
+        body: JSON.stringify({
+          communityId,
+          keepCurrent: true,
+          ...((input?.withdrawDraftedLook ?? true) ? { withdrawDraftedLook: true } : {}),
+        }),
+      }),
+    onSuccess: invalidateSite,
+  });
+}
+
+export function useSiteLook(communityId: number) {
   const token = useSitePublishToken(communityId);
-  const scope = { id: `site-look-${communityId}` };
-  // A look switch rewrites draft sections and the draft look together, and a
-  // publish rewrites everything, so every site query goes stale at once.
-  const invalidateSite = () => qc.invalidateQueries({ queryKey: ['pm', 'site'] });
+  const scope = lookScope(communityId);
+  const invalidateSite = useInvalidateSite();
 
   const selectLook = useMutation<unknown, Error, LookId>({
     scope,
@@ -67,16 +108,7 @@ export function useSiteLook(communityId: number) {
     onSuccess: invalidateSite,
   });
 
-  const keepCurrent = useMutation<unknown, Error, void>({
-    scope,
-    mutationFn: () =>
-      requestJson(LOOK_URL, {
-        method: 'PATCH',
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ communityId, keepCurrent: true, withdrawDraftedLook: true }),
-      }),
-    onSuccess: invalidateSite,
-  });
+  const keepCurrent = useKeepCurrentLook(communityId);
 
   return { selectLook, publishLook, keepCurrent, tokenReady: token.isSuccess };
 }

@@ -27,7 +27,7 @@ export const ACTION_ROUTES: Record<string, ChecklistAction> = {
   invite_first_member:   { label: 'Add',       href: (cid) => directoryHref('residents', { communityId: cid }) },
   review_compliance:     { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
   post_announcement:     { label: 'Create',    href: (cid) => `/announcements/new?communityId=${cid}` },
-  customize_portal:      { label: 'Customize', href: (cid) => `/pm/website-editor?communityId=${cid}` },
+  customize_portal:      { label: 'Customize', href: (cid) => `/pm/website?communityId=${cid}` },
   review_announcement:   { label: 'View',      href: (cid) => `/announcements?communityId=${cid}` },
   check_compliance:      { label: 'View',      href: (cid) => `/communities/${cid}/compliance` },
   access_document:       { label: 'Browse',    href: (cid) => `/communities/${cid}/documents` },
@@ -44,7 +44,7 @@ interface OnboardingChecklistProps {
    * (`chooseCelebrationNextStep`). Null renders no link.
    */
   nextStep: CelebrationNextStep | null;
-  /** Secondary variant demotes checklist below founding aha. */
+  /** Secondary variant demotes the checklist below the dashboard's "Your website is live" card. */
   variant?: 'primary' | 'secondary';
 }
 

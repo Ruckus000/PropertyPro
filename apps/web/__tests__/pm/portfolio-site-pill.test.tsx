@@ -58,7 +58,7 @@ describe('communities-table Site pill', () => {
     ]);
     expect(screen.getByText('Customized')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /customize the public site for customized hoa/i });
-    expect(link).toHaveAttribute('href', '/pm/onboarding/website?communityId=7');
+    expect(link).toHaveAttribute('href', '/pm/website?communityId=7');
   });
 
   it('renders "Draft saved" when not completed but draft blocks exist', () => {
@@ -73,7 +73,7 @@ describe('communities-table Site pill', () => {
     expect(screen.getByText('Draft saved')).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: /in progress condos \(draft saved\)/i }),
-    ).toHaveAttribute('href', '/pm/onboarding/website?communityId=8');
+    ).toHaveAttribute('href', '/pm/website?communityId=8');
   });
 
   it('renders "Default" when neither completed nor drafted', () => {
@@ -88,7 +88,7 @@ describe('communities-table Site pill', () => {
     expect(screen.getByText('Default')).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: /brand new apartments \(default\)/i }),
-    ).toHaveAttribute('href', '/pm/onboarding/website?communityId=9');
+    ).toHaveAttribute('href', '/pm/website?communityId=9');
   });
 
   it('renders distinct pills per row across all three states', () => {
