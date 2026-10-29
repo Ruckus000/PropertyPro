@@ -122,6 +122,27 @@ describeDb('site looks (db-backed integration)', () => {
     return row.blockOrder;
   }
 
+  /** The home page's live draft rows, ids included, in slot order. */
+  async function draftRows(communityId: number) {
+    const { siteBlocks } = state.dbModule;
+    return state.db
+      .select({
+        id: siteBlocks.id,
+        blockOrder: siteBlocks.blockOrder,
+        blockType: siteBlocks.blockType,
+        content: siteBlocks.content,
+      })
+      .from(siteBlocks)
+      .where(
+        and(
+          eq(siteBlocks.communityId, communityId),
+          eq(siteBlocks.isDraft, true),
+          isNull(siteBlocks.deletedAt),
+        ),
+      )
+      .orderBy(asc(siteBlocks.blockOrder));
+  }
+
   async function draftRowCount(communityId: number): Promise<number> {
     const { siteBlocks } = state.dbModule;
     const rows = await state.db
@@ -263,19 +284,54 @@ describeDb('site looks (db-backed integration)', () => {
     expect(await applyLookAtCreation(communityId, 'hoa_720')).toEqual({ applied: false, lookId: 'palm-grove' });
     expect(await liveSections(communityId)).toEqual(lookSections('palm-grove'));
 
-    // Untouched, so the switch is exactly Heritage; saving it twice (Publish
-    // this look repeats the draft) leaves the same draft.
+    // Untouched, so the switch is exactly Heritage. Saving it again (Publish
+    // this look repeats the card's draft) leaves those drafts exactly as they
+    // are: the same rows, not new copies.
     const first = await draftLookSwitch(communityId, 'heritage', { actorUserId });
-    const drafts = await draftRowCount(communityId);
+    const drafts = await draftRows(communityId);
     const second = await draftLookSwitch(communityId, 'heritage', { actorUserId });
     expect(first.kept).toBe(0);
-    expect(second.kept).toBe(0);
-    expect(await draftRowCount(communityId)).toBe(drafts);
+    expect(second).toEqual({ replaced: 0, kept: lookSections('heritage').length, added: 0, removed: 0 });
+    expect(await draftRows(communityId)).toEqual(drafts);
 
     await publish(communityId);
 
     expect(await liveSections(communityId)).toEqual(lookSections('heritage'));
     expect((await readCommunity(communityId)).branding).toMatchObject(lookBranding('heritage'));
+  });
+
+  it('running a switch again for the drafted look moves nothing it kept', async () => {
+    // A Heritage site whose only edit is Announcements 5 → 3, switched to Plain
+    // & Simple. Its Announcements is kept in its slot, before Meetings. The
+    // second run (Publish this look) must not move it after Meetings, although
+    // { limit: 3 } is Plain & Simple's own default.
+    const communityId = await createCommunity('again', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    await publish(communityId);
+    await upsertPublishedBlock({
+      communityId,
+      actorUserId,
+      blockType: 'announcements',
+      blockOrder: await liveSlotOf(communityId, 'announcements'),
+      content: { limit: 3 },
+    });
+
+    await draftLookSwitch(communityId, 'plain-simple', { actorUserId });
+    const drafted = await draftRows(communityId);
+    await draftLookSwitch(communityId, 'plain-simple', { actorUserId });
+    expect(await draftRows(communityId)).toEqual(drafted);
+
+    await publish(communityId);
+    expect(await liveSections(communityId)).toEqual(
+      lookSections('plain-simple')
+        .filter((section) => section.blockType !== 'announcements')
+        .flatMap((section) =>
+          section.blockType === 'quicklinks'
+            ? [section, { blockType: 'announcements', content: { limit: 3 } }]
+            : [section],
+        ),
+    );
   });
 
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {

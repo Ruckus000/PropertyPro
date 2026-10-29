@@ -215,6 +215,12 @@ export interface PlanLookSwitchInput {
    * type's starter pack.
    */
   outgoingDefaults: readonly (readonly LookSection[])[];
+  /**
+   * The look the page has already been switched to as a draft (the drafted
+   * layout's look), or null. Switching to it again changes nothing on the page.
+   * Required, so no caller can leave the rule out by accident.
+   */
+  draftedLookId: LookId | null;
   incoming: LookDefinition;
 }
 
@@ -231,6 +237,11 @@ export interface LookSwitchCounts {
 
 export interface LookSwitchPlan extends LookSwitchCounts {
   sections: SiteSection[];
+  /**
+   * True when `incoming` is the look already drafted: the page comes back
+   * exactly as it is, and a switch writes no section.
+   */
+  unchanged: boolean;
 }
 
 /**
@@ -240,9 +251,15 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * default the site could have received (`outgoingDefaults`), parsed the same
  * way. Parsing both sides is what makes a section stored with the schema's
  * defaults filled in, or with its keys in jsonb's order, still count. Anything
- * else is the manager's: edited content, a hidden section (no default is
- * hidden), and content that does not parse.
+ * else is the manager's: edited content, content that does not parse, and every
+ * hidden section, even one whose default hides it too (an admin's starter-pack
+ * version can).
  *
+ * - `incoming` already drafted (`draftedLookId`): the page exactly as it is.
+ *   Its sections were planned when that look was drafted, and planning again
+ *   from that look's own defaults would take an edit that happens to equal one
+ *   of them for untouched, and could move it. "Publish this look" repeats the
+ *   card's draft (D9), so this keeps the second run from changing the first.
  * - Every section untouched: the page becomes exactly the incoming look's
  *   sections, in its order.
  * - Otherwise each untouched section is replaced in its slot by the incoming
@@ -262,8 +279,13 @@ export function planLookSwitch(input: PlanLookSwitchInput): SiteSection[] {
 export function planLookSwitchWithCounts({
   current,
   outgoingDefaults,
+  draftedLookId,
   incoming,
 }: PlanLookSwitchInput): LookSwitchPlan {
+  if (draftedLookId === incoming.id) {
+    return { sections: current.map(keep), replaced: 0, kept: current.length, added: 0, removed: 0, unchanged: true };
+  }
+
   const defaults = defaultsByType(outgoingDefaults);
   const untouched = current.map((s) => isUntouched(s, defaults));
 
@@ -284,6 +306,7 @@ export function planLookSwitchWithCounts({
       kept: 0,
       added: incoming.sections.length - replaced,
       removed: current.length - replaced,
+      unchanged: false,
     };
   }
 
@@ -318,28 +341,28 @@ export function planLookSwitchWithCounts({
     added += 1;
   });
 
-  return { sections, replaced, kept, added, removed };
+  return { sections, replaced, kept, added, removed, unchanged: false };
 }
 
 function isBlockType(value: string): value is BlockType {
   return (BLOCK_TYPES as readonly string[]).includes(value);
 }
 
-/** The content as its block schema parses it, as canonical JSON; null when it does not parse. */
-function parsedIdentity(blockType: string, content: unknown): string | null {
+/** The content as its block schema parses it; null when the type is unknown or it does not parse. */
+function parsedContent(blockType: string, content: unknown): { data: unknown } | null {
   if (!isBlockType(blockType)) return null;
   const parsed = blockSchemaRegistry[blockType].safeParse(content);
-  return parsed.success ? stableStringify(parsed.data) : null;
+  return parsed.success ? { data: parsed.data } : null;
 }
 
 function defaultsByType(sets: readonly (readonly LookSection[])[]): Map<string, Set<string>> {
   const byType = new Map<string, Set<string>>();
   for (const set of sets) {
     for (const lookSection of set) {
-      const identity = parsedIdentity(lookSection.blockType, lookSection.content);
-      if (identity === null) continue;
+      const parsed = parsedContent(lookSection.blockType, lookSection.content);
+      if (parsed === null) continue;
       const identities = byType.get(lookSection.blockType) ?? new Set<string>();
-      identities.add(identity);
+      identities.add(stableStringify(parsed.data));
       byType.set(lookSection.blockType, identities);
     }
   }
@@ -347,8 +370,14 @@ function defaultsByType(sets: readonly (readonly LookSection[])[]): Map<string, 
 }
 
 function isUntouched(siteSection: SiteSection, defaults: ReadonlyMap<string, ReadonlySet<string>>): boolean {
-  const identity = parsedIdentity(siteSection.blockType, siteSection.content);
-  return identity !== null && (defaults.get(siteSection.blockType)?.has(identity) ?? false);
+  const parsed = parsedContent(siteSection.blockType, siteSection.content);
+  // Hiding a section is the manager's choice, even where a default hides it too.
+  if (parsed === null || isHidden(parsed.data)) return false;
+  return defaults.get(siteSection.blockType)?.has(stableStringify(parsed.data)) ?? false;
+}
+
+function isHidden(data: unknown): boolean {
+  return typeof data === 'object' && data !== null && (data as { hidden?: unknown }).hidden === true;
 }
 
 function countByType(sections: readonly SiteSection[]): Map<string, number> {

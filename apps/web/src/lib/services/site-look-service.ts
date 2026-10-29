@@ -5,9 +5,13 @@
  *   (D6). The look's layout, colour set, colours and fonts are written live, and
  *   its sections are published on a published home page.
  * - `draftLookSwitch`: the manager picks a look (D9). It is saved as a DRAFT in
- *   the editor's own draft layer: the home page's sections as draft rows and
- *   tombstones, the look as `branding.draftLook`. The editor's Publish makes it
- *   live and its Discard throws it away, both unchanged.
+ *   the editor's own draft layer, in one transaction: the home page's sections
+ *   as draft rows and tombstones, and the look as `branding.draftLook`. The
+ *   editor's Publish makes it live and its Discard throws it away, both
+ *   unchanged.
+ * - `loadLookSwitchInput`: what a switch is planned from, read without writing.
+ *   The switch and the look previews share it, so they cannot plan from
+ *   different inputs.
  *
  * What a switch does to the home page is `planLookSwitch` in
  * `@/lib/site-looks/looks` (D5); this file only reads what it needs and writes
@@ -17,7 +21,9 @@
  * caller has just created, or a demo it is provisioning, before anyone is a
  * member of it (the same footing as `applyStarterPackToCommunity`). The caller
  * of `draftLookSwitch` has verified a manager role in the community and the
- * `hasSiteEditor` plan feature (the website routes' gate).
+ * `hasSiteEditor` plan feature (the website routes' gate). `loadLookSwitchInput`
+ * reads one community's site and the platform's starter packs, and writes
+ * nothing.
  */
 import {
   communities,
@@ -28,7 +34,7 @@ import {
   siteStarterPacks,
 } from '@propertypro/db';
 import { and, eq, isNull, sql } from '@propertypro/db/filters';
-// AUTHZ: opens the transaction that holds the community row lock and reads the platform-level site_starter_packs catalog (no community_id); every site write runs through createScopedClient(communityId, tx) or logAuditEvent(..., tx), and callers authorize as the docblock says.
+// AUTHZ: opens the transaction that holds the community row lock, and reads the platform-level site_starter_packs catalog (no community_id). Tenant rows are written through createScopedClient(communityId, tx) or logAuditEvent(..., tx); the community's own row (communities, the root tenant table) is written on tx by its primary key only: site_published_at at creation, and branding.draftLook on a switch (writeDraftDesign's mergeBranding). Callers authorize as the docblock says.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   TOMBSTONE_BLOCK_TYPE,
@@ -38,11 +44,9 @@ import {
   type CommunityBranding,
   type CommunityType,
 } from '@propertypro/shared';
-import { updateBrandingForCommunity, type BrandingPatch } from '@/lib/api/branding';
+import { updateBrandingForCommunity } from '@/lib/api/branding';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
-import { listThemePresetsForWizard, type ThemePresetForWizard } from '@/lib/db/theme-preset-catalog';
-import { applyPresetTokensToBranding } from '@/lib/public-site/preview-overrides';
-import { saveDraftDesign } from '@/lib/services/site-design-service';
+import { resolveDesign, writeDraftDesign } from '@/lib/services/site-design-service';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import {
   getLook,
@@ -53,6 +57,7 @@ import {
   type LookId,
   type LookSection,
   type LookSwitchCounts,
+  type PlanLookSwitchInput,
   type SiteSection,
 } from '@/lib/site-looks/looks';
 
@@ -77,6 +82,19 @@ interface HomeRow {
 }
 
 /**
+ * What a switch of the home page is planned from (D5), as `loadLookSwitchInput`
+ * reads it. Plan with `planLookSwitch({ ...input, incoming })`.
+ */
+export interface LookSwitchInput extends Omit<PlanLookSwitchInput, 'incoming'> {
+  /** The home page; null when the community has none yet, and so no sections. */
+  homePageId: number | null;
+  /** The home page's published rows by slot: what a staged draft is compared with. */
+  published: ReadonlyMap<number, { blockType: string; content: unknown }>;
+  /** The layout being left: the drafted one when there is one, else the live one. */
+  outgoingLayoutId: string | null;
+}
+
+/**
  * Publish a new community's suggested look (D6): its layout, colour set,
  * colours and fonts written live, and its sections published on a published
  * home page.
@@ -93,9 +111,9 @@ interface HomeRow {
  * writes the same branding again. The other order could leave published
  * sections, which every retry skips, on the community type's legacy layout.
  *
- * Throws, having written nothing, when the look's colour set is missing from
- * `site_theme_presets` (see `requirePreset`): a site without its look's colours
- * and fonts is not the look.
+ * The branding is resolved the way a design save resolves it (`resolveDesign`)
+ * before anything is written, so a missing colour set fails cleanly: a site
+ * without its look's colours and fonts is not the look.
  */
 export async function applyLookAtCreation(
   communityId: number,
@@ -106,8 +124,8 @@ export async function applyLookAtCreation(
   // Unlocked fast path: a provisioning retry, or a community that has a site.
   if (await hasPublishedSections(createScopedClient(communityId))) return { applied: false, lookId };
 
-  const preset = await requirePreset(look);
-  await updateBrandingForCommunity(communityId, lookBranding(look, preset));
+  const design = await resolveDesign({ layoutId: look.layoutId, themePresetSlug: look.presetSlug });
+  await updateBrandingForCommunity(communityId, design);
 
   const applied = await withCommunityLock(communityId, async (tx, scoped) => {
     // Again under the lock: a racing call may have published the look since.
@@ -119,10 +137,11 @@ export async function applyLookAtCreation(
     const homePageId = await ensureHomePage(communityId, tx, { publishedAt: now });
     // A draft home page can already exist (the editor was opened first), and
     // `ensureHomePage` never flips an existing draft live.
-    await tx
-      .update(sitePages)
-      .set({ isDraft: false, publishedAt: now })
-      .where(and(eq(sitePages.id, homePageId), eq(sitePages.isDraft, true)));
+    await scoped.update(
+      sitePages,
+      { isDraft: false, publishedAt: now },
+      and(eq(sitePages.id, homePageId), eq(sitePages.isDraft, true)),
+    );
 
     for (const [slot, lookSection] of slotted(look.sections)) {
       await scoped.insert(siteBlocks, {
@@ -137,7 +156,8 @@ export async function applyLookAtCreation(
     }
 
     // Building the site at creation IS a publish, so it stamps what
-    // `publishCommunitySite` stamps; the urgent-notice gate reads it.
+    // `publishCommunitySite` stamps (the urgent-notice gate reads it), the same
+    // way: on the root tenant table's own row, by its primary key.
     await tx
       .update(communities)
       .set({ sitePublishedAt: now })
@@ -151,27 +171,24 @@ export async function applyLookAtCreation(
 /**
  * Save a switch to `lookId` as a draft (D9): the home page as `planLookSwitch`
  * leaves it, and the look's layout, colour set, colours and fonts as
- * `branding.draftLook`. Nothing live changes until the editor's Publish, and
- * its Discard throws the switch away. Other pages are not touched.
+ * `branding.draftLook`, in one transaction under the community row lock.
+ * Nothing live changes until the editor's Publish, and its Discard throws the
+ * switch away. Other pages are not touched.
  *
- * Planned from what the editor shows (each slot's draft over its published
- * row) and from the look being left: the drafted look when there is one, else
- * the live one. When that is a legacy layout, the defaults the site could have
- * received are every version of its community type's starter pack, read only
- * then.
+ * Planned from `loadLookSwitchInput`, the same inputs a look preview plans
+ * from. The sections are written the way the editor's own writers stage a
+ * change (`writeHomeDrafts`), so publishing them leaves exactly the plan.
  *
- * The sections are written the way the editor's own writers stage a change, in
- * one transaction under the community row lock (`writeHomeDrafts`), so
- * publishing them leaves exactly the plan.
+ * Idempotent: once a look is drafted, switching to it again leaves the home
+ * page's drafts exactly as they are and only saves the look again (the plan
+ * comes back `unchanged`). "Publish this look" runs it after the card's own
+ * switch, and the manager may have edited the drafted page in between.
  *
- * Idempotent: run again for the same look, it plans the same page from its own
- * drafts, so `POST /look` can always run it before publishing.
- *
- * The look is saved after the sections, through `saveDraftDesign` (its own
- * statement and audit row). If that fails, the new sections wait under the old
- * look until a retry saves it (the retry keeps them) or Discard drops both. The
- * colour set is checked before anything is written, so a missing one fails the
- * switch cleanly.
+ * The look is resolved before the transaction (`resolveDesign`: the design
+ * save's own validation, and the colour set's colours and fonts), so a missing
+ * colour set fails before anything is written, and saved inside it
+ * (`writeDraftDesign`, with its audit row), so the sections can never wait
+ * under the old look.
  */
 export async function draftLookSwitch(
   communityId: number,
@@ -179,57 +196,88 @@ export async function draftLookSwitch(
   opts: { actorUserId: string },
 ): Promise<LookSwitchCounts> {
   const incoming = requireLook(lookId);
-  await requirePreset(incoming);
+  const design = await resolveDesign({ layoutId: incoming.layoutId, themePresetSlug: incoming.presetSlug });
 
-  const counts = await withCommunityLock(communityId, async (tx, scoped) => {
-    const [community] = await tx
-      .select({ communityType: communities.communityType, branding: communities.branding })
-      .from(communities)
-      .where(eq(communities.id, communityId))
-      .limit(1);
-    if (!community) throw new NotFoundError('Community not found');
+  return withCommunityLock(communityId, async (tx, scoped) => {
+    const input = await loadLookSwitchInput(communityId, tx);
+    const { sections, unchanged, ...counts } = planLookSwitchWithCounts({ ...input, incoming });
 
-    const homePageId = await ensureHomePage(communityId, tx);
-    const { current, published } = readHomePage(
-      await scoped.queryWhere(siteBlocks, eq(siteBlocks.pageId, homePageId)),
-    );
-
-    const branding = (community.branding ?? {}) as CommunityBranding;
-    const outgoingLayoutId = effectiveLook(branding, { includeDraft: true }).layoutId ?? null;
-    const outgoingLookId = lookIdForLayout(outgoingLayoutId);
-    const outgoingDefaults = outgoingLookId
-      ? [requireLook(outgoingLookId).sections]
-      : await starterPackVersions(tx, community.communityType);
-
-    const { sections, ...switchCounts } = planLookSwitchWithCounts({ current, outgoingDefaults, incoming });
-    await writeHomeDrafts(scoped, communityId, homePageId, published, sections);
-
-    await logAuditEvent(
-      {
-        userId: opts.actorUserId,
-        communityId,
-        action: 'update',
-        resourceType: 'community_site',
-        resourceId: String(communityId),
-        metadata: {
-          lookSwitch: true,
-          lookId: incoming.id,
-          fromLayoutId: outgoingLayoutId,
-          pageId: homePageId,
-          ...switchCounts,
+    if (!unchanged) {
+      const homePageId = await ensureHomePage(communityId, tx);
+      await writeHomeDrafts(scoped, communityId, homePageId, input.published, sections);
+      await logAuditEvent(
+        {
+          userId: opts.actorUserId,
+          communityId,
+          action: 'update',
+          resourceType: 'community_site',
+          resourceId: String(communityId),
+          metadata: {
+            lookSwitch: true,
+            lookId: incoming.id,
+            fromLayoutId: input.outgoingLayoutId,
+            pageId: homePageId,
+            ...counts,
+          },
         },
-      },
-      tx as unknown as Executor,
-    );
-    return switchCounts;
-  });
+        tx as unknown as Executor,
+      );
+    }
 
-  await saveDraftDesign(
-    communityId,
-    { layoutId: incoming.layoutId, themePresetSlug: incoming.presetSlug },
-    { actorUserId: opts.actorUserId },
+    await writeDraftDesign(communityId, design, {
+      actorUserId: opts.actorUserId,
+      executor: tx as unknown as Executor,
+    });
+    return counts;
+  });
+}
+
+/**
+ * Everything a switch of the home page is planned from, read and never
+ * written. `draftLookSwitch` plans from it and so must the look previews, so the
+ * draft and the preview of a look cannot be planned from different inputs:
+ *
+ * - `current`: the home page as the editor shows it (each slot's draft over its
+ *   published row, tombstoned slots left out), in slot order;
+ * - `outgoingDefaults`: the defaults those sections could have come from. That
+ *   is the look being left (the drafted look when there is one, else the live
+ *   one) or, on a legacy layout, every version of the community type's starter
+ *   pack, archived ones included, read only then;
+ * - `draftedLookId`: the look already drafted, so that switching to it again
+ *   changes nothing (`planLookSwitch` applies the rule).
+ *
+ * Pass `tx` to read inside a transaction; left out, each read runs on its own.
+ * Throws NotFoundError when the community does not exist.
+ */
+export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise<LookSwitchInput> {
+  const scoped = createScopedClient(communityId, tx as unknown as Executor | undefined);
+  const [community] = (await scoped.query(communities)) as Array<{
+    communityType?: CommunityType;
+    branding?: unknown;
+  }>;
+  if (!community?.communityType) throw new NotFoundError('Community not found');
+
+  const [homePage] = await scoped.queryWhere(sitePages, eq(sitePages.isHome, true));
+  const homePageId = typeof homePage?.['id'] === 'number' ? homePage['id'] : null;
+  const { current, published } = readHomePage(
+    homePageId === null ? [] : await scoped.queryWhere(siteBlocks, eq(siteBlocks.pageId, homePageId)),
   );
-  return counts;
+
+  const branding = (community.branding ?? {}) as CommunityBranding;
+  const outgoingLayoutId = effectiveLook(branding, { includeDraft: true }).layoutId ?? null;
+  const outgoingLookId = lookIdForLayout(outgoingLayoutId);
+  const outgoingDefaults = outgoingLookId
+    ? [requireLook(outgoingLookId).sections]
+    : await starterPackVersions(community.communityType, tx);
+
+  return {
+    homePageId,
+    current,
+    published,
+    outgoingDefaults,
+    outgoingLayoutId,
+    draftedLookId: lookIdForLayout(branding.draftLook?.layoutId),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -247,45 +295,25 @@ function requireLook(id: LookId): LookDefinition {
 }
 
 /**
- * The look's colour set, which holds its colours and fonts. Missing only when
- * migration 0097 has not been applied or a platform admin has archived the set;
- * `saveDraftDesign` refuses such a set too, so this is checked before anything
- * is written.
+ * The unscoped client, called in this one place: it opens the lock's
+ * transaction, and reads the starter-pack catalog when no transaction is open.
  */
-async function requirePreset(look: LookDefinition): Promise<ThemePresetForWizard> {
-  const preset = (await listThemePresetsForWizard()).find((p) => p.slug === look.presetSlug);
-  if (!preset) {
-    throw new Error(
-      `The ${look.name} look's colour set "${look.presetSlug}" is not in site_theme_presets (migration 0097).`,
-    );
-  }
-  return preset;
-}
-
-/**
- * The live branding a look writes: its layout and colour set, and the set's
- * colours and fonts under the names the renderer reads (`headingFont` becomes
- * `fontHeading`), mapped the way `saveDraftDesign` maps them for a draft.
- */
-function lookBranding(look: LookDefinition, preset: ThemePresetForWizard): BrandingPatch {
-  const tokens = (applyPresetTokensToBranding({}, preset.tokens) ?? {}) as BrandingPatch;
-  return { ...tokens, layoutId: look.layoutId, themePresetSlug: look.presetSlug };
+function unscopedDb(): UnscopedDb {
+  return createUnscopedClient();
 }
 
 /**
  * Runs `work` in one transaction holding the community row lock, the lock every
  * site writer takes first (publish, the editor's writers, `ensureHomePage`'s
  * callers), with a client scoped to the community on that transaction.
- *
- * The one use of the unscoped client in this file: it opens the transaction.
- * Statements inside go through the scoped client or `tx`, and on `tx` only, so
- * none waits on the pool for a second connection while this one is held.
+ * Statements inside run on `tx` only, so none waits on the pool for a second
+ * connection while this one is held.
  */
 async function withCommunityLock<T>(
   communityId: number,
   work: (tx: Tx, scoped: ScopedClient) => Promise<T>,
 ): Promise<T> {
-  return createUnscopedClient().transaction(async (tx) => {
+  return unscopedDb().transaction(async (tx) => {
     await tx.execute(sql`SELECT id FROM communities WHERE id = ${communityId} FOR UPDATE`);
     return work(tx, createScopedClient(communityId, tx as unknown as Executor));
   });
@@ -342,8 +370,9 @@ function readHomePage(rows: readonly Record<string, unknown>[]): {
  * Every version of the community type's starter pack, archived ones included:
  * a site on a legacy layout may have received any of them, verbatim.
  */
-async function starterPackVersions(tx: Tx, communityType: CommunityType): Promise<LookSection[][]> {
-  const rows = await tx
+async function starterPackVersions(communityType: CommunityType, tx?: Tx): Promise<LookSection[][]> {
+  const db: Pick<UnscopedDb, 'select'> = tx ?? unscopedDb();
+  const rows = await db
     .select({ blocks: siteStarterPacks.blocks })
     .from(siteStarterPacks)
     .where(eq(siteStarterPacks.communityType, communityType));
@@ -367,7 +396,7 @@ async function writeHomeDrafts(
   scoped: ScopedClient,
   communityId: number,
   pageId: number,
-  published: ReadonlyMap<number, HomeRow>,
+  published: ReadonlyMap<number, { blockType: string; content: unknown }>,
   sections: readonly SiteSection[],
 ): Promise<void> {
   // First, so no insert below meets a live draft in the (page, slot, is_draft)

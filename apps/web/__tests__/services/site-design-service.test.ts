@@ -4,21 +4,32 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getBrandingMock, listPresetsMock, mergeBrandingMock, logAuditEventMock } = vi.hoisted(
-  () => ({
-    getBrandingMock: vi.fn(),
-    listPresetsMock: vi.fn(),
-    mergeBrandingMock: vi.fn(),
-    logAuditEventMock: vi.fn(),
-  }),
-);
+const {
+  getBrandingMock,
+  listPresetsMock,
+  mergeBrandingMock,
+  logAuditEventMock,
+  createScopedClientMock,
+  scopedQueryMock,
+} = vi.hoisted(() => ({
+  getBrandingMock: vi.fn(),
+  listPresetsMock: vi.fn(),
+  mergeBrandingMock: vi.fn(),
+  logAuditEventMock: vi.fn(),
+  createScopedClientMock: vi.fn(),
+  scopedQueryMock: vi.fn(),
+}));
 
-vi.mock('@propertypro/db', () => ({ logAuditEvent: logAuditEventMock }));
+vi.mock('@propertypro/db', () => ({
+  logAuditEvent: logAuditEventMock,
+  createScopedClient: createScopedClientMock,
+  communities: { id: 'communities.id', branding: 'communities.branding' },
+}));
 vi.mock('@/lib/api/branding', () => ({ getBrandingForCommunity: getBrandingMock }));
 vi.mock('@/lib/db/theme-preset-catalog', () => ({ listThemePresetsForWizard: listPresetsMock }));
 vi.mock('@/lib/services/site-settings-service', () => ({ mergeBranding: mergeBrandingMock }));
 
-import { getSiteDesign, saveDraftDesign } from '@/lib/services/site-design-service';
+import { getSiteDesign, saveDraftDesign, writeDraftDesign } from '@/lib/services/site-design-service';
 
 const ACTOR = { actorUserId: 'user-1' };
 
@@ -81,6 +92,30 @@ describe('saveDraftDesign', () => {
         newValues: { draftLook: { layoutId: 'boulevard' } },
       }),
     );
+  });
+});
+
+describe('writeDraftDesign', () => {
+  it('reads, writes and audits on the transaction it is given', async () => {
+    // A look switch saves the look with the sections it drafts, in one
+    // transaction: every statement of the save has to run on that handle.
+    const tx = { transaction: 'handle' };
+    createScopedClientMock.mockReturnValue({ query: scopedQueryMock });
+    scopedQueryMock.mockResolvedValue([{ branding: { layoutId: 'tidewater', primaryColor: '#111111' } }]);
+
+    const result = await writeDraftDesign(42, { layoutId: 'boulevard' }, { ...ACTOR, executor: tx as never });
+
+    expect(createScopedClientMock).toHaveBeenCalledWith(42, tx);
+    expect(getBrandingMock).not.toHaveBeenCalled();
+    expect(mergeBrandingMock).toHaveBeenCalledWith(42, { draftLook: { layoutId: 'boulevard' } }, tx);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'site_design_draft_saved', communityId: 42 }),
+      tx,
+    );
+    expect(result).toEqual({
+      live: { layoutId: 'tidewater', primaryColor: '#111111' },
+      draft: { layoutId: 'boulevard' },
+    });
   });
 });
 
