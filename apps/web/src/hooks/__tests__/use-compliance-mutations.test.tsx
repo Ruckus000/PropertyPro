@@ -218,7 +218,10 @@ describe('useComplianceMutations', () => {
     });
 
     act(() => {
-      result.current.markNotApplicable.mutate({ itemId: 10 });
+      result.current.markNotApplicable.mutate({
+        itemId: 10,
+        reason: 'Our building has no elevator.',
+      });
     });
 
     const cached = queryClient.getQueryData<ChecklistItemData[]>([
@@ -229,9 +232,111 @@ describe('useComplianceMutations', () => {
     expect(cached?.[0]?.status).toBe('not_applicable');
   });
 
+  it('shows the reason in the cache as soon as markNotApplicable starts', async () => {
+    const { queryClient, wrapper } = createWrapper();
+
+    const item = makeChecklistItem({ id: 10, isApplicable: true, notApplicableReason: null });
+    queryClient.setQueryData([COMPLIANCE_QUERY_KEY, COMMUNITY_ID], [item]);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { ...item, isApplicable: false } }),
+    });
+
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), {
+      wrapper,
+    });
+
+    act(() => {
+      result.current.markNotApplicable.mutate({
+        itemId: 10,
+        reason: 'Our building has no elevator.',
+      });
+    });
+
+    const cached = queryClient.getQueryData<ChecklistItemData[]>([
+      COMPLIANCE_QUERY_KEY,
+      COMMUNITY_ID,
+    ]);
+    expect(cached?.[0]?.notApplicableReason).toBe('Our building has no elevator.');
+  });
+
+  it('sends the reason in the PATCH payload for markNotApplicable', async () => {
+    const { queryClient, wrapper } = createWrapper();
+
+    queryClient.setQueryData(
+      [COMPLIANCE_QUERY_KEY, COMMUNITY_ID],
+      [makeChecklistItem({ id: 10 })],
+    );
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({ data: makeChecklistItem({ id: 10, isApplicable: false }) }),
+    });
+
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), {
+      wrapper,
+    });
+
+    act(() => {
+      result.current.markNotApplicable.mutate({
+        itemId: 10,
+        reason: 'Our building has no elevator.',
+      });
+    });
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalled();
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith('/api/v1/compliance', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: 10,
+        communityId: COMMUNITY_ID,
+        action: 'mark_not_applicable',
+        reason: 'Our building has no elevator.',
+      }),
+    });
+  });
+
   // =========================================================================
   // markApplicable — optimistic update and rollback
   // =========================================================================
+
+  it('clears the reason in the cache as soon as markApplicable starts', async () => {
+    const { queryClient, wrapper } = createWrapper();
+
+    const item = makeChecklistItem({
+      id: 10,
+      isApplicable: false,
+      status: 'not_applicable' as ChecklistItemData['status'],
+      notApplicableReason: 'Our building has no elevator.',
+    });
+    queryClient.setQueryData([COMPLIANCE_QUERY_KEY, COMMUNITY_ID], [item]);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ data: { ...item, isApplicable: true } }),
+    });
+
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), {
+      wrapper,
+    });
+
+    act(() => {
+      result.current.markApplicable.mutate({ itemId: 10 });
+    });
+
+    const cached = queryClient.getQueryData<ChecklistItemData[]>([
+      COMPLIANCE_QUERY_KEY,
+      COMMUNITY_ID,
+    ]);
+    expect(cached?.[0]?.isApplicable).toBe(true);
+    expect(cached?.[0]?.notApplicableReason).toBeNull();
+  });
 
   it('rolls back markApplicable on network error', async () => {
     const { queryClient, wrapper } = createWrapper();
