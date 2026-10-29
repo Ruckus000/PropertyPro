@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   resolvePreviewLayoutId,
   applyPresetTokensToBranding,
+  plannedSectionsToBlocks,
 } from '@/lib/public-site/preview-overrides';
 
 describe('resolvePreviewLayoutId', () => {
@@ -46,5 +47,52 @@ describe('applyPresetTokensToBranding', () => {
   it('works when branding is null (preset-only)', () => {
     const result = applyPresetTokensToBranding(null, { primaryColor: '#abcabc', bodyFont: 'Inter' });
     expect(result).toEqual({ primaryColor: '#abcabc', fontBody: 'Inter' });
+  });
+});
+
+describe('plannedSectionsToBlocks', () => {
+  it('numbers the sections in the order given, as a layout reads them', () => {
+    const blocks = plannedSectionsToBlocks([
+      { id: 30, blockType: 'hero', content: { headline: 'A' } },
+      { id: 12, blockType: 'meetings', content: { limit: 5 } },
+      { id: 21, blockType: 'contact', content: {} },
+    ]);
+
+    expect(blocks.map((b) => b.blockType)).toEqual(['hero', 'meetings', 'contact']);
+    // The plan's order, not the row ids' or the slots' (the planner hands back no slots).
+    expect(blocks.map((b) => b.blockOrder)).toEqual([1, 2, 3]);
+  });
+
+  it('keeps a section row’s id and content as they are', () => {
+    const content = { headline: 'Harbor Pointe', hidden: true };
+    const [block] = plannedSectionsToBlocks([{ id: 77, slot: 5, blockType: 'hero', content }]);
+
+    expect(block).toEqual({ id: 77, blockType: 'hero', blockOrder: 1, content });
+    expect(block!.content).toBe(content);
+  });
+
+  it('gives a section a look supplied an id no section on the page shares', () => {
+    const blocks = plannedSectionsToBlocks([
+      { blockType: 'hero', content: {} },
+      { id: 41, blockType: 'announcements', content: {} },
+      { blockType: 'board', content: {} },
+      { id: 9, blockType: 'contact', content: {} },
+      { blockType: 'quicklinks', content: {} },
+    ]);
+
+    const ids = blocks.map((b) => b.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => ![41, 9].includes(id)).every((id) => id > 41)).toBe(true);
+    // The kept rows keep theirs.
+    expect(blocks[1]!.id).toBe(41);
+    expect(blocks[3]!.id).toBe(9);
+  });
+
+  it('gives an empty page no blocks', () => {
+    expect(plannedSectionsToBlocks([])).toEqual([]);
+  });
+
+  it('numbers sections of a page with no rows from 1', () => {
+    expect(plannedSectionsToBlocks([{ blockType: 'hero', content: {} }, { blockType: 'contact', content: {} }]).map((b) => b.id)).toEqual([1, 2]);
   });
 });

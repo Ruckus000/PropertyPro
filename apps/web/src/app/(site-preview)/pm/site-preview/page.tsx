@@ -5,9 +5,17 @@
  * wizard so PMs see the real layout react to their choices.
  *
  * Route: /pm/site-preview?communityId=X&layout=<slug>&preset=<slug>&preview=true
+ *        /pm/site-preview?communityId=X&look=<id>&preview=true
  *
  * The `preview=true` query param is required so the middleware relaxes the
  * frame headers (X-Frame-Options/frame-ancestors) to allow same-origin framing.
+ *
+ * `look` (website builder, Phase 2B; the look picker's cards are iframes of
+ * it) previews a whole look: its layout, its colour set and the home page as
+ * switching to that look would leave it, which is `planLookSwitch` over the same
+ * input the draft is planned from (`loadLookSwitchInput`), so the preview and the
+ * draft cannot disagree. Nothing is written. It wins over `layout` and `preset`,
+ * and an unknown value is ignored: the preview is then what it was without it.
  *
  * Auth: a management role (property_manager / root_manager) in the community —
  * `hasRole(membership, PM_MANAGER_ROLES)`, which redirects rather than throwing.
@@ -50,7 +58,10 @@ import { getLayout } from '@/components/public-site/layouts/registry';
 import {
   resolvePreviewLayoutId,
   applyPresetTokensToBranding,
+  plannedSectionsToBlocks,
 } from '@/lib/public-site/preview-overrides';
+import { loadLookSwitchInput } from '@/lib/services/site-look-service';
+import { getLook, planLookSwitch } from '@/lib/site-looks/looks';
 
 /**
  * Inherited from `(authenticated)/layout.tsx` until this route moved out of that
@@ -97,8 +108,13 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   const savedBranding = await getBrandingForCommunity(community!.id);
   const rawBranding = savedBranding ? effectiveLook(savedBranding, { includeDraft: true }) : null;
 
+  // A look to preview, when `look` names one. An unknown value is no look at all.
+  const lookParam = asString(params['look']);
+  const look = lookParam ? getLook(lookParam) : null;
+
   // Apply the selected preset's tokens over the saved branding (preview only).
-  const presetSlug = asString(params['preset']);
+  // A look's colour set is its preset, and it wins over a `preset` override.
+  const presetSlug = look ? look.presetSlug : asString(params['preset']);
   let presetTokens = null;
   if (presetSlug) {
     const presets = await listThemePresetsForWizard();
@@ -127,7 +143,9 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   const cssVars = siteThemeCssVars(theme, rawBranding?.customCssOverrides);
   const fontLinks = toFontLinks(theme);
 
-  const layoutId = resolvePreviewLayoutId(rawBranding, asString(params['layout']), communityType);
+  const layoutId = look
+    ? look.layoutId
+    : resolvePreviewLayoutId(rawBranding, asString(params['layout']), communityType);
   const Layout = getLayout(layoutId);
   if (!Layout) {
     redirect('/pm/dashboard/communities');
@@ -143,10 +161,18 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   // page stays out of the preview nav just as it stays out of the live one.
   const navPages = await reader.listNavPages();
   const blocks = visibleBlocks(
-    await reader.listSiteBlocks({
-      includeDrafts: true,
-      ...(homePageId === null ? {} : { pageId: homePageId }),
-    }),
+    look
+      ? // A look preview shows the home page as switching to that look would leave
+        // it: the plan, not the saved rows, so a section the manager has edited is
+        // in every look's preview as it will be on the page. `visibleBlocks` still
+        // applies, so a hidden section the plan keeps stays off, as on the live site.
+        plannedSectionsToBlocks(
+          planLookSwitch({ ...(await loadLookSwitchInput(community!.id)), incoming: look }),
+        )
+      : await reader.listSiteBlocks({
+          includeDrafts: true,
+          ...(homePageId === null ? {} : { pageId: homePageId }),
+        }),
   );
 
   return (

@@ -23,9 +23,9 @@ import {
   upsertPublishedBlock,
 } from '@/lib/services/site-blocks-service';
 import { saveDraftDesign } from '@/lib/services/site-design-service';
-import { applyLookAtCreation, draftLookSwitch } from '@/lib/services/site-look-service';
+import { applyLookAtCreation, draftLookSwitch, loadLookSwitchInput } from '@/lib/services/site-look-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
-import { getLook, type LookId } from '@/lib/site-looks/looks';
+import { getLook, planLookSwitch, type LookId } from '@/lib/site-looks/looks';
 import { SITE_LOOK_PRESETS } from '../fixtures/site-look-presets';
 import {
   type TestKitState,
@@ -583,5 +583,40 @@ describeDb('site looks (db-backed integration)', () => {
     const { branding } = await readCommunity(communityId);
     expect(branding).toMatchObject(lookBranding('bayfront'));
     expect(branding).not.toHaveProperty('draftLook');
+  });
+
+  it("a look preview's plan, read the way the preview reads it, is the home page the draft then leaves", async () => {
+    // The look previews (`/pm/site-preview?look=`) plan from `loadLookSwitchInput`
+    // read WITHOUT a transaction; the draft plans from the same read inside one.
+    // A Bayfront site whose welcome text the manager has edited and published:
+    // Heritage keeps the edit, drops Quick links and adds Board members.
+    const communityId = await createCommunity('preview', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    await upsertPublishedBlock({
+      communityId,
+      actorUserId,
+      blockType: 'hero',
+      blockOrder: await liveSlotOf(communityId, 'hero'),
+      content: EDITED_HERO,
+    });
+    const asRendered = (sections: ReadonlyArray<{ blockType: string; content: unknown }>): Section[] =>
+      sections.map(({ blockType, content }) => ({ blockType, content }));
+    const auditRowsBefore = await auditRowCount(communityId);
+
+    const previewed = planLookSwitch({ ...(await loadLookSwitchInput(communityId)), incoming: getLook('heritage')! });
+
+    // Previewing writes nothing: no draft row, no audit row, no draft look.
+    expect(await draftRowCount(communityId)).toBe(0);
+    expect(await auditRowCount(communityId)).toBe(auditRowsBefore);
+    expect((await readCommunity(communityId)).branding).not.toHaveProperty('draftLook');
+    // The edit is in the preview, and so is what Heritage adds.
+    expect(asRendered(previewed)[0]).toEqual({ blockType: 'hero', content: EDITED_HERO });
+    expect(previewed.map((section) => section.blockType)).toContain('board');
+    expect(previewed.map((section) => section.blockType)).not.toContain('quicklinks');
+
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+
+    // What the manager then sees in the editor is what the card showed them.
+    expect(asRendered((await loadLookSwitchInput(communityId)).current)).toEqual(asRendered(previewed));
   });
 });

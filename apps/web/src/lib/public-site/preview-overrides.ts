@@ -1,12 +1,14 @@
 /**
- * Pure helpers for the wizard live-preview route. They turn the in-wizard
+ * Pure helpers for the live-preview route. They turn the in-wizard
  * layout/preset SELECTION (passed as query overrides) into the layout id +
- * branding that the real public-site layout renders with — without persisting
+ * branding that the real public-site layout renders with, and a look preview's
+ * planned home page into the blocks the layout renders — without persisting
  * anything. Kept pure (no I/O) so they're unit-testable.
  */
-import { LAYOUT_IDS, type LayoutId } from '@/components/public-site/layouts/types';
+import { LAYOUT_IDS, type LayoutId, type SiteBlock } from '@/components/public-site/layouts/types';
 import type { CommunityType } from '@propertypro/shared';
 import { resolveLayoutId, type BrandingLayoutInput } from '@/lib/public-site/layout-resolver';
+import type { SiteSection } from '@/lib/site-looks/looks';
 
 export interface PresetTokens {
   primaryColor?: string;
@@ -63,4 +65,25 @@ export function applyPresetTokensToBranding<T extends PreviewBranding>(
     ...(presetTokens.headingFont !== undefined ? { fontHeading: presetTokens.headingFont } : {}),
     ...(presetTokens.bodyFont !== undefined ? { fontBody: presetTokens.bodyFont } : {}),
   };
+}
+
+/**
+ * The `blocks` a layout renders for a page that is only a PLAN: the home page
+ * as `planLookSwitch` would leave it, which a look preview shows instead of the
+ * saved rows.
+ *
+ * The plan hands back sections in page order and no slots, so a block's order is
+ * its place in the list. A section the plan kept from the page keeps its row id;
+ * one a look supplied has no row, so it gets an id past every real one. A layout
+ * needs only that the ids are unique on the page (React keys, the anchors Quick
+ * links lands on); nothing looks a block up by it.
+ */
+export function plannedSectionsToBlocks(sections: readonly SiteSection[]): SiteBlock[] {
+  let nextId = Math.max(0, ...sections.map((section) => section.id ?? 0)) + 1;
+  return sections.map((section, index) => ({
+    id: section.id ?? nextId++,
+    blockType: section.blockType,
+    blockOrder: index + 1,
+    content: section.content,
+  }));
 }

@@ -1249,7 +1249,6 @@ export function EditorRoot({
             return (
               <DesignPanel
                 communityId={communityId}
-                communityType={siteIdentity.communityType}
                 presets={presets}
                 hasSiteCustomCss={hasSiteCustomCss}
                 theme={resolveStylingTheme(canvasContext)}
