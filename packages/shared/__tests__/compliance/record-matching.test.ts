@@ -3,8 +3,9 @@
  *
  * A wrong link is worse than no link, because the checklist would then show a
  * record as posted when it is not. So besides what must match there are cases for
- * what must NOT: the category gate, a file name that fits two items, and the
- * insurance items, which take anything filed as insurance and nothing outside it.
+ * what must NOT: the category gate, a file name that fits two items, the insurance
+ * items (which take anything filed as insurance and nothing outside it), and the
+ * papers that merely talk about a record: committee minutes, drafts, solicitations.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -140,9 +141,10 @@ describe('RECORD_MATCH_RULES', () => {
 
   it('uses the i flag and nothing else, so no pattern keeps match state between calls', () => {
     // A g or y flag makes .test() resume from lastIndex, so the same question gets a
-    // different answer on alternate calls.
+    // different answer on alternate calls. That holds for a veto as much as for a title.
     for (const [key, rule] of Object.entries(RECORD_MATCH_RULES)) {
       expect(rule.title.flags, key).toBe('i');
+      if (rule.exclude !== undefined) expect(rule.exclude.flags, `${key} veto`).toBe('i');
     }
   });
 
@@ -160,6 +162,51 @@ describe('RECORD_MATCH_RULES', () => {
     const anyTitle = RECORD_MATCH_RULES['718_insurance']?.title;
     expect(anyTitle).toBeInstanceOf(RegExp);
     expect(RECORD_MATCH_RULES['720_insurance']?.title).toBe(anyTitle);
+  });
+
+  describe('the vetoes', () => {
+    // Which items share which veto, by key. The patterns themselves are checked against the ruling
+    // by scripts, not restated here; what these pin is the assignment and the sharing.
+    const VETO_GROUPS: Record<string, readonly string[]> = {
+      'governing document': [
+        '718_declaration', '718_bylaws', '718_articles', '720_articles',
+        '718_rules', '718_qa_sheet', '720_governing_docs', '720_bylaws_rules',
+      ],
+      budget: ['718_budget', '720_budget'],
+      'financial report': ['718_financial_report', '720_financial_report'],
+      minutes: ['718_minutes_rolling_12m', '720_minutes_rolling_12m'],
+      bids: ['718_bids', '720_bids'],
+      insurance: ['718_insurance', '720_insurance'],
+      inspection: ['718_inspection_reports', '718_sirs'],
+      'conflict of interest': ['718_conflict_contracts'],
+      recording: ['718_video_recordings'],
+    };
+
+    it.each(Object.entries(VETO_GROUPS))('the %s items share one veto', (_group, keys) => {
+      const first = RECORD_MATCH_RULES[keys[0] ?? '']?.exclude;
+      expect(first, keys.join(', ')).toBeInstanceOf(RegExp);
+      for (const key of keys) expect(RECORD_MATCH_RULES[key]?.exclude, key).toBe(first);
+    });
+
+    it('gives each group a veto of its own', () => {
+      const vetoes = Object.values(VETO_GROUPS).map((keys) => RECORD_MATCH_RULES[keys[0] ?? '']?.exclude);
+      expect(new Set(vetoes).size).toBe(Object.keys(VETO_GROUPS).length);
+    });
+
+    it('puts every item that has a veto in a group, and no other', () => {
+      const withVeto = Object.entries(RECORD_MATCH_RULES)
+        .filter(([, rule]) => rule.exclude !== undefined)
+        .map(([key]) => key);
+      expect(withVeto.sort()).toEqual(Object.values(VETO_GROUPS).flat().sort());
+    });
+
+    it('gives no veto to the meeting notices, the affidavits or the contracts items', () => {
+      // A notice or an agenda is what the meeting-notice items are, and an affidavit of mailing a notice is
+      // a real affidavit. The chapter 720 contracts item is narrowed to whole words instead.
+      for (const key of ['718_meeting_notices', '720_meeting_notices', '718_affidavits', '718_contracts', '720_contracts']) {
+        expect(RECORD_MATCH_RULES[key]?.exclude, key).toBeUndefined();
+      }
+    });
   });
 });
 
@@ -412,6 +459,114 @@ describe('"by law" in a file name', () => {
     expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', phrase), hoaKeys)).toEqual(['720_bylaws_rules']);
     expect(proposeTemplateKeyForFile(phrase, condoKeys)).toBe('718_bylaws');
     expect(proposeTemplateKeyForFile(phrase, hoaKeys)).toBe('720_bylaws_rules');
+  });
+
+  it('accepts the hyphenated singular phrase too, because real amendment titles say "By-Law"', () => {
+    // A hyphen reads in either number, so "Required-by-Law" is read as "by-Law". Left in on purpose:
+    // the spaced "Required by Law" above is not read, and neither is "Required_by_Law".
+    const phrase = 'Required-by-Law.pdf';
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', phrase), condoKeys)).toEqual(['718_bylaws']);
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', phrase), hoaKeys)).toEqual(['720_bylaws_rules']);
+    expect(proposeTemplateKeyForFile(phrase, condoKeys)).toBe('718_bylaws');
+    expect(proposeTemplateKeyForFile(phrase, hoaKeys)).toBe('720_bylaws_rules');
+  });
+});
+
+describe('papers about a record are not the record', () => {
+  // Each row is a realistic document that shares a record's words without being the record: committee and
+  // meeting papers, drafts, solicitations, proposals, invoices. A wrong automatic link is worse than a missed
+  // one, so each matches nothing at all, against every item of either community type. Between them the rows
+  // exercise the veto of every item that has one.
+  const notTheRecord: ReadonlyArray<{ title: string; categoryKey: DocumentCategoryKey }> = [
+    // Governing documents: committee and meeting papers
+    { title: 'Rules Committee Agenda', categoryKey: 'rules' },
+    { title: 'Declaration Review Committee Minutes', categoryKey: 'declaration' },
+    { title: 'Bylaws Committee Meeting Notice', categoryKey: 'declaration' },
+    { title: 'Notice of Proposed Articles Amendment', categoryKey: 'declaration' },
+    { title: 'Q&A Session Notice', categoryKey: 'declaration' },
+    // The budget and its working papers
+    { title: 'Budget Meeting Notice', categoryKey: 'financial_records' },
+    { title: 'Budget Meeting Minutes', categoryKey: 'financial_records' },
+    { title: 'Notice of Budget Workshop', categoryKey: 'financial_records' },
+    { title: 'Budget vs Actual - December 2025', categoryKey: 'financial_records' },
+    // The financial report, and the paperwork around an audit
+    { title: 'Audit Committee Minutes', categoryKey: 'financial_records' },
+    { title: 'Waiver of Financial Reporting Ballot', categoryKey: 'financial_records' },
+    { title: 'Audit Engagement Letter 2025', categoryKey: 'financial_records' },
+    // Minutes that are not yet the approved record, and a receipt for a recording
+    { title: 'DRAFT Board Meeting Minutes - Not Yet Approved', categoryKey: 'meeting_minutes' },
+    { title: 'Unapproved Minutes', categoryKey: 'meeting_minutes' },
+    { title: 'Proposed Meeting Minutes', categoryKey: 'meeting_minutes' },
+    { title: 'Meeting Recording Receipt', categoryKey: 'meeting_minutes' },
+    // Solicitations are not the bids received
+    { title: 'Invitation to Bid', categoryKey: 'contracts' },
+    { title: 'Request for Bids', categoryKey: 'contracts' },
+    { title: 'Bid Opening Notice', categoryKey: 'contracts' },
+    // A policy about conflicts is not a contract that creates one, nor a contractor's certificate a contract
+    { title: 'Conflict of Interest Policy', categoryKey: 'contracts' },
+    { title: 'Contractor Insurance Certificate', categoryKey: 'contracts' },
+    { title: 'Landscaping Contractor Licence', categoryKey: 'contracts' },
+    // What leads to an inspection or a study is not its report
+    { title: 'Reserve Study Proposal', categoryKey: 'inspection_reports' },
+    { title: 'Milestone Inspection Proposal', categoryKey: 'inspection_reports' },
+    // Insurance is decided by category alone: bills, claims and quotes in that folder are not the policy
+    { title: 'Insurance Premium Invoice', categoryKey: 'insurance' },
+    { title: 'Insurance Claim - Hurricane Ian', categoryKey: 'insurance' },
+    { title: 'Insurance Renewal Quote', categoryKey: 'insurance' },
+    { title: 'Insurance Committee Minutes', categoryKey: 'insurance' },
+  ];
+
+  it.each(notTheRecord)('$title filed under $categoryKey matches nothing', ({ title, categoryKey }) => {
+    expect(matchingTemplateKeys(doc(title, categoryKey), condoKeys)).toEqual([]);
+    expect(matchingTemplateKeys(doc(title, categoryKey), hoaKeys)).toEqual([]);
+  });
+
+  it('Recording-Receipt.pdf proposes null, while Recording.pdf is the recording', () => {
+    expect(proposeTemplateKeyForFile('Recording.pdf', condoKeys)).toBe('718_video_recordings');
+    expect(proposeTemplateKeyForFile('Recording-Receipt.pdf', condoKeys)).toBeNull();
+    expect(proposeTemplateKeyForFile('Recording-Receipt.pdf', hoaKeys)).toBeNull();
+  });
+
+  it('Draft-Minutes-March.pdf proposes null, while Minutes-March.pdf is the minutes', () => {
+    expect(proposeTemplateKeyForFile('Minutes-March.pdf', condoKeys)).toBe('718_minutes_rolling_12m');
+    expect(proposeTemplateKeyForFile('Minutes-March.pdf', hoaKeys)).toBe('720_minutes_rolling_12m');
+    expect(proposeTemplateKeyForFile('Draft-Minutes-March.pdf', condoKeys)).toBeNull();
+    expect(proposeTemplateKeyForFile('Draft-Minutes-March.pdf', hoaKeys)).toBeNull();
+  });
+
+  it('a veto word in the file name vetoes a document whose title is clean', () => {
+    const clean = doc('2026 Budget', 'financial_records', '2026-budget.pdf');
+    const workshop = doc('2026 Budget', 'financial_records', '2026-budget-workshop-notice.pdf');
+    expect(matchingTemplateKeys(clean, condoKeys)).toEqual(['718_budget']);
+    expect(matchingTemplateKeys(clean, hoaKeys)).toEqual(['720_budget']);
+    expect(matchingTemplateKeys(workshop, condoKeys)).toEqual([]);
+    expect(matchingTemplateKeys(workshop, hoaKeys)).toEqual([]);
+  });
+
+  it('a veto word in the title vetoes a document whose file name is clean', () => {
+    const notice = doc('2026 Budget Workshop Notice', 'financial_records', '2026-budget.pdf');
+    expect(matchingTemplateKeys(notice, condoKeys)).toEqual([]);
+    expect(matchingTemplateKeys(notice, hoaKeys)).toEqual([]);
+  });
+
+  it('a veto word that only the folded name shows still vetoes', () => {
+    // "_Workshop" has no word boundary as typed; folded it is "Workshop". The first name is the control.
+    const plain = doc('Scan 0042', 'financial_records', 'Budget 2026.pdf');
+    const joined = doc('Scan 0042', 'financial_records', 'Budget 2026_Workshop.pdf');
+    expect(matchingTemplateKeys(plain, condoKeys)).toEqual(['718_budget']);
+    expect(matchingTemplateKeys(joined, condoKeys)).toEqual([]);
+    expect(proposeTemplateKeyForFile('Budget 2026.pdf', condoKeys)).toBe('718_budget');
+    expect(proposeTemplateKeyForFile('Budget 2026_Workshop.pdf', condoKeys)).toBeNull();
+  });
+
+  it('still reads an affidavit of mailing a notice as an affidavit', () => {
+    // Why the affidavits take no veto: this one names a notice and is still the record.
+    expect(matchingTemplateKeys(doc('Affidavit of Mailing of Notice', 'declaration'), condoKeys)).toEqual(['718_affidavits']);
+  });
+
+  it('the chapter 720 contracts item reads a contract as a whole word, singular or plural', () => {
+    expect(matchingTemplateKeys(doc('Landscaping Contract', 'contracts'), hoaKeys)).toEqual(['720_contracts']);
+    expect(matchingTemplateKeys(doc('Landscaping Contracts', 'contracts'), hoaKeys)).toEqual(['720_contracts']);
   });
 });
 
