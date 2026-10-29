@@ -37,8 +37,8 @@ export interface FloatControlsProps {
  *
  * Ends of the list disable rather than hide their control, so the cluster keeps
  * a stable shape and a stable tab order as sections move. `canMove` comes from
- * the shared editor context, which is the same predicate the Sections panel
- * uses — the two surfaces cannot disagree about what is at the top.
+ * the shared editor context, so the keyboard move (`SectionShell`'s Alt+Arrow)
+ * and these buttons cannot disagree about what is at the top.
  *
  * Removal is confirmed and then undoable: `useUndoableRemove` owns both halves
  * (see its doc comment for why undo has to replay an upsert).
@@ -127,9 +127,8 @@ export function FloatControls({ block, communityId, className }: FloatControlsPr
         type="button"
         variant="ghost"
         size="icon"
-        // Same names as the Sections panel's toggle. Whether visitors are
-        // affected yet depends on the next publish, so the control names the
-        // action, not an outcome.
+        // Whether visitors are affected yet depends on the next publish, so
+        // the control names the action, not an outcome.
         ref={hideRef}
         aria-label={`${isHidden ? 'Show' : 'Hide'} ${label} section`}
         title={isHidden ? 'Show' : 'Hide'}

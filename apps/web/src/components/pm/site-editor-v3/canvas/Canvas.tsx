@@ -31,12 +31,13 @@ export interface CanvasProps {
   communityId: number;
   context: CanvasContext;
   /**
-   * Opens the Add tool, with the section a new one should go above — or null
-   * to append (the end button and the empty state). Optional so the canvas
-   * still renders standalone, but without it the empty state tells the PM to
-   * add a section and offers no way to do so.
+   * Opens the Add a part dialog, with the section a new one should go above —
+   * or null to append (the end button and the empty state) — and the button
+   * that asked, which gets focus back when the dialog closes. Optional so the
+   * canvas still renders standalone, but without it the empty state tells the
+   * PM to add a part and offers no way to do so.
    */
-  onAddSection?: (beforeBlockId: number | null) => void;
+  onAddSection?: (beforeBlockId: number | null, opener: HTMLElement) => void;
   /** Injected for deterministic tests; defaults to the real clock. */
   now?: number;
   /**
@@ -56,7 +57,7 @@ export interface CanvasProps {
   /** The page being edited; names the empty-state hero on a sub-page (D18). */
   page?: SitePageContext;
   /**
-   * Opens the Pages tool. When given, the header is an editable region of the
+   * Opens Site settings on Pages. When given, the header is an editable region of the
    * canvas — the navigation bar — the way each block is a section. Nav links
    * come from pages, so "edit the navigation" means "manage the pages".
    */
@@ -129,10 +130,10 @@ export function Canvas({
   const renderedAt = useMemo(() => now ?? Date.now(), [now, blocks]);
   const { duplicateError } = useSiteEditor();
   // Stable across renders so the memoised section list below survives
-  // selection changes. `onAddSection` is the shell's tool switch.
+  // selection changes. `onAddSection` opens the Add a part dialog.
   const insertAt = useCallback(
-    (beforeBlockId: number | null) => {
-      onAddSection?.(beforeBlockId);
+    (beforeBlockId: number | null, opener: HTMLElement) => {
+      onAddSection?.(beforeBlockId, opener);
     },
     [onAddSection],
   );
@@ -166,14 +167,15 @@ export function Canvas({
     () =>
       ordered.map((block, index) => (
         <Fragment key={block.id}>
-          {/* BETWEEN sections only, as the design has it. Not above the first
-              section: there the pill straddles the frame's top edge and the
-              frame's overflow-hidden clips it in half (seen in the browser on a
-              page with no hero). Not above the hero either, which is pinned. */}
+          {/* BETWEEN sections only, as the design has it: only where a section
+              can go. Not above the first section: there the pill straddles the
+              frame's top edge and the frame's overflow-hidden clips it in half
+              (seen in the browser on a page with no hero). Not above the hero
+              either, which is pinned. Named after the section it follows. */}
           {onAddSection && index > 0 && block.blockType !== 'hero' ? (
             <SectionInserter
-              beforeLabel={sectionLabel(block.blockType)}
-              onInsert={() => insertAt(block.id)}
+              afterLabel={sectionLabel(ordered[index - 1]!.blockType)}
+              onInsert={(opener) => insertAt(block.id, opener)}
             />
           ) : null}
           <SectionShell block={block} communityId={communityId}>
@@ -257,8 +259,8 @@ export function Canvas({
         FRAME_WIDTH[device],
       )}
     >
-      {/* The toolbar's Duplicate can fail with the list looking unchanged, so it
-          needs a visible channel here as well as the Sections panel's. */}
+      {/* The toolbar's Duplicate can fail with the page looking unchanged, so
+          it needs a visible channel, and this is the only one. */}
       {duplicateError ? (
         <p role="alert" className="mb-3 text-sm text-status-danger">
           {duplicateError}
@@ -295,11 +297,11 @@ export function Canvas({
           {ordered.length === 0 ? (
             <EmptyState
               title="This page is empty"
-              description="Add a section to give visitors something to read."
+              description="Add a part to give visitors something to read."
               action={
                 onAddSection && (
-                  <Button type="button" onClick={() => insertAt(null)}>
-                    Add a section
+                  <Button type="button" onClick={(event) => insertAt(null, event.currentTarget)}>
+                    Add a part
                   </Button>
                 )
               }
@@ -311,11 +313,12 @@ export function Canvas({
                 <div className="px-6 py-5">
                   <button
                     type="button"
-                    onClick={() => insertAt(null)}
+                    onClick={(event) => insertAt(null, event.currentTarget)}
+                    aria-label="Add a part at the end of this page"
                     className="flex min-h-16 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border-2 border-dashed border-edge-strong text-sm font-semibold text-content-secondary transition-colors duration-quick hover:border-edge-focus hover:bg-interactive-subtle hover:text-content-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                   >
                     <Plus className="h-[18px] w-[18px]" aria-hidden="true" />
-                    Add a section to the end of this page
+                    Add a part
                   </button>
                 </div>
               ) : null}

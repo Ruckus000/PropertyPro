@@ -137,7 +137,7 @@ describe('HelpDrawer — the guide list', () => {
   it('puts the Settings guides first while Settings is showing', () => {
     renderDrawer({ view: 'settings' });
     expect(
-      within(section('Help with Settings')).getAllByRole('button').map((b) => b.textContent),
+      within(section('Help with Site settings')).getAllByRole('button').map((b) => b.textContent),
     ).toEqual([
       expect.stringContaining('Publish your changes'),
       expect.stringContaining('Use your own domain'),
@@ -223,6 +223,87 @@ describe('HelpDrawer — reading a guide', () => {
     await user.click(screen.getByRole('button', { name: /change the words and photos/i }));
     await user.click(screen.getByRole('button', { name: 'linked guide' }));
     expect(articleMock).toHaveBeenLastCalledWith('website', 'website-pages', 42);
+  });
+});
+
+/**
+ * Combined plan Task 28: the tool rail is gone. A guide whose "Show me" opened a
+ * rail tool now opens the Site settings tab that holds it, or the Add a part
+ * dialog; the drawer's half of that is the action it hands `onShowMe`.
+ */
+describe('HelpDrawer — "Show me" after the tool rail', () => {
+  const TOOL_GUIDES = [
+    guide('website-pages', 'Add and manage pages'),
+    guide('website-sections', 'Add, move or remove a section'),
+    guide('website-design', 'Change the look'),
+    guide('website-branding', 'Colours and logos'),
+    guide('urgent-notice', 'Post an urgent notice'),
+    guide('edit-words-and-photos', 'Change the words and photos'),
+    guide('florida-website-rules', 'What Florida law requires'),
+  ];
+
+  beforeEach(() => {
+    contextualMock.mockReturnValue(loaded(TOOL_GUIDES));
+    articleMock.mockImplementation((category: string | null, slug: string | null) =>
+      category && slug
+        ? loaded({
+            html: '<p>body</p>',
+            metadata: { title: TOOL_GUIDES.find((g) => g.slug === slug)?.title ?? slug, slug, category },
+            related: [],
+          })
+        : idle(),
+    );
+  });
+
+  async function showMe(guideTitle: RegExp, label: string) {
+    const user = userEvent.setup();
+    renderDrawer();
+    await user.click(screen.getByRole('button', { name: guideTitle }));
+    await user.click(screen.getByRole('button', { name: label }));
+  }
+
+  // Revert check: point `website-pages` back at `{ kind: 'tool', tool: 'pages' }`.
+  it('help "Show me" for pages opens Site settings on the Pages tab', async () => {
+    await showMe(/add and manage pages/i, 'Open Pages');
+    expect(onShowMe).toHaveBeenCalledWith({ kind: 'settings', tab: 'pages' });
+  });
+
+  it.each([
+    [/add, move or remove a section/i, 'Add a part', { kind: 'add' }],
+    [/change the look/i, 'Open Design', { kind: 'settings', tab: 'design' }],
+    [/colours and logos/i, 'Open Design', { kind: 'settings', tab: 'design' }],
+    [/post an urgent notice/i, 'Open Notice', { kind: 'settings', tab: 'notice' }],
+  ] as const)('%s: "%s" asks for %o', async (title, label, action) => {
+    await showMe(title, label);
+    expect(onShowMe).toHaveBeenCalledWith(action);
+  });
+
+  // Their tools had no Site settings tab to go to: sections are edited on the
+  // page, and the records list is on the website home.
+  it.each([/change the words and photos/i, /what florida law requires/i])(
+    '%s has no "Show me" now',
+    async (title) => {
+      const user = userEvent.setup();
+      renderDrawer();
+      await user.click(screen.getByRole('button', { name: title }));
+      expect(screen.getByTestId('help-drawer-guide')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^(Open|Add a part)/ })).not.toBeInTheDocument();
+    },
+  );
+
+  it('lists the pages, design, branding and notice guides first in Site settings', () => {
+    renderDrawer({ view: 'settings' });
+    const first = within(section('Help with Site settings'))
+      .getAllByRole('button')
+      .map((b) => b.textContent);
+    for (const title of [
+      'Add and manage pages',
+      'Change the look',
+      'Colours and logos',
+      'Post an urgent notice',
+    ]) {
+      expect(first).toContainEqual(expect.stringContaining(title));
+    }
   });
 });
 

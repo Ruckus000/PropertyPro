@@ -39,7 +39,13 @@ export interface AddPanelProps {
   /** Called once an add has used `insertBefore`, so the next add appends. */
   onInsertConsumed: () => void;
   /**
-   * Opens the Pages tool. The navigation bar is not a section — its links ARE
+   * Called once a section has been added, with its label. The Add a part
+   * dialog closes on it, which unmounts this panel and its live region, so the
+   * caller announces the addition from a region that survives.
+   */
+  onAdded?: (label: string) => void;
+  /**
+   * Opens Site settings on Pages. The navigation bar is not a section — its links ARE
    * the pages (`in_nav`), so the Add panel offers it as an entry that leads to
    * where it is built rather than as a block to insert. Optional so the panel
    * still renders standalone; without it the entry is not shown.
@@ -48,7 +54,8 @@ export interface AddPanelProps {
 }
 
 /**
- * The Add tool panel: create a section and open its settings.
+ * The Add a part catalog: create a section and open its settings. Shown in the
+ * Add a part dialog (`AddPartDialog`).
  *
  * ## Why every section starts with real content
  *
@@ -75,7 +82,7 @@ export interface AddPanelProps {
  * Two independent reasons, and each alone would be enough.
  *
  * First, the provider's list is now PAGE-SCOPED (D-C2) — `EditorRoot` narrows
- * it with `blocksForPage` so the Sections panel and Inspector agree with the
+ * it with `blocksForPage` so the section controls and Inspector agree with the
  * canvas. That is the wrong input for slot maths, per D-C3 below.
  *
  * Second, the provider collapses `undefined` to `[]`, which makes "still
@@ -112,6 +119,7 @@ export function AddPanel({
   hasPolishBlocks,
   insertBefore,
   onInsertConsumed,
+  onAdded,
   onGoToPages,
 }: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
@@ -156,8 +164,9 @@ export function AddPanel({
       onInsertConsumed();
       setImageEntry(null);
       setAnnouncement(`${entry.label} section added. Its settings are open.`);
+      onAdded?.(entry.label);
     },
-    [onInsertConsumed, placeAdded, selectSlot],
+    [onAdded, onInsertConsumed, placeAdded, selectSlot],
   );
 
   const add = async (entry: AddCatalogEntry) => {

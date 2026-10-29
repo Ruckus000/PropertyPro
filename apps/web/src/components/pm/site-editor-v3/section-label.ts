@@ -1,10 +1,6 @@
 /**
- * Human labels for block types, used by the section list, the float controls'
- * accessible names, and the reorder live-region announcements.
- *
- * Deliberately separate from `TOOL_PANEL_TITLES` — these name a *section on the
- * page*, not a tool panel, and the two vocabularies drift (the "Add" panel adds
- * a "Text section"; there is no "Add" section).
+ * Human labels for block types, used by the float controls' and "Add a part"
+ * buttons' accessible names, and the reorder live-region announcements.
  */
 const SECTION_LABELS: Record<string, string> = {
   hero: 'Welcome',

@@ -39,7 +39,7 @@ import {
   type HelpArticleResult,
 } from '@/hooks/use-help';
 import type { EditorView } from '../EditorTopBar';
-import { HELP_DRAWER_ID } from '../tools';
+import { HELP_DRAWER_ID } from './drawer-id';
 import { EDITOR_GUIDES, GUIDE_GROUPS, sortGuides, type HelpAction } from './guides';
 
 export interface HelpDrawerProps {
@@ -384,7 +384,7 @@ export function HelpDrawer({
                   </p>
                 ) : null}
                 <GuideList
-                  title={view === 'settings' ? 'Help with Settings' : 'Help with your website'}
+                  title={view === 'settings' ? 'Help with Site settings' : 'Help with your website'}
                   articles={guides.filter((g) => EDITOR_GUIDES[g.slug]?.views.includes(view))}
                   onOpen={setOpen}
                 />

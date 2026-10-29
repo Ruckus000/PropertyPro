@@ -34,8 +34,9 @@ export function isSettingsTabId(value: unknown): value is SettingsTabId {
  *
  * - `general`: the footer is `PATCH /api/v1/pm/site/settings`; the site icon is
  *   the favicon upload, finalised on pick. Both are live.
- * - `pages`: adding a page, removing a published one and every section are
- *   draft; a published page's name, menu visibility and order are live
+ * - `pages`: adding a page and removing a published one are draft; deleting a
+ *   page that was never published is immediate (`DELETE` with no staging); a
+ *   published page's name, menu visibility and order are live
  *   (`describeLiveImmediacy`).
  * - `design`: the colour set, custom colours and fonts are `draftLook`
  *   (`PATCH /api/v1/pm/site/design`) and wait for Publish; logos save to the
@@ -49,7 +50,7 @@ export function isSettingsTabId(value: unknown): value is SettingsTabId {
 export const SETTINGS_SAVE_NOTES: Readonly<Record<SettingsTabId, string>> = {
   general: 'Saves immediately.',
   pages:
-    "Saved as a draft until you publish. A published page's name, menu and order save immediately.",
+    "Adding a page and removing a published page wait for Publish. A page that was never published is deleted straight away. A published page's name, menu and order save immediately.",
   design: 'Saved as a draft until you publish. Logos save immediately.',
   notice: 'Saves immediately.',
   address: 'Saves immediately.',

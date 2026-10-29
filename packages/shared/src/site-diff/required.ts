@@ -2,9 +2,9 @@
  * Florida-required website sections (v4 builder, Phase 2).
  *
  * One source of truth for "which sections must this community's site show",
- * shared by the canvas toolbar, SectionList, the top-bar requirements pill,
- * the publish sheet's checks and the server's delete guards — so the five can
- * never disagree about what is required.
+ * shared by the canvas toolbar, the top-bar requirements pill, the publish
+ * sheet's checks and the server's delete guards — so the four can never
+ * disagree about what is required.
  *
  * Keyed by a `ComplianceSubject`: the community type AND its unit (or parcel)
  * count, because the statutes only reach associations above a size threshold —

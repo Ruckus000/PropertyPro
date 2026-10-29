@@ -10,17 +10,13 @@
     {
       "name": "pg-panel",
       "kind": "still",
-      "route": "/pm/website-editor?communityId={cid}",
+      "route": "/pm/website-editor?communityId={cid}&view=settings&tab=pages",
       "role": "cam",
       "community": "condo",
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"site-editor-tool-pages\"]"
-        },
-        {
-          "type": "click",
-          "selector": "[data-testid=\"site-editor-tool-pages\"]"
+          "selector": "role=tabpanel[name=\"Pages\"]"
         },
         {
           "type": "waitFor",
@@ -28,8 +24,7 @@
         }
       ],
       "clipTo": [
-        "#site-editor-tool-panel-title",
-        "role=button[name=\"Add a page\"]"
+        "#settings-panel-pages"
       ],
       "highlight": "role=list[name=\"Site pages\"]",
       "step": 3

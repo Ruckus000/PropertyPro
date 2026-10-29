@@ -6,16 +6,14 @@
  *
  * The REAL `RequiredSectionsProvider` is rendered — it is the unit under test —
  * fed with whole-site snapshots the way `EditorRoot` feeds it from
- * `useSiteDiff().validated`. The page-scoped editor context is mocked, as in
- * `section-list-hide.test.tsx`.
+ * `useSiteDiff().validated`. The page-scoped editor context is mocked.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RequiredSectionPage } from '@propertypro/shared';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
-import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { RequirementsPill } from '@/components/pm/site-editor-v3/RequirementsPill';
 import {
@@ -163,18 +161,26 @@ beforeEach(() => {
   checklist.isError = false;
 });
 
-describe('SectionList — required sections', () => {
-  it('badges required sections and locks their Duplicate', () => {
-    renderWith(<SectionList />);
+// These ran against the Sections tool's list until it went with the tool rail
+// (combined plan Task 28); the section toolbar on the page shares its hide
+// confirmation (`useHideToggle`) and duplicate lock, so they run there now.
+describe('FloatControls — hiding and copying required sections', () => {
+  const meetings = () => <FloatControls block={editor.blocks[1]!} communityId={7} />;
 
-    expect(screen.getAllByText('Required')).toHaveLength(2);
+  it('locks Duplicate on a required section, not on an optional one', () => {
+    renderWith(
+      <>
+        {meetings()}
+        <FloatControls block={editor.blocks[0]!} communityId={7} />
+      </>,
+    );
     expect(screen.getByRole('button', { name: 'Duplicate Meetings section' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Duplicate Text section' })).toBeEnabled();
   });
 
   it('asks before hiding the last visible copy, and hides only on "Hide anyway"', async () => {
     const user = userEvent.setup();
-    renderWith(<SectionList />);
+    renderWith(meetings());
 
     await user.click(screen.getByRole('button', { name: 'Hide Meetings section' }));
     const dialog = await screen.findByRole('alertdialog');
@@ -189,7 +195,7 @@ describe('SectionList — required sections', () => {
 
   it('keeps it visible on "Keep it visible"', async () => {
     const user = userEvent.setup();
-    renderWith(<SectionList />);
+    renderWith(meetings());
 
     await user.click(screen.getByRole('button', { name: 'Hide Meetings section' }));
     await user.click(await screen.findByRole('button', { name: 'Keep it visible' }));
@@ -198,7 +204,7 @@ describe('SectionList — required sections', () => {
 
   it('hides without asking when another visible copy exists on another page', async () => {
     const user = userEvent.setup();
-    renderWith(<SectionList />, {
+    renderWith(meetings(), {
       pages: sitePages({ [HOME]: editor.blocks, 11: [block(5, 'meetings', { pageId: 11 })] }),
     });
 
@@ -207,14 +213,12 @@ describe('SectionList — required sections', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
-  it('never asks about an optional section, or on an apartment site', async () => {
+  it('never asks about a section on an apartment site', async () => {
     const user = userEvent.setup();
-    renderWith(<SectionList />, { communityType: 'apartment' });
+    renderWith(meetings(), { communityType: 'apartment' });
 
-    expect(screen.queryByText('Required')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Hide Meetings section' }));
-    await user.click(screen.getByRole('button', { name: 'Hide Text section' }));
-    expect(editor.toggleHidden).toHaveBeenCalledTimes(2);
+    expect(editor.toggleHidden).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'Duplicate Meetings section' })).toBeEnabled();
   });
 });
@@ -375,7 +379,7 @@ describe('RequirementsPill', () => {
     expect(onGoToSection).toHaveBeenCalledWith({ pageId: 'site', slot: 6 });
   });
 
-  it('opens the Add tool for a missing section', async () => {
+  it('opens Add a part for a missing section', async () => {
     const user = userEvent.setup();
     editor.blocks = [block(4, 'documents')];
     renderWith(pill());
@@ -408,12 +412,10 @@ describe('RequirementsPill', () => {
 describe('below the size threshold — recommended, never locked', () => {
   const small = { unitCount: 12 };
 
-  it('badges required types "Recommended" and leaves Duplicate and Hide alone', async () => {
+  it('leaves Duplicate and Hide alone', async () => {
     const user = userEvent.setup();
-    renderWith(<SectionList />, small);
+    renderWith(<FloatControls block={editor.blocks[1]!} communityId={7} />, small);
 
-    expect(screen.queryByText('Required')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Recommended')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Duplicate Meetings section' })).toBeEnabled();
     await user.click(screen.getByRole('button', { name: 'Hide Meetings section' }));
     expect(editor.toggleHidden).toHaveBeenCalledWith(3, true);
@@ -450,25 +452,26 @@ describe('the unit count', () => {
     expect(screen.getByLabelText('How many units does your association have?')).toBeInTheDocument();
   });
 
-  it('saving a small count turns "Required" into "Recommended" without a reload', async () => {
+  it('saving a small count unlocks the required sections without a reload', async () => {
     const user = userEvent.setup();
     unitCountApi.mutateAsync.mockResolvedValue({ unitCount: 12 });
     renderWith(
       <>
         {pill()}
-        <SectionList />
+        <FloatControls block={editor.blocks[1]!} communityId={7} />
       </>,
       { unitCount: null },
     );
-    expect(screen.getAllByText('Required')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Remove Meetings section' })).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
     await user.type(await screen.findByLabelText('How many units does your association have?'), '12');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(unitCountApi.mutateAsync).toHaveBeenCalledWith(12);
-    expect(await screen.findAllByText('Recommended')).toHaveLength(2);
-    expect(screen.queryByText('Required')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove Meetings section' })).toBeEnabled(),
+    );
   });
 
   it('refuses a non-number before calling the server', async () => {

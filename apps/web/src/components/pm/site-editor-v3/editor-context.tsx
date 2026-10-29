@@ -34,10 +34,10 @@ export interface SiteEditorContextValue {
    * renders them (D-C2).
    *
    * Narrowed by `blocksForPage` in `EditorRoot` before it reaches here. The
-   * narrowing is load-bearing, not cosmetic: `movableSections` below feeds
-   * `SectionList` — the editor's DEFAULT tool — and the Inspector, both of
-   * which sit beside the canvas and are read as one view with it. An unscoped
-   * list makes them offer sections the canvas is not showing, and selecting one
+   * narrowing is load-bearing, not cosmetic: `movableSections` below feeds the
+   * section controls, the Add a part dialog and the Inspector, which sit on and
+   * beside the canvas and are read as one view with it. An unscoped list makes
+   * them act on sections the canvas is not showing, and selecting one
    * opens the Inspector on a block whose write `assertSlotFreeAcrossPages`
    * rejects, because the write hooks carry the selected page's id (D-WRITE).
    *
@@ -104,8 +104,8 @@ export interface SiteEditorContextValue {
    * refusals here (a page with no free slot, and a rejected write) both leave
    * the section list looking exactly as it did before the click, and an
    * `aria-live` announcement is gone by the time a sighted PM looks for the
-   * copy. `SectionList` renders this as a `role="alert"`, mirroring how
-   * `AddPanel` surfaces its own full-site and write failures.
+   * copy. `Canvas` renders this as a `role="alert"`, mirroring how `AddPanel`
+   * surfaces its own full-site and write failures.
    */
   duplicateError: string | null;
   /**
@@ -212,13 +212,13 @@ export type SiteEditorProviderPropsWithSlot = SiteEditorProviderProps & SlotHand
  * Shared editing state for the v3 editor: which section is selected, and how
  * sections move.
  *
- * This is a context rather than a hook because the two surfaces that drive it
- * live in different columns — the canvas (`SectionShell` / `FloatControls`) and
- * the Sections tool panel (`SectionList`). Two independent hook instances would
- * mean two selections that silently disagree, and two screen-reader live
- * regions announcing the same move twice.
+ * This is a context rather than a hook because the surfaces that drive it are
+ * many — every section's shell and toolbar on the canvas (`SectionShell` /
+ * `FloatControls`), the inspector, and the Add a part dialog. Independent hook
+ * instances would mean selections that silently disagree, and several
+ * screen-reader live regions announcing the same move.
  *
- * The provider renders the single live region. Both surfaces mutate through
+ * The provider renders the single live region. Every surface mutates through
  * `move` / `moveTo`, so a reorder is announced exactly once no matter which one
  * initiated it.
  */
@@ -281,9 +281,9 @@ export function SiteEditorProvider({
    * Consume `selectSlotOnMount` — see the prop's doc for why it cannot be done
    * by the caller.
    *
-   * `selectInternal`, not `select`: `onSelect` reveals the Sections panel, and
-   * `EditorRoot` has already done that synchronously before switching page.
-   * Calling it again would be a second identical `setActiveTool`.
+   * `selectInternal`, not `select`: this selection is the caller's request
+   * replayed after a page switch, not a new click, so it does not report back
+   * through `onSelect`.
    *
    * Not a bare mount effect. `movableSections` is derived from `blocks`, which
    * is already populated at mount on the real path (the block list is

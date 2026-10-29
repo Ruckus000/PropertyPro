@@ -8,8 +8,6 @@
  * module (ruling R12), so the calls live in a loader module of their own. The
  * editor is within ~100 KiB of its budget and the web aggregate has under 2 KiB
  * to spare: a manager who never opens one of these tabs must not pay for it.
- * `EditorRoot` loads the same modules for the rail until the rail goes, so
- * webpack keeps one chunk per panel.
  */
 import dynamic from 'next/dynamic';
 

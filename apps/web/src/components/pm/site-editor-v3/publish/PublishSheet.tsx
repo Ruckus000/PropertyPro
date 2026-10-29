@@ -1148,12 +1148,12 @@ function describeTarget(
      * Named with its PAGE once the site has more than one.
      *
      * `Section 12 (faq)` is a slot number, and a slot number appears on no
-     * other surface in the editor — not on a `SectionList` row, not on the
+     * other surface in the editor — not on a section's toolbar, not on the
      * canvas — so on a multi-page site it named an offender the PM could not
      * locate without pressing "Fix this" and being carried away from the list
      * they were triaging. Cross-page issues are the norm, not an edge: the
      * publish diff is whole-site by design (D-C2) while the editor context is
-     * page-scoped, which is the entire reason `handleSelectSlot` exists.
+     * page-scoped, which is the entire reason `handleGoToSlot` exists.
      *
      * The page branch below has named its page since round 6; this branch is
      * the half of the same function that was left in machine syntax.

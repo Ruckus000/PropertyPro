@@ -19,7 +19,7 @@ const RequirementsDetails = dynamic(
 export interface RequirementsPillProps {
   /**
    * Fallback only: takes the PM to a hidden section that `showSection` cannot
-   * write — `EditorRoot`'s `handleSelectSlot`, the cross-page hand-off the
+   * write — `EditorRoot`'s `handleGoToSlot`, the cross-page hand-off the
    * publish sheet's "Fix this" uses. Normally "Show it" un-hides in place, on
    * any page.
    */

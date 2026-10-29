@@ -37,7 +37,7 @@ function Swatch({ color, label }: { color?: string; label: string }) {
   );
 }
 
-/** The colour-set cards. Single-column on purpose — see the note inside. */
+/** The colour-set cards, in as many columns as the Design tab has room for. */
 export function PresetCards({
   presets,
   selected,
@@ -53,11 +53,12 @@ export function PresetCards({
   /** Hold every card still, for a save that is under way: no card takes a click. */
   disabled?: boolean;
 }) {
-  // No `sm:`/`lg:` columns: those test the VIEWPORT, while this fieldset lives
-  // in the Design panel, which is ~340px wide at any viewport. Three columns
-  // there gave 83px cards.
+  // The Design tab's card is about 680px wide inside at 768px and 1024px (the
+  // tab list sits beside it from 1024px) and about 750px from 1280px. Two
+  // columns from `sm` and three from `xl` keep each card 240px or wider. (It
+  // was a single column while the cards sat in the 340px rail panel.)
   return (
-    <fieldset className="grid grid-cols-1 gap-3">
+    <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       <legend className="sr-only">Theme preset</legend>
       {presets.map((preset) => {
         const isSelected = preset.slug === selected;

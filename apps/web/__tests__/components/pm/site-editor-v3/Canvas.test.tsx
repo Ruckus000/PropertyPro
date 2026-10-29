@@ -153,7 +153,7 @@ describe('Canvas — states', () => {
     expect(screen.getByText('This page is empty')).toBeInTheDocument();
     // No handler passed: the copy still stands on its own, and no dead button
     // is rendered.
-    expect(screen.queryByRole('button', { name: 'Add a section' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add a part' })).not.toBeInTheDocument();
   });
 
   it('offers a way to add from the empty canvas', () => {
@@ -162,9 +162,11 @@ describe('Canvas — states', () => {
       <Canvas communityId={7} context={CONTEXT} now={NOW} onAddSection={onAddSection} />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add a section' }));
-    // The empty page's button appends: no target.
-    expect(onAddSection).toHaveBeenCalledWith(null);
+    const button = screen.getByRole('button', { name: 'Add a part' });
+    fireEvent.click(button);
+    // The empty page's button appends: no target. It hands itself over so the
+    // dialog can give it focus back.
+    expect(onAddSection).toHaveBeenCalledWith(null, button);
   });
 });
 
@@ -197,7 +199,7 @@ describe('Canvas — v4 insert, hide', () => {
     return onAddSection;
   }
 
-  it('offers "Add section here" only between sections, never above the hero', () => {
+  it('offers "Add a part" only between sections, never above the hero', () => {
     blocksState.value = {
       data: [heroRow, textRow(2, 2), textRow(3, 3)],
       isPending: false,
@@ -207,7 +209,28 @@ describe('Canvas — v4 insert, hide', () => {
     renderWithAdd();
     // hero, text 2, text 3 → two seams (hero|2, 2|3). None above the hero,
     // which is pinned, and none above the first section of a page.
-    expect(screen.getAllByRole('button', { name: /^Add a section above/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Add a part after/ })).toHaveLength(2);
+  });
+
+  // Combined plan Task 28: every one of them reads "Add a part", so the name
+  // says where. Revert check: name it after `block` instead of the one before.
+  it('names each "Add a part" after the section it follows', () => {
+    blocksState.value = {
+      data: [heroRow, textRow(2, 2), { ...textRow(3, 3), blockType: 'faq', content: {} }],
+      isPending: false,
+      isError: false,
+      error: null,
+    };
+    renderWithAdd();
+    expect(
+      screen.getAllByRole('button', { name: /^Add a part after/ }).map((b) => b.getAttribute('aria-label')),
+    // The hero's plain name is "Welcome", as on its own section chip.
+    ).toEqual(['Add a part after Welcome', 'Add a part after Text']);
+    for (const button of screen.getAllByRole('button', { name: /^Add a part after/ })) {
+      expect(button).toHaveTextContent('Add a part');
+      // Visible on focus, and a 44px touch target below 768px.
+      expect(button).toHaveClass('focus-visible:opacity-100', 'h-11', 'md:h-9');
+    }
   });
 
   it('targets the section the inserter sits above, then opens Add', () => {
@@ -218,9 +241,10 @@ describe('Canvas — v4 insert, hide', () => {
       error: null,
     };
     const onAddSection = renderWithAdd();
-    fireEvent.click(screen.getAllByRole('button', { name: /^Add a section above/ })[1]!);
-    // Seams: hero|2 and 2|3. The second targets 3.
-    expect(onAddSection).toHaveBeenCalledWith(3);
+    const seam = screen.getAllByRole('button', { name: /^Add a part after/ })[1]!;
+    fireEvent.click(seam);
+    // Seams: hero|2 and 2|3. The second targets 3, and hands itself over.
+    expect(onAddSection).toHaveBeenCalledWith(3, seam);
     expect(onAddSection).toHaveBeenCalledTimes(1);
   });
 
@@ -232,8 +256,10 @@ describe('Canvas — v4 insert, hide', () => {
       error: null,
     };
     const onAddSection = renderWithAdd();
-    fireEvent.click(screen.getByRole('button', { name: 'Add a section to the end of this page' }));
-    expect(onAddSection).toHaveBeenCalledWith(null);
+    const end = screen.getByRole('button', { name: 'Add a part at the end of this page' });
+    expect(end).toHaveTextContent('Add a part');
+    fireEvent.click(end);
+    expect(onAddSection).toHaveBeenCalledWith(null, end);
     expect(onAddSection).toHaveBeenCalledTimes(1);
   });
 
@@ -246,7 +272,7 @@ describe('Canvas — v4 insert, hide', () => {
       error: null,
     };
     renderWithAdd();
-    const inserters = screen.getAllByRole('button', { name: /^Add a section above/ });
+    const inserters = screen.getAllByRole('button', { name: /^Add a part after/ });
     expect(inserters).toHaveLength(1);
   });
 
@@ -258,10 +284,7 @@ describe('Canvas — v4 insert, hide', () => {
       error: null,
     };
     renderCanvas();
-    expect(screen.queryByRole('button', { name: /^Add a section above/ })).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'Add a section to the end of this page' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Add a part/ })).not.toBeInTheDocument();
   });
 
   it('collapses a hidden section to a placeholder with a way back', () => {
@@ -615,7 +638,7 @@ describe('Canvas — site chrome and theme (templates)', () => {
     );
   });
 
-  it('offers the navigation bar as an editable region that opens the Pages tool', () => {
+  it('offers the navigation bar as an editable region that opens the pages', () => {
     const onEditNavigation = vi.fn();
     renderChrome({}, { onEditNavigation });
     fireEvent.click(screen.getByTestId('canvas-navigation-bar'));

@@ -21,7 +21,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Copy } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import { DomainPanel } from '../panels/DomainPanel';
@@ -50,8 +51,6 @@ export interface SettingsViewProps {
   /** The site's PropertyPro address, e.g. `https://sunset.getpropertypro.com/`. */
   publicSiteUrl: string | null;
   hasSiteCustomDomain: boolean;
-  /** Back to the Website view with the Documents tool open. */
-  onOpenDocuments: () => void;
   /**
    * A tab to bring forward — a Help guide's "Show me" (v4 Phase 3). A new
    * object per request, so asking for the tab already showing after the PM has
@@ -65,7 +64,7 @@ export interface SettingsViewProps {
    * view would drop back to General.
    */
   onTabChange?: (tab: SettingsTabId) => void;
-  /** The Pages tab: the editor's page selection, exactly as the Pages tool gets it. */
+  /** The Pages tab: the editor's page selection, as `EditorRoot` holds it. */
   pagesPanel: Omit<PagesPanelProps, 'communityId'>;
   /** The Design tab: colour sets, custom colours and the theme that seeds them. */
   designPanel: Omit<DesignPanelProps, 'communityId'>;
@@ -91,7 +90,6 @@ export function SettingsView({
   initialSettings,
   publicSiteUrl,
   hasSiteCustomDomain,
-  onOpenDocuments,
   tabRequest,
   onTabChange,
   pagesPanel,
@@ -268,9 +266,13 @@ export function SettingsView({
           Each document stays private until you open it to the public, one at a time, in
           Documents.
         </p>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
+        {/* The documents library, where each one is opened to the public. */}
+        <Link
+          href={`/communities/${communityId}/documents`}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
           Open Documents
-        </Button>
+        </Link>
       </Card>
     ),
   };

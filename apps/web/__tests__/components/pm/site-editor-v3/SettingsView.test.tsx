@@ -119,8 +119,6 @@ import { SettingsView } from '@/components/pm/site-editor-v3/settings/SettingsVi
 import { SETTINGS_SAVE_NOTES, parseEditorLocation } from '@/components/pm/site-editor-v3/settings/settings-tabs';
 import type { PresetCardData } from '@/components/pm/site-editor-v3/panels/preset-cards';
 
-const onOpenDocuments = vi.fn();
-
 const preset = (slug: string, displayName: string): PresetCardData => ({
   slug,
   displayName,
@@ -140,7 +138,6 @@ function renderView(props: Partial<React.ComponentProps<typeof SettingsView>> = 
       tagline={null}
       publicSiteUrl="https://sunset-condos.getpropertypro.com/"
       hasSiteCustomDomain={false}
-      onOpenDocuments={onOpenDocuments}
       onTabChange={onTabChange}
       pagesPanel={{
         selectedPageId: 5,
@@ -276,7 +273,10 @@ describe('SettingsView — pages, design and notice', () => {
     renderView();
     const expected: Array<[string, string]> = [
       ['General', 'Saves immediately.'],
-      ['Pages', "Saved as a draft until you publish. A published page's name, menu and order save immediately."],
+      [
+        'Pages',
+        "Adding a page and removing a published page wait for Publish. A page that was never published is deleted straight away. A published page's name, menu and order save immediately.",
+      ],
       ['Design', 'Saved as a draft until you publish. Logos save immediately.'],
       ['Notice', 'Saves immediately.'],
       ['Address & domain', 'Saves immediately.'],
@@ -360,7 +360,6 @@ describe('SettingsView — a requested tab', () => {
         tagline={null}
         publicSiteUrl="https://sunset-condos.getpropertypro.com/"
         hasSiteCustomDomain={false}
-        onOpenDocuments={onOpenDocuments}
         pagesPanel={{
           selectedPageId: 5,
           restoreFocusToSelectedRow: false,
@@ -446,8 +445,12 @@ describe('SettingsView — access', () => {
     const panel = screen.getByRole('tabpanel');
     expect(panel).toHaveTextContent('Official records are for owners and residents who sign in.');
     expect(panel.textContent).not.toMatch(/\$\d|fine/i);
-    await user.click(screen.getByRole('button', { name: 'Open Documents' }));
-    expect(onOpenDocuments).toHaveBeenCalled();
+    // The documents library, where a document is opened to the public. It was
+    // the editor's Documents tool, which went with the tool rail (Task 28).
+    expect(screen.getByRole('link', { name: 'Open Documents' })).toHaveAttribute(
+      'href',
+      '/communities/42/documents',
+    );
   });
 });
 

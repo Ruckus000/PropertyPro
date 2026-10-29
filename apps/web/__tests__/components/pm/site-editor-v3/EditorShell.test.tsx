@@ -15,11 +15,6 @@ vi.mock('@/hooks/use-media-query', () => ({
   useIsDesktop: () => !isNarrowMock.value,
 }));
 
-// `Partial<EditorShellProps>` rather than `Partial<ComponentProps<…>>`: the
-// component's props are that interface intersected with the all-or-nothing
-// `activeTool`/`onActiveToolChange` union, and `Partial` over a union produces
-// the half-controlled shape the union exists to forbid. No case here drives the
-// tool from outside, so the overrides are the non-tool props.
 // The phone gate lazy-loads UrgentNoticeForm (next/dynamic), which reads
 // through React Query. Without a provider, whether the notice-form cases pass
 // depended on chunk timing: on a fast machine "Back" was clicked before the
@@ -71,7 +66,6 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       communityId={42}
       hasPublishedSite
       initialNotice={null}
-      renderToolPanel={(tool) => <p>panel:{tool}</p>}
       canOpenPublish={false}
       // True by default because that is the ordinary state — it is false only
       // when BOTH page reads failed. Supplied explicitly rather than left to
@@ -119,7 +113,7 @@ describe('EditorShell — phone gate', () => {
     isNarrowMock.value = true;
     renderShell();
     expect(await screen.findByRole('heading', { name: /bigger screen/i })).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website areas' })).not.toBeInTheDocument();
   });
 
   it('unmounts the editor entirely rather than hiding it', async () => {
@@ -167,7 +161,7 @@ describe('EditorShell — phone gate', () => {
       await screen.findByRole('heading', { name: /post an urgent notice/i }),
     ).toBeInTheDocument();
     // Still no editor: the fast path is a sibling of the gate, not a way in.
-    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website areas' })).not.toBeInTheDocument();
     expect(screen.queryByText('canvas')).not.toBeInTheDocument();
   });
 
@@ -198,53 +192,41 @@ describe('EditorShell — composition', () => {
     expect(screen.getByText('canvas')).toBeInTheDocument();
   });
 
-  it('opens on the page, with no tool panel covering it', () => {
+  // Combined plan Task 28. Editing happens on the page; pages, design and the
+  // notice are Site settings tabs. Revert check: put `<ToolRail …/>` back.
+  it('the editor has no tool rail', () => {
     renderShell();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+    expect(screen.queryAllByTestId(/^site-editor-tool-/)).toEqual([]);
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
-    for (const tile of screen.getAllByTestId(/^site-editor-tool-/)) {
-      expect(tile).toHaveAttribute('aria-expanded', 'false');
-    }
+    expect(screen.queryByRole('button', { name: 'Close panel' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
+    // Control: the page and the top bar did render.
+    expect(screen.getByText('canvas')).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Website areas' })).toBeInTheDocument();
   });
 
-  it('opens a tool, names its panel, and closes it again from the same tile', async () => {
-    const user = userEvent.setup();
-    renderShell();
-    const notice = screen.getByRole('button', { name: /Notice/ });
-    await user.click(notice);
-    expect(screen.getByText('panel:notice')).toBeInTheDocument();
-    expect(notice).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('complementary', { name: 'Urgent notice' })).toHaveAttribute(
-      'id',
-      notice.getAttribute('aria-controls'),
-    );
-
-    await user.click(notice);
-    expect(screen.queryByText('panel:notice')).not.toBeInTheDocument();
-    expect(notice).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('closes the panel from its own close button', async () => {
-    const user = userEvent.setup();
-    renderShell();
-    await user.click(screen.getByRole('button', { name: /Notice/ }));
-    await user.click(screen.getByRole('button', { name: 'Close panel' }));
-    expect(screen.queryByText('panel:notice')).not.toBeInTheDocument();
+  it('puts the missing-records link in the top bar, in either area', () => {
+    const first = renderShell({ records: <a href="#records">3 missing records</a> });
+    expect(screen.getByRole('link', { name: '3 missing records' })).toBeInTheDocument();
+    first.unmount();
+    renderShell({ view: 'settings', records: <a href="#records">3 missing records</a> });
+    expect(screen.getByRole('link', { name: '3 missing records' })).toBeInTheDocument();
   });
 });
 
 describe('EditorShell — Help drawer', () => {
-  it('toggles the drawer from the top bar and from the rail, without opening a tool panel', async () => {
+  it('toggles the drawer from the top bar, its only opener', async () => {
     const user = userEvent.setup();
     const onHelpToggle = vi.fn();
     renderShell({ onHelpToggle });
-    const [topBar, rail] = screen.getAllByRole('button', { name: 'Help' });
-    await user.click(topBar!);
-    await user.click(rail!);
-    expect(onHelpToggle).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+    const openers = screen.getAllByRole('button', { name: 'Help' });
+    expect(openers).toHaveLength(1);
+    await user.click(openers[0]!);
+    expect(onHelpToggle).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the drawer over either area, and both openers say it is open', () => {
+  it('shows the drawer over either area, and its opener says it is open', () => {
     renderShell({
       helpOpen: true,
       help: <aside id="site-editor-help" aria-label="Help">guides</aside>,
@@ -317,7 +299,7 @@ describe('EditorShell — Editing page picker', () => {
     expect(trigger).toHaveFocus();
   });
 
-  it('routes "Add or manage pages" to the Pages tool', async () => {
+  it('routes "Add or manage pages" to the caller (Site settings, Pages)', async () => {
     const user = userEvent.setup();
     const onManagePages = vi.fn();
     renderShell({ onManagePages });
@@ -379,11 +361,8 @@ describe('EditorShell — scroll containers contain their sr-only regions', () =
   // jsdom has no layout, so this pins the class that does the work. Without
   // `relative`, an `sr-only` (position: absolute) live region inside a panel
   // anchors to the page and stretches the document past the viewport.
-  it('positions the tool panel and canvas scrollers', async () => {
-    const user = userEvent.setup();
+  it('positions the canvas scroller', () => {
     renderShell();
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    expect(screen.getByTestId('tool-panel-scroller')).toHaveClass('relative', 'overflow-y-auto');
     expect(screen.getByTestId('canvas-scroller')).toHaveClass('relative', 'overflow-y-auto');
   });
 });
@@ -405,12 +384,11 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
     expect(onViewChange).toHaveBeenCalledWith('settings');
   });
 
-  it('in Settings, shows the settings in place of the rail, canvas and page controls', () => {
+  it('in Settings, shows the settings in place of the canvas and page controls', () => {
     renderShell({ view: 'settings', children: <p>canvas body</p> });
 
     expect(screen.getByText('settings body')).toBeInTheDocument();
     expect(screen.getByTestId('settings-scroller')).toHaveClass('relative', 'overflow-y-auto');
-    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
     expect(screen.queryByText('canvas body')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Preview size' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('editing-page-name')).not.toBeInTheDocument();
@@ -422,6 +400,6 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
   it('in Website, does not render the settings', () => {
     renderShell();
     expect(screen.queryByText('settings body')).not.toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.getByText('canvas')).toBeInTheDocument();
   });
 });

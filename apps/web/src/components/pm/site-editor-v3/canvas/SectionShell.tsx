@@ -30,7 +30,7 @@ export interface SectionShellProps {
  *
  * Bounds are *not* re-checked here. `move` in the editor context already treats
  * the first-up and last-down cases as silent no-ops, and duplicating that test
- * is how the canvas and the Sections panel end up disagreeing about what is at
+ * is how the keyboard move and the toolbar end up disagreeing about what is at
  * the top of the list.
  *
  * The hero is selectable — a PM still needs to open its inspector — but has no

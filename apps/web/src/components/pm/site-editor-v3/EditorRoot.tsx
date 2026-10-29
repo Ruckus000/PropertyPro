@@ -38,15 +38,6 @@ const PublishSheet = dynamic(
 // Type-only: erased at build, so the sheet stays code-split.
 import type { SlotTarget } from './publish/PublishSheet';
 
-// Phase 7. Deferred for the same budget reason, and it works because the panel
-// body is only rendered when its tab is active — so the chunk (form + the Radix
-// alert-dialog stack behind the remove confirmation) is requested on the click,
-// not on mount. A PM who never posts a notice never pays for it.
-const UrgentNoticePanel = dynamic(
-  () => import('./panels/UrgentNoticePanel').then((m) => m.UrgentNoticePanel),
-  { loading: () => null },
-);
-
 // v4 Phase 5. The Settings view (site icon, footer, search, sharing image,
 // web address and custom domain) is fetched when the PM switches to it, for
 // the same budget reason as every panel: the web JS aggregate has little
@@ -56,19 +47,13 @@ const SettingsView = dynamic(
   { loading: () => null },
 );
 
-// Same reasoning again: only the active tool's panel is rendered, so the Add
-// catalog — and, behind its own nested dynamic import, the image upload flow —
-// is fetched on the tab click. A PM editing existing sections never pays for it.
-const AddPanel = dynamic(() => import('./panels/AddPanel').then((m) => m.AddPanel), {
+// Same reasoning again: the Add a part dialog is mounted only while open, so
+// the Radix dialog stack and the section catalog — and, behind its own nested
+// dynamic import, the image upload flow — arrive on the first "Add a part"
+// click. A PM editing existing sections never pays for them.
+const AddPartDialog = dynamic(() => import('./AddPartDialog').then((m) => m.AddPartDialog), {
   loading: () => null,
 });
-
-// Split for the same budget reason as everything above. Design carries the
-// colour-set grid and the custom-colour pickers.
-const DesignPanel = dynamic(
-  () => import('./panels/DesignPanel').then((m) => m.DesignPanel),
-  { loading: () => null },
-);
 // v4 Phase 3. Mounted only while open, so its guide reader (the help modal's
 // article body, figures and lightbox) is fetched on the first Help click.
 const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpDrawer), {
@@ -77,22 +62,11 @@ const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpD
 // Type-only: erased at build, so the chunk is not pulled in.
 import type { HelpAction } from './help/guides';
 import { DEFAULT_SETTINGS_TAB, type SettingsTabId } from './settings/settings-tabs';
+// The top bar's missing-records link; its query stays out of the first load.
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
   { ssr: false, loading: () => null },
 );
-const DocumentsPanel = dynamic(
-  () => import('./panels/DocumentsPanel').then((m) => m.DocumentsPanel),
-  { loading: () => null },
-);
-
-// Phase 11b-3. Same reasoning as every panel above — only the ACTIVE tool's
-// panel is rendered, so the pages list and its query only arrive on the tab
-// click. The route sits at ~640 KiB of a 700 KiB HARD budget, and a statically
-// imported panel is a cost every PM pays whether or not they ever open it.
-const PagesPanel = dynamic(() => import('./panels/PagesPanel').then((m) => m.PagesPanel), {
-  loading: () => null,
-});
 // Code-split, for the same reason as PreviewDialog/PublishSheet above: the
 // inspector renders nothing until a section is selected, but a static import
 // put its whole subtree — the form registry, and every form's shared field
@@ -107,8 +81,6 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Canvas } from './canvas/Canvas';
 import { SiteEditorProvider, useSiteEditor } from './editor-context';
-import { SectionList } from './panels/SectionList';
-import type { EditorToolId } from './tools';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 import { UndoableRemoveProvider } from './undoable-remove-context';
 import { useSitePages, type SitePageSummary } from '@/hooks/use-site-pages';
@@ -237,10 +209,10 @@ function resolveStylingTheme(canvasContext: CanvasContext | null): StylingPanelT
  * Client root of the v3 editor — the seam where state lives.
  *
  * Phase 2b-2 mounts `SiteEditorProvider` here rather than inside the canvas,
- * because selection and reordering are driven from two different columns: the
- * canvas and the Sections tool panel. Both read the same block list; the query
- * key is shared with `Canvas`'s own `useContentBlocks` call, so this adds no
- * second request.
+ * because selection and reordering are driven from more than the canvas: the
+ * inspector, the Add a part dialog and the publish sheet's "Fix this" read it
+ * too. The query key is shared with `Canvas`'s own `useContentBlocks` call, so
+ * this adds no second request.
  *
  * Phase 3 adds the status line, and Phase 4 hangs the change model off here.
  */
@@ -265,8 +237,6 @@ export function EditorRoot({
   initialSettingsTab = DEFAULT_SETTINGS_TAB,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
-  // The Documents tool's count, reported by the code-split `RecordsAttention`.
-  const [recordsAttention, setRecordsAttention] = useState(0);
   // The canvas, preview and publish-sheet contrast check all show the DRAFT
   // look (website builder v4), which changes as the Design panel saves. The
   // server context carries the live look; this re-derives theme and layout
@@ -289,8 +259,6 @@ export function EditorRoot({
     isPending: diffPending,
     isError: diffFailed,
   } = useSiteDiff(communityId);
-  // Closed by default — the v4 builder opens on the page, not on a panel.
-  const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
   // v4 Phase 5: the page being built, or Site settings.
   const [view, setView] = useState<EditorView>(initialView);
   // The Site settings tab showing, or asked for by a link or a Help guide's
@@ -365,12 +333,12 @@ export function EditorRoot({
    * released by the panel the moment it acts on it, via
    * `PagesPanelProps.onFocusRestored`.
    *
-   * That release is load-bearing, not tidiness. `PagesPanel` is rendered behind
-   * `if (tool === 'pages')`, so it unmounts on a tool switch and remounts on the
-   * way back. While the flag merely latched, the ordinary journey — click a
-   * page, go to Sections to add content, return to Pages — remounted the panel
-   * with a stale `true` and yanked focus onto the row, which is precisely the
-   * ambush the paragraph above says this flag prevents.
+   * That release is load-bearing, not tidiness. `PagesPanel` lives in Site
+   * settings' Pages tab, so it unmounts when the PM goes back to the page and
+   * remounts on the way back. While the flag merely latched, the ordinary
+   * journey — click a page, go to the page to add content, return to Pages —
+   * remounted the panel with a stale `true` and yanked focus onto the row,
+   * which is precisely the ambush the paragraph above says this flag prevents.
    */
   const [focusSelectedRow, setFocusSelectedRow] = useState(false);
   const handleFocusRestored = useCallback(() => setFocusSelectedRow(false), []);
@@ -574,14 +542,14 @@ export function EditorRoot({
   }, [home, selectionNeedsRepair, selectedPageId, selfRemovedPageId]);
 
   /*
-   * D-C2. The provider feeds `SectionList` — the DEFAULT tool — and the
-   * Inspector, both of which sit beside the canvas and are read as one view
-   * with it, so they get the same narrowing `Canvas` applies.
+   * D-C2. The provider feeds the section controls and the Inspector, which sit
+   * on and beside the canvas and are read as one view with it, so they get the
+   * same narrowing `Canvas` applies.
    *
-   * Unfiltered, they listed every page's sections next to a one-page canvas,
-   * and selecting a foreign row opened the Inspector on a block whose write
-   * `assertSlotFreeAcrossPages` rejects — the selected page's id travels with
-   * it (D-WRITE) and does not match the block's slot. A brand-new empty page
+   * Unfiltered, the old Sections list showed every page's sections next to a
+   * one-page canvas, and selecting a foreign row opened the Inspector on a
+   * block whose write `assertSlotFreeAcrossPages` rejects — the selected page's
+   * id travels with it (D-WRITE) and does not match the block's slot. A brand-new empty page
    * showed home's sections instead of its empty state.
    *
    * The whole-site list is still what the publish diff and the slot allocator
@@ -689,6 +657,9 @@ export function EditorRoot({
       queueMicrotask(() => retryPagesRef.current?.focus());
     }
     setPreviewOpen(false);
+    // The Add a part dialog is gated the same way, for the same reason: it
+    // must not spring back open when the read recovers.
+    setAddOpen(false);
   }, [pagesUnavailable]);
 
   // The return leg. Separate effect rather than an `else` above, because it
@@ -752,9 +723,9 @@ export function EditorRoot({
   }, []);
   const handlePreview = useCallback(() => setPreviewOpen(true), []);
   const handlePublish = useCallback(() => setPublishOpen(true), []);
-  // "Fix this" hands back the PAGE and the block_order slot together. Surfacing
-  // the Sections panel is this component's job; selecting the row needs the
-  // editor context, so it happens one level down in PublishSheetMount.
+  // "Fix this" hands back the PAGE and the block_order slot together. Showing
+  // the page is this component's job; selecting the section needs the editor
+  // context, so it happens one level down in PublishSheetMount.
   //
   // It also switches PAGE when the offending section is on another one. Since
   // D-C2 the editor context is page-scoped while the publish sheet's issues
@@ -776,13 +747,11 @@ export function EditorRoot({
   // it did, the `key` remount would discard the selection. So the intent is
   // parked in `pendingSelectSlot` and honoured by the provider that replaces
   // this one, which is the first instance whose blocks are the right page's.
-  // Takes the PM to a section, switching page if it is on another one. The
-  // checklist's "Show me" uses this without `handleSelectSlot`'s Sections
-  // panel, which would cover the checklist the PM is working through.
+  // Takes the PM to a section, switching page if it is on another one.
   const handleGoToSlot = useCallback(
     (target: SlotTarget) => {
       // Reachable from Settings too (requirements pill, Publish's "Fix this"),
-      // whose view hides the rail and canvas this lands on.
+      // whose view hides the canvas this lands on.
       setView('website');
       const targetPageId = Number(target.pageId);
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
@@ -795,61 +764,80 @@ export function EditorRoot({
     },
     [effectivePageId],
   );
-  const handleSelectSlot = useCallback(
-    (target: SlotTarget) => {
-      setActiveTool('sections');
-      handleGoToSlot(target);
-    },
-    [handleGoToSlot],
-  );
   const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
-  // The empty states in the Sections panel and on the canvas both name adding a
-  // section; this is what makes them able to do it. Passed as a prop rather
-  // than read from context because `setActiveTool` lives HERE — the provider's
-  // parent — and only `useSiteEditor` is out of reach from this component.
-  const handleGoToAdd = useCallback(() => {
-    setView('website');
-    setActiveTool('add');
-  }, []);
 
   /*
-   * v4 "Add section here": which section the next add goes above.
+   * Site settings, on one tab: the route every caller that used to open a rail
+   * tool now takes — "Add or manage pages", the staged-page banner, the publish
+   * sheet's "Go to Pages", the canvas's navigation bar, the Add a part
+   * dialog's "Manage pages", and Help's "Show me".
+   */
+  const openSettingsTab = useCallback((tab: SettingsTabId) => {
+    setView('settings');
+    setSettingsTab(tab);
+  }, []);
+  const handleGoToPages = useCallback(() => openSettingsTab('pages'), [openSettingsTab]);
+
+  /*
+   * "Add a part" (combined plan Task 28): which section the next add goes
+   * above, and whether the dialog is open.
    *
-   * Owned HERE, not by the Add panel or the editor context. The first version
-   * lived in the context and the panel cleared it in an unmount cleanup, which
-   * React StrictMode's mount → cleanup → mount fired the moment the panel
-   * opened — so in the dev editor every "Add section here" appended. Found in
-   * the browser; the jsdom tests do not run StrictMode.
+   * The target is owned HERE, not by the Add panel or the editor context. The
+   * first version lived in the context and the panel cleared it in an unmount
+   * cleanup, which React StrictMode's mount → cleanup → mount fired the moment
+   * the panel opened — so in the dev editor every "Add section here" appended.
+   * Found in the browser; the jsdom tests do not run StrictMode.
    *
    * Keyed on the page it was picked on, so a page switch drops it without an
-   * effect. Cleared when the PM picks ANY tool from the rail (including Add
-   * itself), because a rail click says nothing about position.
+   * effect. An opener with no position (Help, the requirements pill, the empty
+   * page, the end of the page) clears it, so those add to the end.
    */
   const [addTarget, setAddTarget] = useState<{ pageId: number | null; blockId: number } | null>(
     null,
   );
+  const [addOpen, setAddOpen] = useState(false);
+  /** The "Add a part" button that opened the dialog; focus goes back to it. */
+  const addOpenerRef = useRef<HTMLElement | null>(null);
   const insertBefore =
     addTarget !== null && addTarget.pageId === effectivePageId ? addTarget.blockId : null;
-  const handleInsertAt = useCallback(
-    (beforeBlockId: number | null) => {
+  const openAdd = useCallback(
+    (beforeBlockId: number | null, opener: HTMLElement | null) => {
+      setView('website');
       setAddTarget(
         beforeBlockId === null ? null : { pageId: effectivePageId, blockId: beforeBlockId },
       );
-      setActiveTool('add');
+      addOpenerRef.current =
+        opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      setAddOpen(true);
     },
     [effectivePageId],
   );
-  const handleToolChange = useCallback((tool: EditorToolId | null) => {
-    setAddTarget(null);
-    setActiveTool(tool);
+  const handleInsertAt = useCallback(
+    (beforeBlockId: number | null, opener: HTMLElement) => openAdd(beforeBlockId, opener),
+    [openAdd],
+  );
+  // The requirements pill's "Add" for a required section no page has: to the end.
+  const handleGoToAdd = useCallback(() => openAdd(null, null), [openAdd]);
+  const handleAddOpenChange = useCallback((open: boolean) => {
+    setAddOpen(open);
+    if (!open) setAddTarget(null);
   }, []);
   const handleInsertConsumed = useCallback(() => setAddTarget(null), []);
-  // The publish sheet's route out of a page-set problem — a duplicate address
-  // or a missing home page has no section slot, so "Fix this" cannot reach it.
-  const handleGoToPages = useCallback(() => {
-    setView('website');
-    setActiveTool('pages');
+  // The dialog closes once a part is added — the new section's settings open
+  // beside the page — and its own live region goes with it, so the addition is
+  // announced from the editor's region, which outlives it.
+  const handleAdded = useCallback((label: string) => {
+    setAddOpen(false);
+    setAddTarget(null);
+    setPageAnnouncement(`${label} section added. Its settings are open.`);
   }, []);
+  // The dialog's "Manage pages": the navigation bar is built from the pages.
+  const handleAddGoToPages = useCallback(() => {
+    setAddOpen(false);
+    setAddTarget(null);
+    openSettingsTab('pages');
+  }, [openSettingsTab]);
+
   const handleViewChange = useCallback((next: EditorView) => {
     setView(next);
     // Spent: the PM's own switch opens Site settings on its first tab again.
@@ -858,25 +846,19 @@ export function EditorRoot({
   const handleHelpToggle = useCallback(() => setHelpOpen((open) => !open), []);
   const handleHelpClose = useCallback(() => setHelpOpen(false), []);
   const canOpenPublish = diff.changes.length > 0 || diffFailed;
-  const handleShowMe = useCallback((action: HelpAction) => {
-    if (action.kind === 'tool') {
-      setView('website');
-      // Like a rail click: says nothing about position, so "Open Add" appends.
-      setAddTarget(null);
-      setActiveTool(action.tool);
-    } else if (action.kind === 'settings') {
-      setView('settings');
-      setSettingsTab(action.tab);
-    } else {
-      setPublishOpen(true);
-    }
-  }, []);
-
-  // Settings → Access links to the records: back to the page, Documents open.
-  const handleOpenDocuments = useCallback(() => {
-    setView('website');
-    setActiveTool('documents');
-  }, []);
+  const handleShowMe = useCallback(
+    (action: HelpAction) => {
+      if (action.kind === 'add') {
+        // Says nothing about position, so the part goes at the end.
+        openAdd(null, null);
+      } else if (action.kind === 'settings') {
+        openSettingsTab(action.tab);
+      } else {
+        setPublishOpen(true);
+      }
+    },
+    [openAdd, openSettingsTab],
+  );
 
   return (
     <SelectedSitePageProvider pageId={effectivePageId}>
@@ -928,23 +910,17 @@ export function EditorRoot({
         key={effectivePageId ?? 'none'}
         communityId={communityId}
         blocks={pageBlocks}
-        // No `onSelect`: in v4 selecting a section opens its inspector and
-        // toolbar in place. Pulling the Sections panel forward as well would
-        // cover a third of the canvas the PM just clicked on.
+        // No `onSelect`: selecting a section opens its inspector and toolbar
+        // in place, and that is all it needs to do.
         // Cross-page "Fix this": this instance is the one that can resolve it.
         selectSlotOnMount={pendingSelectSlot}
         onSlotSelected={handleSlotSelected}
       >
       <AutosaveStatusProvider>
-      {/* Apartments have no records checklist (the route refuses them), so
-          they never ask. */}
-      {siteIdentity.communityType !== 'apartment' ? (
-        <RecordsAttention communityId={communityId} onCount={setRecordsAttention} />
-      ) : null}
       <EditorShell
         communityName={communityName}
-        // The only thing on screen naming the page while the Sections tool is
-        // open — see `EditorTopBarProps.pageName`.
+        // The only thing on screen naming the page — see
+        // `EditorTopBarProps.pageName`.
         pageName={selectedPage?.name}
         pages={pages ?? initialPages}
         selectedPageId={effectivePageId}
@@ -954,7 +930,19 @@ export function EditorRoot({
         device={device}
         onDeviceChange={setDevice}
         requirements={
-          <RequirementsPill onGoToSection={handleSelectSlot} onAddSection={handleGoToAdd} />
+          <RequirementsPill onGoToSection={handleGoToSlot} onAddSection={handleGoToAdd} />
+        }
+        // Condos and HOAs only: apartments owe no records, and the count's
+        // route refuses them. The page has already required a manager with
+        // the site editor, the rest of the sidebar badge's condition.
+        records={
+          <RecordsAttention
+            communityId={communityId}
+            enabled={
+              siteIdentity.communityType === 'condo_718' ||
+              siteIdentity.communityType === 'hoa_720'
+            }
+          />
         }
         publicSiteUrl={publicSiteUrl}
         view={view}
@@ -968,7 +956,6 @@ export function EditorRoot({
               initialSettings={initialSiteSettings}
               publicSiteUrl={publicSiteUrl}
               hasSiteCustomDomain={hasSiteCustomDomain}
-              onOpenDocuments={handleOpenDocuments}
               tabRequest={settingsTabRequest}
               onTabChange={setSettingsTab}
               pagesPanel={{
@@ -1000,12 +987,9 @@ export function EditorRoot({
             />
           ) : null
         }
-        toolBadges={recordsAttention > 0 ? { documents: recordsAttention } : undefined}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
-        activeTool={activeTool}
-        onActiveToolChange={handleToolChange}
         onPreview={handlePreview}
         onPublish={handlePublish}
         // Openable when there is something to publish — and also when the diff
@@ -1066,83 +1050,13 @@ export function EditorRoot({
               title={`"${selectedPage?.name ?? 'This page'}" is set to be removed.`}
               description="It stays on your live site until you publish, and the publish deletes it along with everything on it — including anything you change here now."
               action={
-                <Button size="sm" variant="outline" onClick={() => setActiveTool('pages')}>
+                <Button size="sm" variant="outline" onClick={handleGoToPages}>
                   Go to Pages
                 </Button>
               }
             />
           ) : null
         }
-        renderToolPanel={(tool) => {
-          // Nothing that writes a BLOCK is offered while the page is unknown —
-          // a write with no page id defaults to the live home page, which is
-          // precisely the silent wrong-page save the banner is warning about.
-          // The other tools are unaffected: they are not page-scoped.
-          if (pagesUnavailable && (tool === 'sections' || tool === 'add')) {
-            return (
-              <p className="p-4 text-sm text-content-secondary">
-                Sections are unavailable until this site&apos;s pages load.
-              </p>
-            );
-          }
-          if (tool === 'sections') return <SectionList onAddSection={handleGoToAdd} />;
-          if (tool === 'add') {
-            return (
-              <AddPanel
-                communityId={communityId}
-                hasPolishBlocks={hasPolishBlocks}
-                insertBefore={insertBefore}
-                onInsertConsumed={handleInsertConsumed}
-                onGoToPages={handleGoToPages}
-              />
-            );
-          }
-          if (tool === 'notice') {
-            return (
-              <UrgentNoticePanel
-                communityId={communityId}
-                hasPublishedSite={hasPublishedSite}
-                initialNotice={initialNotice}
-              />
-            );
-          }
-          if (tool === 'design') {
-            return (
-              <DesignPanel
-                communityId={communityId}
-                presets={presets}
-                hasSiteCustomCss={hasSiteCustomCss}
-                theme={resolveStylingTheme(canvasContext)}
-              />
-            );
-          }
-          if (tool === 'pages') {
-            return (
-              <PagesPanel
-                communityId={communityId}
-                selectedPageId={effectivePageId}
-                restoreFocusToSelectedRow={focusSelectedRow}
-                onFocusRestored={handleFocusRestored}
-                onSelectPage={handleSelectPage}
-                onPageRemoved={handlePageRemoved}
-              />
-            );
-          }
-          if (tool === 'documents') {
-            return (
-              <DocumentsPanel
-                communityId={communityId}
-                communityType={siteIdentity.communityType}
-              />
-            );
-          }
-          // Every tool in EDITOR_TOOLS now has a panel. This assignment is the
-          // exhaustiveness check: adding an id to EDITOR_TOOLS without a branch
-          // above fails typecheck here, instead of shipping a tab that renders
-          // "not built yet" to a manager.
-          const unhandled: never = tool;
-          return unhandled;
-        }}
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here — except while the
         // page is unknown, where an inspector save would target home.
@@ -1226,8 +1140,27 @@ export function EditorRoot({
           theme={canvasContext?.theme ?? null}
           layout={canvasContext?.layout ?? null}
           onOpenChange={setPublishOpen}
-          onFixIssue={handleSelectSlot}
+          onFixIssue={handleGoToSlot}
           onGoToPages={handleGoToPages}
+        />
+      ) : null}
+
+      {/*
+        * Inside the page-keyed provider: the catalog selects the section it
+        * adds, and positions it, through the editor context. Withheld while the
+        * page is unknown, like the canvas and the inspector: a section written
+        * now would land on the live home page.
+        */}
+      {addOpen && !pagesUnavailable ? (
+        <AddPartDialog
+          onOpenChange={handleAddOpenChange}
+          restoreFocusTo={addOpenerRef}
+          communityId={communityId}
+          hasPolishBlocks={hasPolishBlocks}
+          insertBefore={insertBefore}
+          onInsertConsumed={handleInsertConsumed}
+          onAdded={handleAdded}
+          onGoToPages={handleAddGoToPages}
         />
       ) : null}
       </AutosaveStatusProvider>
