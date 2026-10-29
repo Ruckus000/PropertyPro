@@ -301,6 +301,7 @@ async function applyLink(
   communityId: number,
   link: PlannedRecordLink,
   actorUserId: string | null,
+  auditMetadata: Readonly<Record<string, string>> = {},
 ): Promise<boolean> {
   const scoped = createScopedClient(communityId);
   // The document's own posting date, read by the statement that writes the link.
@@ -331,7 +332,9 @@ async function applyLink(
     resourceId: String(link.itemId),
     communityId,
     newValues: { documentId: link.documentId },
-    metadata: { linkedBy: 'auto_match', templateKey: link.templateKey },
+    // The caller's extras come first so they can never replace the two keys that
+    // every automatic link carries.
+    metadata: { ...auditMetadata, linkedBy: 'auto_match', templateKey: link.templateKey },
   });
   return true;
 }
@@ -396,15 +399,20 @@ export async function planCommunityRecordLinks(communityId: number): Promise<Pla
  * Write planned links, each through the guarded UPDATE: a link whose item was
  * linked, or whose document stopped being eligible, since the plan was read is
  * skipped. Returns how many landed.
+ *
+ * `auditMetadata` is merged into each audit row's `metadata`, beside
+ * `linkedBy` and `templateKey`. The backfill script uses it to name the operator
+ * (`{ operator, source: 'backfill' }`); the request-time callers pass nothing.
  */
 export async function applyRecordLinks(
   communityId: number,
   links: readonly PlannedRecordLink[],
   actorUserId: string | null,
+  auditMetadata?: Readonly<Record<string, string>>,
 ): Promise<number> {
   let linked = 0;
   for (const link of links) {
-    if (await applyLink(communityId, link, actorUserId)) linked++;
+    if (await applyLink(communityId, link, actorUserId, auditMetadata)) linked++;
   }
   return linked;
 }

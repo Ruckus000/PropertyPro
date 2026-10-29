@@ -391,6 +391,31 @@ describe('autoLinkCommunityRecords', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  it('applyRecordLinks adds the caller\'s audit metadata beside linkedBy and templateKey, and cannot replace them', async () => {
+    db.docs = [doc(100, '2026 Annual Budget')];
+    const plan = await planCommunityRecordLinks(42);
+
+    await expect(
+      applyRecordLinks(42, plan.links, null, {
+        operator: 'Jane Doe',
+        source: 'backfill',
+        linkedBy: 'someone_else',
+        templateKey: 'spoofed',
+      }),
+    ).resolves.toBe(1);
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          operator: 'Jane Doe',
+          source: 'backfill',
+          linkedBy: 'auto_match',
+          templateKey: '718_budget',
+        },
+      }),
+    );
+  });
+
   it('applyRecordLinks skips a planned link whose item a person linked after the plan', async () => {
     db.docs = [doc(100, '2026 Annual Budget')];
     const plan = await planCommunityRecordLinks(42);

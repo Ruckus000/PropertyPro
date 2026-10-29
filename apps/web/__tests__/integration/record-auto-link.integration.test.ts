@@ -195,6 +195,27 @@ describeDb('record auto-link (db-backed integration)', () => {
     });
   });
 
+  it('applyRecordLinks writes the operator into the audit row beside the automatic-link keys', async () => {
+    const { communityId, categoryId, itemId } = await seedCondoWithBudgetItem('operator');
+    const budget = await seedBudget(communityId, categoryId, '2026 Annual Budget');
+
+    const plan = await planCommunityRecordLinks(communityId);
+    await expect(
+      applyRecordLinks(communityId, plan.links, null, { operator: 'Jane Doe', source: 'backfill' }),
+    ).resolves.toBe(1);
+
+    expect((await readItem(itemId))?.documentId).toBe(budget);
+    const audit = await autoMatchAuditRows(communityId);
+    expect(audit).toHaveLength(1);
+    expect(audit[0]?.userId).toBeNull();
+    expect(audit[0]?.metadata).toEqual({
+      linkedBy: 'auto_match',
+      templateKey: '718_budget',
+      operator: 'Jane Doe',
+      source: 'backfill',
+    });
+  });
+
   it('a link a person makes between the plan and the write is never replaced', async () => {
     const { communityId, categoryId, itemId } = await seedCondoWithBudgetItem('race-link');
     const budget = await seedBudget(communityId, categoryId, '2026 Annual Budget');
