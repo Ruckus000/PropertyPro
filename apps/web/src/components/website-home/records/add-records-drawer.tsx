@@ -113,6 +113,10 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
   rowsRef.current = rows;
   const nextKey = useRef(0);
   const resultsHeading = useRef<HTMLHeadingElement>(null);
+  const mayApplyHeading = useRef<HTMLHeadingElement>(null);
+  const postButton = useRef<HTMLButtonElement>(null);
+  const chooseInput = useRef<HTMLInputElement>(null);
+  const [markCount, setMarkCount] = useState(0);
   const attestationId = useId();
 
   const mayApply = useMemo(
@@ -120,7 +124,9 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
     [conditional, markedIds],
   );
   const items = useMemo(() => [...missing, ...mayApply], [missing, mayApply]);
-  const itemById = useMemo(() => new Map(items.map((item) => [item.itemId, item])), [items]);
+  // Every record, marked or not: a file that already uploaded keeps its record.
+  const allItems = useMemo(() => [...missing, ...conditional], [missing, conditional]);
+  const itemById = useMemo(() => new Map(allItems.map((item) => [item.itemId, item])), [allItems]);
 
   /** The category a record files under, by id and by name. */
   const categoryFor = useCallback(
@@ -141,7 +147,9 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
       if (!item) return null;
       const category = categoryFor(item);
       if (category.id == null) return null;
-      return { item, categoryId: category.id, sensitive: categoryRequiresRedactionAttestation(category.name) };
+      // A file already uploaded is only linked on a retry: nothing more is published, so nothing to attest to.
+      const sensitive = row.documentId == null && categoryRequiresRedactionAttestation(category.name);
+      return { item, categoryId: category.id, sensitive };
     },
     [categoryFor, itemById],
   );
@@ -269,6 +277,18 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
     if (sendCount > 0) resultsHeading.current?.focus();
   }, [sendCount]);
 
+  // The button that opened "Doesn't apply" is gone once its record is marked, so
+  // focus goes to the group's heading, or to Post when the group has emptied.
+  useEffect(() => {
+    if (markCount === 0) return;
+    if (mayApplyHeading.current) {
+      mayApplyHeading.current.focus();
+      return;
+    }
+    postButton.current?.focus();
+    if (document.activeElement !== postButton.current) chooseInput.current?.focus();
+  }, [markCount]);
+
   return (
     <Sheet open onOpenChange={(open) => !open && !isSending && onClose()}>
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
@@ -309,6 +329,7 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
               <input
                 type="file"
                 multiple
+                ref={chooseInput}
                 className="sr-only"
                 accept={DOCUMENT_ACCEPT}
                 disabled={isSending}
@@ -338,6 +359,7 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
                   key={row.key}
                   row={row}
                   items={items}
+                  allItems={allItems}
                   claimedBy={rows}
                   disabled={isSending}
                   noCategory={
@@ -370,42 +392,50 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
             </div>
           )}
 
-          {outcomes.length > 0 && (
-            <section aria-labelledby={`${attestationId}-results`} className="space-y-2">
-              <h3
-                id={`${attestationId}-results`}
-                ref={resultsHeading}
-                tabIndex={-1}
-                className="text-sm font-semibold text-content outline-none focus-visible:ring-2 focus-visible:ring-focus"
-              >
-                {outcomeHeading(outcomes)}
-              </h3>
-              <div role="status">
-                <ul className="space-y-2">
-                  {outcomes.map((outcome) => (
-                    <li
-                      key={outcome.key}
-                      className={cn(
-                        'flex items-start gap-2 text-sm',
-                        outcome.ok ? 'text-status-success' : 'text-status-danger',
-                      )}
-                    >
-                      {outcome.ok ? (
-                        <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                      ) : (
-                        <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-                      )}
-                      <span>{outcome.text}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </section>
-          )}
+          {/* Present from the start and empty, so what is added to it is announced. */}
+          <div role="status">
+            {outcomes.length > 0 && (
+              <section aria-labelledby={`${attestationId}-results`} className="space-y-2">
+                <h3
+                  id={`${attestationId}-results`}
+                  ref={resultsHeading}
+                  tabIndex={-1}
+                  className="text-sm font-semibold text-content outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                >
+                  {outcomeHeading(outcomes)}
+                </h3>
+                <div>
+                  <ul className="space-y-2">
+                    {outcomes.map((outcome) => (
+                      <li
+                        key={outcome.key}
+                        className={cn(
+                          'flex items-start gap-2 text-sm',
+                          outcome.ok ? 'text-status-success' : 'text-status-danger',
+                        )}
+                      >
+                        {outcome.ok ? (
+                          <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                        )}
+                        <span>{outcome.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </section>
+            )}
+          </div>
 
           {mayApply.length > 0 && (
             <section aria-labelledby={`${attestationId}-may-apply`} className="space-y-2">
-              <h3 id={`${attestationId}-may-apply`} className="text-sm font-semibold text-content">
+              <h3
+                id={`${attestationId}-may-apply`}
+                ref={mayApplyHeading}
+                tabIndex={-1}
+                className="text-sm font-semibold text-content outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
                 May apply to you
               </h3>
               <p className="text-sm text-content-secondary">
@@ -445,7 +475,13 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
           <Button variant="outline" className={TOUCH} disabled={isSending} onClick={onClose}>
             {outcomes.length > 0 ? 'Done' : 'Cancel'}
           </Button>
-          <Button className={TOUCH} loading={isSending} disabled={!canPost} onClick={() => void postRows()}>
+          <Button
+            ref={postButton}
+            className={TOUCH}
+            loading={isSending}
+            disabled={!canPost}
+            onClick={() => void postRows()}
+          >
             {postable.length > 0 ? `Post ${postable.length} record${postable.length === 1 ? '' : 's'}` : 'Post records'}
           </Button>
         </SheetFooter>
@@ -460,8 +496,13 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
               setMarkedIds((current) => new Set(current).add(applying.itemId));
               // A file that was aimed at this record has nowhere to go.
               setRows((current) =>
-                current.map((row) => (row.itemId === applying.itemId ? { ...row, itemId: null, matched: false } : row)),
+                current.map((row) =>
+                  row.itemId === applying.itemId && row.documentId == null
+                    ? { ...row, itemId: null, matched: false }
+                    : row,
+                ),
               );
+              setMarkCount((n) => n + 1);
               void qc.invalidateQueries({ queryKey: recordsAlertQueryKey(communityId) });
             }
             setApplying(null);
@@ -484,6 +525,7 @@ function outcomeHeading(outcomes: readonly Outcome[]): string {
 function FileRowItem({
   row,
   items,
+  allItems,
   claimedBy,
   disabled,
   noCategory,
@@ -492,6 +534,8 @@ function FileRowItem({
 }: {
   row: DropRow;
   items: readonly MissingRecord[];
+  /** Every record, for naming the one a locked row is filed under. */
+  allItems: readonly MissingRecord[];
   /** Every row, to tell which records another file has already claimed. */
   claimedBy: readonly DropRow[];
   disabled: boolean;
@@ -501,7 +545,9 @@ function FileRowItem({
   onRemove: () => void;
 }) {
   const refused = row.verdict.kind === 'error';
-  const chosen = items.find((item) => item.itemId === row.itemId);
+  const chosen = allItems.find((item) => item.itemId === row.itemId);
+  // Uploaded already, so it is filed under this record's category (and attested for it): the record cannot change.
+  const locked = row.documentId != null;
   const [picking, setPicking] = useState(false);
   const selectId = useId();
   const changeButton = useRef<HTMLButtonElement>(null);
@@ -571,22 +617,24 @@ function FileRowItem({
                   Matched
                 </span>
               )}
-              <Button
-                ref={changeButton}
-                variant="link"
-                size="sm"
-                className={cn('h-auto p-0', TOUCH)}
-                aria-expanded={picking}
-                aria-label={`Change record for ${row.file.name}`}
-                disabled={disabled}
-                onClick={() => setPicking((open) => !open)}
-              >
-                Change
-              </Button>
+              {!locked && (
+                <Button
+                  ref={changeButton}
+                  variant="link"
+                  size="sm"
+                  className={cn('h-auto p-0', TOUCH)}
+                  aria-expanded={picking}
+                  aria-label={`Change record for ${row.file.name}`}
+                  disabled={disabled}
+                  onClick={() => setPicking((open) => !open)}
+                >
+                  Change
+                </Button>
+              )}
             </div>
           )}
 
-          {(!chosen || picking) && (
+          {!locked && (!chosen || picking) && (
             <div className="space-y-1">
               <label htmlFor={selectId} className="block text-xs font-medium text-content-secondary">
                 Which record is this?

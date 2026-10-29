@@ -352,6 +352,44 @@ describe('posting', () => {
     expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100 });
   });
 
+  it('once a file has uploaded, its record is locked: no Change, and the retry links the original record', async () => {
+    linkMock.mockRejectedValueOnce(new Error('PATCH failed: 500'));
+    const { user } = renderDrawer({ missing: [BYLAWS, INSURANCE] });
+    await drop(user, pdf('bylaws.pdf'));
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+    await screen.findByText(/bylaws.pdf is posted, but we couldn't link it/);
+
+    const row = within(rowOf('bylaws.pdf'));
+    expect(row.getByText('Bylaws')).toBeInTheDocument();
+    expect(row.queryByRole('button', { name: /change record/i })).not.toBeInTheDocument();
+    expect(row.queryByRole('combobox')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+
+    await waitFor(() => expect(screen.getByText('Posted bylaws.pdf as Bylaws.')).toBeInTheDocument());
+    expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100 });
+    expect(linkedItemsOf(100)).toEqual([BYLAWS.itemId]);
+  });
+
+  it('a link-only retry asks for no attestation again', async () => {
+    linkMock.mockRejectedValueOnce(new Error('PATCH failed: 500'));
+    const { user } = renderDrawer({ missing: [REPORT] });
+    await drop(user, pdf('2025-financial-report.pdf'));
+    await user.click(screen.getByRole('checkbox')); // Financial Records is sensitive
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+    await screen.findByText(/is posted, but we couldn't link it/);
+
+    // Nothing more is uploaded on the retry, so there is nothing to attest to.
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Post 1 record' });
+    expect(retry).toBeEnabled();
+
+    await user.click(retry);
+
+    await waitFor(() => expect(screen.getByText(/^Posted 2025-financial-report\.pdf/)).toBeInTheDocument());
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+  });
+
   it('a file re-pointed with Change ends up linked only to the chosen record', async () => {
     const { user } = renderDrawer();
     // Named for the budget: left alone, the server would link it there by itself.
@@ -400,6 +438,39 @@ describe('may apply', () => {
     expect(markMock).toHaveBeenCalledWith({ itemId: SIRS.itemId, reason: 'The building is under three stories' });
     expect(screen.queryByText('Structural integrity reserve study')).not.toBeInTheDocument();
     expect(screen.getByText('Video recordings of meetings')).toBeInTheDocument();
+  });
+});
+
+describe('focus and announcements', () => {
+  it('the results region is on the page from the start, empty', () => {
+    renderDrawer();
+
+    const status = screen.getByRole('status');
+    expect(status).toBeEmptyDOMElement();
+  });
+
+  it('after Doesn\'t apply, focus moves to the May apply heading while the group has items', async () => {
+    const { user } = renderDrawer({ conditional: [SIRS, VIDEO] });
+
+    await user.click(screen.getByRole('button', { name: "Doesn't apply: Structural integrity reserve study" }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('The building is under three stories'));
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as not applying' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'May apply to you' })).toHaveFocus());
+  });
+
+  it('after the last May apply item is marked, focus moves to Post', async () => {
+    const { user } = renderDrawer({ missing: [BYLAWS], conditional: [SIRS] });
+    await drop(user, pdf('bylaws.pdf'));
+
+    await user.click(screen.getByRole('button', { name: "Doesn't apply: Structural integrity reserve study" }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByLabelText('The building is under three stories'));
+    await user.click(within(dialog).getByRole('button', { name: 'Mark as not applying' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Post 1 record' })).toHaveFocus());
+    expect(screen.queryByText('May apply to you')).not.toBeInTheDocument();
   });
 });
 
