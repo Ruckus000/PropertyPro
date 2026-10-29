@@ -421,9 +421,9 @@ describe('draftLookSwitch', () => {
   });
 
   it('plans from the drafted look when there is one', async () => {
-    // Bayfront is live and Heritage was drafted over it. Switching to Bayfront
-    // treats Heritage's sections as untouched, so the draft layer is cleared and
-    // the live Bayfront sections stand.
+    // Bayfront is live and Heritage was drafted over it. Switching on to Palm
+    // Grove treats Heritage's sections as untouched (not Bayfront's), so the
+    // page becomes Palm Grove exactly.
     const published = publishedRows(look('bayfront').sections);
     const heritageDrafts = look('heritage').sections.map((section, i) => ({
       id: 700 + i,
@@ -441,10 +441,10 @@ describe('draftLookSwitch', () => {
       homeRows: [...published, ...heritageDrafts],
     });
 
-    await draftLookSwitch(COMMUNITY_ID, 'bayfront', { actorUserId: ACTOR });
+    await draftLookSwitch(COMMUNITY_ID, 'palm-grove', { actorUserId: ACTOR });
 
-    expect(scoped.softDelete).toHaveBeenCalledTimes(1);
-    expect(insertedBlocks(scoped)).toEqual([]);
+    const palmGrove = look('palm-grove').sections.map(({ blockType, content }) => ({ blockType, content }));
+    expect(afterPublish(published, insertedBlocks(scoped))).toEqual(palmGrove);
   });
 
   it('switching again to the drafted look leaves its drafts exactly as they are (Heritage to Plain & Simple, twice)', async () => {
@@ -514,6 +514,105 @@ describe('draftLookSwitch', () => {
     expect(auditActions()).toEqual([
       expect.objectContaining({ action: 'site_design_draft_saved', resourceType: 'community' }),
     ]);
+  });
+
+  describe('back to the live look', () => {
+    /** A live Bayfront page whose manager removed Quick links: published slots 1, 3, 4, 5, 6. */
+    function bayfrontWithoutQuickLinks(): BlockRow[] {
+      return publishedRows(look('bayfront').sections).filter((row) => row.blockType !== 'quicklinks');
+    }
+    const liveBayfront = { communityType: 'condo_718', branding: lookBranding('bayfront') };
+
+    /** Heritage drafted over that page, as the drafts a later read returns. */
+    async function draftHeritage(published: BlockRow[]): Promise<BlockRow[]> {
+      const { scoped } = setUp({ community: liveBayfront, homeRows: published });
+      await draftLookSwitch(COMMUNITY_ID, 'heritage', { actorUserId: ACTOR });
+      const drafts = insertedBlocks(scoped).map((draft, i) => ({
+        id: 800 + i,
+        pageId: draft.pageId,
+        blockType: draft.blockType,
+        blockOrder: draft.blockOrder,
+        content: draft.content,
+        isDraft: true,
+      }));
+      vi.clearAllMocks();
+      return drafts;
+    }
+    const heritageDrafted = {
+      communityType: 'condo_718',
+      branding: { ...lookBranding('bayfront'), draftLook: lookBranding('heritage') },
+    };
+
+    it('choosing the live look with nothing drafted writes nothing at all', async () => {
+      const { scoped, tx } = setUp({ community: liveBayfront, homeRows: bayfrontWithoutQuickLinks() });
+
+      const counts = await draftLookSwitch(COMMUNITY_ID, 'bayfront', { actorUserId: ACTOR });
+
+      expect(counts).toEqual({ replaced: 0, kept: 5, added: 0, removed: 0 });
+      expect(scoped.softDelete).not.toHaveBeenCalled();
+      expect(scoped.insert).not.toHaveBeenCalled();
+      expect(mocks.mergeBranding).not.toHaveBeenCalled();
+      expect(mocks.logAuditEvent).not.toHaveBeenCalled();
+      expect(tx.execute).toHaveBeenCalledTimes(1); // the lock, and nothing after it
+    });
+
+    it('returning to it from Heritage leaves no Quick links, no other draft, and no pending design', async () => {
+      const published = bayfrontWithoutQuickLinks();
+      const drafts = await draftHeritage(published);
+      expect(drafts.length).toBeGreaterThan(0);
+      const { scoped, tx } = setUp({ community: heritageDrafted, homeRows: [...published, ...drafts] });
+
+      await draftLookSwitch(COMMUNITY_ID, 'bayfront', { actorUserId: ACTOR });
+
+      // Heritage's drafts are cleared and nothing is staged in their place, so a
+      // publish would change nothing: the live page, Quick links still gone.
+      expect(scoped.softDelete).toHaveBeenCalledTimes(1);
+      expect(scoped.insert).not.toHaveBeenCalled();
+      // The drafted look is withdrawn rather than Bayfront's colour set saved over
+      // it: nothing about the design is pending.
+      expect(mocks.mergeBranding).not.toHaveBeenCalled();
+      expect(tx.execute.mock.calls.some(([query]) => JSON.stringify(query).includes('draftLook'))).toBe(true);
+      expect(mocks.logAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ resourceType: 'community_site', metadata: expect.objectContaining({ kind: 'back-to-live' }) }),
+        tx,
+      );
+      expect(mocks.logAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'site_design_draft_saved', newValues: { draftLook: {} } }),
+        tx,
+      );
+    });
+
+    it('an edit made while Heritage was drafted survives returning to Bayfront', async () => {
+      const published = bayfrontWithoutQuickLinks();
+      const drafts = await draftHeritage(published);
+      // The manager edits Meetings under Heritage: a draft at its slot.
+      const meetingsSlot = published.find((row) => row.blockType === 'meetings')!.blockOrder;
+      const editedMeetings: BlockRow = {
+        id: 950,
+        pageId: HOME_PAGE_ID,
+        blockType: 'meetings',
+        blockOrder: meetingsSlot,
+        content: { limit: 9 },
+        isDraft: true,
+      };
+      const { scoped } = setUp({
+        community: heritageDrafted,
+        homeRows: [...published, ...drafts.filter((d) => d.blockOrder !== meetingsSlot), editedMeetings],
+      });
+
+      await draftLookSwitch(COMMUNITY_ID, 'bayfront', { actorUserId: ACTOR });
+
+      // The live page again, with the edit as its one pending change.
+      const staged = insertedBlocks(scoped);
+      expect(staged).toEqual([
+        expect.objectContaining({ blockType: 'meetings', blockOrder: meetingsSlot, content: { limit: 9 }, isDraft: true }),
+      ]);
+      expect(afterPublish(published, staged)).toEqual(
+        published.map(({ blockType, content }) =>
+          blockType === 'meetings' ? { blockType, content: { limit: 9 } } : { blockType, content },
+        ),
+      );
+    });
   });
 
   it('stages the removal of a published slot the new look leaves empty', async () => {
@@ -611,6 +710,8 @@ describe('loadLookSwitchInput', () => {
       outgoingDefaults: [condoV1],
       outgoingLayoutId: 'tidewater',
       draftedLookId: null,
+      // A legacy live layout: no card returns to it.
+      live: null,
     });
     expect(whereFor.get(siteStarterPacksTable)).toEqual({ __eq: ['site_starter_packs.community_type', 'condo_718'] });
     // Read only: no transaction, no home page created, no row written.
@@ -635,6 +736,34 @@ describe('loadLookSwitchInput', () => {
     expect(input.outgoingLayoutId).toBe('heritage');
     expect(input.outgoingDefaults).toEqual([look('heritage').sections]);
     expect(selectedTables).not.toContain(siteStarterPacksTable);
+  });
+
+  it('describes the live look: its published sections in live order, and whether another layout is drafted over it', async () => {
+    const published = publishedRows(look('bayfront').sections).filter((row) => row.blockType !== 'quicklinks');
+    const pendingEdit: BlockRow = {
+      id: 900,
+      pageId: HOME_PAGE_ID,
+      blockType: 'meetings',
+      blockOrder: 4,
+      content: { limit: 9 },
+      isDraft: true,
+    };
+    const withBranding = (branding: Record<string, unknown>) =>
+      setUp({ community: { communityType: 'condo_718', branding }, homeRows: [...published, pendingEdit] });
+
+    withBranding(lookBranding('bayfront'));
+    expect((await loadLookSwitchInput(COMMUNITY_ID)).live).toEqual({
+      lookId: 'bayfront',
+      // Published rows only, in slot order: a pending edit is not live.
+      sections: published.map(({ id, blockType, content }) => ({ id, blockType, content })),
+      otherLayoutDrafted: false,
+    });
+
+    // A colour drafted on its own drafts no other layout; a look does.
+    withBranding({ ...lookBranding('bayfront'), draftLook: { primaryColor: '#000000' } });
+    expect((await loadLookSwitchInput(COMMUNITY_ID)).live?.otherLayoutDrafted).toBe(false);
+    withBranding({ ...lookBranding('bayfront'), draftLook: { layoutId: 'heritage' } });
+    expect((await loadLookSwitchInput(COMMUNITY_ID)).live?.otherLayoutDrafted).toBe(true);
   });
 
   it('has no sections for a community with no home page yet', async () => {

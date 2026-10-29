@@ -218,11 +218,32 @@ export interface PlanLookSwitchInput {
   /**
    * The look the page has already been switched to as a draft (the drafted
    * layout's look), or null. Switching to it again changes nothing on the page.
-   * Required, so no caller can leave the rule out by accident.
+   * Required, like `live`, so no caller can leave a rule out by accident.
    */
   draftedLookId: LookId | null;
+  /** The live look, which a switch can return to; null when the live layout is a legacy one. */
+  live: LiveHomePage | null;
   incoming: LookDefinition;
 }
+
+/** The live look and what the live home page shows. */
+export interface LiveHomePage {
+  lookId: LookId;
+  /** The published home-page sections, in their live order. */
+  sections: readonly SiteSection[];
+  /** Whether a different layout is drafted over the live one: another look, or a layout that is not a look. */
+  otherLayoutDrafted: boolean;
+}
+
+/**
+ * What a switch is:
+ * - `switch`: to a look the page is not on;
+ * - `already-drafted`: to the look already drafted; the page stays as it is;
+ * - `live-look`: to the live look, with no other layout drafted; nothing changes;
+ * - `back-to-live`: to the live look from another drafted layout; the page
+ *   returns to what is live.
+ */
+export type LookSwitchKind = 'switch' | 'already-drafted' | 'live-look' | 'back-to-live';
 
 export interface LookSwitchCounts {
   /** Untouched sections replaced, in their slot, by the incoming look's section of the same type. */
@@ -237,11 +258,7 @@ export interface LookSwitchCounts {
 
 export interface LookSwitchPlan extends LookSwitchCounts {
   sections: SiteSection[];
-  /**
-   * True when `incoming` is the look already drafted: the page comes back
-   * exactly as it is, and a switch writes no section.
-   */
-  unchanged: boolean;
+  kind: LookSwitchKind;
 }
 
 /**
@@ -260,32 +277,54 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  *   from that look's own defaults would take an edit that happens to equal one
  *   of them for untouched, and could move it. "Publish this look" repeats the
  *   card's draft (D9), so this keeps the second run from changing the first.
- * - Every section untouched: the page becomes exactly the incoming look's
- *   sections, in its order.
+ * - `incoming` is the live look and no other layout is drafted: the page
+ *   exactly as it is. Nothing is being switched.
+ * - `incoming` is the live look and another layout is drafted: the switch back
+ *   is planned as below, with the live home page's sections, in their live
+ *   order, in place of the look's own. Untouched sections return to what is
+ *   live, edits made under the other look stay, and a section removed from the
+ *   live site does not come back.
+ * - Every section untouched: the page becomes exactly the incoming sections,
+ *   in their order.
  * - Otherwise each untouched section is replaced in its slot by the incoming
- *   look's section of its type, or dropped when there is none. Each of those is
- *   used once, so the incoming look's section never shows twice. Kept sections
- *   stay as they are, in their slots. The incoming look's types the page still
- *   lacks go in after the nearest section before them in the incoming look's
- *   order, or first.
+ *   section of its type, or dropped when there is none. Each incoming section
+ *   is used once, so none shows twice. Kept sections stay as they are, in their
+ *   slots. The incoming types the page still lacks go in after the nearest
+ *   section before them in the incoming order, or first.
  *
- * Content the look supplies is a copy; kept sections are handed back as given.
+ * Content the switch supplies is a copy; kept sections are handed back as given.
  */
 export function planLookSwitch(input: PlanLookSwitchInput): SiteSection[] {
   return planLookSwitchWithCounts(input).sections;
 }
 
-/** `planLookSwitch`, with what it did to each section counted. */
+/** `planLookSwitch`, with what it did to each section counted, and which kind of switch it was. */
 export function planLookSwitchWithCounts({
   current,
   outgoingDefaults,
   draftedLookId,
+  live,
   incoming,
 }: PlanLookSwitchInput): LookSwitchPlan {
-  if (draftedLookId === incoming.id) {
-    return { sections: current.map(keep), replaced: 0, kept: current.length, added: 0, removed: 0, unchanged: true };
+  if (draftedLookId === incoming.id) return asItIs(current, 'already-drafted');
+  if (live !== null && live.lookId === incoming.id) {
+    if (!live.otherLayoutDrafted) return asItIs(current, 'live-look');
+    return { ...planAgainst(current, outgoingDefaults, live.sections), kind: 'back-to-live' };
   }
+  return { ...planAgainst(current, outgoingDefaults, incoming.sections), kind: 'switch' };
+}
 
+/** The page as it is: nothing replaced, added or removed. */
+function asItIs(current: readonly SiteSection[], kind: LookSwitchKind): LookSwitchPlan {
+  return { sections: current.map(keep), replaced: 0, kept: current.length, added: 0, removed: 0, kind };
+}
+
+/** D5's switch of `current` to the `incoming` sections, untouched judged against `outgoingDefaults`. */
+function planAgainst(
+  current: readonly SiteSection[],
+  outgoingDefaults: readonly (readonly LookSection[])[],
+  incoming: readonly LookSection[],
+): Omit<LookSwitchPlan, 'kind'> {
   const defaults = defaultsByType(outgoingDefaults);
   const untouched = current.map((s) => isUntouched(s, defaults));
 
@@ -293,7 +332,7 @@ export function planLookSwitchWithCounts({
     // Count by pairing each incoming section with an untouched one of its type.
     const unpaired = countByType(current);
     let replaced = 0;
-    for (const { blockType } of incoming.sections) {
+    for (const { blockType } of incoming) {
       const left = unpaired.get(blockType) ?? 0;
       if (left > 0) {
         unpaired.set(blockType, left - 1);
@@ -301,17 +340,16 @@ export function planLookSwitchWithCounts({
       }
     }
     return {
-      sections: incoming.sections.map(fromLook),
+      sections: incoming.map(fromLook),
       replaced,
       kept: 0,
-      added: incoming.sections.length - replaced,
+      added: incoming.length - replaced,
       removed: current.length - replaced,
-      unchanged: false,
     };
   }
 
   const unused = new Map<string, LookSection[]>();
-  for (const lookSection of incoming.sections) {
+  for (const lookSection of incoming) {
     unused.set(lookSection.blockType, [...(unused.get(lookSection.blockType) ?? []), lookSection]);
   }
 
@@ -335,13 +373,13 @@ export function planLookSwitchWithCounts({
   });
 
   let added = 0;
-  incoming.sections.forEach((lookSection, i) => {
+  incoming.forEach((lookSection, i) => {
     if (sections.some((s) => s.blockType === lookSection.blockType)) return;
-    sections.splice(insertionIndex(sections, incoming.sections.slice(0, i)), 0, fromLook(lookSection));
+    sections.splice(insertionIndex(sections, incoming.slice(0, i)), 0, fromLook(lookSection));
     added += 1;
   });
 
-  return { sections, replaced, kept, added, removed, unchanged: false };
+  return { sections, replaced, kept, added, removed };
 }
 
 function isBlockType(value: string): value is BlockType {
@@ -391,7 +429,7 @@ function keep({ id, blockType, content }: SiteSection): SiteSection {
   return id === undefined ? { blockType, content } : { id, blockType, content };
 }
 
-/** A look's section for the page, as a copy the caller may change (look content is plain JSON). */
+/** An incoming section for the page, as a copy the caller may change (section content is plain JSON). */
 function fromLook({ blockType, content }: LookSection): SiteSection {
   return { blockType, content: JSON.parse(JSON.stringify(content)) as unknown };
 }

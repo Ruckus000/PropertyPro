@@ -8,7 +8,7 @@
  *   the editor's own draft layer, in one transaction: the home page's sections
  *   as draft rows and tombstones, and the look as `branding.draftLook`. The
  *   editor's Publish makes it live and its Discard throws it away, both
- *   unchanged.
+ *   unchanged. Picking the live look again restores what is live.
  * - `loadLookSwitchInput`: what a switch is planned from, read without writing.
  *   The switch and the look previews share it, so they cannot plan from
  *   different inputs.
@@ -34,9 +34,10 @@ import {
   siteStarterPacks,
 } from '@propertypro/db';
 import { and, eq, isNull, sql } from '@propertypro/db/filters';
-// AUTHZ: opens the transaction that holds the community row lock, and reads the platform-level site_starter_packs catalog (no community_id). Tenant rows are written through createScopedClient(communityId, tx) or logAuditEvent(..., tx); the community's own row (communities, the root tenant table) is written on tx by its primary key only: site_published_at at creation, and branding.draftLook on a switch (writeDraftDesign's mergeBranding). Callers authorize as the docblock says.
+// AUTHZ: opens the transaction that holds the community row lock, and reads the platform-level site_starter_packs catalog (no community_id). Tenant rows are written through createScopedClient(communityId, tx) or logAuditEvent(..., tx); the community's own row (communities, the root tenant table) is written on tx by its primary key only: site_published_at at creation, and branding.draftLook on a switch (site-design-service's writeDraftDesign / withdrawDraftDesign). Callers authorize as the docblock says.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
+  SITE_LOOK_FIELDS,
   TOMBSTONE_BLOCK_TYPE,
   effectiveLook,
   fingerprint,
@@ -46,7 +47,7 @@ import {
 } from '@propertypro/shared';
 import { updateBrandingForCommunity } from '@/lib/api/branding';
 import { NotFoundError, ValidationError } from '@/lib/api/errors';
-import { resolveDesign, writeDraftDesign } from '@/lib/services/site-design-service';
+import { resolveDesign, withdrawDraftDesign, writeDraftDesign } from '@/lib/services/site-design-service';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import {
   getLook,
@@ -68,9 +69,13 @@ type Tx = Parameters<Parameters<UnscopedDb['transaction']>[0]>[0];
 type Executor = NonNullable<Parameters<typeof createScopedClient>[1]>;
 type ScopedClient = ReturnType<typeof createScopedClient>;
 
-/** The hero is in slot 1; every other section takes 2, 3, … in order. */
+/** The hero is in slot 1; every other section takes 2, 3, … The publish check refuses a slot past 99. */
 const HERO_SLOT = 1;
 const FIRST_CONTENT_SLOT = 2;
+const LAST_SLOT = 99;
+
+/** The look fields a switch drafts: all of them but custom colours, which only the manager sets. */
+const SWITCHED_LOOK_FIELDS = SITE_LOOK_FIELDS.filter((field) => field !== 'customCssOverrides');
 
 /** A home-page row, as the switch reads it. */
 interface HomeRow {
@@ -143,7 +148,7 @@ export async function applyLookAtCreation(
       and(eq(sitePages.id, homePageId), eq(sitePages.isDraft, true)),
     );
 
-    for (const [slot, lookSection] of slotted(look.sections)) {
+    for (const [slot, lookSection] of assignSlots(look.sections, [])) {
       await scoped.insert(siteBlocks, {
         communityId,
         pageId: homePageId,
@@ -179,16 +184,20 @@ export async function applyLookAtCreation(
  * from. The sections are written the way the editor's own writers stage a
  * change (`writeHomeDrafts`), so publishing them leaves exactly the plan.
  *
- * Idempotent: once a look is drafted, switching to it again leaves the home
- * page's drafts exactly as they are and only saves the look again (the plan
- * comes back `unchanged`). "Publish this look" runs it after the card's own
- * switch, and the manager may have edited the drafted page in between.
+ * What is written follows the plan's kind:
+ * - `switch`: the planned sections, and the look as the draft look.
+ * - `already-drafted` (the look is drafted already): no section, and the look
+ *   saved again. "Publish this look" runs the switch after the card's own, and
+ *   the manager may have edited the drafted page in between.
+ * - `live-look` (the live look, nothing else drafted): nothing at all.
+ * - `back-to-live` (the live look, another layout drafted): the sections
+ *   return to what is live, and the drafted look is withdrawn, so no design
+ *   change is pending.
  *
  * The look is resolved before the transaction (`resolveDesign`: the design
  * save's own validation, and the colour set's colours and fonts), so a missing
- * colour set fails before anything is written, and saved inside it
- * (`writeDraftDesign`, with its audit row), so the sections can never wait
- * under the old look.
+ * colour set fails before anything is written, and saved or withdrawn inside it
+ * (with its audit row), so the sections can never wait under the wrong look.
  */
 export async function draftLookSwitch(
   communityId: number,
@@ -200,9 +209,10 @@ export async function draftLookSwitch(
 
   return withCommunityLock(communityId, async (tx, scoped) => {
     const input = await loadLookSwitchInput(communityId, tx);
-    const { sections, unchanged, ...counts } = planLookSwitchWithCounts({ ...input, incoming });
+    const { sections, kind, ...counts } = planLookSwitchWithCounts({ ...input, incoming });
+    const executor = tx as unknown as Executor;
 
-    if (!unchanged) {
+    if (kind === 'switch' || kind === 'back-to-live') {
       const homePageId = await ensureHomePage(communityId, tx);
       await writeHomeDrafts(scoped, communityId, homePageId, input.published, sections);
       await logAuditEvent(
@@ -215,19 +225,21 @@ export async function draftLookSwitch(
           metadata: {
             lookSwitch: true,
             lookId: incoming.id,
+            kind,
             fromLayoutId: input.outgoingLayoutId,
             pageId: homePageId,
             ...counts,
           },
         },
-        tx as unknown as Executor,
+        executor,
       );
     }
 
-    await writeDraftDesign(communityId, design, {
-      actorUserId: opts.actorUserId,
-      executor: tx as unknown as Executor,
-    });
+    if (kind === 'switch' || kind === 'already-drafted') {
+      await writeDraftDesign(communityId, design, { actorUserId: opts.actorUserId, executor });
+    } else if (kind === 'back-to-live') {
+      await withdrawDraftDesign(communityId, SWITCHED_LOOK_FIELDS, { actorUserId: opts.actorUserId, executor });
+    }
     return counts;
   });
 }
@@ -244,10 +256,14 @@ export async function draftLookSwitch(
  *   one) or, on a legacy layout, every version of the community type's starter
  *   pack, archived ones included, read only then;
  * - `draftedLookId`: the look already drafted, so that switching to it again
- *   changes nothing (`planLookSwitch` applies the rule).
+ *   changes nothing;
+ * - `live`: the live look, the published home page in its live order, and
+ *   whether another layout is drafted over it, so that picking the live look
+ *   again restores what is live (null on a legacy live layout).
  *
- * Pass `tx` to read inside a transaction; left out, each read runs on its own.
- * Throws NotFoundError when the community does not exist.
+ * `planLookSwitch` applies both rules. Pass `tx` to read inside a transaction;
+ * left out, each read runs on its own. Throws NotFoundError when the community
+ * does not exist.
  */
 export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise<LookSwitchInput> {
   const scoped = createScopedClient(communityId, tx as unknown as Executor | undefined);
@@ -264,11 +280,13 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
   );
 
   const branding = (community.branding ?? {}) as CommunityBranding;
+  const liveLayoutId = branding.layoutId ?? null;
   const outgoingLayoutId = effectiveLook(branding, { includeDraft: true }).layoutId ?? null;
   const outgoingLookId = lookIdForLayout(outgoingLayoutId);
   const outgoingDefaults = outgoingLookId
     ? [requireLook(outgoingLookId).sections]
     : await starterPackVersions(community.communityType, tx);
+  const liveLookId = lookIdForLayout(liveLayoutId);
 
   return {
     homePageId,
@@ -277,6 +295,15 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
     outgoingDefaults,
     outgoingLayoutId,
     draftedLookId: lookIdForLayout(branding.draftLook?.layoutId),
+    live: liveLookId
+      ? {
+          lookId: liveLookId,
+          sections: [...published.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([, row]) => ({ id: row.id, blockType: row.blockType as BlockType, content: row.content })),
+          otherLayoutDrafted: outgoingLayoutId !== liveLayoutId,
+        }
+      : null,
   };
 }
 
@@ -325,21 +352,27 @@ async function hasPublishedSections(scoped: ScopedClient): Promise<boolean> {
 }
 
 /**
- * Each section with its slot: the first hero in slot 1, every other section in
- * 2, 3, … in order.
+ * Each section with its slot. The first hero takes slot 1. The other sections
+ * take the page's published content slots in order, so a section that is the
+ * same as the live one in that place needs no draft, even where a removed
+ * section left a gap in the numbering; any left over go after the last of them.
+ * When that would pass slot 99 they are numbered 2, 3, … instead.
  */
-function slotted<T extends { blockType: string }>(sections: readonly T[]): Array<[number, T]> {
-  let next = FIRST_CONTENT_SLOT;
-  let heroPlaced = false;
-  return sections.map((s): [number, T] => {
-    if (s.blockType === 'hero' && !heroPlaced) {
-      heroPlaced = true;
-      return [HERO_SLOT, s];
-    }
-    const slot = next;
-    next += 1;
-    return [slot, s];
-  });
+function assignSlots<T extends { blockType: string }>(
+  sections: readonly T[],
+  publishedSlots: Iterable<number>,
+): Array<[number, T]> {
+  const heroAt = sections.findIndex((s) => s.blockType === 'hero');
+  const contentCount = sections.length - (heroAt === -1 ? 0 : 1);
+  const live = [...publishedSlots].filter((slot) => slot >= FIRST_CONTENT_SLOT).sort((a, b) => a - b);
+  const last = live[live.length - 1] ?? HERO_SLOT;
+  const extra = Math.max(0, contentCount - live.length);
+  const slots =
+    last + extra <= LAST_SLOT
+      ? [...live.slice(0, contentCount), ...Array.from({ length: extra }, (_, i) => last + 1 + i)]
+      : Array.from({ length: contentCount }, (_, i) => FIRST_CONTENT_SLOT + i);
+  let next = 0;
+  return sections.map((s, i): [number, T] => (i === heroAt ? [HERO_SLOT, s] : [slots[next++]!, s]));
 }
 
 /**
@@ -390,7 +423,9 @@ async function starterPackVersions(communityType: CommunityType, tx?: Tx): Promi
  * wherever a slot's published row differs (compared as the editor's change list
  * compares, so content stored with defaults filled in is not a change), and a
  * tombstone on every published slot left empty. Publishing that leaves exactly
- * `sections`; no live row is touched.
+ * `sections`; no live row is touched. The slots are the published ones where
+ * they can be (`assignSlots`), so a page planned back to what is live stages
+ * nothing at all.
  */
 async function writeHomeDrafts(
   scoped: ScopedClient,
@@ -406,7 +441,7 @@ async function writeHomeDrafts(
     and(eq(siteBlocks.pageId, pageId), eq(siteBlocks.isDraft, true), isNull(siteBlocks.deletedAt)),
   );
 
-  const target = new Map(slotted(sections));
+  const target = new Map(assignSlots(sections, published.keys()));
   for (const [slot, section] of target) {
     const live = published.get(slot);
     if (

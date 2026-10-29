@@ -14,11 +14,12 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import type { CommunityType } from '@propertypro/shared';
+import { pendingLook, type CommunityBranding, type CommunityType } from '@propertypro/shared';
 import { updateBrandingForCommunity } from '@/lib/api/branding';
 import {
   discardSiteDrafts,
   publishCommunitySite,
+  removeSiteBlock,
   upsertPublishedBlock,
 } from '@/lib/services/site-blocks-service';
 import { applyLookAtCreation, draftLookSwitch } from '@/lib/services/site-look-service';
@@ -332,6 +333,36 @@ describeDb('site looks (db-backed integration)', () => {
             : [section],
         ),
     );
+  });
+
+  it('picking a card and then the live one again leaves nothing pending', async () => {
+    // A live Bayfront site whose manager removed Quick links and published.
+    const communityId = await createCommunity('round-trip', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    await removeSiteBlock({ communityId, actorUserId, blockOrder: await liveSlotOf(communityId, 'quicklinks') });
+    await publish(communityId);
+    const live = await liveSections(communityId);
+    expect(live.map((section) => section.blockType)).not.toContain('quicklinks');
+    const pendingDesign = async () => pendingLook((await readCommunity(communityId)).branding as CommunityBranding);
+
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    expect(await draftRowCount(communityId)).toBeGreaterThan(0);
+    expect(await pendingDesign()).toMatchObject({ layoutId: 'heritage' });
+
+    // Back to the live card: no draft at all, no design change pending, and
+    // Quick links does not come back.
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+    expect(await draftRowCount(communityId)).toBe(0);
+    expect(await pendingDesign()).toEqual({});
+
+    // Choosing it once more changes nothing either, and Publish has nothing to do.
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+    expect(await draftRowCount(communityId)).toBe(0);
+    expect(await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null })).toEqual({
+      published: false,
+      reason: 'nothing-to-publish',
+    });
+    expect(await liveSections(communityId)).toEqual(live);
   });
 
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {

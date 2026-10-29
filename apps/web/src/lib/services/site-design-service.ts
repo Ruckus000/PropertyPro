@@ -19,12 +19,14 @@
  * only reads the colour-set catalog, so community creation uses it too.
  */
 import { communities, createScopedClient, logAuditEvent } from '@propertypro/db';
+import { sql } from '@propertypro/db/filters';
 import {
   pendingLook,
   liveLook,
   type CommunityBranding,
   type CustomCssOverrides,
   type SiteLook,
+  type SiteLookField,
 } from '@propertypro/shared';
 import { ValidationError } from '@/lib/api/errors';
 import { getBrandingForCommunity } from '@/lib/api/branding';
@@ -144,6 +146,58 @@ export async function writeDraftDesign(
   };
   await (executor ? logAuditEvent(entry, executor) : logAuditEvent(entry));
 
+  return after;
+}
+
+/**
+ * Withdraw drafted look fields: each one's draft goes, so its live value stands
+ * and `pendingLook` stops listing it, and `draftLook` goes once nothing is left
+ * in it. One UPDATE and its audit row, both on `executor`, a transaction's
+ * handle: a look switch back to the live look withdraws the look it drafted
+ * together with the sections it restores. Nothing to withdraw writes nothing.
+ */
+export async function withdrawDraftDesign(
+  communityId: number,
+  fields: readonly SiteLookField[],
+  opts: { actorUserId: string; executor: Executor },
+): Promise<SiteDesign> {
+  const { executor } = opts;
+  const branding = (await readBranding(communityId, executor)) ?? {};
+  const before = { live: liveLook(branding), draft: pendingLook(branding) };
+  const drafted = branding.draftLook ?? {};
+  const withdrawn = fields.filter((field) => field in drafted);
+  if (withdrawn.length === 0) return before;
+
+  const keys = sql`ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(withdrawn)}::jsonb))`;
+  await executor.execute(sql`
+    UPDATE communities SET branding = CASE
+      WHEN jsonb_typeof(branding -> 'draftLook') IS DISTINCT FROM 'object' THEN branding
+      WHEN (branding -> 'draftLook') - ${keys} = '{}'::jsonb THEN branding - 'draftLook'
+      ELSE jsonb_set(branding, '{draftLook}', (branding -> 'draftLook') - ${keys}, true)
+    END
+    WHERE id = ${communityId}`);
+
+  // Computed the way the UPDATE leaves the row, as `writeDraftDesign` does.
+  const remaining = Object.fromEntries(
+    Object.entries(drafted).filter(([field]) => !withdrawn.includes(field as SiteLookField)),
+  ) as SiteLook;
+  const { draftLook: _withdrawn, ...withoutDraft } = branding;
+  const next: CommunityBranding =
+    Object.keys(remaining).length > 0 ? { ...withoutDraft, draftLook: remaining } : withoutDraft;
+  const after = { live: liveLook(next), draft: pendingLook(next) };
+
+  await logAuditEvent(
+    {
+      userId: opts.actorUserId,
+      communityId,
+      action: 'site_design_draft_saved',
+      resourceType: 'community',
+      resourceId: String(communityId),
+      oldValues: { draftLook: before.draft },
+      newValues: { draftLook: after.draft },
+    },
+    executor,
+  );
   return after;
 }
 

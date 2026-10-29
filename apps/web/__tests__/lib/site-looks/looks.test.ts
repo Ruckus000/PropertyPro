@@ -291,6 +291,7 @@ describe('planLookSwitch', () => {
           current: siteFrom(from.sections),
           outgoingDefaults: [from.sections],
           draftedLookId: null,
+          live: null,
           incoming: to,
         });
         expect({ from: from.id, to: to.id, result }).toEqual({
@@ -304,7 +305,7 @@ describe('planLookSwitch', () => {
     // A page the manager only reordered is still untouched: it takes the look's order.
     const [hero, quicklinks, announcements, meetings, documents, contact] = siteFrom(bayfront.sections);
     const reordered = [hero!, documents!, contact!, quicklinks!, meetings!, announcements!];
-    expect(planLookSwitch({ current: reordered, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage })).toEqual(
+    expect(planLookSwitch({ current: reordered, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage })).toEqual(
       asPlanned(heritage.sections),
     );
 
@@ -316,11 +317,11 @@ describe('planLookSwitch', () => {
       content: blockSchemaRegistry[s.blockType].parse(s.content),
     }));
     expect(
-      planLookSwitch({ current: savedByTheEditor, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage }),
+      planLookSwitch({ current: savedByTheEditor, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage }),
     ).toEqual(asPlanned(heritage.sections));
 
     // A site with no sections at all is untouched too.
-    expect(planLookSwitch({ current: [], outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage })).toEqual(
+    expect(planLookSwitch({ current: [], outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage })).toEqual(
       asPlanned(heritage.sections),
     );
   });
@@ -330,7 +331,7 @@ describe('planLookSwitch', () => {
     const current = siteFrom(bayfront.sections);
     current[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
 
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
 
     expect(result).toEqual([
       { id: 100, blockType: 'hero', content: EDITED_HERO },
@@ -352,7 +353,7 @@ describe('planLookSwitch', () => {
     const meetingsSlot = types(current).indexOf('meetings');
     current[meetingsSlot] = { id: 999, blockType: 'meetings', content: { limit: 5, hidden: true } };
 
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: plainSimple });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: plainSimple });
 
     expect(result[meetingsSlot]).toEqual({ id: 999, blockType: 'meetings', content: { limit: 5, hidden: true } });
     expect(types(result).filter((t) => t === 'meetings')).toHaveLength(1);
@@ -376,6 +377,7 @@ describe('planLookSwitch', () => {
       current: siteFrom(pack),
       outgoingDefaults: [pack],
       draftedLookId: null,
+      live: null,
       incoming: bayfront,
     });
 
@@ -392,6 +394,7 @@ describe('planLookSwitch', () => {
       current,
       outgoingDefaults: [heritage.sections],
       draftedLookId: null,
+      live: null,
       incoming: plainSimple,
     });
     expect(types(first)).toEqual(['hero', 'quicklinks', 'announcements', 'meetings', 'documents', 'contact']);
@@ -405,9 +408,10 @@ describe('planLookSwitch', () => {
         current: draftedPage,
         outgoingDefaults: [plainSimple.sections],
         draftedLookId: 'plain-simple',
+        live: null,
         incoming: plainSimple,
       }),
-    ).toEqual({ sections: draftedPage, replaced: 0, kept: 6, added: 0, removed: 0, unchanged: true });
+    ).toEqual({ sections: draftedPage, replaced: 0, kept: 6, added: 0, removed: 0, kind: 'already-drafted' });
 
     // A different look is still a switch.
     expect(
@@ -415,9 +419,84 @@ describe('planLookSwitch', () => {
         current: draftedPage,
         outgoingDefaults: [plainSimple.sections],
         draftedLookId: 'plain-simple',
+        live: null,
         incoming: heritage,
-      }).unchanged,
-    ).toBe(false);
+      }).kind,
+    ).toBe('switch');
+  });
+
+  describe('back to the live look', () => {
+    // A live Bayfront home page whose manager removed Quick links.
+    const live = siteFrom(bayfront.sections).filter((s) => s.blockType !== 'quicklinks');
+    const liveAsPlanned = live.map(({ blockType, content }) => ({ blockType, content }));
+    // Heritage drafted over it: a plain switch, every section untouched.
+    const heritageDrafted = planLookSwitch({
+      current: live,
+      outgoingDefaults: [bayfront.sections],
+      draftedLookId: null,
+      live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: false },
+      incoming: heritage,
+    }).map((section, i) => ({ id: 700 + i, ...section }));
+
+    it('choosing the live look with no other layout drafted changes nothing', () => {
+      expect(
+        planLookSwitchWithCounts({
+          current: live,
+          outgoingDefaults: [bayfront.sections],
+          draftedLookId: null,
+          live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: false },
+          incoming: bayfront,
+        }),
+      ).toEqual({ sections: live, replaced: 0, kept: 5, added: 0, removed: 0, kind: 'live-look' });
+    });
+
+    it('returning to it restores what is live, and a section removed from it stays removed', () => {
+      expect(types(heritageDrafted)).toEqual(types(heritage.sections));
+
+      const back = planLookSwitchWithCounts({
+        current: heritageDrafted,
+        outgoingDefaults: [heritage.sections],
+        draftedLookId: 'heritage',
+        live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: true },
+        incoming: bayfront,
+      });
+
+      expect(back.kind).toBe('back-to-live');
+      // What is live, in its live order: not Bayfront's own sections, so no Quick links.
+      expect(back.sections).toEqual(liveAsPlanned);
+    });
+
+    it('an edit made while another look was drafted survives returning to it', () => {
+      const edited = heritageDrafted.map((s) =>
+        s.blockType === 'meetings' ? { ...s, content: { limit: 9 } } : s,
+      );
+      const editedMeetings = edited.find((s) => s.blockType === 'meetings')!;
+
+      const back = planLookSwitch({
+        current: edited,
+        outgoingDefaults: [heritage.sections],
+        draftedLookId: 'heritage',
+        live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: true },
+        incoming: bayfront,
+      });
+
+      expect(back).toEqual(
+        liveAsPlanned.map((section) => (section.blockType === 'meetings' ? editedMeetings : section)),
+      );
+    });
+
+    it('a drafted layout that is not a look is undone the same way', () => {
+      // Only the raw design route can draft one: no card is a legacy layout.
+      const back = planLookSwitchWithCounts({
+        current: live,
+        outgoingDefaults: [bayfront.sections],
+        draftedLookId: null,
+        live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: true },
+        incoming: bayfront,
+      });
+      expect(back.kind).toBe('back-to-live');
+      expect(back.sections).toEqual(liveAsPlanned);
+    });
   });
 
   it('switching to heritage inserts Board members after Documents', () => {
@@ -427,7 +506,7 @@ describe('planLookSwitch', () => {
     const [hero, quicklinks, announcements, meetings, documents, contact] = siteFrom(bayfront.sections);
     const current = [{ ...hero!, content: EDITED_HERO }, quicklinks!, announcements!, documents!, meetings!, contact!];
 
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
 
     expect(types(result)).toEqual(['hero', 'announcements', 'documents', 'board', 'meetings', 'contact']);
     expect(result[3]).toEqual(sectionOf(heritage.sections, 'board'));
@@ -437,7 +516,7 @@ describe('planLookSwitch', () => {
     // A legacy page with no welcome section, and Announcements the manager edited.
     const current: SiteSection[] = [{ id: 300, blockType: 'announcements', content: { limit: 2 } }];
 
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
 
     expect(result[0]).toEqual(sectionOf(heritage.sections, 'hero'));
     expect(types(result)).toEqual(['hero', 'announcements', 'meetings', 'documents', 'board', 'contact']);
@@ -448,7 +527,7 @@ describe('planLookSwitch', () => {
     const current = siteFrom(heritage.sections);
     current[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
 
-    const result = planLookSwitch({ current, outgoingDefaults: [heritage.sections], draftedLookId: null, incoming: bayfront });
+    const result = planLookSwitch({ current, outgoingDefaults: [heritage.sections], draftedLookId: null, live: null, incoming: bayfront });
 
     expect(result).toEqual([
       { id: 100, blockType: 'hero', content: EDITED_HERO },
@@ -464,7 +543,7 @@ describe('planLookSwitch', () => {
     const editedBoard = siteFrom(heritage.sections);
     const boardSlot = types(editedBoard).indexOf('board');
     editedBoard[boardSlot] = { id: 555, blockType: 'board', content: { heading: 'Our volunteers' } };
-    const kept = planLookSwitch({ current: editedBoard, outgoingDefaults: [heritage.sections], draftedLookId: null, incoming: bayfront });
+    const kept = planLookSwitch({ current: editedBoard, outgoingDefaults: [heritage.sections], draftedLookId: null, live: null, incoming: bayfront });
     expect(kept).toContainEqual({ id: 555, blockType: 'board', content: { heading: 'Our volunteers' } });
   });
 
@@ -496,21 +575,21 @@ describe('planLookSwitch', () => {
     const packs = [condoV1, condoV2];
 
     for (const pack of packs) {
-      const result = planLookSwitch({ current: siteFrom(pack), outgoingDefaults: packs, draftedLookId: null, incoming: bayfront });
+      const result = planLookSwitch({ current: siteFrom(pack), outgoingDefaults: packs, draftedLookId: null, live: null, incoming: bayfront });
       expect(result).toEqual(asPlanned(bayfront.sections));
     }
 
     // jsonb hands keys back in its own order; that is still the same section.
     const reordered = siteFrom(condoV1);
     reordered[1] = { id: 101, blockType: 'announcements', content: { timeWindowDays: 30, limit: 5 } };
-    expect(planLookSwitch({ current: reordered, outgoingDefaults: packs, draftedLookId: null, incoming: bayfront })).toEqual(
+    expect(planLookSwitch({ current: reordered, outgoingDefaults: packs, draftedLookId: null, live: null, incoming: bayfront })).toEqual(
       asPlanned(bayfront.sections),
     );
 
     // A section matching no version is the manager's, and stays in its slot.
     const edited = siteFrom(condoV1);
     edited[2] = { id: 102, blockType: 'meetings', content: { limit: 7, timeWindowDays: 30 } };
-    const result = planLookSwitch({ current: edited, outgoingDefaults: packs, draftedLookId: null, incoming: bayfront });
+    const result = planLookSwitch({ current: edited, outgoingDefaults: packs, draftedLookId: null, live: null, incoming: bayfront });
     expect(result[3]).toEqual({ id: 102, blockType: 'meetings', content: { limit: 7, timeWindowDays: 30 } });
     expect(types(result)).toEqual(['hero', 'quicklinks', 'announcements', 'meetings', 'documents', 'contact']);
   });
@@ -521,7 +600,7 @@ describe('planLookSwitch', () => {
       // limit is capped at 20, so this fails its schema.
       { id: 900, blockType: 'announcements', content: { limit: 500 } },
     ];
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
     expect(result).toContainEqual({ id: 900, blockType: 'announcements', content: { limit: 500 } });
   });
 
@@ -539,7 +618,7 @@ describe('planLookSwitch', () => {
       contact!,
     ];
 
-    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
 
     expect(types(result)).toEqual(['hero', 'announcements', 'meetings', 'documents', 'board', 'contact']);
   });
@@ -548,7 +627,7 @@ describe('planLookSwitch', () => {
     const edited = siteFrom(bayfront.sections);
     edited[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
     expect(
-      planLookSwitchWithCounts({ current: edited, outgoingDefaults: [bayfront.sections], draftedLookId: null, incoming: heritage }),
+      planLookSwitchWithCounts({ current: edited, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage }),
     ).toMatchObject({ kept: 1, replaced: 4, removed: 1, added: 1 });
 
     // An untouched site: each section pairs with the incoming one of its type.
@@ -557,13 +636,14 @@ describe('planLookSwitch', () => {
         current: siteFrom(bayfront.sections),
         outgoingDefaults: [bayfront.sections],
         draftedLookId: null,
+        live: null,
         incoming: heritage,
       }),
     ).toMatchObject({ kept: 0, replaced: 5, removed: 1, added: 1 });
   });
 
   it('hands back copies, so changing the plan never changes the look', () => {
-    const result = planLookSwitch({ current: [], outgoingDefaults: [], draftedLookId: null, incoming: heritage });
+    const result = planLookSwitch({ current: [], outgoingDefaults: [], draftedLookId: null, live: null, incoming: heritage });
     (result[1]!.content as { limit: number }).limit = 20;
     expect(sectionOf(look('heritage').sections, 'announcements').content).toEqual({ limit: 5 });
   });
