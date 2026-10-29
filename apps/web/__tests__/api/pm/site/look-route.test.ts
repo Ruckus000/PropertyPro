@@ -107,6 +107,21 @@ describe('PATCH /api/v1/pm/site/look — the gate', () => {
     for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
   });
 
+  it('refuses someone who is not a member of the community, for both forms', async () => {
+    // What `requireCommunityMembership` throws for a signed-in user with no seat here.
+    requireMembershipMock.mockRejectedValue(new ForbiddenError('User is not a member of this community'));
+
+    const draft = await PATCH(patchRequest({ communityId: COMMUNITY_ID, lookId: 'heritage' }));
+    const keep = await PATCH(patchRequest({ communityId: COMMUNITY_ID, keepCurrent: true }));
+
+    expect(draft.status).toBe(403);
+    expect(keep.status).toBe(403);
+    expect(requireMembershipMock).toHaveBeenCalledWith(COMMUNITY_ID, 'user-1');
+    // Refused before the role and plan checks, and before anything is written.
+    expect(requirePlanFeatureMock).not.toHaveBeenCalled();
+    for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
+  });
+
   it('refuses a demo in its grace window before membership runs', async () => {
     assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
 

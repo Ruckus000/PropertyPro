@@ -14,7 +14,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { pendingLook, type CommunityBranding, type CommunityType } from '@propertypro/shared';
+import { effectiveLook, liveLook, pendingLook, type CommunityBranding, type CommunityType } from '@propertypro/shared';
 import { updateBrandingForCommunity } from '@/lib/api/branding';
 import {
   discardSiteDrafts,
@@ -25,7 +25,8 @@ import {
 import { saveDraftDesign } from '@/lib/services/site-design-service';
 import { applyLookAtCreation, draftLookSwitch, loadLookSwitchInput } from '@/lib/services/site-look-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
-import { getLook, planLookSwitch, type LookId } from '@/lib/site-looks/looks';
+import { getLook, planLookSwitch, planLookSwitchWithCounts, type LookId } from '@/lib/site-looks/looks';
+import { resolveLookPreviewBranding } from '@/lib/public-site/preview-overrides';
 import { SITE_LOOK_PRESETS } from '../fixtures/site-look-presets';
 import {
   type TestKitState,
@@ -601,9 +602,15 @@ describeDb('site looks (db-backed integration)', () => {
     });
     const asRendered = (sections: ReadonlyArray<{ blockType: string; content: unknown }>): Section[] =>
       sections.map(({ blockType, content }) => ({ blockType, content }));
+    const previewOf = async (lookId: LookId) =>
+      planLookSwitch({ ...(await loadLookSwitchInput(communityId)), incoming: getLook(lookId)! });
     const auditRowsBefore = await auditRowCount(communityId);
 
-    const previewed = planLookSwitch({ ...(await loadLookSwitchInput(communityId)), incoming: getLook('heritage')! });
+    // The live look's card shows the page as it is: nothing is being switched.
+    const pageNow = asRendered((await loadLookSwitchInput(communityId)).current);
+    expect(asRendered(await previewOf('bayfront'))).toEqual(pageNow);
+
+    const previewed = await previewOf('heritage');
 
     // Previewing writes nothing: no draft row, no audit row, no draft look.
     expect(await draftRowCount(communityId)).toBe(0);
@@ -618,5 +625,92 @@ describeDb('site looks (db-backed integration)', () => {
 
     // What the manager then sees in the editor is what the card showed them.
     expect(asRendered((await loadLookSwitchInput(communityId)).current)).toEqual(asRendered(previewed));
+
+    // And the live look's card now shows the way back, which the draft restores:
+    // the live page, keeping the edit.
+    const wayBack = await previewOf('bayfront');
+    expect(asRendered(wayBack)[0]).toEqual({ blockType: 'hero', content: EDITED_HERO });
+    expect(wayBack.map((section) => section.blockType)).toEqual(lookSections('bayfront').map((section) => section.blockType));
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+    expect(asRendered((await loadLookSwitchInput(communityId)).current)).toEqual(asRendered(wayBack));
+    expect(await draftRowCount(communityId)).toBe(0);
+  });
+
+  it('a look preview paints the colours and fonts the draft leaves, whichever kind of switch the card is', async () => {
+    // Each card is previewed, then chosen, and the branding a renderer would read
+    // after the choice (the draft over the live look) must be what the preview
+    // painted. The live card is the one that could lie: it must paint the LIVE
+    // colours, which are not the look's stock ones once a manager has published
+    // their own.
+    const communityId = await createCommunity('preview-colours', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    await updateBrandingForCommunity(communityId, {
+      primaryColor: '#AA0000',
+      customCssOverrides: { secondaryColor: '#334455' },
+    });
+
+    /** The look fields of a branding as a renderer reads it. */
+    const lookFields = (branding: Record<string, unknown>, includeDraft: boolean) =>
+      liveLook(effectiveLook(branding as CommunityBranding, { includeDraft }));
+    const preview = async (lookId: LookId) => {
+      const look = getLook(lookId)!;
+      const plan = planLookSwitchWithCounts({ ...(await loadLookSwitchInput(communityId)), incoming: look });
+      const { branding } = await readCommunity(communityId);
+      return {
+        kind: plan.kind,
+        painted: liveLook(
+          resolveLookPreviewBranding(plan.kind, branding as CommunityBranding, look, SITE_LOOK_PRESETS[lookId]),
+        ),
+      };
+    };
+    const afterChoosing = async () => lookFields((await readCommunity(communityId)).branding, true);
+
+    // 1. The live card (Bayfront, nothing drafted): the live site's colours. Choosing it writes nothing.
+    const liveCard = await preview('bayfront');
+    expect(liveCard.kind).toBe('live-look');
+    expect(liveCard.painted).toEqual(lookFields((await readCommunity(communityId)).branding, false));
+    expect(liveCard.painted).toMatchObject({
+      layoutId: 'bayfront',
+      primaryColor: '#AA0000',
+      customCssOverrides: { secondaryColor: '#334455' },
+    });
+    expect(liveCard.painted.primaryColor).not.toBe(SITE_LOOK_PRESETS.bayfront.primaryColor);
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+    expect(await draftRowCount(communityId)).toBe(0);
+    expect((await readCommunity(communityId)).branding).not.toHaveProperty('draftLook');
+    expect(await afterChoosing()).toEqual(liveCard.painted);
+
+    // 2. Another look: its colour set, layout and fonts, with the custom colours kept.
+    const heritageCard = await preview('heritage');
+    expect(heritageCard.kind).toBe('switch');
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    expect(await afterChoosing()).toEqual(heritageCard.painted);
+    expect(heritageCard.painted).toMatchObject({
+      ...lookBranding('heritage'),
+      customCssOverrides: { secondaryColor: '#334455' },
+    });
+
+    // 3. The look already drafted, after the manager changed a drafted colour:
+    // choosing it again writes nothing, so the card paints the drafted colours as they are.
+    await saveDraftDesign(communityId, { primaryColor: '#0000FF' }, { actorUserId });
+    const againCard = await preview('heritage');
+    expect(againCard.kind).toBe('already-drafted');
+    expect(againCard.painted.primaryColor).toBe('#0000FF');
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    expect(await afterChoosing()).toEqual(againCard.painted);
+
+    // 4. Back to the live look, after the manager also drafted custom colours: the drafted
+    // layout, colour set and colours are withdrawn; the custom colours are theirs and stay.
+    await saveDraftDesign(communityId, { customCssOverrides: { primaryColor: '#654321' } }, { actorUserId });
+    const backCard = await preview('bayfront');
+    expect(backCard.kind).toBe('back-to-live');
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+    expect(await afterChoosing()).toEqual(backCard.painted);
+    expect(backCard.painted).toMatchObject({
+      layoutId: 'bayfront',
+      themePresetSlug: 'bayfront',
+      primaryColor: '#AA0000',
+      customCssOverrides: { primaryColor: '#654321' },
+    });
   });
 });

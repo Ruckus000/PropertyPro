@@ -15,8 +15,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 };
 
-const { saveMutateMock, draftLookMutateMock, draftLookPendingRef, designRef } = vi.hoisted(() => ({
+const { saveMutateMock, savePendingRef, draftLookMutateMock, draftLookPendingRef, designRef } = vi.hoisted(() => ({
   saveMutateMock: vi.fn(),
+  savePendingRef: { current: false },
   draftLookMutateMock: vi.fn(),
   draftLookPendingRef: { current: false },
   designRef: {
@@ -27,7 +28,7 @@ const { saveMutateMock, draftLookMutateMock, draftLookPendingRef, designRef } = 
 vi.mock('@/hooks/use-site-design', () => ({
   siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId] as const,
   useSiteDesign: () => ({ data: designRef.current, isError: false, refetch: vi.fn() }),
-  useSaveSiteDesign: () => ({ mutate: saveMutateMock, isPending: false }),
+  useSaveSiteDesign: () => ({ mutate: saveMutateMock, isPending: savePendingRef.current }),
 }));
 vi.mock('@/hooks/use-draft-site-look', () => ({
   useDraftSiteLook: () => ({ mutate: draftLookMutateMock, isPending: draftLookPendingRef.current }),
@@ -83,6 +84,7 @@ function renderPanel(presets = PRESETS) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  savePendingRef.current = false;
   draftLookPendingRef.current = false;
   designRef.current = {
     live: { layoutId: 'tidewater', themePresetSlug: 'bay-light' },
@@ -174,6 +176,42 @@ describe('looks', () => {
     expect(saveMutateMock).not.toHaveBeenCalled();
   });
 
+  it('says the website already uses the look when the choice goes back to the live look', async () => {
+    const user = userEvent.setup();
+    // What the route returns for a way back with nothing edited: counts that are not zero,
+    // although nothing is left to publish. The panel knows the live look, so it need not guess from them.
+    draftLookMutateMock.mockImplementation((_lookId, opts) =>
+      opts?.onSuccess?.({ replaced: 5, kept: 0, added: 1, removed: 1 }),
+    );
+    designRef.current = {
+      live: { layoutId: 'bayfront', themePresetSlug: 'bayfront' },
+      draft: { layoutId: 'heritage', themePresetSlug: 'heritage' },
+    };
+    renderPanel();
+
+    await user.click(screen.getByTestId('design-look-bayfront'));
+
+    expect(toastSuccessMock).toHaveBeenCalledTimes(1);
+    expect(toastSuccessMock).toHaveBeenCalledWith('Your website already uses this look.');
+  });
+
+  it('still asks for Publish for a look the website does not use yet', async () => {
+    const user = userEvent.setup();
+    draftLookMutateMock.mockImplementation((_lookId, opts) =>
+      opts?.onSuccess?.({ replaced: 5, kept: 0, added: 1, removed: 1 }),
+    );
+    designRef.current = {
+      live: { layoutId: 'bayfront', themePresetSlug: 'bayfront' },
+      draft: { layoutId: 'heritage', themePresetSlug: 'heritage' },
+    };
+    renderPanel();
+
+    await user.click(screen.getByTestId('design-look-palm-grove'));
+
+    expect(toastSuccessMock).toHaveBeenCalledTimes(1);
+    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/palm grove.*publish/i));
+  });
+
   it('can return to the live look after another is drafted', async () => {
     const user = userEvent.setup();
     designRef.current = {
@@ -214,9 +252,41 @@ describe('looks', () => {
 
     expect(lookRadios().every((radio) => radio.hasAttribute('disabled'))).toBe(true);
   });
+
+  it('holds the looks still while a colour set is being saved', () => {
+    savePendingRef.current = true;
+    renderPanel();
+
+    expect(lookRadios().every((radio) => radio.hasAttribute('disabled'))).toBe(true);
+  });
 });
 
 describe('colour sets', () => {
+  it('holds the colour sets still while a look is being saved', async () => {
+    const user = userEvent.setup();
+    draftLookPendingRef.current = true;
+    renderPanel();
+
+    const set = screen.getByLabelText(/midnight coast/i);
+    expect(set).toBeDisabled();
+    await user.click(set);
+
+    expect(saveMutateMock).not.toHaveBeenCalled();
+  });
+
+  it('holds the colour sets still while a colour set is being saved', () => {
+    savePendingRef.current = true;
+    renderPanel();
+
+    expect(screen.getByLabelText(/midnight coast/i)).toBeDisabled();
+  });
+
+  it('lets a colour set be chosen when nothing is being saved', () => {
+    renderPanel();
+
+    expect(screen.getByLabelText(/midnight coast/i)).toBeEnabled();
+  });
+
   it('saves a colour set by its slug', async () => {
     const user = userEvent.setup();
     renderPanel();

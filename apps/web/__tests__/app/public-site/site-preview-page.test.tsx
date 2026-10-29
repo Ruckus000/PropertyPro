@@ -121,7 +121,7 @@ vi.mock('@/components/public-site/layouts/registry', () => ({
 }));
 
 import SitePreviewPage from '@/app/(site-preview)/pm/site-preview/page';
-import { resolveTheme } from '@propertypro/theme';
+import { customCssOverridesToCssVars, resolveTheme } from '@propertypro/theme';
 import { getLook, type LookId, type SiteSection } from '@/lib/site-looks/looks';
 import { SITE_LOOK_PRESETS } from '../../fixtures/site-look-presets';
 
@@ -436,7 +436,183 @@ describe('SitePreviewPage — the props it hands <Layout>', () => {
       await renderPreview();
 
       expect(loadLookSwitchInputMock).not.toHaveBeenCalled();
+      expect(getHomePageIdMock).toHaveBeenCalledTimes(1);
       expect(listSiteBlocksMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads no saved rows, and looks up no home page, when it plans one', async () => {
+      // The plan is the home page, and `loadLookSwitchInput` finds it itself.
+      await renderPreview({ look: 'heritage' });
+
+      expect(getHomePageIdMock).not.toHaveBeenCalled();
+      expect(listSiteBlocksMock).not.toHaveBeenCalled();
+    });
+
+    // -----------------------------------------------------------------------
+    // The colours: what choosing the card would leave (`draftLookSwitch`), by the
+    // plan's kind. The card for the LIVE look must not paint colours the live
+    // site lacks.
+    // -----------------------------------------------------------------------
+
+    describe('colours follow what choosing the card would leave', () => {
+      const OWN_PRIMARY = '#AA0000';
+      const LIVE_CUSTOM = { secondaryColor: '#334455' };
+      const DRAFT_CUSTOM = { primaryColor: '#654321' };
+
+      const stock = (id: LookId) => ({
+        layoutId: id,
+        themePresetSlug: id,
+        primaryColor: SITE_LOOK_PRESETS[id].primaryColor,
+        secondaryColor: SITE_LOOK_PRESETS[id].secondaryColor,
+        accentColor: SITE_LOOK_PRESETS[id].accentColor,
+        fontHeading: SITE_LOOK_PRESETS[id].headingFont,
+        fontBody: SITE_LOOK_PRESETS[id].bodyFont,
+      });
+      const themeOf = (id: LookId, primaryColor = SITE_LOOK_PRESETS[id].primaryColor) => ({
+        primaryColor,
+        secondaryColor: SITE_LOOK_PRESETS[id].secondaryColor,
+        accentColor: SITE_LOOK_PRESETS[id].accentColor,
+        fontHeading: SITE_LOOK_PRESETS[id].headingFont,
+        fontBody: SITE_LOOK_PRESETS[id].bodyFont,
+      });
+      const presetRow = (id: LookId) => ({
+        id: 1,
+        slug: id,
+        displayName: id,
+        description: null,
+        tokens: SITE_LOOK_PRESETS[id],
+        tier: 'essentials',
+        isFeatured: false,
+      });
+
+      /** A live Bayfront site whose manager published their own main colour, with custom colours on top. */
+      function liveBayfront(draftLook?: Record<string, unknown>) {
+        return {
+          ...BRANDING,
+          ...stock('bayfront'),
+          primaryColor: OWN_PRIMARY,
+          customCssOverrides: LIVE_CUSTOM,
+          ...(draftLook ? { draftLook } : {}),
+        };
+      }
+
+      /** Heritage drafted over that site, with its sections in the editor's view. */
+      function heritageDraftedOverBayfront() {
+        const live = siteOn('bayfront');
+        const heritage = getLook('heritage')!.sections;
+        return {
+          ...live,
+          current: heritage.map((section, i) => ({
+            id: 200 + i,
+            slot: i + 1,
+            blockType: section.blockType,
+            content: structuredClone(section.content),
+          })),
+          outgoingLayoutId: 'heritage',
+          outgoingDefaults: [heritage],
+          draftedLookId: 'heritage' as const,
+          live: { ...live.live, otherLayoutDrafted: true },
+        };
+      }
+
+      /** What the preview painted with: the theme it resolved, and the custom colours it laid on top. */
+      function painted() {
+        const theme = vi.mocked(resolveTheme).mock.calls[0]![0] as Record<string, unknown>;
+        return {
+          theme: {
+            primaryColor: theme.primaryColor,
+            secondaryColor: theme.secondaryColor,
+            accentColor: theme.accentColor,
+            fontHeading: theme.fontHeading,
+            fontBody: theme.fontBody,
+          },
+          custom: vi.mocked(customCssOverridesToCssVars).mock.calls[0]![0],
+        };
+      }
+
+      beforeEach(() => {
+        listThemePresetsMock.mockResolvedValue((['bayfront', 'heritage'] as const).map(presetRow));
+      });
+
+      it('another look: its own colour set and fonts, with the live custom colours kept', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(liveBayfront());
+        loadLookSwitchInputMock.mockResolvedValue(siteOn('bayfront'));
+
+        await renderPreview({ look: 'heritage' });
+
+        expect(getLayoutMock).toHaveBeenCalledWith('heritage');
+        expect(painted()).toEqual({ theme: themeOf('heritage'), custom: LIVE_CUSTOM });
+      });
+
+      it('another look: the draft’s custom colours win over the live ones, as in the draft', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(liveBayfront({ customCssOverrides: DRAFT_CUSTOM }));
+        loadLookSwitchInputMock.mockResolvedValue(siteOn('bayfront'));
+
+        await renderPreview({ look: 'heritage' });
+
+        expect(painted().custom).toEqual(DRAFT_CUSTOM);
+      });
+
+      it('the look already drafted: the drafted colours as they are, a colour changed after picking it included', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(
+          liveBayfront({ ...stock('heritage'), primaryColor: '#0000FF' }),
+        );
+        loadLookSwitchInputMock.mockResolvedValue(heritageDraftedOverBayfront());
+
+        await renderPreview({ look: 'heritage' });
+
+        expect(getLayoutMock).toHaveBeenCalledWith('heritage');
+        expect(painted()).toEqual({ theme: themeOf('heritage', '#0000FF'), custom: LIVE_CUSTOM });
+        // Choosing it writes nothing, so its colour set is not laid over the drafted colours.
+        expect(listThemePresetsMock).not.toHaveBeenCalled();
+      });
+
+      it('the live look: the live site’s own colours, not the look’s stock ones', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(liveBayfront());
+        loadLookSwitchInputMock.mockResolvedValue(siteOn('bayfront'));
+
+        await renderPreview({ look: 'bayfront' });
+
+        expect(getLayoutMock).toHaveBeenCalledWith('bayfront');
+        expect(painted()).toEqual({ theme: themeOf('bayfront', OWN_PRIMARY), custom: LIVE_CUSTOM });
+        expect(painted().theme.primaryColor).not.toBe(SITE_LOOK_PRESETS.bayfront.primaryColor);
+        expect(listThemePresetsMock).not.toHaveBeenCalled();
+      });
+
+      it('the live look: a colour edit that is only pending does not appear on the card that says Live now', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(
+          liveBayfront({ primaryColor: '#00FF00', customCssOverrides: DRAFT_CUSTOM }),
+        );
+        loadLookSwitchInputMock.mockResolvedValue(siteOn('bayfront'));
+
+        await renderPreview({ look: 'bayfront' });
+
+        expect(painted()).toEqual({ theme: themeOf('bayfront', OWN_PRIMARY), custom: LIVE_CUSTOM });
+      });
+
+      it('back to the live look: the live colours again, plus the draft’s custom colours', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(
+          liveBayfront({ ...stock('heritage'), customCssOverrides: DRAFT_CUSTOM }),
+        );
+        loadLookSwitchInputMock.mockResolvedValue(heritageDraftedOverBayfront());
+
+        await renderPreview({ look: 'bayfront' });
+
+        expect(getLayoutMock).toHaveBeenCalledWith('bayfront');
+        // The drafted Heritage colours are withdrawn; the manager's own live main colour and
+        // the draft's custom colours are what the site has once the card is chosen.
+        expect(painted()).toEqual({ theme: themeOf('bayfront', OWN_PRIMARY), custom: DRAFT_CUSTOM });
+        expect(listThemePresetsMock).not.toHaveBeenCalled();
+      });
+
+      it('back to the live look: the live custom colours when none are drafted', async () => {
+        getBrandingForCommunityMock.mockResolvedValue(liveBayfront(stock('heritage')));
+        loadLookSwitchInputMock.mockResolvedValue(heritageDraftedOverBayfront());
+
+        await renderPreview({ look: 'bayfront' });
+
+        expect(painted()).toEqual({ theme: themeOf('bayfront', OWN_PRIMARY), custom: LIVE_CUSTOM });
+      });
     });
   });
 });

@@ -92,15 +92,28 @@ export function DesignPanel({
   // whose id is the layout the draft-over-live design carries. None when the
   // site is on a layout that predates the looks.
   const selectedLookId = LOOK_SUMMARIES.find((summary) => summary.id === look.layoutId)?.id ?? null;
+  // The look the website has now, which is where "choosing a look" can lead back to.
+  const liveLookId = LOOK_SUMMARIES.find((summary) => summary.id === design.data.live.layoutId)?.id ?? null;
   const busy = save.isPending || draftLook.isPending;
   const customColoursActive =
     look.customCssOverrides != null && Object.keys(look.customCssOverrides).length > 0;
 
   function chooseLook(summary: LookSummary) {
     if (summary.id === selectedLookId) return;
+    // Choosing the look the website already has takes the drafted one back, which
+    // leaves nothing of the look to publish. The counts the route returns cannot
+    // tell the panel so: a way back with nothing edited still counts the sections
+    // it put back (5 replaced, 1 added and 1 removed, Heritage to Bayfront), and a
+    // switch that keeps every edited section counts as nothing, the same as one
+    // that changed nothing. The panel knows which look is live.
+    const returnsToLive = summary.id === liveLookId;
     draftLook.mutate(summary.id, {
       onSuccess: () =>
-        toast.success(`Now using ${summary.name}. Publish to put it on your website.`),
+        toast.success(
+          returnsToLive
+            ? 'Your website already uses this look.'
+            : `Now using ${summary.name}. Publish to put it on your website.`,
+        ),
       onError: (err) => toast.error(err.message),
     });
   }
@@ -220,6 +233,7 @@ export function DesignPanel({
             selected={look.themePresetSlug ?? null}
             onChoose={chooseColourSet}
             name="design-colour-set"
+            disabled={busy}
           />
         )}
       </section>

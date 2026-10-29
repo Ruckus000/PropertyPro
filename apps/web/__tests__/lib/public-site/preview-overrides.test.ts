@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import { liveLook, type CommunityBranding } from '@propertypro/shared';
 import {
   resolvePreviewLayoutId,
   applyPresetTokensToBranding,
   plannedSectionsToBlocks,
+  resolveLookPreviewBranding,
 } from '@/lib/public-site/preview-overrides';
+import { getLook, type LookId, type LookSwitchKind } from '@/lib/site-looks/looks';
+import { SITE_LOOK_PRESETS } from '../../fixtures/site-look-presets';
 
 describe('resolvePreviewLayoutId', () => {
   it('uses a valid layout override', () => {
@@ -95,4 +99,144 @@ describe('plannedSectionsToBlocks', () => {
   it('numbers sections of a page with no rows from 1', () => {
     expect(plannedSectionsToBlocks([{ blockType: 'hero', content: {} }, { blockType: 'contact', content: {} }]).map((b) => b.id)).toEqual([1, 2]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// resolveLookPreviewBranding: the colours a look's card paints are the colours
+// choosing it would leave (`draftLookSwitch`, by the plan's kind).
+// ---------------------------------------------------------------------------
+
+describe('resolveLookPreviewBranding', () => {
+  /** The look fields of a branding as a renderer reads them: what the card paints. */
+  const painted = (branding: CommunityBranding) => liveLook(branding);
+  const stock = (id: LookId) => ({
+    layoutId: id,
+    themePresetSlug: id,
+    primaryColor: SITE_LOOK_PRESETS[id].primaryColor,
+    secondaryColor: SITE_LOOK_PRESETS[id].secondaryColor,
+    accentColor: SITE_LOOK_PRESETS[id].accentColor,
+    fontHeading: SITE_LOOK_PRESETS[id].headingFont,
+    fontBody: SITE_LOOK_PRESETS[id].bodyFont,
+  });
+  const resolve = (kind: LookSwitchKind, branding: CommunityBranding, lookId: LookId, withTokens = true) =>
+    resolveLookPreviewBranding(kind, branding, getLook(lookId)!, withTokens ? SITE_LOOK_PRESETS[lookId] : null);
+
+  /** A live Bayfront site whose manager published their own main colour, and custom colours on top. */
+  const OWN_PRIMARY = '#AA0000';
+  const liveBayfront = (extra: Partial<CommunityBranding> = {}): CommunityBranding => ({
+    logoPath: 'communities/1/logo.png',
+    siteFooter: { associationName: 'Sunset Condominium Association, Inc.', note: null, showStatutoryLine: true },
+    ...stock('bayfront'),
+    primaryColor: OWN_PRIMARY,
+    customCssOverrides: { secondaryColor: '#334455' },
+    ...extra,
+  });
+  /** Heritage drafted over it, as `draftLookSwitch` writes it. */
+  const heritageDraft = stock('heritage');
+
+  describe('switch', () => {
+    it("paints the look's own colour set, layout and slug over the live site's colours", () => {
+      expect(painted(resolve('switch', liveBayfront(), 'heritage'))).toMatchObject(stock('heritage'));
+    });
+
+    it('keeps the live custom colours, as the draft does (it never drafts them)', () => {
+      expect(painted(resolve('switch', liveBayfront(), 'heritage')).customCssOverrides).toEqual({
+        secondaryColor: '#334455',
+      });
+    });
+
+    it('keeps drafted custom colours over live ones, and a drafted clear (null) clears them', () => {
+      const custom = liveBayfront({ draftLook: { customCssOverrides: { primaryColor: '#654321' } } });
+      expect(painted(resolve('switch', custom, 'heritage')).customCssOverrides).toEqual({ primaryColor: '#654321' });
+
+      const cleared = liveBayfront({ draftLook: { customCssOverrides: null } });
+      expect(painted(resolve('switch', cleared, 'heritage')).customCssOverrides).toBeNull();
+    });
+
+    it('lays the colour set over colours drafted for another look', () => {
+      const palmGrove = liveBayfront({ draftLook: { ...stock('palm-grove'), primaryColor: '#0000FF' } });
+      expect(painted(resolve('switch', palmGrove, 'heritage'))).toMatchObject(stock('heritage'));
+    });
+
+    it("keeps the colours the community has when the look's colour set is not in the catalog", () => {
+      const result = painted(resolve('switch', liveBayfront(), 'heritage', false));
+      expect(result).toMatchObject({ layoutId: 'heritage', themePresetSlug: 'heritage', primaryColor: OWN_PRIMARY });
+    });
+  });
+
+  describe('already-drafted', () => {
+    it('is the drafted look as it stands, including a colour changed after picking it', () => {
+      const drafted = liveBayfront({ draftLook: { ...heritageDraft, primaryColor: '#0000FF' } });
+      expect(painted(resolve('already-drafted', drafted, 'heritage'))).toMatchObject({
+        ...heritageDraft,
+        primaryColor: '#0000FF',
+      });
+    });
+
+    it('does not bring the look colour set again', () => {
+      const drafted = liveBayfront({ draftLook: { ...heritageDraft, primaryColor: '#0000FF' } });
+      expect(painted(resolve('already-drafted', drafted, 'heritage')).primaryColor).not.toBe(
+        SITE_LOOK_PRESETS.heritage.primaryColor,
+      );
+    });
+  });
+
+  describe('live-look', () => {
+    it("is the live site's own colours, not the look's stock ones", () => {
+      const result = painted(resolve('live-look', liveBayfront(), 'bayfront'));
+      expect(result.primaryColor).toBe(OWN_PRIMARY);
+      expect(result.primaryColor).not.toBe(SITE_LOOK_PRESETS.bayfront.primaryColor);
+      expect(result.customCssOverrides).toEqual({ secondaryColor: '#334455' });
+    });
+
+    it('leaves a pending colour edit off the card that says Live now', () => {
+      // The edit stays pending (choosing this card writes nothing), but it is not live.
+      const pending = liveBayfront({ draftLook: { primaryColor: '#00FF00', customCssOverrides: { primaryColor: '#111111' } } });
+      const result = painted(resolve('live-look', pending, 'bayfront'));
+      expect(result.primaryColor).toBe(OWN_PRIMARY);
+      expect(result.customCssOverrides).toEqual({ secondaryColor: '#334455' });
+    });
+  });
+
+  describe('back-to-live', () => {
+    const drafted = (extra: Partial<NonNullable<CommunityBranding['draftLook']>> = {}) =>
+      liveBayfront({ draftLook: { ...heritageDraft, ...extra } });
+
+    it('is the live look again: the drafted layout, colour set, colours and fonts are withdrawn', () => {
+      const result = painted(resolve('back-to-live', drafted(), 'bayfront'));
+      expect(result).toMatchObject({ ...stock('bayfront'), primaryColor: OWN_PRIMARY });
+      expect(result.themePresetSlug).toBe('bayfront');
+    });
+
+    it("keeps the draft's custom colours, which the switch never withdraws", () => {
+      const withCustom = drafted({ customCssOverrides: { primaryColor: '#654321' } });
+      expect(painted(resolve('back-to-live', withCustom, 'bayfront')).customCssOverrides).toEqual({
+        primaryColor: '#654321',
+      });
+      const cleared = drafted({ customCssOverrides: null });
+      expect(painted(resolve('back-to-live', cleared, 'bayfront')).customCssOverrides).toBeNull();
+    });
+
+    it('falls back to the live custom colours when none are drafted', () => {
+      expect(painted(resolve('back-to-live', drafted(), 'bayfront')).customCssOverrides).toEqual({
+        secondaryColor: '#334455',
+      });
+    });
+  });
+
+  it.each<LookSwitchKind>(['switch', 'already-drafted', 'live-look', 'back-to-live'])(
+    '%s leaves everything that is not the look alone, and never changes its input',
+    (kind) => {
+      const input = liveBayfront({ draftLook: { ...heritageDraft } });
+      const before = structuredClone(input);
+
+      const result = resolve(kind, input, kind === 'switch' || kind === 'already-drafted' ? 'heritage' : 'bayfront');
+
+      expect(input).toEqual(before);
+      expect(result.logoPath).toBe('communities/1/logo.png');
+      expect(result.siteFooter).toEqual(before.siteFooter);
+      // A renderer never sees the draft.
+      expect(result).not.toHaveProperty('draftLook');
+    },
+  );
 });

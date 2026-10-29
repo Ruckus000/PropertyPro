@@ -6,9 +6,9 @@
  * anything. Kept pure (no I/O) so they're unit-testable.
  */
 import { LAYOUT_IDS, type LayoutId, type SiteBlock } from '@/components/public-site/layouts/types';
-import type { CommunityType } from '@propertypro/shared';
+import { effectiveLook, type CommunityBranding, type CommunityType, type SiteLook } from '@propertypro/shared';
 import { resolveLayoutId, type BrandingLayoutInput } from '@/lib/public-site/layout-resolver';
-import type { SiteSection } from '@/lib/site-looks/looks';
+import type { LookDefinition, LookSwitchKind, SiteSection } from '@/lib/site-looks/looks';
 
 export interface PresetTokens {
   primaryColor?: string;
@@ -86,4 +86,58 @@ export function plannedSectionsToBlocks(sections: readonly SiteSection[]): SiteB
     blockOrder: index + 1,
     content: section.content,
   }));
+}
+
+/**
+ * The branding a look preview paints: what a renderer would read after choosing
+ * that look's card. `draftLookSwitch` writes by the plan's `kind`, and so does
+ * this, so a card can never paint colours its choice would not leave. The one
+ * that could lie is the live look's: its stock colour set is not the live site's
+ * once a manager has published their own colours.
+ *
+ * - `switch`: the look's layout, colour set, colours and fonts, drafted over
+ *   whatever is drafted. Custom colours are the manager's own and are never
+ *   drafted by a switch, so they stay as the draft has them, else as live.
+ * - `already-drafted`: nothing is written, so the draft as it stands, including
+ *   a colour changed after picking the look.
+ * - `live-look`: nothing is written, and no other layout is drafted: the live
+ *   look. A colour edit that is only pending stays pending (choosing this card
+ *   does not touch it) but is not what is live, and this is the card that says
+ *   "Live now".
+ * - `back-to-live`: the drafted layout, colour set, colours and fonts are
+ *   withdrawn and the live ones stand again; custom colours are not withdrawn,
+ *   so the draft's, if it has any, are still there.
+ *
+ * `presetTokens` are the look's colour set's, as the catalog has them, and only
+ * a `switch` uses them; none (the set is not in the catalog) leaves the colours
+ * the community has. Pure: `branding` is not changed, and the result has no
+ * `draftLook`.
+ */
+export function resolveLookPreviewBranding(
+  kind: LookSwitchKind,
+  branding: CommunityBranding,
+  look: Pick<LookDefinition, 'layoutId' | 'presetSlug'>,
+  presetTokens: PresetTokens | null | undefined,
+): CommunityBranding {
+  switch (kind) {
+    case 'switch': {
+      // `resolveDesign`'s look: the colour set's colours and fonts, with the layout and the set's slug.
+      const design = {
+        ...applyPresetTokensToBranding({}, presetTokens),
+        layoutId: look.layoutId,
+        themePresetSlug: look.presetSlug,
+      } as SiteLook;
+      return effectiveLook({ ...branding, draftLook: { ...branding.draftLook, ...design } }, { includeDraft: true });
+    }
+    case 'already-drafted':
+      return effectiveLook(branding, { includeDraft: true });
+    case 'live-look':
+      return effectiveLook(branding, { includeDraft: false });
+    case 'back-to-live': {
+      const drafted = branding.draftLook ?? {};
+      const customColours: SiteLook =
+        'customCssOverrides' in drafted ? { customCssOverrides: drafted.customCssOverrides } : {};
+      return effectiveLook({ ...branding, draftLook: customColours }, { includeDraft: true });
+    }
+  }
 }
