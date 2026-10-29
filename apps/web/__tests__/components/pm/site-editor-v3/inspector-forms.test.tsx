@@ -9,8 +9,9 @@
  * rules each one mirrors, and the round-trip hazards.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { BlockType, LinkedFacts } from '@propertypro/shared';
+import { render, screen, within } from '@testing-library/react';
+import { documentsBlockSchema, type BlockType, type LinkedFacts } from '@propertypro/shared';
+import { getLook } from '@/lib/site-looks/looks';
 import { HeroBlock } from '@/components/public-site/blocks/HeroBlock';
 import type { PublicCommunity } from '@/components/public-site/blocks/types';
 import { ImageForm } from '@/components/pm/site-editor-v3/inspector/forms/ImageForm';
@@ -21,6 +22,37 @@ import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardF
 import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
 import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
 import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
+import {
+  SectionSourcesProvider,
+  type ContactInfoLike,
+  type OwnerRecordGroupCount,
+} from '@/components/pm/site-editor-v3/inspector/section-sources-context';
+
+/**
+ * Renders a panel the way `EditorRoot` wires it: with the facts behind the
+ * canvas that tell a section where its content comes from. Unset facts are
+ * unknown, which is also what a panel outside a provider sees.
+ */
+function withSources(
+  ui: React.ReactElement,
+  sources: {
+    layoutId?: string | null;
+    contact?: ContactInfoLike | null;
+    ownerRecordGroups?: readonly OwnerRecordGroupCount[] | null;
+    recordsApply?: boolean;
+  } = {},
+) {
+  return (
+    <SectionSourcesProvider
+      layoutId={sources.layoutId ?? null}
+      contact={sources.contact ?? null}
+      ownerRecordGroups={sources.ownerRecordGroups ?? null}
+      recordsApply={sources.recordsApply ?? true}
+    >
+      {ui}
+    </SectionSourcesProvider>
+  );
+}
 
 const upsertMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
@@ -707,5 +739,454 @@ describe('HeroForm — "Shows as" for linked fields', () => {
         screen.getByText(page.subtitle === '' ? NOTHING : `Shows as: ${page.subtitle}`),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe('HeroForm — linked-detail chips and buttons', () => {
+  const HARBOR: LinkedFacts = {
+    name: 'Harbor Pointe Condominium Association, Inc.',
+    shortName: 'Harbor Pointe',
+    city: 'Miami',
+    unitCount: 120,
+  };
+
+  function renderHero(content: unknown, layoutId: string | null = null) {
+    return render(
+      <LinkedFactsProvider facts={HARBOR}>
+        {withSources(
+          <HeroForm communityId={7} blockType="hero" blockOrder={1} content={content} />,
+          { layoutId },
+        )}
+      </LinkedFactsProvider>,
+    );
+  }
+  const headline = () => screen.getByLabelText(/headline/i) as HTMLInputElement;
+  const subtitle = () => screen.getByLabelText('Subtitle') as HTMLTextAreaElement;
+  const insertButton = (name: string) => screen.getByRole('button', { name });
+  const chips = () => Array.from(document.querySelectorAll('[data-linked-field]'));
+
+  it('the Name chip inserts {{name}}', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to !' });
+
+    // The cursor sits between "to " and "!": the detail goes there, not at the end.
+    headline().focus();
+    headline().setSelectionRange(11, 11);
+    await user.click(insertButton('Insert the community name'));
+
+    expect(headline()).toHaveValue('Welcome to {{name}}!');
+    // The words become a chip, and the line still says what the page shows.
+    expect(chips().map((chip) => chip.getAttribute('data-linked-field'))).toEqual(['name']);
+    expect(chips()[0]!.textContent).toContain('Community name');
+    expect(screen.getByText('Shows as: Welcome to Harbor Pointe!')).toBeInTheDocument();
+    // The cursor is behind the detail, still in the headline, ready to go on typing.
+    expect(headline()).toHaveFocus();
+    expect(headline().selectionStart).toBe(19);
+    // Said aloud too, since focus moved to the field and the button row is behind it.
+    expect(screen.getByText('Added the community name to the headline.')).toHaveAttribute(
+      'role',
+      'status',
+    );
+
+    await settleAutosave();
+    expect(updateHeroMock.mock.calls.at(-1)![0].headline).toBe('Welcome to {{name}}!');
+
+    // ...and gone once the manager types on.
+    await user.type(headline(), 'x');
+    expect(screen.queryByText(/Added the community name/)).not.toBeInTheDocument();
+  });
+
+  it('puts City and Homes into the subtitle when that is the field being edited', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome', subtitle: 'Homes in .' });
+
+    subtitle().focus();
+    subtitle().setSelectionRange(9, 9);
+    await user.click(insertButton('Insert the city'));
+    expect(subtitle()).toHaveValue('Homes in {{city}}.');
+
+    subtitle().setSelectionRange(0, 0);
+    await user.click(insertButton('Insert the number of homes'));
+    expect(subtitle()).toHaveValue('{{units}}Homes in {{city}}.');
+    expect(headline()).toHaveValue('Welcome');
+  });
+
+  it('adds the detail to the end of the headline when no field has been used', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to ' });
+
+    await user.click(insertButton('Insert the community name'));
+
+    expect(headline()).toHaveValue('Welcome to {{name}}');
+  });
+
+  it('forgets the field once focus has gone to another control', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to ', subtitle: 'Homes in .' });
+
+    subtitle().focus();
+    subtitle().setSelectionRange(9, 9);
+    await user.click(screen.getByLabelText('Button label'));
+    await user.click(insertButton('Insert the community name'));
+
+    // Not into the subtitle it was last in: the headline's end, like a fresh form.
+    expect(subtitle()).toHaveValue('Homes in .');
+    expect(headline()).toHaveValue('Welcome to {{name}}');
+  });
+
+  it('replaces the words selected in the field', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to our home' });
+
+    headline().focus();
+    headline().setSelectionRange(11, 19);
+    await user.click(insertButton('Insert the community name'));
+
+    expect(headline()).toHaveValue('Welcome to {{name}}');
+  });
+
+  it('inserts into the field the keyboard user was in, though focus is on the button', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome', subtitle: 'Homes in .' });
+
+    subtitle().focus();
+    subtitle().setSelectionRange(9, 9);
+    await user.tab();
+    expect(insertButton('Insert the community name')).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(subtitle()).toHaveValue('Homes in {{name}}.');
+  });
+
+  it('says so, and changes nothing, when the field has no room left', async () => {
+    const user = setupTimers();
+    const full = 'x'.repeat(115);
+    renderHero({ headline: full });
+
+    await user.click(insertButton('Insert the community name'));
+
+    expect(headline()).toHaveValue(full);
+    expect(screen.getByText(/There isn't room left in the headline for that\./)).toHaveAttribute(
+      'role',
+      'status',
+    );
+  });
+
+  it('names what each button inserts, and keeps its short label in that name', () => {
+    renderHero({ headline: 'Welcome' });
+    for (const [label, name] of [
+      ['Name', 'Insert the community name'],
+      ['City', 'Insert the city'],
+      ['Homes', 'Insert the number of homes'],
+    ] as const) {
+      const button = insertButton(name);
+      expect(button).toHaveTextContent(label);
+      expect(name.toLowerCase()).toContain(label.toLowerCase());
+    }
+  });
+
+  it('shows no chip for words that use no linked detail', () => {
+    renderHero({ headline: 'Welcome home' });
+    expect(chips()).toHaveLength(0);
+  });
+
+  it('"Use the look\'s wording" restores the bayfront defaults', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Our own words', subtitle: 'Something else.' }, 'bayfront');
+
+    await user.click(screen.getByRole('button', { name: "Use the look's wording" }));
+
+    const bayfront = getLook('bayfront')!.sections.find((section) => section.blockType === 'hero')!
+      .content as { headline: string; subtitle: string };
+    expect(headline()).toHaveValue('Welcome to {{name}}');
+    expect(subtitle()).toHaveValue(
+      '{{units}} homes in {{city}}. Meeting notices, news and community records, all in one place.',
+    );
+    expect(headline()).toHaveValue(bayfront.headline);
+    expect(subtitle()).toHaveValue(bayfront.subtitle);
+
+    // Through the form's normal save, like any other edit.
+    await settleAutosave();
+    const sent = updateHeroMock.mock.calls.at(-1)![0];
+    expect(sent.headline).toBe(bayfront.headline);
+    expect(sent.subtitle).toBe(bayfront.subtitle);
+  });
+
+  it('keeps the button label, link and photos when the wording is restored', async () => {
+    const user = setupTimers();
+    renderHero(
+      {
+        headline: 'Our own words',
+        ctaText: 'Sign in',
+        ctaTarget: '/auth/login',
+        photos: [{ stock: 'sunset', alt: 'A sunset over the water' }],
+      },
+      'bayfront',
+    );
+
+    await user.click(screen.getByRole('button', { name: "Use the look's wording" }));
+    await settleAutosave();
+
+    const sent = updateHeroMock.mock.calls.at(-1)![0];
+    expect(sent.ctaText).toBe('Sign in');
+    expect(sent.ctaTarget).toBe('/auth/login');
+    expect(sent.photos).toEqual([{ stock: 'sunset', alt: 'A sunset over the water' }]);
+  });
+
+  it.each(['tidewater', 'boulevard', 'sable', null])(
+    'has no look to go back to on the %s layout, so the button is not offered',
+    (layoutId) => {
+      renderHero({ headline: 'Our own words' }, layoutId);
+      expect(screen.queryByRole('button', { name: "Use the look's wording" })).not.toBeInTheDocument();
+    },
+  );
+});
+
+describe('SorEmptyTextForm — the panels say where the content comes from', () => {
+  const PROFILE_OWNER_GROUPS: OwnerRecordGroupCount[] = [
+    { label: 'Budgets', postedCount: 3 },
+    { label: 'Meeting minutes', postedCount: 2 },
+  ];
+
+  function renderSor(
+    blockType: BlockType,
+    content: unknown,
+    sources: Parameters<typeof withSources>[1] = {},
+    communityId = 7,
+  ) {
+    return render(
+      withSources(
+        <SorEmptyTextForm
+          communityId={communityId}
+          blockType={blockType}
+          blockOrder={6}
+          content={content}
+        />,
+        sources,
+      ),
+    );
+  }
+  const written = () => upsertMock.mock.calls.at(-1)![0] as {
+    blockType: string;
+    blockOrder: number;
+    content: Record<string, unknown>;
+  };
+
+  it('the Announcements panel links to Announcements for this community', () => {
+    renderSor('announcements', { limit: 3 });
+
+    expect(document.body.textContent).toContain('Updates by itself from Announcements.');
+    expect(screen.getByRole('link', { name: 'Announcements' })).toHaveAttribute(
+      'href',
+      '/announcements?communityId=7',
+    );
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toHaveAttribute(
+      'href',
+      '/announcements/new?communityId=7',
+    );
+  });
+
+  it('links each panel to the community it is for', () => {
+    renderSor('announcements', {}, {}, 31);
+    expect(screen.getByRole('link', { name: 'Announcements' })).toHaveAttribute(
+      'href',
+      '/announcements?communityId=31',
+    );
+  });
+
+  it('the Meetings panel links to Meetings, and has no announcement to write', () => {
+    renderSor('meetings', { limit: 5 });
+
+    expect(document.body.textContent).toContain('Updates by itself from Meetings.');
+    expect(screen.getByRole('link', { name: 'Meetings' })).toHaveAttribute(
+      'href',
+      '/communities/7/meetings',
+    );
+    expect(screen.queryByRole('link', { name: 'Write an announcement' })).not.toBeInTheDocument();
+  });
+
+  it('the Documents panel writes includeCategories', async () => {
+    const user = setupTimers();
+    renderSor('documents', { limit: 5, includeCategories: ['budget'] });
+
+    expect(screen.getByLabelText('Budgets')).toBeChecked();
+    expect(screen.getByLabelText('Meeting minutes')).not.toBeChecked();
+
+    await user.click(screen.getByLabelText('Meeting minutes'));
+    await settleAutosave();
+
+    expect(upsertMock).toHaveBeenCalledWith({
+      blockType: 'documents',
+      blockOrder: 6,
+      content: { limit: 5, includeCategories: ['budget', 'minutes'] },
+    });
+    expect(documentsBlockSchema.safeParse(written().content).success).toBe(true);
+
+    // Taking one away writes the rest, in the schema's order.
+    await user.click(screen.getByLabelText('Budgets'));
+    await settleAutosave();
+    expect(written().content).toEqual({ limit: 5, includeCategories: ['minutes'] });
+  });
+
+  it('lists the categories in the schema order, whatever order they were checked in', async () => {
+    const user = setupTimers();
+    renderSor('documents', { limit: 5, includeCategories: ['rules'] });
+
+    await user.click(screen.getByLabelText('Budgets'));
+    await settleAutosave();
+
+    expect(written().content.includeCategories).toEqual(['budget', 'rules']);
+  });
+
+  it('warns, with words, when no category is checked', async () => {
+    const user = setupTimers();
+    renderSor('documents', { limit: 5, includeCategories: ['budget'] });
+
+    expect(screen.queryByText(/lists no documents/)).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Budgets'));
+
+    expect(screen.getByText('Nothing is checked, so this section lists no documents.')).toBeInTheDocument();
+  });
+
+  it('writes no includeCategories while the block has none and only its message is edited', async () => {
+    // A block saved before this panel has no key. Fixing its message must not add one.
+    const user = setupTimers();
+    renderSor('documents', { limit: 5 });
+
+    expect(screen.getByText('Nothing is checked, so this section lists no documents.')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Empty-state message'), 'None yet.');
+    await settleAutosave();
+
+    expect(written().content).toEqual({ limit: 5, emptyText: 'None yet.' });
+  });
+
+  it("the Documents panel links to Documents and summarises the owners' records", () => {
+    renderSor(
+      'documents',
+      { limit: 5, includeCategories: ['budget'] },
+      { ownerRecordGroups: PROFILE_OWNER_GROUPS },
+    );
+
+    expect(screen.getByRole('link', { name: 'Documents' })).toHaveAttribute(
+      'href',
+      '/communities/7/documents',
+    );
+    const records = screen.getByRole('heading', { name: 'Records for owners' }).parentElement!;
+    expect(within(records).getByText('Budgets · 3')).toBeInTheDocument();
+    expect(within(records).getByText('Meeting minutes · 2')).toBeInTheDocument();
+    expect(
+      within(records).getByRole('link', { name: 'See the records on your website home' }),
+    ).toHaveAttribute('href', '/pm/website?communityId=7#records');
+  });
+
+  it('says so when no record is posted for owners yet', () => {
+    renderSor('documents', { limit: 5 }, { ownerRecordGroups: [] });
+    expect(
+      screen.getByText('No records for owners are posted yet, so your website has no summary to show.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says nothing about owners\' records for a community that owes no records list', () => {
+    renderSor('documents', { limit: 5 }, { ownerRecordGroups: [], recordsApply: false });
+    expect(screen.queryByRole('heading', { name: 'Records for owners' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /website home/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('ContactForm — what the Community profile still lacks', () => {
+  function renderContact(
+    contact: ContactInfoLike | null,
+    content: unknown = { showBoard: true, showManagement: true },
+  ) {
+    return render(
+      withSources(
+        <ContactForm communityId={7} blockType="contact" blockOrder={3} content={content} />,
+        { contact },
+      ),
+    );
+  }
+
+  it('the Contact panel names the hidden fields and links to the Community profile', () => {
+    renderContact({
+      management: { email: 'office@example.com', phone: null },
+      address: '100 Palm Way, Miami, FL',
+      officeHours: null,
+    });
+
+    expect(screen.getByText("Office hours aren't added yet, so they're hidden")).toBeInTheDocument();
+    expect(screen.getByText("The phone number isn't added yet, so it's hidden")).toBeInTheDocument();
+    // What the profile has is not listed.
+    expect(screen.queryByText(/address isn't added/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/contact email isn't added/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Community profile/ })).toHaveAttribute(
+      'href',
+      '/settings?communityId=7#community-profile',
+    );
+  });
+
+  it('names every detail when the profile has none', () => {
+    renderContact({ management: null, address: null, officeHours: null });
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      "The address isn't added yet, so it's hidden",
+      "Office hours aren't added yet, so they're hidden",
+      "The phone number isn't added yet, so it's hidden",
+      "The contact email isn't added yet, so it's hidden",
+    ]);
+  });
+
+  it('treats blank text as not added', () => {
+    renderContact({ management: { email: '  ', phone: '' }, address: ' ', officeHours: '\n' });
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+  });
+
+  it('lists nothing when the profile has every detail, and still links to it', () => {
+    renderContact({
+      management: { email: 'office@example.com', phone: '305-555-0100' },
+      address: '100 Palm Way, Miami, FL',
+      officeHours: 'Mon-Fri, 9-5',
+    });
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Community profile/ })).toBeInTheDocument();
+  });
+
+  it('does not blame the profile for a phone and email the management switch hides', () => {
+    renderContact(
+      { management: null, address: null, officeHours: null },
+      { showBoard: true, showManagement: false },
+    );
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      "The address isn't added yet, so it's hidden",
+      "Office hours aren't added yet, so they're hidden",
+    ]);
+  });
+
+  it('lists nothing when the profile is not known', () => {
+    renderContact(null);
+    expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Community profile/ })).toBeInTheDocument();
+  });
+});
+
+describe('Quick links and Board members — source links', () => {
+  it('Quick links links to where each shortcut comes from', () => {
+    render(<QuickLinksForm communityId={7} blockType="quicklinks" blockOrder={4} content={{}} />);
+
+    const hrefs = Object.fromEntries(
+      screen.getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')]),
+    );
+    expect(hrefs).toEqual({
+      Meetings: '/communities/7/meetings',
+      Announcements: '/announcements?communityId=7',
+      Documents: '/communities/7/documents',
+      'Community profile': '/settings?communityId=7#community-profile',
+    });
+  });
+
+  it('Board members links to Roles & Access, where board seats are given out', () => {
+    render(<BoardForm communityId={7} blockType="board" blockOrder={5} content={{}} />);
+    expect(screen.getByRole('link', { name: 'Roles & Access' })).toHaveAttribute(
+      'href',
+      '/settings/roles?communityId=7',
+    );
   });
 });

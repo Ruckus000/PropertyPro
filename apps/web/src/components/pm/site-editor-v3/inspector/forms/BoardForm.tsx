@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useBlockForm } from '../use-block-form';
+import { rolesAccessHref } from '../source-links';
+import { SourceLink } from './fields/SourceLink';
 import type { BlockFormProps } from '../types';
 
 /** `boardBlockSchema`'s limit on the heading. */
@@ -94,6 +96,11 @@ export function BoardForm({ communityId, blockOrder, content }: BlockFormProps) 
       </p>
       <p className="text-sm text-content-secondary">
         If no one holds a board seat yet, your website leaves this section out.
+      </p>
+      <p className="text-sm text-content-secondary">
+        Board seats are given out in{' '}
+        <SourceLink href={rolesAccessHref(communityId)}>Roles &amp; Access</SourceLink>, which only
+        your main manager can open.
       </p>
       <p className="text-sm text-content-secondary">
         If your Contact section also lists the board, untick “Show board members” there so the

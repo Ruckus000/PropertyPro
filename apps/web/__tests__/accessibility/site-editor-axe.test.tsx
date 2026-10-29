@@ -23,6 +23,9 @@ import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
 import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardForm';
 import { QuickLinksForm } from '@/components/pm/site-editor-v3/inspector/forms/QuickLinksForm';
+import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
+import { SorEmptyTextForm } from '@/components/pm/site-editor-v3/inspector/forms/SorEmptyTextForm';
+import { SectionSourcesProvider } from '@/components/pm/site-editor-v3/inspector/section-sources-context';
 import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
@@ -407,6 +410,7 @@ describe('Add a part — axe (combined plan Task 28)', () => {
       meetings: [],
       contact: { management: null, board: [], address: null, officeHours: null },
     },
+    ownerRecordGroups: [],
   };
   const PAGE_BLOCKS = [
     block({ id: 1, blockType: 'hero', blockOrder: 1, content: { headline: 'Welcome home' } }),
@@ -729,27 +733,90 @@ describe('Website builder writers — axe', () => {
           unitCount: 120,
         }}
       >
-        <HeroForm
-          communityId={7}
-          blockType="hero"
-          blockOrder={1}
-          content={{
-            headline: 'Welcome to {{name}}',
-            subtitle: '{{units}} homes in {{city}}. Notices and records.',
-            photos: [
-              { stock: 'sunset', alt: 'Sunset over the water' },
-              { path: '7/hero/pool.jpg', alt: 'The pool' },
-            ],
-          }}
-        />
+        <SectionSourcesProvider
+          layoutId="bayfront"
+          contact={null}
+          ownerRecordGroups={null}
+          recordsApply
+        >
+          <HeroForm
+            communityId={7}
+            blockType="hero"
+            blockOrder={1}
+            content={{
+              headline: 'Welcome to {{name}}',
+              subtitle: '{{units}} homes in {{city}}. Notices and records.',
+              photos: [
+                { stock: 'sunset', alt: 'Sunset over the water' },
+                { path: '7/hero/pool.jpg', alt: 'The pool' },
+              ],
+            }}
+          />
+        </SectionSourcesProvider>
       </LinkedFactsProvider>,
     );
-    // The preview lines, the stock photo's own controls and the upload's.
+    // The preview lines, the chips and insert buttons, "Use the look's wording",
+    // the stock photo's own controls and the upload's.
     expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-linked-field]').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Insert the community name' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Use the look's wording" })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Documents panel, with its categories and the owners\' records', async () => {
+    const { container } = render(
+      <SectionSourcesProvider
+        layoutId="bayfront"
+        contact={null}
+        ownerRecordGroups={[{ label: 'Budgets', postedCount: 3 }]}
+        recordsApply
+      >
+        <SorEmptyTextForm
+          communityId={7}
+          blockType="documents"
+          blockOrder={6}
+          content={{ limit: 5, includeCategories: ['budget'] }}
+        />
+      </SectionSourcesProvider>,
+    );
+    expect(screen.getByRole('group', { name: 'Which documents to list' })).toBeInTheDocument();
+    expect(screen.getByText('Budgets · 3')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Documents panel with nothing checked', async () => {
+    const { container } = render(
+      <SorEmptyTextForm communityId={7} blockType="documents" blockOrder={6} content={{ limit: 5 }} />,
+    );
+    expect(screen.getByText('Nothing is checked, so this section lists no documents.')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Announcements panel', async () => {
+    const { container } = render(
+      <SorEmptyTextForm communityId={7} blockType="announcements" blockOrder={6} content={{}} />,
+    );
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Contact panel listing what the profile lacks', async () => {
+    const { container } = render(
+      <SectionSourcesProvider
+        layoutId={null}
+        contact={{ management: null, address: null, officeHours: null }}
+        ownerRecordGroups={null}
+        recordsApply
+      >
+        <ContactForm communityId={7} blockType="contact" blockOrder={3} content={{}} />
+      </SectionSourcesProvider>,
+    );
+    expect(screen.getByText("Office hours aren't added yet, so they're hidden")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 });

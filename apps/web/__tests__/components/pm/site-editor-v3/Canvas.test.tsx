@@ -92,6 +92,7 @@ const CONTEXT: CanvasContext = {
     meetings: [],
     contact: { management: null, board: [], address: null, officeHours: null },
   },
+  ownerRecordGroups: [],
 };
 
 /** The two pages every scope case uses. HOME is what EditorRoot seeds. */

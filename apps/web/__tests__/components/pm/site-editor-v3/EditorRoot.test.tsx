@@ -31,6 +31,7 @@ import { RequirementsDetails as RealRequirementsDetails } from '@/components/pm/
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { useLinkedFacts } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
+import { useSectionSources } from '@/components/pm/site-editor-v3/inspector/section-sources-context';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -162,10 +163,15 @@ vi.mock('next/dynamic', () => ({
             // forgot to provide them would switch the hero form's "Shows as"
             // line off silently.
             const facts = useLinkedFacts();
+            // Likewise where each section's content comes from: a parent that
+            // forgot these would leave every panel saying nothing about its
+            // source, with no error.
+            const sources = useSectionSources();
             return (
               <>
                 <p>inspector</p>
                 <p data-testid="inspector-facts">{facts === null ? 'no facts' : JSON.stringify(facts)}</p>
+                <p data-testid="inspector-sources">{JSON.stringify(sources)}</p>
                 <SectionsProbe />
               </>
             );
@@ -659,6 +665,7 @@ function publishButton() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  designDraft.value = {};
   queries.draft = [];
   queries.published = [];
   queries.pages = [];
@@ -935,6 +942,59 @@ describe('EditorRoot — linked-field facts for the inspector', () => {
       city: null,
       unitCount: null,
     });
+  });
+});
+
+describe('EditorRoot — where each section panel gets its content', () => {
+  const sources = () => JSON.parse(screen.getByTestId('inspector-sources').textContent!);
+
+  it("hands the panels the canvas layout, what Contact lacks and the owners' records", () => {
+    // The layout the canvas draws is the DRAFT look, so it comes from the design
+    // query; the server context's tidewater is the live one.
+    designDraft.value = { layoutId: 'bayfront' };
+    renderRoot({
+      canvasContext: {
+        ...STUB_CANVAS,
+        layout: 'bayfront',
+        preview: {
+          ...STUB_CANVAS.preview,
+          contact: {
+            management: { name: null, email: 'office@example.com', phone: null },
+            board: [],
+            address: '100 Palm Way, Miami, FL',
+            officeHours: null,
+          },
+        },
+        ownerRecordGroups: [{ category: 'budget', label: 'Budgets', postedCount: 3 }],
+      } as never,
+    });
+
+    expect(sources()).toEqual({
+      layoutId: 'bayfront',
+      contact: { address: false, officeHours: true, phone: true, email: false },
+      ownerRecordGroups: [{ category: 'budget', label: 'Budgets', postedCount: 3 }],
+      recordsApply: true,
+    });
+  });
+
+  it('knows nothing of the sources when the community could not be read', () => {
+    renderRoot({ canvasContext: null });
+    expect(sources()).toEqual({
+      layoutId: null,
+      contact: null,
+      ownerRecordGroups: null,
+      recordsApply: true,
+    });
+  });
+
+  it('says records do not apply to an apartment community', () => {
+    render(
+      <EditorRoot
+        {...(rootElement().props as React.ComponentProps<typeof EditorRoot>)}
+        siteIdentity={{ name: 'Sunset Ridge', slug: 'sunset-ridge', communityType: 'apartment' }}
+      />,
+    );
+    expect(sources().recordsApply).toBe(false);
   });
 });
 

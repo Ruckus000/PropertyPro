@@ -54,7 +54,7 @@ export function InspectorSheet({
     >
       <SheetContent side="right" className="flex flex-col gap-0 overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>{label} settings</SheetTitle>
+          <SheetTitle>{label}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         {children ? <div className="min-h-0 flex-1 px-4 pb-4">{children}</div> : null}

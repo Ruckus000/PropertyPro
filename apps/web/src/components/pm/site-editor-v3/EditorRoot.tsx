@@ -92,6 +92,7 @@ import type { EditorView } from './EditorTopBar';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
 import { LinkedFactsProvider } from './inspector/linked-facts-context';
+import { SectionSourcesProvider } from './inspector/section-sources-context';
 import { useSiteDiff } from './use-site-diff';
 import { RequiredSectionsProvider, useRequiredSections } from './required-sections-context';
 import { RequirementsPill } from './RequirementsPill';
@@ -1063,9 +1064,19 @@ export function EditorRoot({
         inspector={
           pagesUnavailable ? null : (
             // The hero form previews its linked fields with the facts the canvas
-            // draws them with.
+            // draws them with, and each section's panel says where its content
+            // comes from with the same canvas context.
             <LinkedFactsProvider facts={canvasContext?.community ?? null}>
-              <Inspector communityId={communityId} />
+              <SectionSourcesProvider
+                layoutId={canvasContext?.layout ?? null}
+                contact={canvasContext?.preview.contact ?? null}
+                ownerRecordGroups={canvasContext?.ownerRecordGroups ?? null}
+                // Apartments owe no records list, so their Documents panel says
+                // nothing about owners' records.
+                recordsApply={siteIdentity.communityType !== 'apartment'}
+              >
+                <Inspector communityId={communityId} />
+              </SectionSourcesProvider>
             </LinkedFactsProvider>
           )
         }
