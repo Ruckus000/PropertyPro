@@ -678,6 +678,42 @@ describe('draftLookSwitch', () => {
       { id: 990, pageId: HOME_PAGE_ID, blockType: 'hero', blockOrder: 1, content: { headline: 'Harbor Pointe' }, isDraft: true },
     ];
 
+    /**
+     * The drafted Announcements, edited to show four: a new draft in its slot.
+     * It is a draft of its own when the switch moved it, else the live row it
+     * matched, left in place.
+     */
+    const announcementsEdited =
+      (published: BlockRow[]) =>
+      (drafts: BlockRow[]): BlockRow[] => {
+        const slot =
+          drafts.find((draft) => draft.blockType === 'announcements')?.blockOrder ??
+          published.find((row) => row.blockType === 'announcements')!.blockOrder;
+        return [
+          ...drafts.filter((draft) => draft.blockOrder !== slot),
+          { id: 991, pageId: HOME_PAGE_ID, blockType: 'announcements', blockOrder: slot, content: { limit: 4 }, isDraft: true },
+        ];
+      };
+
+    it('an edited section returns to its live row (Bayfront, Heritage with Announcements edited 5 → 4, back)', async () => {
+      const published = publishedRows(look('bayfront').sections);
+      const liveSlot = published.find((row) => row.blockType === 'announcements')!.blockOrder;
+
+      const result = await cardThenLiveCard('bayfront', 'heritage', published, announcementsEdited(published));
+
+      // The one draft is that edit, in the live Announcements' slot: no second
+      // Announcements, and nothing shifted to make room for one.
+      expect(result.staged).toEqual([
+        expect.objectContaining({ blockType: 'announcements', blockOrder: liveSlot, content: { limit: 4 }, isDraft: true }),
+      ]);
+      expect(afterPublish(published, result.staged)).toEqual(
+        published.map(({ blockType, content }) =>
+          blockType === 'announcements' ? { blockType, content: { limit: 4 } } : { blockType, content },
+        ),
+      );
+      expect(result.designWithdrawn).toBe(true);
+    });
+
     it('one edit between the clicks is the one change staged, in place (Plain & Simple, Heritage, hero edited, back)', async () => {
       const result = await cardThenLiveCard('plain-simple', 'heritage', publishedRows(look('plain-simple').sections), heroEdited);
 
@@ -732,26 +768,36 @@ describe('draftLookSwitch', () => {
       it.each([...LOOK_IDS])('live %s: nothing pending after any card and back, and only an edit made in between', async (liveId) => {
         const failures: string[] = [];
         let roundTrips = 0;
+        /** Whether exactly one row was staged: `blockType` in `slot`, with `content`. */
+        const onlyThatEdit = (staged: InsertedBlock[], blockType: string, slot: number, content: unknown) =>
+          staged.length === 1 &&
+          staged[0]!.blockType === blockType &&
+          staged[0]!.blockOrder === slot &&
+          JSON.stringify(staged[0]!.content) === JSON.stringify(content);
+        const slotsAndTypes = (staged: InsertedBlock[]) => JSON.stringify(staged.map((s) => [s.blockOrder, s.blockType]));
         for (const { name, rows } of livePages(liveId)) {
+          const announcementsSlot = rows.find((row) => row.blockType === 'announcements')!.blockOrder;
           for (const toId of LOOK_IDS.filter((id) => id !== liveId)) {
             const label = `${liveId} → ${toId} → ${liveId}, ${name}`;
             const plain = await cardThenLiveCard(liveId, toId, rows);
-            const edit = await cardThenLiveCard(liveId, toId, rows, heroEdited);
-            roundTrips += 2;
+            const hero = await cardThenLiveCard(liveId, toId, rows, heroEdited);
+            const announcements = await cardThenLiveCard(liveId, toId, rows, announcementsEdited(rows));
+            roundTrips += 3;
             if (plain.draftedRows === 0) failures.push(`${label}: the card staged nothing`);
             if (plain.staged.length > 0) failures.push(`${label}: ${plain.staged.length} rows staged on the way back`);
             if (plain.designSaved || !plain.designWithdrawn) failures.push(`${label}: design still pending`);
-            const onlyTheEdit =
-              edit.staged.length === 1 &&
-              edit.staged[0]!.blockType === 'hero' &&
-              edit.staged[0]!.blockOrder === 1 &&
-              JSON.stringify(edit.staged[0]!.content) === JSON.stringify({ headline: 'Harbor Pointe' });
-            if (!onlyTheEdit) failures.push(`${label}, hero edited: staged ${JSON.stringify(edit.staged.map((s) => [s.blockOrder, s.blockType]))}`);
+            if (!onlyThatEdit(hero.staged, 'hero', 1, { headline: 'Harbor Pointe' })) {
+              failures.push(`${label}, hero edited: staged ${slotsAndTypes(hero.staged)}`);
+            }
+            // Wherever the switch staged it, the edit goes back to the live row.
+            if (!onlyThatEdit(announcements.staged, 'announcements', announcementsSlot, { limit: 4 })) {
+              failures.push(`${label}, Announcements edited: staged ${slotsAndTypes(announcements.staged)}`);
+            }
           }
         }
         expect(failures).toEqual([]);
         // Not vacuous: dozens of pages, each with every other look.
-        expect(roundTrips).toBeGreaterThan(300);
+        expect(roundTrips).toBeGreaterThan(400);
       });
     });
   });

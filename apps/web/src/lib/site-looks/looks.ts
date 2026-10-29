@@ -332,12 +332,12 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * - `incoming` is the live look and no other layout is drafted: the page
  *   exactly as it is. Nothing is being switched.
  * - `incoming` is the live look and another layout is drafted: the live home
- *   page, row for row, in its live order, matched to the page now by row id and
- *   slot rather than block type (`planBackToLive`). A live row the manager
- *   edited since keeps the edit in its place; a section with no live row that
- *   they added or edited goes after the nearest live row before it; the drafted
- *   look's untouched defaults go. So a section removed from the live page
- *   before the switch stays removed.
+ *   page, row for row, in its live order, matched to the page now by row id,
+ *   slot and content, and by block type only where that cannot be a guess
+ *   (`planBackToLive`). A live row the manager edited since keeps the edit in
+ *   its place; a section with no live row that they added or edited goes after
+ *   the nearest live row before it; the drafted look's untouched defaults go.
+ *   So a section removed from the live page before the switch stays removed.
  * - Every section untouched: the page becomes exactly the incoming sections,
  *   in their order.
  * - Otherwise each untouched section is replaced in its slot by the incoming
@@ -448,7 +448,8 @@ function planAgainst(
  * other live row comes back as it is, wherever the switch had replaced, moved
  * or removed it, and so does one removed since.
  *
- * The page now is matched to the live rows by row, not by block type:
+ * The page now is matched to the live rows by row, and by block type only last
+ * and only where it cannot be a guess:
  * - a published row on the page is the live row with its id (no draft covers
  *   its slot);
  * - a draft with a live row's exact content is that row. The switch moved it,
@@ -459,7 +460,14 @@ function planAgainst(
  *   in its slot (a draft overlays its slot), when it is that row's type. The
  *   editor never changes a section's type, so a draft of another type is a
  *   different section that the switch put in that slot, and the live row comes
- *   back.
+ *   back;
+ * - an edited section still left is an edit of the one live row of its type
+ *   still left, when there is exactly one of each: the switch staged it in
+ *   another row's slot (it moves every section after Quick links up one when the
+ *   new look has none), and the edit goes back to its own row. This is the
+ *   editor's change list's rule. With two or more of the type on either side
+ *   the pairing would be a guess, so the section stays a section the live page
+ *   lacks.
  * A section given no slot is taken to be where `assignSlots` stages it over the
  * live rows (a plan handed back as it was returned), and a live row given none
  * where a look publishes it. `loadLookSwitchInput` gives every slot.
@@ -517,6 +525,15 @@ function planBackToLive(
     const j = inSlot(i);
     if (!untouched[i] && j !== -1 && live[j]?.blockType === s.blockType) pair(i, j);
   });
+  // An edited section still left, of a type with exactly one such section and
+  // exactly one live row left: an edit of that row, the way the editor's change
+  // list pairs them. With two or more of the type on either side the pairing
+  // would be a guess, so none is made.
+  for (const type of new Set(current.map((s) => s.blockType))) {
+    const edits = current.flatMap((s, i) => (s.blockType === type && standsFor[i] === -1 && !untouched[i] ? [i] : []));
+    const rows = live.flatMap((row, j) => (row.blockType === type && standIn[j] === -1 ? [j] : []));
+    if (edits.length === 1 && rows.length === 1) pair(edits[0]!, rows[0]!);
+  }
 
   // Where each live row is on the page now, to place the added sections by: the
   // section standing for it, else an untouched default in its slot.

@@ -460,6 +460,45 @@ describeDb('site looks (db-backed integration)', () => {
     );
   });
 
+  it('an edited section returns to its live row (Bayfront, Heritage with Announcements edited 5 → 4, back)', async () => {
+    const communityId = await createCommunity('edited-row', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    const live = await liveSections(communityId);
+    const liveSlot = await liveSlotOf(communityId, 'announcements');
+
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    // Heritage's Announcements, drafted in another slot (Heritage has no Quick
+    // links, so it moved up one), edited to show four.
+    const drafted = (await draftRows(communityId)).find((row) => row.blockType === 'announcements');
+    expect(drafted).toMatchObject({ content: { limit: 5 } });
+    expect(drafted?.blockOrder).not.toBe(liveSlot);
+    await upsertPublishedBlock({
+      communityId,
+      actorUserId,
+      blockType: 'announcements',
+      blockOrder: drafted!.blockOrder,
+      content: { limit: 4 },
+      isDraft: true,
+    });
+
+    await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+
+    // The one pending draft is that edit, in the live Announcements' slot.
+    const drafts = await draftRows(communityId);
+    expect(drafts.map(({ blockOrder, blockType, content }) => ({ blockOrder, blockType, content }))).toEqual([
+      { blockOrder: liveSlot, blockType: 'announcements', content: { limit: 4 } },
+    ]);
+    expect(pendingLook((await readCommunity(communityId)).branding as CommunityBranding)).toEqual({});
+
+    // Published: Bayfront as it was, with one Announcements showing four.
+    await publish(communityId);
+    expect(await liveSections(communityId)).toEqual(
+      live.map((section) =>
+        section.blockType === 'announcements' ? { blockType: 'announcements', content: { limit: 4 } } : section,
+      ),
+    );
+  });
+
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {
     // Bayfront has six sections and Palm Grove five: the sixth slot is staged
     // for removal (a tombstone), which the editor's Publish applies.

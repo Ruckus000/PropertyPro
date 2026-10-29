@@ -646,23 +646,71 @@ describe('planLookSwitch', () => {
       expect(back.sections.filter((s) => s.blockType !== 'board' && s.blockType !== 'text')).toEqual(rowsOf(live));
     });
 
-    it('never loses a live row to an edit of a different section staged in its slot', () => {
+    it('an edited section returns to its live row (Bayfront, Heritage with Announcements edited 5 → 4, back)', () => {
       // Heritage has no Quick links, so its Announcements is staged in the live
-      // Quick links' slot. Edited there, it is not an edit of Quick links (the
-      // editor never changes a section's type), so it comes back as a section
-      // the live page lacks, after the hero, and Quick links and the live
-      // Announcements both come back.
+      // Quick links' slot. Edited there, it is no edit of Quick links (the editor
+      // never changes a section's type), but it is the one edited Announcements
+      // left, and the live Announcements the one such row left: an edit of that
+      // row. One Announcements comes back, in its live slot, showing four, and
+      // Quick links stays.
       const live = livePage(bayfront.sections);
 
       const { drafted, back } = roundTrip(live, bayfront, heritage, (page) => edited(page, 'announcements', { limit: 4 }));
 
-      expect(drafted.find((s) => s.blockType === 'announcements')!.slot).toBe(2);
-      const [hero, ...rest] = rowsOf(live);
-      expect(back.sections).toEqual([
-        hero,
-        expect.objectContaining({ blockType: 'announcements', content: { limit: 4 } }),
-        ...rest,
+      const quickLinksSlot = live.find((row) => row.blockType === 'quicklinks')!.slot;
+      expect(drafted.find((s) => s.blockType === 'announcements')).toMatchObject({ slot: quickLinksSlot, content: { limit: 4 } });
+      expect(back.sections).toEqual(
+        rowsOf(live).map((row) =>
+          row.blockType === 'announcements' ? expect.objectContaining({ blockType: 'announcements', content: { limit: 4 } }) : row,
+        ),
+      );
+      // That edit is the only draft staged, in the live Announcements' slot.
+      const announcementsSlot = live.find((row) => row.blockType === 'announcements')!.slot;
+      expect(staged(live, back.sections)).toMatchObject({
+        drafts: [{ slot: announcementsSlot, blockType: 'announcements', content: { limit: 4 } }],
+        tombstones: [],
+      });
+    });
+
+    it('does not guess which row an edited section belongs to when two could (two text sections, one edited)', () => {
+      // Either way round, two text sections of one side are left over for one on
+      // the other, so no pairing is made: the edit stays a section the live page
+      // lacks, after the nearest live row before it, and every live row comes
+      // back as it is. The placement from before there was a pairing step.
+      const aboutUs = text('About us');
+
+      // Two edited text sections left for one live row: About us, moved one
+      // slot up by the switch and then edited, and a text section added.
+      const oneRow = livePage([...bayfrontRows('hero', 'quicklinks'), aboutUs, ...bayfrontRows('announcements', 'meetings', 'documents', 'contact')]);
+      const first = roundTrip(oneRow, bayfront, heritage, (page) => [
+        ...edited(page, 'text', { body: 'About us, edited' }),
+        { id: nextDraftId++, slot: 8, blockType: 'text', content: { body: 'Parking' } },
       ]);
+      const [hero1, ...rest1] = rowsOf(oneRow);
+      expect(first.back.sections).toEqual([
+        hero1,
+        expect.objectContaining({ content: { body: 'About us, edited' } }),
+        ...rest1,
+        expect.objectContaining({ content: { body: 'Parking' } }),
+      ]);
+
+      // Two live text rows left for one edited section: About us edited, and
+      // Pool hours removed, while Heritage was drafted.
+      const twoRows = livePage([
+        ...bayfrontRows('hero', 'quicklinks'),
+        aboutUs,
+        text('Pool hours'),
+        ...bayfrontRows('announcements', 'meetings', 'documents', 'contact'),
+      ]);
+      const second = roundTrip(twoRows, bayfront, heritage, (page) =>
+        page.flatMap((s) => {
+          const body = s.blockType === 'text' ? (s.content as { body: string }).body : null;
+          if (body === 'Pool hours') return [];
+          return body === 'About us' ? [{ ...s, id: nextDraftId++, content: { body: 'About us, edited' } }] : [s];
+        }),
+      );
+      const [hero2, ...rest2] = rowsOf(twoRows);
+      expect(second.back.sections).toEqual([hero2, expect.objectContaining({ content: { body: 'About us, edited' } }), ...rest2]);
     });
 
     it('identical live rows pair with the draft in their own slot, so an edit of one stays an edit', () => {
