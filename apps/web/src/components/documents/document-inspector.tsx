@@ -42,7 +42,8 @@ type InspectorMode = 'viewer' | 'versions';
  * The confirmation shown before a delete. When the file is the record for a
  * statutory requirement, says so: the link survives a delete (so a restore
  * puts it back), but until then the requirement reads as missing — on the
- * Compliance page and in the website editor's Documents tool.
+ * Compliance page, in the website home's Records list and in the editor's
+ * missing-records count.
  */
 export function deleteConfirmation(document: DocumentRow, requirement: ChecklistRow | null): string {
   const parts = [`Are you sure you want to delete “${document.title}”?`];

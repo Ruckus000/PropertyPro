@@ -1,6 +1,6 @@
 /**
- * Pure helpers for the live-preview route. They turn the in-wizard
- * layout/preset SELECTION (passed as query overrides) into the layout id +
+ * Pure helpers for the signed-in preview route (`/pm/site-preview`). They turn
+ * a layout/preset SELECTION passed as query overrides into the layout id +
  * branding that the real public-site layout renders with, and a look preview's
  * planned home page into the blocks the layout renders — without persisting
  * anything. Kept pure (no I/O) so they're unit-testable.

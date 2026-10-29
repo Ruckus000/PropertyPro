@@ -121,7 +121,8 @@ export interface SiteEditorContextValue {
 
   /**
    * Move a section that has just been WRITTEN at `slot` into the insert target,
-   * once the refetch delivers it — the Add panel's half of "Add section here".
+   * once the refetch delivers it — the Add a part dialog's half of the canvas
+   * inserter ("Add a part after …").
    *
    * Same mechanism as `duplicate`'s deferred move, for the same reason: the
    * upsert resolves to `void`, so the new row's id only exists after the
@@ -130,7 +131,7 @@ export interface SiteEditorContextValue {
    *
    * `aboveBlockId` is passed IN, captured by the caller when the write STARTS.
    * Reading a live target on resolution lost it whenever the PM closed the Add
-   * panel mid-write.
+   * a part dialog mid-write.
    */
   placeAdded: (slot: number, blockType: string, aboveBlockId: number | null) => void;
 }
@@ -138,7 +139,7 @@ export interface SiteEditorContextValue {
 const SiteEditorContext = createContext<SiteEditorContextValue | null>(null);
 
 /**
- * A new section — a duplicate, or one added with "Add section here" — that has
+ * A new section — a duplicate, or one added from the canvas inserter — that has
  * been WRITTEN at the end of the page but not yet moved to where it belongs.
  *
  * Anchored on `(blockOrder, blockType)` rather than an id, for the same reason
@@ -152,7 +153,7 @@ interface PendingPlacement {
   blockType: string;
   /**
    * Where it goes. A duplicate knows its target SLOT up front
-   * (`reorderTargetForCopy`); an "Add section here" knows only the SECTION it
+   * (`reorderTargetForCopy`); an add from the canvas inserter knows only the SECTION it
    * goes above, whose slot is resolved when the new row arrives — it may have
    * moved in the meantime.
    */

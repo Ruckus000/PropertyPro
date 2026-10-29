@@ -30,7 +30,7 @@ import {
 } from '@propertypro/shared';
 import { ValidationError } from '@/lib/api/errors';
 import { getBrandingForCommunity } from '@/lib/api/branding';
-import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
+import { listThemePresets } from '@/lib/db/theme-preset-catalog';
 import { isLayoutId } from '@/lib/public-site/layout-resolver';
 import { applyPresetTokensToBranding } from '@/lib/public-site/preview-overrides';
 import { mergeBranding } from '@/lib/services/site-settings-service';
@@ -78,9 +78,9 @@ export async function saveDraftDesign(
  * colours and fonts filled in. Reads the colour sets and writes nothing, so a
  * caller can resolve a look before opening a transaction.
  *
- * Choosing a colour set writes that set's colours and fonts too. Storing only
- * its slug is how the wizard's choice never reached the live site:
- * `resolveTheme` reads the colour and font fields, not the slug. Colours or
+ * Choosing a colour set writes that set's colours and fonts too: storing only
+ * its slug would never reach the live site, because `resolveTheme` reads the
+ * colour and font fields, not the slug. Colours or
  * fonts sent in the same patch win over the set's.
  */
 export async function resolveDesign(patch: DesignPatch): Promise<SiteLook> {
@@ -93,7 +93,7 @@ export async function resolveDesign(patch: DesignPatch): Promise<SiteLook> {
   let draft: SiteLook = { ...patch };
 
   if (patch.themePresetSlug != null) {
-    const presets = await listThemePresetsForWizard();
+    const presets = await listThemePresets();
     const preset = presets.find((p) => p.slug === patch.themePresetSlug);
     if (!preset) {
       throw new ValidationError('That colour set does not exist', {

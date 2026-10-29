@@ -65,8 +65,8 @@ export const POST = withErrorHandler(
     });
 
     // A caller that asks for it marks website setup complete. No caller in the
-    // app sends the flag today (the look picker's Publish marks setup complete
-    // through the look route); it stays for tabs opened before that change.
+    // app sends the flag (the look picker marks setup complete through the
+    // look route), so this only runs for a request made by hand.
     // Done after (and outside) the publish transaction on purpose: completion
     // is a separate concern from draft-promotion, and it holds even when the
     // publish was a no-op (`nothing-to-publish` rolls back the tx but is not an

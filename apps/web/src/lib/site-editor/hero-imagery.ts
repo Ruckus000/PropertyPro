@@ -1,17 +1,16 @@
 import type { HeroBlockContent, HeroPhoto } from '@propertypro/shared';
 
 /**
- * Helpers for the hero writers that are NOT the v3 inspector.
+ * Helpers for a hero writer that is NOT the v3 inspector.
  *
  * ## The hazard these exist to close
  *
- * Three surfaces write hero content by rebuilding it from a hard-coded
- * allowlist of fields — the onboarding wizard's welcome step, its hero-image
- * step, and the v2 editor's hero form. That was safe while the hero had a
- * fixed set of keys. It stopped being safe the moment `photos` was added:
- * every one of those allowlists silently dropped it, so saving any of those
- * forms for any reason — fixing a typo in the headline — destroyed a PM's
- * entire photo array with no warning and no undo.
+ * A writer that rebuilds hero content from a hard-coded allowlist of fields
+ * silently drops any field added to the hero later. When `photos` was added,
+ * that is what happened: saving such a form for any reason — fixing a typo in
+ * the headline — destroyed a PM's entire photo array with no warning and no
+ * undo. No such writer is left in the app (the v3 inspector edits the content
+ * it was given); these helpers are where one must carry the imagery forward.
  *
  * The lesson is structural, not incidental: **a hand-maintained allowlist over
  * a schema that other code can extend is a data-loss bug waiting for the next
@@ -51,13 +50,13 @@ export function carryHeroImagery(existing: HeroBlockContent | null | undefined):
  * The imagery fields for "the PM just uploaded a new primary hero image".
  *
  * When the hero already uses `photos`, the upload replaces slot 0 and leaves
- * the rest of the gallery alone — the wizard's step is "set the hero image",
- * singular, and slot 0 is what that means. Slot 0 is replaced whole, with the
+ * the rest of the gallery alone — "set the hero image" is singular, and slot 0
+ * is what that means. Slot 0 is replaced whole, with the
  * upload's own description: when it held one of our stock photos (D3), nothing
  * of it carries over, since its "Sunset over the water" would describe a
  * picture that is no longer there. Writing `heroImagePath` instead
  * would produce content carrying both shapes, which the schema refuses, and
- * the PM would hit a validation error in a wizard that has no photo UI to
+ * the PM would hit a validation error on a surface that has no photo UI to
  * resolve it with — after the upload had already been finalized and charged
  * against their storage quota.
  *

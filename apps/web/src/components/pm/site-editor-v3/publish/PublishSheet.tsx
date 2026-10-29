@@ -296,11 +296,9 @@ export function stagedPageRemoval(change: Change): number | null {
 /**
  * What the publish outcome should say.
  *
- * The counts live in `describePublishedCounts`, shared with the onboarding
- * wizard's final step — which had its own section-only copy and was reachable
- * with a page-only publish, because the wizard is entered FROM this editor
- * while the Pages tool is open. Only the `published: false` sentence is local:
- * the two surfaces say different things about it on purpose.
+ * The counts live in `describePublishedCounts`, which counts pages as well as
+ * sections. Only the `published: false` sentence is local: it reports on a
+ * click this sheet invited.
  */
 function describeOutcome(result: PublishSiteResult): string {
   if (!result.published) return 'The server found nothing left to publish.';

@@ -7,9 +7,9 @@
  * client can be used here. Callers verify a management role
  * (property_manager / root_manager) in the target community before
  * invoking — the rows returned are not community-sensitive but the
- * editor and preview pages that consume them are gated. (The `ForWizard`
- * names date from the retired setup wizard; the Design panel and the
- * signed-in preview are the readers now.)
+ * editor and preview pages that consume them are gated. The readers are the
+ * website editor (its Design tab), the signed-in preview (`/pm/site-preview`)
+ * and the site design service.
  *
  * Note what the callers do NOT do: both page callers
  * (pm/site-preview, pm/website-editor) check membership + role only.
@@ -22,7 +22,7 @@ import { siteThemePresets } from '@propertypro/db';
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { and, asc, desc, eq } from '@propertypro/db/filters';
 
-export interface ThemePresetForWizard {
+export interface ThemePresetSummary {
   id: number;
   slug: string;
   displayName: string;
@@ -43,7 +43,7 @@ export interface ThemePresetForWizard {
  * first, then by display name). Wrapped in React.cache so multiple
  * server components on a single request share one DB read.
  */
-export const listThemePresetsForWizard = cache(async (): Promise<ThemePresetForWizard[]> => {
+export const listThemePresets = cache(async (): Promise<ThemePresetSummary[]> => {
   const db = createUnscopedClient();
   const rows = await db
     .select({
@@ -64,7 +64,7 @@ export const listThemePresetsForWizard = cache(async (): Promise<ThemePresetForW
     slug: r.slug,
     displayName: r.displayName,
     description: r.description,
-    tokens: (r.tokens ?? {}) as ThemePresetForWizard['tokens'],
+    tokens: (r.tokens ?? {}) as ThemePresetSummary['tokens'],
     tier: r.tier,
     isFeatured: r.isFeatured,
   }));

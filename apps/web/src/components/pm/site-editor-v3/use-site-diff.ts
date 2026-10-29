@@ -28,9 +28,9 @@
  *
  * ## `useContentBlocks` here stays WHOLE-SITE (Phase 11b-3, D-C2)
  *
- * The canvas, the preview, and the Sections panel + Inspector (via the provider,
- * which `EditorRoot` narrows) all scope the block list to the selected page.
- * The Add panel scopes only the page it WRITES to — its slot maths must keep
+ * The canvas, the preview and the Inspector (via the provider, which
+ * `EditorRoot` narrows) all scope the block list to the selected page. The Add
+ * a part dialog scopes only the page it WRITES to — its slot maths must keep
  * seeing every page, or it allocates a slot another page already holds (D-C3).
  * **This one must not scope at all.** A publish is
  * whole-site and atomic: the server promotes every draft row for the community

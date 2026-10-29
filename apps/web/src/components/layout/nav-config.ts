@@ -434,7 +434,8 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
  *
  * /pm/site-preview is community-scoped too but is NOT in that list: it renders
  * no sidebar at all. It lives in the shell-less `(site-preview)` route group so
- * the wizard can frame it, so neither nav applies.
+ * the look picker, the dashboard's live card and the editor's preview can
+ * frame it, so neither nav applies.
  *
  * The deeper fix is moving the community-scoped editor out from under the
  * portfolio prefix entirely (e.g. /communities/[id]/website); this allowlist

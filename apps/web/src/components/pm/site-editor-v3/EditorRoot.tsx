@@ -152,8 +152,8 @@ export interface EditorRootProps {
   tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
-   * The colour-set catalog (`site_theme_presets`) for the Design panel — the
-   * same list the wizard shows. The look itself is read through
+   * The colour-set catalog (`site_theme_presets`) for the Design panel. The
+   * look itself is read through
    * `useSiteDesign`, because it changes while the editor is open.
    */
   presets: PresetCardData[];

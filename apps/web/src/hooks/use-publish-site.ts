@@ -80,8 +80,9 @@ export interface PublishSiteVariables {
   expectedPublishedAt: string | null;
   /**
    * When true, the server stamps `site_onboarding_completed_at = now()` after
-   * the publish, unless it is already set. Set by the onboarding wizard's final
-   * step; omitted by the ongoing editor's PublishBar.
+   * the publish, unless it is already set. No caller sets it: the look picker
+   * marks setup complete through `/api/v1/pm/site/look`, and the editor's
+   * Publish never does.
    */
   markOnboardingComplete?: boolean;
   /**

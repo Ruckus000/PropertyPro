@@ -87,7 +87,7 @@ vi.mock('@/lib/api/role-guard', () => ({
 }));
 
 vi.mock('@/lib/db/theme-preset-catalog', () => ({
-  listThemePresetsForWizard: listThemePresetsMock,
+  listThemePresets: listThemePresetsMock,
 }));
 
 // The one database read behind a look preview. `draftLookSwitch` is here only so
