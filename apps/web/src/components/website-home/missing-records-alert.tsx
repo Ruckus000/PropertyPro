@@ -122,11 +122,17 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
     router.refresh();
   }
 
-  async function link(item: MissingRecord, documentId: number, failure: string) {
+  /**
+   * `replace`: an upload for this row. The record is listed as missing, and it
+   * may still hold a file (a stale one, a draft, or one since deleted), which
+   * the person's new file replaces on purpose. "Use this one" never replaces:
+   * its candidates exist only for unlinked records.
+   */
+  async function link(item: MissingRecord, documentId: number, failure: string, replace = false) {
     setLinkingId(item.itemId);
     setRowError(null);
     try {
-      await linkDocument.mutateAsync({ itemId: item.itemId, documentId });
+      await linkDocument.mutateAsync({ itemId: item.itemId, documentId, ...(replace ? { replace: true } : {}) });
       setLinkedSinceRead((prev) => ({
         from: records,
         ids: [...(prev.from === records ? prev.ids : []), documentId],
@@ -338,6 +344,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
               item,
               documentId,
               `Your file is posted in Documents, but we couldn't link it to ${item.title}. You can link it from the Compliance page.`,
+              true,
             );
           }}
           onClose={() => setUploading(null)}

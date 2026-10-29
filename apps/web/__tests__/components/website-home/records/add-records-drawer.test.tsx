@@ -260,8 +260,8 @@ describe('posting', () => {
     expect(uploadMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'bylaws', categoryId: 12, redactionAttested: false, skipAutoLink: true }),
     );
-    expect(linkMock).toHaveBeenCalledWith({ itemId: REPORT.itemId, documentId: 100 });
-    expect(linkMock).toHaveBeenCalledWith({ itemId: BYLAWS.itemId, documentId: 101 });
+    expect(linkMock).toHaveBeenCalledWith({ itemId: REPORT.itemId, documentId: 100, replace: true });
+    expect(linkMock).toHaveBeenCalledWith({ itemId: BYLAWS.itemId, documentId: 101, replace: true });
     // Each link comes after its own upload.
     uploadMock.mock.results.forEach((_, index) => {
       expect(uploadMock.mock.invocationCallOrder[index]).toBeLessThan(linkMock.mock.invocationCallOrder[index]!);
@@ -296,6 +296,24 @@ describe('posting', () => {
     releases[1]!();
     releases[2]!();
     await waitFor(() => expect(linkMock).toHaveBeenCalledTimes(3));
+  });
+
+  it('posts over an out-of-date record: the new file replaces the old one on purpose', async () => {
+    const stale: MissingRecord = { ...BUDGET, state: 'out_of_date' };
+    // As the server does: a record that already has a file is refused unless the link says replace.
+    linkMock.mockImplementation(async ({ itemId, replace }: { itemId: number; replace?: boolean }) => {
+      if (itemId === stale.itemId && replace !== true) {
+        throw new Error('This record already has a file. Remove it first to replace it.');
+      }
+    });
+    const { user } = renderDrawer({ missing: [stale] });
+    await drop(user, pdf('2026-budget.pdf'));
+    await user.click(screen.getByRole('checkbox')); // Financial Records is sensitive
+
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+
+    expect(await screen.findByText('Posted 2026-budget.pdf as Annual budget.')).toBeInTheDocument();
+    expect(linkMock).toHaveBeenCalledWith({ itemId: stale.itemId, documentId: 100, replace: true });
   });
 
   it('one file failing does not stop the others, and the result says which is which', async () => {
@@ -349,7 +367,7 @@ describe('posting', () => {
     await waitFor(() => expect(screen.getByText('Posted bylaws.pdf as Bylaws.')).toBeInTheDocument());
     expect(uploadMock).toHaveBeenCalledTimes(1);
     expect(linkMock).toHaveBeenCalledTimes(2);
-    expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100 });
+    expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100, replace: true });
   });
 
   it('once a file has uploaded, its record is locked: no Change, and the retry links the original record', async () => {
@@ -367,7 +385,7 @@ describe('posting', () => {
     await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
 
     await waitFor(() => expect(screen.getByText('Posted bylaws.pdf as Bylaws.')).toBeInTheDocument());
-    expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100 });
+    expect(linkMock).toHaveBeenLastCalledWith({ itemId: BYLAWS.itemId, documentId: 100, replace: true });
     expect(linkedItemsOf(100)).toEqual([BYLAWS.itemId]);
   });
 

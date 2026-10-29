@@ -25,6 +25,7 @@ function makeCommunity(overrides: Partial<PortfolioCommunity>): PortfolioCommuni
     outstandingBalance: 0,
     expiringLeases: 0,
     siteOnboardingCompletedAt: null,
+    sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
     ...overrides,
   };

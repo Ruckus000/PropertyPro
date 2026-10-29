@@ -33,8 +33,10 @@ export interface ManagedCommunityPortfolioRow {
   occupiedUnits: number;
   /** Rounded occupancy percentage (apartment only when totalUnits > 0, else null) */
   occupancyRate: number | null;
-  /** Public-site onboarding completion timestamp. Null = wizard never completed. */
+  /** When the community first chose or kept a look. Null = still on its suggested look. */
   siteOnboardingCompletedAt: Date | null;
+  /** When the public site was first published. Null = no public site yet. */
+  sitePublishedAt: Date | null;
   /** True when the community has at least one unpublished draft site_block. */
   hasUnpublishedSiteDrafts: boolean;
 }
@@ -105,6 +107,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       communityType: communities.communityType,
       timezone: communities.timezone,
       siteOnboardingCompletedAt: communities.siteOnboardingCompletedAt,
+      sitePublishedAt: communities.sitePublishedAt,
     })
     .from(userRoles)
     .innerJoin(communities, eq(communities.id, userRoles.communityId))
@@ -256,6 +259,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       occupiedUnits,
       occupancyRate,
       siteOnboardingCompletedAt: row.siteOnboardingCompletedAt ?? null,
+      sitePublishedAt: row.sitePublishedAt ?? null,
       hasUnpublishedSiteDrafts: (siteDraftCounts.get(row.communityId) ?? 0) > 0,
     };
   });

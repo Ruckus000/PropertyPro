@@ -295,4 +295,64 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
     expect((await link(first.id, replacement, { replace: true })).status).toBe(200);
     expect(await documentOf(first.id)).toBe(replacement);
   });
+
+  it('PATCH link_document with replace puts a new file over a stale one, but never gives one file to two records', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+    const { documents, complianceChecklistItems } = kit.dbModule;
+
+    async function postDocument(title: string, postedAt: Date): Promise<number> {
+      const slug = `${title.toLowerCase().replace(/\s+/g, '-')}-${kit.runSuffix}`;
+      const [row] = await kit.db
+        .insert(documents)
+        .values({
+          communityId: communityA.id,
+          title: `${title} ${kit.runSuffix}`,
+          filePath: `communities/${communityA.id}/documents/${slug}.pdf`,
+          fileName: `${slug}.pdf`,
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+          postedAt,
+        })
+        .returning({ id: documents.id });
+      if (!row) throw new Error(`Failed to post "${title}"`);
+      return row.id;
+    }
+    function link(itemId: number, documentId: number, extra: Record<string, unknown> = {}) {
+      return route.PATCH(
+        jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
+          id: itemId,
+          communityId: communityA.id,
+          action: 'link_document',
+          documentId,
+          ...extra,
+        }),
+      );
+    }
+    async function documentOf(itemId: number): Promise<number | null> {
+      const rows = await kit.db
+        .select({ id: complianceChecklistItems.id, documentId: complianceChecklistItems.documentId })
+        .from(complianceChecklistItems);
+      return rows.find((row) => row.id === itemId)?.documentId ?? null;
+    }
+
+    const list = await route.GET(new NextRequest(apiUrl(`/api/v1/compliance?communityId=${communityA.id}`)));
+    const [stale, other] = (await parseJson<{ data: Array<{ id: number; documentId: number | null }> }>(list)).data
+      .filter((item) => item.documentId === null);
+    if (!stale || !other) throw new Error('Expected two unlinked checklist items');
+
+    // Last year's file, then this year's posted over it on purpose.
+    const lastYear = await postDocument('Budget last year', new Date('2025-01-15T00:00:00Z'));
+    const thisYear = await postDocument('Budget this year', new Date());
+    expect((await link(stale.id, lastYear)).status).toBe(200);
+    expect((await link(stale.id, thisYear, { replace: true })).status).toBe(200);
+    expect(await documentOf(stale.id)).toBe(thisYear);
+
+    // replace never lets one file fill two records.
+    const twice = await link(other.id, thisYear, { replace: true });
+    expect(twice.status).toBe(409);
+    expect(JSON.stringify(await twice.json())).toContain('This file is already posted as another record.');
+    expect(await documentOf(other.id)).toBeNull();
+  });
 });

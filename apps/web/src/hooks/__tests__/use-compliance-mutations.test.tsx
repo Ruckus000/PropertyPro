@@ -513,6 +513,27 @@ describe('useComplianceMutations', () => {
     );
   });
 
+  it('reads the message from the error envelope, so a conflict reads as the server wrote it', async () => {
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData([COMPLIANCE_QUERY_KEY, COMMUNITY_ID], [makeChecklistItem({ id: 10 })]);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: () =>
+        Promise.resolve({
+          error: { code: 'CONFLICT', message: 'This file is already posted as another record.' },
+        }),
+    });
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), { wrapper });
+
+    act(() => {
+      result.current.linkDocument.mutate({ itemId: 10, documentId: 1 });
+    });
+
+    await waitFor(() => expect(result.current.linkDocument.isError).toBe(true));
+    expect(result.current.linkDocument.error?.message).toBe('This file is already posted as another record.');
+  });
+
   it('falls back to status code when no message in error response', async () => {
     const { queryClient, wrapper } = createWrapper();
 

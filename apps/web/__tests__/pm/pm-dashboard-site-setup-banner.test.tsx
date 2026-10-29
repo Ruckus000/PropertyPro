@@ -61,7 +61,11 @@ vi.mock('@/components/pm/ViewToggle', () => ({
 
 import { PmDashboardClient } from '@/components/pm/PmDashboardClient';
 
-function community(id: number, siteOnboardingCompletedAt: string | null) {
+function community(
+  id: number,
+  siteOnboardingCompletedAt: string | null,
+  sitePublishedAt: string | null = '2026-09-01T00:00:00.000Z',
+) {
   return {
     communityId: id,
     communityName: `Community ${id}`,
@@ -75,6 +79,7 @@ function community(id: number, siteOnboardingCompletedAt: string | null) {
     outstandingBalance: 0,
     expiringLeases: 0,
     siteOnboardingCompletedAt,
+    sitePublishedAt,
     hasUnpublishedSiteDrafts: false,
   };
 }
@@ -111,6 +116,25 @@ describe('PmDashboardClient → SiteSetupBanner wiring', () => {
       'href',
       '/pm/website/looks?communityId=9',
     );
+  });
+
+  it('says "already live" when every community it is about has a published site', () => {
+    mockDashboard([community(9, null), community(11, null)]);
+    render(<PmDashboardClient />);
+    const banner = screen.getByTestId('site-setup-banner');
+    expect(banner).toHaveTextContent('Pick a look for your community website');
+    expect(banner).toHaveTextContent('Your community website is already live.');
+  });
+
+  it('asks to pick a look and publish when any of them has no published site', () => {
+    mockDashboard([community(9, null), community(11, null, null)]);
+    render(<PmDashboardClient />);
+    const banner = screen.getByTestId('site-setup-banner');
+    expect(banner).toHaveTextContent('Finish setting up your community website');
+    expect(banner).toHaveTextContent('Pick a look for your community website, then publish it.');
+    expect(banner).not.toHaveTextContent(/already live/);
+    // The same CTA.
+    expect(screen.getByTestId('site-setup-banner-cta')).toHaveAttribute('href', '/pm/website/looks?communityId=9');
   });
 
   it('hides the banner when every community has completed onboarding', () => {

@@ -32,10 +32,17 @@ import type { LookId } from '@/lib/site-looks/looks';
 import { TOUCH } from './touch';
 import { LazyConfirmDialog } from './website-home-lazy';
 
-/** What a restore discards, counted when the count is known to be more than none. */
-export function discardedEditsSentence(pendingDraftCount: number): string {
+/**
+ * What a restore discards. `pendingDraftCount` leaves out a drafted look's own
+ * edits, and a restore discards that look too, so it is named when there is one.
+ */
+export function discardedEditsSentence(pendingDraftCount: number, draftLookName: string | null = null): string {
+  const edits = pendingDraftCount === 1 ? '1 unpublished edit' : `${pendingDraftCount} unpublished edits`;
+  if (draftLookName !== null) {
+    return pendingDraftCount > 0 ? `${draftLookName} and ${edits} are discarded.` : `${draftLookName} is discarded.`;
+  }
   if (pendingDraftCount === 1) return '1 unpublished edit is discarded.';
-  if (pendingDraftCount > 1) return `${pendingDraftCount} unpublished edits are discarded.`;
+  if (pendingDraftCount > 1) return `${edits} are discarded.`;
   return 'Unpublished edits are discarded.';
 }
 
@@ -110,7 +117,7 @@ export function YourSiteCard({
       ? (LOOK_SUMMARIES.find((look) => look.id === draftLookId)?.name ?? null)
       : null;
   const keepLabel = liveLookId === null ? 'keep your current look' : `keep ${lookName}`;
-  const discarded = discardedEditsSentence(pendingDraftCount);
+  const discarded = discardedEditsSentence(pendingDraftCount, draftLookName);
 
   function ask(next: Pending, event: MouseEvent<HTMLElement>) {
     opener.current = event.currentTarget;

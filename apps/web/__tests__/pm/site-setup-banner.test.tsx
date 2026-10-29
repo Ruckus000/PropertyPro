@@ -75,7 +75,7 @@ describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
 
   it('says the website is already live, never that it is unpublished', async () => {
     mockStatus(false);
-    render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
+    render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} allSitesPublished />));
     const banner = await screen.findByTestId('site-setup-banner');
     expect(banner).toHaveTextContent('Pick a look for your community website');
     expect(banner).toHaveTextContent(

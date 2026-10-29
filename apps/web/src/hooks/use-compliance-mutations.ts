@@ -29,10 +29,20 @@ async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemD
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      (err as Record<string, string>).message ?? `PATCH failed: ${res.status}`,
-    );
+    // The error envelope is `{ error: { message } }`; an older shape put
+    // `message` at the top level. Either way the person sees the sentence the
+    // server wrote ("This file is already posted as another record.").
+    const err = (await res.json().catch(() => ({}))) as {
+      error?: { message?: unknown };
+      message?: unknown;
+    };
+    const message =
+      typeof err.error?.message === "string"
+        ? err.error.message
+        : typeof err.message === "string"
+          ? err.message
+          : `PATCH failed: ${res.status}`;
+    throw new Error(message);
   }
   const json = await res.json();
   return json.data as ChecklistItemData;

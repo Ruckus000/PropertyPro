@@ -21,6 +21,7 @@ const communities: PortfolioCommunity[] = [
     outstandingBalance: 225000,
     expiringLeases: 0,
     siteOnboardingCompletedAt: null,
+    sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
   },
   {
@@ -36,6 +37,7 @@ const communities: PortfolioCommunity[] = [
     outstandingBalance: 0,
     expiringLeases: 4,
     siteOnboardingCompletedAt: null,
+    sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
   },
 ];

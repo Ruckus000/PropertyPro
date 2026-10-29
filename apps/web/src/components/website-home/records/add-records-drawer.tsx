@@ -241,7 +241,9 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
           documentId = Number(uploaded.document['id']);
           patchRow(row.key, { documentId });
         }
-        await linkDocument.mutateAsync({ itemId: item.itemId, documentId });
+        // Every record here is listed as missing, and may still hold a stale,
+        // draft or deleted file: the person's new file replaces it on purpose.
+        await linkDocument.mutateAsync({ itemId: item.itemId, documentId, replace: true });
         setRows((current) => current.filter((r) => r.key !== row.key));
         record({ key: row.key, ok: true, text: `Posted ${name} as ${item.title}.` });
       } catch (error) {

@@ -1,11 +1,14 @@
 'use client';
 
 /**
- * PM dashboard "pick a look" nudge. Every community's website is live from the
- * day it is created, wearing the suggested look for its type, so this never
- * says a site is unpublished: it offers the look picker. Shows when the PM has
- * at least one community that hasn't chosen or kept a look yet
- * (siteOnboardingCompletedAt === null) AND the PM hasn't dismissed it.
+ * PM dashboard "pick a look" nudge. Shows when the PM has at least one
+ * community that hasn't chosen or kept a look yet (siteOnboardingCompletedAt
+ * === null) AND the PM hasn't dismissed it. It offers the look picker.
+ *
+ * A community's website is normally live from the day it is created, wearing
+ * the suggested look for its type, and then the banner says so. It says
+ * "already live" only when every community it is about has a published site
+ * (`allSitesPublished`); otherwise it asks the PM to pick a look and publish.
  * Dismissal is persisted per-user (user_preferences) so it stays dismissed
  * across devices/sessions.
  *
@@ -41,9 +44,11 @@ interface Props {
    * when hasIncompleteSite is true, but the nudge must never be a dead end).
    */
   firstIncompleteCommunityId?: number | null;
+  /** True when every community without a chosen look already has a published site. */
+  allSitesPublished?: boolean;
 }
 
-export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId }: Props) {
+export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId, allSitesPublished = false }: Props) {
   const { data: dismissed, isLoading } = useSiteSetupBannerDismissed();
   const dismiss = useDismissSiteSetupBanner();
 
@@ -56,8 +61,12 @@ export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId 
       role="status"
       data-testid="site-setup-banner"
       status="brand"
-      title="Pick a look for your community website"
-      description="Your community website is already live. Choose how it looks, or keep the one it has."
+      title={allSitesPublished ? 'Pick a look for your community website' : 'Finish setting up your community website'}
+      description={
+        allSitesPublished
+          ? 'Your community website is already live. Choose how it looks, or keep the one it has.'
+          : 'Pick a look for your community website, then publish it.'
+      }
       action={
         <Button asChild size="sm">
           {/*
