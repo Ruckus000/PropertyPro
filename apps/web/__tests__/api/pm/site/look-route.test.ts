@@ -1,5 +1,6 @@
 /**
- * Website builder, Phase 2B — `PATCH /api/v1/pm/site/look`.
+ * Website builder, Phase 2B — `PATCH /api/v1/pm/site/look`; Phase 4 — `POST`
+ * (publish a look in one click).
  *
  * The route is the manager's decision about the site's look, in two forms: draft
  * a look (`draftLookSwitch`) or keep the current one (`keepCurrent`). What a
@@ -14,7 +15,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { AppError, ForbiddenError } from '@/lib/api/errors';
+import { AppError, ConflictError, ForbiddenError } from '@/lib/api/errors';
 
 const {
   draftLookSwitchMock,
@@ -25,7 +26,11 @@ const {
   requireMembershipMock,
   requirePlanFeatureMock,
   assertNotDemoGraceMock,
+  publishCommunitySiteMock,
+  notifyResidentsMock,
 } = vi.hoisted(() => ({
+  publishCommunitySiteMock: vi.fn(),
+  notifyResidentsMock: vi.fn(),
   draftLookSwitchMock: vi.fn(),
   markSiteOnboardingCompleteMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
@@ -44,8 +49,14 @@ vi.mock('@/lib/api/auth', () => ({ requireAuthenticatedUserId: requireAuthMock }
 vi.mock('@/lib/api/community-membership', () => ({ requireCommunityMembership: requireMembershipMock }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: requirePlanFeatureMock }));
 vi.mock('@/lib/middleware/demo-grace-guard', () => ({ assertNotDemoGrace: assertNotDemoGraceMock }));
+vi.mock('@/lib/services/site-blocks-service', () => ({ publishCommunitySite: publishCommunitySiteMock }));
+// The route must never reach this: owners are emailed only by the website home's
+// separate "Email owners" action. Mocked so a call would be seen, not sent.
+vi.mock('@/lib/services/site-publish-notification', () => ({
+  notifyResidentsOfSitePublish: notifyResidentsMock,
+}));
 
-import { PATCH } from '@/app/api/v1/pm/site/look/route';
+import { PATCH, POST } from '@/app/api/v1/pm/site/look/route';
 
 const COMMUNITY_ID = 42;
 const COUNTS = { replaced: 3, kept: 1, added: 2, removed: 0 };
@@ -58,12 +69,25 @@ function patchRequest(body: unknown, headers: Record<string, string> = {}): Next
   });
 }
 
+function postRequest(body: unknown, headers: Record<string, string> = {}): NextRequest {
+  return new NextRequest('http://localhost/api/v1/pm/site/look', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json', ...headers },
+  });
+}
+
+const PUBLISHED_AT = new Date('2026-10-29T15:04:05.000Z');
+const TOKEN = '2026-10-01T12:00:00.000Z';
+
 /** Everything the route can write or trigger, in one list: for "nothing happened" assertions. */
 const sideEffects = () => [
   draftLookSwitchMock,
+  publishCommunitySiteMock,
   markSiteOnboardingCompleteMock,
   tryAutoCompleteMock,
   logAuditEventMock,
+  notifyResidentsMock,
 ];
 
 beforeEach(() => {
@@ -76,6 +100,14 @@ beforeEach(() => {
   markSiteOnboardingCompleteMock.mockResolvedValue(undefined);
   tryAutoCompleteMock.mockResolvedValue(undefined);
   logAuditEventMock.mockResolvedValue(undefined);
+  publishCommunitySiteMock.mockResolvedValue({
+    published: true,
+    publishedAt: PUBLISHED_AT,
+    promotedCount: 5,
+    retiredCount: 4,
+    addedPageCount: 0,
+    removedPageCount: 0,
+  });
 });
 
 describe('PATCH /api/v1/pm/site/look — the gate', () => {
@@ -269,5 +301,158 @@ describe('PATCH /api/v1/pm/site/look — keepCurrent', () => {
     } finally {
       errorSpy.mockRestore();
     }
+  });
+});
+
+describe('POST /api/v1/pm/site/look — publish a look in one click', () => {
+  it('POST switches, publishes, then marks onboarding and the checklist, in that order', async () => {
+    const calls: string[] = [];
+    draftLookSwitchMock.mockImplementation(async () => {
+      calls.push('switch');
+      return COUNTS;
+    });
+    publishCommunitySiteMock.mockImplementation(async () => {
+      calls.push('publish');
+      return { published: true, publishedAt: PUBLISHED_AT, promotedCount: 5, retiredCount: 4, addedPageCount: 0, removedPageCount: 0 };
+    });
+    markSiteOnboardingCompleteMock.mockImplementation(async () => void calls.push('onboarding'));
+    tryAutoCompleteMock.mockImplementation(async () => void calls.push('checklist'));
+
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(calls).toEqual(['switch', 'publish', 'onboarding', 'checklist']);
+    expect(draftLookSwitchMock).toHaveBeenCalledWith(COMMUNITY_ID, 'heritage', { actorUserId: 'user-1' });
+    expect(publishCommunitySiteMock).toHaveBeenCalledWith({
+      communityId: COMMUNITY_ID,
+      actorUserId: 'user-1',
+      expectedPublishedAt: new Date(TOKEN),
+    });
+    expect(markSiteOnboardingCompleteMock).toHaveBeenCalledWith(COMMUNITY_ID);
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(COMMUNITY_ID, 'user-1', 'customize_portal');
+    expect((await res.json()).data).toEqual({
+      publishedAt: PUBLISHED_AT.toISOString(),
+      lookId: 'heritage',
+    });
+  });
+
+  it('POST never sends an owner email', async () => {
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'bayfront', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(publishCommunitySiteMock).toHaveBeenCalledTimes(1);
+    expect(notifyResidentsMock).not.toHaveBeenCalled();
+  });
+
+  it('POST returns 409 on a stale token', async () => {
+    // What publishCommunitySite throws when another publish moved the token.
+    publishCommunitySiteMock.mockRejectedValueOnce(
+      new ConflictError('Another editor published changes while you were working. Reload the page and try again.'),
+    );
+
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(409);
+    // Nothing that follows a publish happens: the look is not the site's yet.
+    expect(markSiteOnboardingCompleteMock).not.toHaveBeenCalled();
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('passes a null token through for a site never published', async () => {
+    await POST(postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: null }));
+
+    expect(publishCommunitySiteMock).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedPublishedAt: null }),
+    );
+  });
+
+  it('answers publishedAt null when the live look had nothing to publish, and still marks the choice', async () => {
+    publishCommunitySiteMock.mockResolvedValueOnce({ published: false, reason: 'nothing-to-publish' });
+
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'bayfront', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ publishedAt: null, lookId: 'bayfront' });
+    expect(markSiteOnboardingCompleteMock).toHaveBeenCalledWith(COMMUNITY_ID);
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(COMMUNITY_ID, 'user-1', 'customize_portal');
+  });
+
+  it('audits the publish as an update of the site look', async () => {
+    await POST(postRequest({ communityId: COMMUNITY_ID, lookId: 'palm-grove', expectedPublishedAt: TOKEN }));
+
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      userId: 'user-1',
+      communityId: COMMUNITY_ID,
+      action: 'update',
+      resourceType: 'site_look',
+      resourceId: String(COMMUNITY_ID),
+      newValues: { lookId: 'palm-grove', publishedAt: PUBLISHED_AT.toISOString() },
+    });
+  });
+
+  it('is gated like PATCH: a resident is refused and nothing is written', async () => {
+    requireMembershipMock.mockResolvedValue({ role: 'resident', communityId: COMMUNITY_ID });
+
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(403);
+    for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
+  });
+
+  it('refuses a demo in its grace window, and a plan without the website editor', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
+    const demo = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+    requirePlanFeatureMock.mockRejectedValueOnce(new ForbiddenError('Upgrade to use the website editor'));
+    const plan = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(demo.status).toBe(403);
+    expect(plan.status).toBe(403);
+    expect(requirePlanFeatureMock).toHaveBeenCalledWith(COMMUNITY_ID, 'hasSiteEditor');
+    for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
+  });
+
+  it('404s a body that names another community than the middleware header', async () => {
+    const res = await POST(
+      postRequest(
+        { communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN },
+        { 'x-community-id': '7' },
+      ),
+    );
+
+    expect(res.status).toBe(404);
+    for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['an unknown look', { communityId: COMMUNITY_ID, lookId: 'sable', expectedPublishedAt: TOKEN }],
+    ['no token key', { communityId: COMMUNITY_ID, lookId: 'heritage' }],
+    ['a token that is not a timestamp', { communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: 'yesterday' }],
+    ['an email request', {
+      communityId: COMMUNITY_ID,
+      lookId: 'heritage',
+      expectedPublishedAt: TOKEN,
+      notifyResidents: { summary: 'New look' },
+    }],
+  ])('rejects %s', async (_label, body) => {
+    const res = await POST(postRequest(body));
+
+    expect(res.status).toBe(400);
+    for (const effect of sideEffects()) expect(effect).not.toHaveBeenCalled();
   });
 });
