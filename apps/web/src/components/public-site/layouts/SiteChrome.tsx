@@ -133,6 +133,13 @@ interface LayoutChrome {
   EmptyHero: (props: { heading: string }) => ReactNode;
 }
 
+/** A look's page, by `LookStyle.pageBackground`. */
+const PAGE_BACKGROUND: Record<LookStyle['pageBackground'], string> = {
+  white: 'bg-surface-card',
+  // The theme's own secondary, for the reason SECTION_RHYTHM gives below.
+  secondary: 'bg-[var(--theme-secondary)]',
+};
+
 /**
  * A look's sections, by `LookStyle.sectionTint`.
  *
@@ -169,14 +176,14 @@ function lookEmptyHero(look: LookStyle) {
 }
 
 /**
- * The chrome of one of the four looks, from its `LOOK_STYLES` entry: section
- * headings in the theme's primary colour, its section rhythm and its accent
- * rule, plus anything particular to it.
+ * The chrome of one of the four looks, from its `LOOK_STYLES` entry: its page
+ * colour, section headings in the theme's primary colour, its section rhythm
+ * and its accent rule, plus anything particular to it.
  */
-function lookChrome(id: LookLayoutId, root: string, list?: string): LayoutChrome {
+function lookChrome(id: LookLayoutId, root?: string, list?: string): LayoutChrome {
   const look = LOOK_STYLES[id];
   return {
-    root: cn('flex flex-col font-body text-content', root),
+    root: cn('flex flex-col font-body text-content', PAGE_BACKGROUND[look.pageBackground], root),
     main: 'flex-1',
     list: cn('[&_h2]:text-primary', SECTION_RHYTHM[look.sectionTint], ACCENT_TEXT[look.accentUse], list),
     EmptyHero: lookEmptyHero(look),
@@ -207,19 +214,15 @@ const LAYOUT_CHROME: Record<LayoutId, LayoutChrome> = {
     EmptyHero: SableEmptyHero,
   },
   // Photo-led and modern: a white page under a full-bleed photo.
-  bayfront: lookChrome('bayfront', 'bg-surface-card'),
+  bayfront: lookChrome('bayfront'),
   // Formal: the page on the theme's paper-like secondary, each section heading
   // ruled off in the primary.
-  heritage: lookChrome(
-    'heritage',
-    'bg-[var(--theme-secondary)]',
-    '[&_h2]:border-b-2 [&_h2]:border-primary [&_h2]:pb-3',
-  ),
+  heritage: lookChrome('heritage', undefined, '[&_h2]:border-b-2 [&_h2]:border-primary [&_h2]:pb-3'),
   // Warm and friendly: a white page, the photo with the welcome on a card.
-  'palm-grove': lookChrome('palm-grove', 'bg-surface-card'),
+  'palm-grove': lookChrome('palm-grove'),
   // No photos needed: a white page, and every text size one step up
   // (`.large-text`, the app's own large-text scale in tokens.css).
-  'plain-simple': lookChrome('plain-simple', 'large-text bg-surface-card'),
+  'plain-simple': lookChrome('plain-simple', 'large-text'),
 };
 
 export interface SiteChromeProps {

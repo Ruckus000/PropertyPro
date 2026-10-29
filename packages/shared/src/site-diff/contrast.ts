@@ -21,14 +21,19 @@
  * (packages/tokens/src/semantic.ts). The pairs below are the ones that put text
  * on a brand colour or a brand colour on a surface.
  *
+ * `--theme-secondary` is consumed by no token, but three of the four looks paint
+ * it behind text directly: Heritage's page, and the alternating section bands of
+ * Bayfront and Palm Grove. So it is checked exactly when the caller says the
+ * site's layout paints it (`layoutPaintsSecondary`): default dark text on it at
+ * 4.5:1, and the primary as headings on it at 3:1. Both are advisory even at the
+ * write path. A legacy layout paints none of it, and its sites see nothing new.
+ *
  * NOT checked, on purpose:
  *   - `--theme-primary-hover`, which is `darkenHex(primary, 15)` — a monotone
  *     luminance reduction against white, so if the primary/white pair passes,
  *     hover passes. Pinned as a property test rather than a runtime check.
- *   - `--theme-secondary`. **Nothing in the token system references it.**
- *     `toCssVars` emits it and one preview component sets it, but no semantic
- *     token consumes it. Blocking a PM on a colour that paints zero pixels
- *     would be superstition. (Worth resolving in Phase 8: wire it up or drop it.)
+ *   - `--theme-secondary` on a layout that does not paint it. Warning a PM about
+ *     a colour that paints zero pixels would be superstition.
  *   - Fonts, which are not a contrast concern.
  */
 import type { Issue, IssueSeverity } from './types';
@@ -88,6 +93,9 @@ export function contrastRatio(a: string, b: string): number | null {
 /** WCAG 2.1 AA for normal-size body text. */
 export const AA_NORMAL_TEXT_RATIO = 4.5;
 
+/** WCAG 2.1 AA for large text, which headings are. */
+export const AA_LARGE_TEXT_RATIO = 3;
+
 /**
  * Fixed sides of each checked pair, mirroring
  * `packages/tokens/src/primitives.ts`. Named rather than inlined so the tie to
@@ -102,6 +110,8 @@ const TEXT_PRIMARY = '#111827'; // gray-900  → text.primary
 export interface ResolvedBrandColors {
   primaryColor: string;
   accentColor: string;
+  /** Checked only when `layoutPaintsSecondary` says the layout paints it. */
+  secondaryColor?: string;
 }
 
 export interface ContrastIssueOptions {
@@ -116,16 +126,27 @@ export interface ContrastIssueOptions {
    * one argument.
    */
   severity: IssueSeverity;
+  /**
+   * Whether the site's layout paints the secondary colour behind text (a look's
+   * page or its section bands). Only then are text and headings checked on it.
+   * Absent means no, which is right for every legacy layout.
+   */
+  layoutPaintsSecondary?: boolean;
 }
 
 interface CheckedPair {
   field: string;
   /** Which resolved colour participates. */
   colorKey: keyof ResolvedBrandColors;
-  against: string;
+  /** The other side: a fixed token colour, or another of the resolved colours. */
+  against: string | { colorKey: keyof ResolvedBrandColors };
   label: string;
+  /** The ratio the pair needs. Absent means body text, 4.5:1. */
+  minimum?: number;
   /** Some pairs are advisory even at the write path. */
   alwaysWarning?: boolean;
+  /** Checked only when the layout paints the secondary colour (`layoutPaintsSecondary`). */
+  onSecondary?: true;
 }
 
 const CHECKED_PAIRS: CheckedPair[] = [
@@ -174,6 +195,25 @@ const CHECKED_PAIRS: CheckedPair[] = [
     label: 'default dark text on your accent colour',
     alwaysWarning: true,
   },
+  // The secondary colour, where a look paints it behind text. Advisory: the
+  // colour has never been checked, and must not start blocking anything.
+  {
+    field: 'secondaryColor',
+    colorKey: 'secondaryColor',
+    against: TEXT_PRIMARY,
+    label: 'default dark text on your secondary colour',
+    alwaysWarning: true,
+    onSecondary: true,
+  },
+  {
+    field: 'secondaryColor',
+    colorKey: 'secondaryColor',
+    against: { colorKey: 'primaryColor' },
+    label: 'your primary colour as headings on your secondary colour',
+    minimum: AA_LARGE_TEXT_RATIO,
+    alwaysWarning: true,
+    onSecondary: true,
+  },
 ];
 
 /**
@@ -181,31 +221,37 @@ const CHECKED_PAIRS: CheckedPair[] = [
  *
  * An unparseable colour is always an `error` naming its field — that is a
  * malformed value, not a taste question, and it means the site is silently
- * rendering a fallback the PM did not choose.
+ * rendering a fallback the PM did not choose. The one exception is the secondary
+ * colour, reported as a warning: its check is advisory only.
  */
 export function contrastIssues(
   colors: ResolvedBrandColors,
-  { severity }: ContrastIssueOptions,
+  { severity, layoutPaintsSecondary = false }: ContrastIssueOptions,
 ): Issue[] {
   const issues: Issue[] = [];
   const seenUnparseable = new Set<string>();
 
   for (const pair of CHECKED_PAIRS) {
+    if (pair.onSecondary && !layoutPaintsSecondary) continue;
+
     const value = colors[pair.colorKey];
-    if (parseHex(value) === null) {
+    if (value === undefined || parseHex(value) === null) {
       if (!seenUnparseable.has(pair.colorKey)) {
         seenUnparseable.add(pair.colorKey);
         issues.push({
           field: pair.field,
           message: `"${String(value)}" is not a 6-digit hex colour like #C2533A, so the site falls back to its default instead.`,
-          severity: 'error',
+          severity: pair.onSecondary ? 'warning' : 'error',
         });
       }
       continue;
     }
 
-    const ratio = contrastRatio(value, pair.against);
-    if (ratio === null || ratio >= AA_NORMAL_TEXT_RATIO) continue;
+    const against = typeof pair.against === 'string' ? pair.against : colors[pair.against.colorKey];
+    const minimum = pair.minimum ?? AA_NORMAL_TEXT_RATIO;
+    // An unparseable `against` colour is reported by its own pair, not here.
+    const ratio = against === undefined ? null : contrastRatio(value, against);
+    if (ratio === null || ratio >= minimum) continue;
 
     // Naming WCAG AA and the audience is deliberate. This advisory is
     // non-blocking by design (see the long note on `contrastIssues` in
@@ -217,7 +263,7 @@ export function contrastIssues(
     // See docs/audits/2026-08-09-legal-risk-audit.md F-12.
     issues.push({
       field: pair.field,
-      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${AA_NORMAL_TEXT_RATIO}:1 required by WCAG 2.1 AA. Residents with low vision may be unable to read this text. Publishing is still allowed, but the association carries the accessibility risk.`,
+      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${minimum}:1 required by WCAG 2.1 AA. Residents with low vision may be unable to read this text. Publishing is still allowed, but the association carries the accessibility risk.`,
       severity: pair.alwaysWarning ? 'warning' : severity,
     });
   }

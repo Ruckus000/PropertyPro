@@ -18,7 +18,7 @@ import { contrastRatio } from '@propertypro/shared';
 import { tokenDefinitions, toHex } from '@propertypro/tokens';
 import type { BlockRendererProps, LayoutId } from '@/components/public-site/blocks/types';
 import { HeroBlock } from '@/components/public-site/blocks/HeroBlock';
-import { LOOK_STYLES, type LookLayoutId } from '@/components/public-site/layouts/look-styles';
+import { LOOK_STYLES, paintsSecondary, type LookLayoutId } from '@/components/public-site/layouts/look-styles';
 import { Bayfront } from '@/components/public-site/layouts/Bayfront';
 import { Heritage } from '@/components/public-site/layouts/Heritage';
 import { PalmGrove } from '@/components/public-site/layouts/PalmGrove';
@@ -133,12 +133,12 @@ afterEach(() => {
 });
 
 describe('LOOK_STYLES', () => {
-  it('is the table the plan gives each look', () => {
+  it('is the table the plan gives each look, with the colour of each page', () => {
     expect(LOOK_STYLES).toEqual({
-      bayfront: { heroStyle: 'photo-full', sectionTint: 'alternate', radius: 'pill', accentUse: 'background', onAccent: 'text' },
-      heritage: { heroStyle: 'photo-split', sectionTint: 'none', radius: 'square', accentUse: 'text', onAccent: 'inverse' },
-      'palm-grove': { heroStyle: 'photo-card', sectionTint: 'alternate', radius: 'rounded', accentUse: 'background', onAccent: 'inverse' },
-      'plain-simple': { heroStyle: 'text', sectionTint: 'none', radius: 'rounded', accentUse: 'background', onAccent: 'text' },
+      bayfront: { heroStyle: 'photo-full', pageBackground: 'white', sectionTint: 'alternate', radius: 'pill', accentUse: 'background', onAccent: 'text' },
+      heritage: { heroStyle: 'photo-split', pageBackground: 'secondary', sectionTint: 'none', radius: 'square', accentUse: 'text', onAccent: 'inverse' },
+      'palm-grove': { heroStyle: 'photo-card', pageBackground: 'white', sectionTint: 'alternate', radius: 'rounded', accentUse: 'background', onAccent: 'inverse' },
+      'plain-simple': { heroStyle: 'text', pageBackground: 'white', sectionTint: 'none', radius: 'rounded', accentUse: 'background', onAccent: 'text' },
     });
   });
 });
@@ -338,6 +338,14 @@ describe('the page around the hero follows LOOK_STYLES', () => {
   it.each(LOOKS)('%s: only plain-simple sets every text size one step up', (id, Layout) => {
     const { root } = renderPage(Layout);
     expect(root.classList.contains('large-text')).toBe(id === 'plain-simple');
+  });
+
+  it.each(LOOKS)("%s: paints the theme's secondary exactly where the publish check looks for it", (id, Layout) => {
+    const { root, list } = renderPage(Layout);
+    // The page colour comes from LOOK_STYLES too, so the check cannot miss a page.
+    expect(root.classList.contains('bg-[var(--theme-secondary)]')).toBe(LOOK_STYLES[id].pageBackground === 'secondary');
+    const painted = `${root.className} ${list.className}`.includes('--theme-secondary');
+    expect(painted).toBe(paintsSecondary(id));
   });
 
   it('.large-text really is a step up: the body size grows from the default', () => {

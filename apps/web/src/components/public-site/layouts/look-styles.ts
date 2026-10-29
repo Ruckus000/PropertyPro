@@ -25,6 +25,8 @@ export type HeroStyle = 'photo-full' | 'photo-split' | 'photo-card' | 'text';
 
 export interface LookStyle {
   heroStyle: HeroStyle;
+  /** `white`: the card surface (`--surface-card`); `secondary`: the theme's secondary colour. */
+  pageBackground: 'white' | 'secondary';
   /** `alternate`: every other section on the theme's secondary colour; `none`: hairline rules between sections. */
   sectionTint: 'alternate' | 'none';
   /** The corners of the hero's button, photo and card. */
@@ -41,6 +43,7 @@ export type LookLayoutId = Extract<LayoutId, 'bayfront' | 'heritage' | 'palm-gro
 export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
   bayfront: {
     heroStyle: 'photo-full',
+    pageBackground: 'white',
     sectionTint: 'alternate',
     radius: 'pill',
     accentUse: 'background',
@@ -48,6 +51,7 @@ export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
   },
   heritage: {
     heroStyle: 'photo-split',
+    pageBackground: 'secondary',
     sectionTint: 'none',
     radius: 'square',
     accentUse: 'text',
@@ -55,6 +59,7 @@ export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
   },
   'palm-grove': {
     heroStyle: 'photo-card',
+    pageBackground: 'white',
     sectionTint: 'alternate',
     radius: 'rounded',
     accentUse: 'background',
@@ -62,6 +67,7 @@ export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
   },
   'plain-simple': {
     heroStyle: 'text',
+    pageBackground: 'white',
     sectionTint: 'none',
     radius: 'rounded',
     accentUse: 'background',
@@ -72,4 +78,14 @@ export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
 /** The look a layout draws, or null for a legacy layout (tidewater, boulevard, sable). */
 export function lookStyleFor(layout: LayoutId): LookStyle | null {
   return layout in LOOK_STYLES ? LOOK_STYLES[layout as LookLayoutId] : null;
+}
+
+/**
+ * Whether a layout paints the theme's secondary colour behind text: a look's
+ * page or its alternating section bands. A legacy layout never does. The publish
+ * contrast check tests text and headings on the secondary only where this holds.
+ */
+export function paintsSecondary(layout: LayoutId): boolean {
+  const look = lookStyleFor(layout);
+  return look !== null && (look.pageBackground === 'secondary' || look.sectionTint === 'alternate');
 }

@@ -1362,6 +1362,7 @@ export function EditorRoot({
         <PublishSheetMount
           communityId={communityId}
           theme={canvasContext?.theme ?? null}
+          layout={canvasContext?.layout ?? null}
           onOpenChange={setPublishOpen}
           onFixIssue={handleSelectSlot}
           onGoToPages={handleGoToPages}
@@ -1385,12 +1386,14 @@ export function EditorRoot({
 function PublishSheetMount({
   communityId,
   theme,
+  layout,
   onOpenChange,
   onFixIssue,
   onGoToPages,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
+  layout: CanvasContext['layout'] | null;
   onOpenChange: (open: boolean) => void;
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
@@ -1434,10 +1437,14 @@ function PublishSheetMount({
             brandColors: {
               primaryColor: theme.primaryColor,
               accentColor: theme.accentColor,
+              secondaryColor: theme.secondaryColor,
             },
           }
         : {})}
       onFixIssue={handleFixIssue}
+      // The draft look's layout, like the colours: a look that paints the
+      // secondary colour behind text gets text and headings checked on it.
+      {...(layout ? { layout } : {})}
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
       complianceSubject={subject}

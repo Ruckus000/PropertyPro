@@ -166,3 +166,93 @@ describe('contrastIssues', () => {
     expect(issues[0]!.message).toMatch(/\d+\.\d{2}:1/);
   });
 });
+
+describe('contrastIssues — the secondary colour a look paints', () => {
+  // Heritage's navy and bronze; each case sets the secondary it is about.
+  const LOOK = { primaryColor: '#1D2B4A', accentColor: '#7A5B27' };
+  const TEXT_ON_SECONDARY = 'default dark text on your secondary colour';
+  const HEADINGS_ON_SECONDARY = 'your primary colour as headings on your secondary colour';
+
+  /** At publish, on a layout that paints the secondary colour. */
+  function onLook(colors: { primaryColor: string; accentColor: string; secondaryColor?: string }) {
+    return contrastIssues(colors, { severity: 'warning', layoutPaintsSecondary: true });
+  }
+  function about(issues: ReturnType<typeof contrastIssues>, label: string) {
+    return issues.filter((i) => i.message.startsWith(label));
+  }
+
+  it('warns when default dark text on the secondary colour is under 4.5:1', () => {
+    // #808080 is the lightest grey under the line: 4.49:1 against #111827.
+    const issues = about(onLook({ ...LOOK, secondaryColor: '#808080' }), TEXT_ON_SECONDARY);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toMatchObject({ field: 'secondaryColor', severity: 'warning' });
+    expect(issues[0]!.message).toContain('4.49:1, below the 4.5:1 required by WCAG 2.1 AA');
+  });
+
+  it('stays quiet about dark text from 4.5:1 up', () => {
+    // #818181, the next grey up, is the first to pass (4.55:1); Heritage's cream is 16.73:1.
+    expect(about(onLook({ ...LOOK, secondaryColor: '#818181' }), TEXT_ON_SECONDARY)).toHaveLength(0);
+    expect(about(onLook({ ...LOOK, secondaryColor: '#FBF8F1' }), TEXT_ON_SECONDARY)).toHaveLength(0);
+  });
+
+  it('warns when the primary as headings on the secondary colour is under 3:1', () => {
+    // A white secondary keeps dark text passing, so only the heading pair speaks.
+    const justUnder = about(
+      onLook({ primaryColor: '#959595', accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' }),
+      HEADINGS_ON_SECONDARY,
+    );
+    expect(justUnder).toHaveLength(1);
+    expect(justUnder[0]).toMatchObject({ field: 'secondaryColor', severity: 'warning' });
+
+    const wellUnder = about(
+      onLook({ primaryColor: '#AAAAAA', accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' }),
+      HEADINGS_ON_SECONDARY,
+    );
+    expect(wellUnder[0]!.message).toMatch(/ratio of \d+\.\d{2}:1, below the 3:1 required by WCAG 2\.1 AA/);
+  });
+
+  it('holds headings to 3:1, not 4.5:1', () => {
+    // #949494 is the first grey to pass 3:1 on white (3.03:1); #888888 is 3.54:1,
+    // which would fail a body-text threshold and must not warn here.
+    for (const primaryColor of ['#949494', '#888888']) {
+      const issues = onLook({ primaryColor, accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' });
+      expect(about(issues, HEADINGS_ON_SECONDARY), primaryColor).toHaveLength(0);
+    }
+  });
+
+  it('is advisory even at the write path, so it never blocks', () => {
+    const issues = contrastIssues(
+      { ...LOOK, secondaryColor: '#111827' },
+      { severity: 'error', layoutPaintsSecondary: true },
+    );
+    const onSecondary = issues.filter((i) => i.field === 'secondaryColor');
+    expect(onSecondary).toHaveLength(2);
+    expect(onSecondary.every((i) => i.severity === 'warning')).toBe(true);
+    expect(publishBlocked(onSecondary)).toBe(false);
+  });
+
+  it('checks nothing on the secondary colour when the layout does not paint it', () => {
+    const colors = { ...LOOK, secondaryColor: '#111827' };
+    for (const options of [{ severity: 'warning' as const }, { severity: 'warning' as const, layoutPaintsSecondary: false }]) {
+      expect(contrastIssues(colors, options).some((i) => i.field === 'secondaryColor')).toBe(false);
+    }
+  });
+
+  it('reports an unparseable secondary once, as a warning, when the layout paints it', () => {
+    const issues = onLook({ ...LOOK, secondaryColor: '#abc' }).filter((i) => i.field === 'secondaryColor');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.severity).toBe('warning');
+    expect(issues[0]!.message).toMatch(/6-digit hex/);
+  });
+
+  it('adds to the existing pairs without changing them', () => {
+    const DEFAULTS = { primaryColor: '#C2533A', accentColor: '#FCF1ED' };
+    const before = contrastIssues(DEFAULTS, { severity: 'error' });
+    const after = contrastIssues(
+      { ...DEFAULTS, secondaryColor: '#FFFFFF' },
+      { severity: 'error', layoutPaintsSecondary: true },
+    );
+    expect(before.length).toBeGreaterThan(0);
+    expect(after).toEqual(before);
+  });
+});

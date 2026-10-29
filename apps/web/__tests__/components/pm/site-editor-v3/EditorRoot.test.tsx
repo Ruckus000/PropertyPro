@@ -16,7 +16,7 @@
  * only at module load for whichever component reaches the missing export, and
  * reads as an unrelated component breaking.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useEffect } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import {
@@ -292,11 +292,21 @@ vi.mock('next/dynamic', () => ({
         ? ({
             onFixIssue,
             onGoToPages,
+            layout,
+            brandColors,
           }: {
             onFixIssue: (target: { pageId: string; slot: number }) => void;
             onGoToPages: () => void;
+            layout?: string;
+            brandColors?: { secondaryColor?: string };
           }) => (
             <>
+              {/* What the secondary-colour advisory needs, echoed: a parent
+                  that forgot either would switch the check off silently. */}
+              <p>
+                publish check on {layout ?? '(no layout)'}, secondary{' '}
+                {brandColors?.secondaryColor ?? '(no secondary)'}
+              </p>
               <button
                 type="button"
                 onClick={() => {
@@ -2251,5 +2261,42 @@ describe('EditorRoot — Preview is withheld when the page is unknown', () => {
     });
 
     expect(await screen.findByRole('button', { name: /Try again/ })).toHaveFocus();
+  });
+});
+
+describe("EditorRoot — the publish sheet checks the look it is about to publish", () => {
+  /*
+   * The sheet warns about text on the secondary colour only when its parent
+   * hands it the layout AND that colour, so a parent that forgot either would
+   * switch the advisory off with nothing failing. Both must be the DRAFT look's,
+   * because that is what a publish puts live.
+   *
+   * Revert check (production line): `{...(layout ? { layout } : {})}` in
+   * `PublishSheetMount`.
+   */
+  beforeEach(() => {
+    queries.published = [hero(), block({ id: 1 })];
+    queries.draft = [
+      hero(),
+      block({
+        id: 2,
+        isDraft: true,
+        publishedAt: null,
+        content: { heading: 'Pool rules', body: 'No glass, and no diving.' },
+      }),
+    ];
+    designDraft.value = { layoutId: 'heritage', secondaryColor: '#FBF8F1' };
+  });
+  afterEach(() => {
+    designDraft.value = {};
+  });
+
+  it("hands the sheet the draft look's layout and secondary colour", async () => {
+    renderRoot({ canvasContext: STUB_CANVAS });
+    await userEvent.click(publishButton());
+
+    expect(screen.getByText(/^publish check on/)).toHaveTextContent(
+      'publish check on heritage, secondary #FBF8F1',
+    );
   });
 });

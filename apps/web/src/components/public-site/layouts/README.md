@@ -13,9 +13,10 @@ that use them, and four looks (website builder Phase 2B) are what managers pick 
 | palm-grove   | `PalmGrove.tsx`   | Look                 | Warm and friendly — the welcome on a card over a wide photo, alternating bands, rounded.   |
 | plain-simple | `PlainSimple.tsx` | Look                 | No photos needed — a text hero, every text size one step up, hairline rules.               |
 
-A look's id, layout id and preset slug are the same string. How a look draws its hero, its section
-rhythm, its corners and its accent is `LOOK_STYLES` in `look-styles.ts`, read by `HeroBlock` and
-`SiteChrome`; its colours and fonts are its `site_theme_presets` row (migration 0097).
+A look's id, layout id and preset slug are the same string. How a look draws its hero, its page colour,
+its section rhythm, its corners and its accent is `LOOK_STYLES` in `look-styles.ts`, read by `HeroBlock`,
+`SiteChrome` and the publish contrast check (`paintsSecondary`); its colours and fonts are its
+`site_theme_presets` row (migration 0097).
 
 ## Architecture
 

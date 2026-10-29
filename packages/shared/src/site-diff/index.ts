@@ -45,5 +45,6 @@ export {
   contrastRatio,
   contrastIssues,
   AA_NORMAL_TEXT_RATIO,
+  AA_LARGE_TEXT_RATIO,
 } from './contrast';
 export type { Rgb, ResolvedBrandColors, ContrastIssueOptions } from './contrast';

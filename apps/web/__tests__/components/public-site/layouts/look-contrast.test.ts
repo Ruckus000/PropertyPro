@@ -17,9 +17,13 @@
  * (`looks.test.tsx`), since its strength lives in the markup.
  */
 import { describe, expect, it } from 'vitest';
-import { contrastRatio } from '@propertypro/shared';
+import { contrastIssues, contrastRatio } from '@propertypro/shared';
 import { tokenDefinitions, toHex } from '@propertypro/tokens';
-import { LOOK_STYLES, type LookLayoutId } from '@/components/public-site/layouts/look-styles';
+import {
+  LOOK_STYLES,
+  paintsSecondary,
+  type LookLayoutId,
+} from '@/components/public-site/layouts/look-styles';
 import { SITE_LOOK_PRESETS } from '../../../fixtures/site-look-presets';
 
 const TEXT_PRIMARY = toHex(tokenDefinitions.text.primary); // --text-primary
@@ -99,5 +103,24 @@ describe("every look's colour pairs pass AA", () => {
     it('the primary colour as small text (links, redrawn accent text) on white and on the secondary colour is at least 4.5:1', () => {
       expectOnEach(preset.primaryColor, pageColours, BODY_TEXT);
     });
+  });
+});
+
+describe('the publish contrast check on the secondary colour', () => {
+  it('checks it on the layouts that paint it behind text, and only those', () => {
+    // Heritage's page, and the section bands of Bayfront and Palm Grove.
+    expect(LOOK_IDS.filter((id) => paintsSecondary(id)).sort()).toEqual(['bayfront', 'heritage', 'palm-grove']);
+    for (const layout of ['tidewater', 'boulevard', 'sable', 'plain-simple'] as const) {
+      expect(paintsSecondary(layout), layout).toBe(false);
+    }
+  });
+
+  it.each(LOOK_IDS)("raises no secondary-colour warning for %s's own preset", (id) => {
+    const { primaryColor, accentColor, secondaryColor } = SITE_LOOK_PRESETS[id];
+    const issues = contrastIssues(
+      { primaryColor, accentColor, secondaryColor },
+      { severity: 'warning', layoutPaintsSecondary: paintsSecondary(id) },
+    );
+    expect(issues.filter((i) => i.field === 'secondaryColor')).toEqual([]);
   });
 });
