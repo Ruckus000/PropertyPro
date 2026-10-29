@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   CannotCheckError,
@@ -98,15 +99,15 @@ describe('scanRoot', () => {
  * through `callsRequireCronSecret` alone — the wiring between the predicate and
  * the `violations.push` is the part that was untested.
  *
- * The root is built on disk under the repo, because `scanRoot` resolves its
- * `dir` against the repo root and there is no seam to inject a base path. A
- * committed fixture would be a permanent fake `route.ts` in the tree; a
- * temporary one is gone by the end of the test.
+ * The root is built in a temp directory and passed to `scanRoot` as its base.
+ * It used to be built under the repo root, and the real working tree is what
+ * other guard tests walk in parallel workers; nothing written there is private
+ * to this file.
  */
 describe('scanRoot over an injected root', () => {
-  const REPO_ROOT = resolve(import.meta.dirname, '../..');
+  const dir = 'internal';
+  let base: string;
   let absolute: string;
-  let dir: string;
 
   const rootAt = (relativeDir: string) => ({
     dir: relativeDir,
@@ -116,12 +117,13 @@ describe('scanRoot over an injected root', () => {
   });
 
   beforeEach(() => {
-    absolute = mkdtempSync(join(REPO_ROOT, '.internal-cron-auth-fixture-'));
-    dir = relative(REPO_ROOT, absolute);
+    base = mkdtempSync(join(tmpdir(), 'internal-cron-auth-'));
+    absolute = join(base, dir);
+    mkdirSync(absolute);
   });
 
   afterEach(() => {
-    rmSync(absolute, { recursive: true, force: true });
+    rmSync(base, { recursive: true, force: true });
   });
 
   function writeRoute(segment: string, filename: string, source: string): void {
@@ -145,7 +147,7 @@ describe('scanRoot over an injected root', () => {
       "export const GET = async () => new Response('ok');\n",
     );
 
-    const { scanned, violations } = scanRoot(rootAt(dir));
+    const { scanned, violations } = scanRoot(rootAt(dir), base);
 
     // The denominator is asserted too: one violation out of one file would be a
     // different, weaker claim.
@@ -164,7 +166,7 @@ describe('scanRoot over an injected root', () => {
     (filename) => {
       writeRoute('forgotten', filename, "export const GET = async () => new Response('ok');\n");
 
-      const { scanned, violations } = scanRoot(rootAt(dir));
+      const { scanned, violations } = scanRoot(rootAt(dir), base);
 
       expect(scanned).toBe(1);
       expect(violations).toHaveLength(1);
@@ -179,7 +181,7 @@ describe('scanRoot over an injected root', () => {
     writeRoute('a', 'route.ts', 'requireCronSecret(req, process.env.CRON_SECRET);\n');
     writeRoute('b', 'route.mjs', 'requireCronSecret(req, process.env.CRON_SECRET);\n');
 
-    const { scanned, violations } = scanRoot(rootAt(dir));
+    const { scanned, violations } = scanRoot(rootAt(dir), base);
 
     expect(scanned).toBe(2);
     expect(violations).toEqual([]);
@@ -196,7 +198,7 @@ describe('scanRoot over an injected root', () => {
         "export const GET = async () => new Response('ok');\n",
     );
 
-    const { violations } = scanRoot(rootAt(dir));
+    const { violations } = scanRoot(rootAt(dir), base);
     expect(violations).toHaveLength(1);
   });
 });
