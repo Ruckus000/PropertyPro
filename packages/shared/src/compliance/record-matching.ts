@@ -21,9 +21,8 @@
  * run of `-`, `_`, `.` and whitespace is one space. File names are written with
  * separators (`2025_budget.xlsx`, `By_Laws.pdf`), and `_` is a word character, so
  * `\bbudget\b` and `financial\s+report` cannot see those words as typed; the folded
- * copy can. The text as typed is kept for a pattern that reads a separator itself.
- * None does today (the bylaws patterns accept a hyphen or a space), so the folded
- * copy matches everything the typed text does.
+ * copy can. But the text as typed is the only one in which `By-Law` (one bylaw,
+ * hyphenated) still has the hyphen that `by-?laws?` reads: folded it is `By Law`.
  *
  * ## Insurance
  *
@@ -90,9 +89,10 @@ const BIDS = /\bbids?\b/i;
  */
 export const RECORD_MATCH_RULES: Readonly<Record<string, RecordMatchRule>> = {
   '718_declaration': { categoryKeys: ['declaration'], title: /\bdeclaration\b/i },
-  // A hyphen or a space between "by" and "laws": "By-Laws", "By Laws", and the "By_Laws" and
-  // "By-Laws_2019" that fold to "By Laws". The chapter 720 item below accepts the same.
-  '718_bylaws': { categoryKeys: ['declaration'], title: /\bby[-\s]?laws?\b/i },
+  // "Bylaws", "By-Laws", "By-Law", and "By Laws" with a space, which is also what "By_Laws" and
+  // "By-Laws_2019" fold to. The spaced form needs the plural, so "Required by Law" is not read
+  // as bylaws. The chapter 720 item below reads the same names.
+  '718_bylaws': { categoryKeys: ['declaration'], title: /\bby-?laws?\b|\bby\s+laws\b/i },
   '718_articles': { categoryKeys: ['declaration'], title: ARTICLES },
   '720_articles': { categoryKeys: ['declaration'], title: ARTICLES },
   '718_rules': { categoryKeys: ['declaration', 'rules'], title: /\brules?\b|\bregulations?\b/i },
@@ -118,7 +118,8 @@ export const RECORD_MATCH_RULES: Readonly<Record<string, RecordMatchRule>> = {
   '718_sirs': { categoryKeys: ['inspection_reports'], title: /reserve\s+study|\bsirs\b/i },
   // Chapter 720 only: its own wording for the governing documents and contracts.
   '720_governing_docs': { categoryKeys: ['declaration'], title: /declaration|covenants/i },
-  '720_bylaws_rules': { categoryKeys: ['declaration', 'rules'], title: /by[-\s]?laws?|\brules?\b|regulations?/i },
+  // The spaced "by laws" starts at a word boundary, so "Standby Laws" is not read as bylaws.
+  '720_bylaws_rules': { categoryKeys: ['declaration', 'rules'], title: /by-?laws?|\bby\s+laws\b|\brules?\b|regulations?/i },
   '720_contracts': { categoryKeys: ['contracts'], title: /\bcontract/i },
 };
 

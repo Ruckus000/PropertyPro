@@ -12,7 +12,6 @@ import {
   matchingTemplateKeys,
   proposeTemplateKeyForFile,
   type MatchableDocument,
-  type RecordMatchRule,
 } from '../../src/compliance/record-matching';
 import { getComplianceTemplate } from '../../src/compliance/templates';
 import {
@@ -96,14 +95,17 @@ const SEPARATED: ReadonlyArray<[text: string, categoryKey: DocumentCategoryKey, 
   ['List_of_Executory_Contracts.pdf', 'contracts', '718_contracts'],
   // A run of separators is ONE space: nine characters would overrun question.{0,6}answer.
   ['Question___and___Answer_Sheet.pdf', 'declaration', '718_qa_sheet'],
-  // A hyphenated spelling reads as typed and as the space it folds to.
+  // Reads as typed and as the space it folds to.
   ['By-Laws.pdf', 'declaration', '718_bylaws'],
+  // One hyphenated bylaw: only the text as typed has the hyphen that by-?laws? reads. Folded it is
+  // "By Law", and the spaced form needs the plural.
+  ['By-Law.pdf', 'declaration', '718_bylaws'],
 ];
 
 /**
- * How a board writes "bylaws" in a file name. The first two read before the patterns
- * accepted a space between "by" and "laws"; the rest need it, either as typed ("By Laws")
- * or once a separator folds to one ("By_Laws", "By.Laws", "By-Laws_2019").
+ * How a board writes "bylaws" in a file name. The first two need no space; the rest need the
+ * spaced form "By Laws", either as typed or once a separator folds to one ("By_Laws", "By.Laws",
+ * "By-Laws_2019").
  */
 const BYLAWS_SPELLINGS: readonly string[] = [
   'Bylaws.pdf',
@@ -255,40 +257,6 @@ describe('matchingTemplateKeys', () => {
     });
   });
 
-  describe('the text as typed and as folded', () => {
-    // Every shipped pattern reads a folded name at least as well as a typed one, so each half
-    // of the reading is pinned with a throwaway rule. The table is restored afterwards.
-    const table = RECORD_MATCH_RULES as Record<string, RecordMatchRule>;
-    const withRule = (key: string, title: RegExp, run: () => void) => {
-      table[key] = { categoryKeys: ['declaration'], title };
-      try {
-        run();
-      } finally {
-        delete table[key];
-      }
-    };
-
-    it('reads the text as typed, for a pattern that needs the separator', () => {
-      withRule('test_needs_hyphen', /\ba-b\b/i, () => {
-        const typed = doc('a-b', 'declaration', 'scan0042.pdf');
-        expect(matchingTemplateKeys(typed, ['test_needs_hyphen'])).toEqual(['test_needs_hyphen']);
-        expect(proposeTemplateKeyForFile('a-b.pdf', ['test_needs_hyphen'])).toBe('test_needs_hyphen');
-      });
-    });
-
-    it('reads the folded text, for a pattern that needs the space', () => {
-      withRule('test_needs_space', /\ba b\b/i, () => {
-        const separated = doc('a_b', 'declaration', 'scan0042.pdf');
-        expect(matchingTemplateKeys(separated, ['test_needs_space'])).toEqual(['test_needs_space']);
-        expect(proposeTemplateKeyForFile('a.b.pdf', ['test_needs_space'])).toBe('test_needs_space');
-      });
-    });
-
-    it('leaves the rule table as it found it', () => {
-      expect(Object.keys(RECORD_MATCH_RULES).sort()).toEqual([...condoKeys, ...hoaKeys].sort());
-    });
-  });
-
   describe('meeting records named in the plural', () => {
     const meetingRecords: Array<[title: string, key: string]> = [
       ['Meeting Notices', '718_meeting_notices'],
@@ -405,6 +373,45 @@ describe('spellings of "bylaws" in a file name', () => {
 
   it.each(BYLAWS_SPELLINGS)('"%s" is proposed as the HOA bylaws and rules item', (fileName) => {
     expect(proposeTemplateKeyForFile(fileName, hoaKeys)).toBe('720_bylaws_rules');
+  });
+});
+
+describe('"by law" in a file name', () => {
+  const neutralTitle = 'Scan 0042';
+
+  // The phrase "by law" and the word "Standby" are not a bylaws file, and a wrong automatic link is
+  // worse than a missed one. What each name is proposed as instead is part of the row (null: nothing
+  // fits): "Notice by law" is a meeting notice by its first word.
+  const notBylaws: ReadonlyArray<{ fileName: string; condo: string | null; hoa: string | null }> = [
+    { fileName: 'Required by Law.pdf', condo: null, hoa: null },
+    { fileName: 'Notice by law.pdf', condo: '718_meeting_notices', hoa: '720_meeting_notices' },
+    { fileName: 'Standby Laws.pdf', condo: null, hoa: null },
+  ];
+
+  it.each(notBylaws)('$fileName does not match the condo bylaws item', ({ fileName }) => {
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', fileName), condoKeys)).toEqual([]);
+  });
+
+  it.each(notBylaws)('$fileName does not match the HOA bylaws and rules item', ({ fileName }) => {
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', fileName), hoaKeys)).toEqual([]);
+  });
+
+  it.each(notBylaws)('$fileName is not proposed as the condo bylaws item', ({ fileName, condo }) => {
+    expect(proposeTemplateKeyForFile(fileName, condoKeys)).toBe(condo);
+  });
+
+  it.each(notBylaws)('$fileName is not proposed as the HOA bylaws and rules item', ({ fileName, hoa }) => {
+    expect(proposeTemplateKeyForFile(fileName, hoaKeys)).toBe(hoa);
+  });
+
+  it('accepts the plural phrase, which cannot be told from the spelling "By Laws"', () => {
+    // "Required By Laws of Florida" says the same two words as "By Laws.pdf", so it reads as bylaws.
+    // The singular phrase above is left out; this one is the cost of reading the spelling.
+    const phrase = 'Required By Laws of Florida.pdf';
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', phrase), condoKeys)).toEqual(['718_bylaws']);
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', phrase), hoaKeys)).toEqual(['720_bylaws_rules']);
+    expect(proposeTemplateKeyForFile(phrase, condoKeys)).toBe('718_bylaws');
+    expect(proposeTemplateKeyForFile(phrase, hoaKeys)).toBe('720_bylaws_rules');
   });
 });
 
