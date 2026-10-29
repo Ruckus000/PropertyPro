@@ -12,6 +12,7 @@ import {
   matchingTemplateKeys,
   proposeTemplateKeyForFile,
   type MatchableDocument,
+  type RecordMatchRule,
 } from '../../src/compliance/record-matching';
 import { getComplianceTemplate } from '../../src/compliance/templates';
 import {
@@ -95,8 +96,22 @@ const SEPARATED: ReadonlyArray<[text: string, categoryKey: DocumentCategoryKey, 
   ['List_of_Executory_Contracts.pdf', 'contracts', '718_contracts'],
   // A run of separators is ONE space: nine characters would overrun question.{0,6}answer.
   ['Question___and___Answer_Sheet.pdf', 'declaration', '718_qa_sheet'],
-  // The hyphen is what by-?laws? reads, so the text as typed must be tried too.
+  // A hyphenated spelling reads as typed and as the space it folds to.
   ['By-Laws.pdf', 'declaration', '718_bylaws'],
+];
+
+/**
+ * How a board writes "bylaws" in a file name. The first two read before the patterns
+ * accepted a space between "by" and "laws"; the rest need it, either as typed ("By Laws")
+ * or once a separator folds to one ("By_Laws", "By.Laws", "By-Laws_2019").
+ */
+const BYLAWS_SPELLINGS: readonly string[] = [
+  'Bylaws.pdf',
+  'By-Laws.pdf',
+  'By Laws.pdf',
+  'By_Laws.pdf',
+  'By.Laws.pdf',
+  'By-Laws_2019.pdf',
 ];
 
 describe('RECORD_MATCH_RULES', () => {
@@ -126,6 +141,16 @@ describe('RECORD_MATCH_RULES', () => {
     // different answer on alternate calls.
     for (const [key, rule] of Object.entries(RECORD_MATCH_RULES)) {
       expect(rule.title.flags, key).toBe('i');
+    }
+  });
+
+  it('answers the same every time it is asked about the same text', () => {
+    // Asked of the pattern itself: through the two functions a stateful pattern can hide,
+    // because the folded copy gives it a second chance at the text it just failed.
+    for (const { key, title } of SAMPLES) {
+      const rule = RECORD_MATCH_RULES[key];
+      expect(rule, key).toBeDefined();
+      expect([1, 2, 3].map(() => rule?.title.test(title)), `${key}: ${title}`).toEqual([true, true, true]);
     }
   });
 
@@ -230,6 +255,40 @@ describe('matchingTemplateKeys', () => {
     });
   });
 
+  describe('the text as typed and as folded', () => {
+    // Every shipped pattern reads a folded name at least as well as a typed one, so each half
+    // of the reading is pinned with a throwaway rule. The table is restored afterwards.
+    const table = RECORD_MATCH_RULES as Record<string, RecordMatchRule>;
+    const withRule = (key: string, title: RegExp, run: () => void) => {
+      table[key] = { categoryKeys: ['declaration'], title };
+      try {
+        run();
+      } finally {
+        delete table[key];
+      }
+    };
+
+    it('reads the text as typed, for a pattern that needs the separator', () => {
+      withRule('test_needs_hyphen', /\ba-b\b/i, () => {
+        const typed = doc('a-b', 'declaration', 'scan0042.pdf');
+        expect(matchingTemplateKeys(typed, ['test_needs_hyphen'])).toEqual(['test_needs_hyphen']);
+        expect(proposeTemplateKeyForFile('a-b.pdf', ['test_needs_hyphen'])).toBe('test_needs_hyphen');
+      });
+    });
+
+    it('reads the folded text, for a pattern that needs the space', () => {
+      withRule('test_needs_space', /\ba b\b/i, () => {
+        const separated = doc('a_b', 'declaration', 'scan0042.pdf');
+        expect(matchingTemplateKeys(separated, ['test_needs_space'])).toEqual(['test_needs_space']);
+        expect(proposeTemplateKeyForFile('a.b.pdf', ['test_needs_space'])).toBe('test_needs_space');
+      });
+    });
+
+    it('leaves the rule table as it found it', () => {
+      expect(Object.keys(RECORD_MATCH_RULES).sort()).toEqual([...condoKeys, ...hoaKeys].sort());
+    });
+  });
+
   describe('meeting records named in the plural', () => {
     const meetingRecords: Array<[title: string, key: string]> = [
       ['Meeting Notices', '718_meeting_notices'],
@@ -277,15 +336,6 @@ describe('matchingTemplateKeys', () => {
         matchingTemplateKeys(both, ['constructor', '__proto__', 'toString', 'hasOwnProperty', '718_bylaws']),
       ).toEqual(['718_bylaws']);
     });
-  });
-
-  it('answers the same every time it is asked', () => {
-    // Only the title as typed fits here, so a pattern that kept match state would
-    // fail on a later call instead of finding the same text by another route.
-    const byLaws = doc('By-Laws', 'declaration', 'scan0042.pdf');
-    for (let call = 1; call <= 3; call += 1) {
-      expect(matchingTemplateKeys(byLaws, condoKeys), `call ${call}`).toEqual(['718_bylaws']);
-    }
   });
 });
 
@@ -335,13 +385,26 @@ describe('proposeTemplateKeyForFile', () => {
       expect(proposeTemplateKeyForFile(fileName, condoKeys)).toBe(key);
     });
   });
+});
 
-  it('answers the same every time it is asked', () => {
-    // Only the file name as typed fits ("By-Laws" loses its hyphen once folded), so a
-    // pattern that kept match state would fail on a later call.
-    for (let call = 1; call <= 3; call += 1) {
-      expect(proposeTemplateKeyForFile('By-Laws.pdf', condoKeys), `call ${call}`).toBe('718_bylaws');
-    }
+describe('spellings of "bylaws" in a file name', () => {
+  // The title carries no evidence, so only the file name can match.
+  const neutralTitle = 'Scan 0042';
+
+  it.each(BYLAWS_SPELLINGS)('"%s" is the condo bylaws item', (fileName) => {
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', fileName), condoKeys)).toEqual(['718_bylaws']);
+  });
+
+  it.each(BYLAWS_SPELLINGS)('"%s" is the HOA bylaws and rules item', (fileName) => {
+    expect(matchingTemplateKeys(doc(neutralTitle, 'declaration', fileName), hoaKeys)).toEqual(['720_bylaws_rules']);
+  });
+
+  it.each(BYLAWS_SPELLINGS)('"%s" is proposed as the condo bylaws item', (fileName) => {
+    expect(proposeTemplateKeyForFile(fileName, condoKeys)).toBe('718_bylaws');
+  });
+
+  it.each(BYLAWS_SPELLINGS)('"%s" is proposed as the HOA bylaws and rules item', (fileName) => {
+    expect(proposeTemplateKeyForFile(fileName, hoaKeys)).toBe('720_bylaws_rules');
   });
 });
 
