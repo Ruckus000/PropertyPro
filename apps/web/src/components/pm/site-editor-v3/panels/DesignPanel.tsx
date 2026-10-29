@@ -1,36 +1,30 @@
 'use client';
 
 /**
- * The Design tool (website builder v4, Phase 4b; looks, Phase 2B): look, colour
- * set, and — on Professional — custom colours, which save as a draft and go live
- * on Publish (`site-design-service`). The logos at the bottom are the exception:
+ * The Design panel (website builder v4, Phase 4b; Site settings, combined plan
+ * Task 27): colour set, fonts, on Professional custom colours, and the logos.
+ * Colour, font and custom-colour changes save as a draft and go live on
+ * Publish (`site-design-service`). The logos at the bottom are the exception:
  * they are live as soon as they save (see `LogosSection`).
  *
- * A look is a whole design: a layout, a colour set and the home page's starting
- * sections (D1). Choosing one drafts it through `PATCH /api/v1/pm/site/look`,
- * which keeps every section the manager has edited (D5). It lists
- * `LOOK_SUMMARIES`, not the registry, so the panel's chunk stays small.
- *
- * ponytail: this list of looks is interim. Trigger: the look picker
- * (`/pm/website/looks`) exists; the Design tab then keeps colours, fonts and
- * logos and links to the picker instead of listing looks.
+ * It lists no looks. A look is a whole design (a layout, a colour set and the
+ * home page's starting sections), and choosing one is the look picker's job
+ * (`/pm/website/looks`); this panel links to it.
  *
  * The colour-set grid is `PresetCards`.
  *
- * No plan lock on looks or colour sets: Essentials could already pick any set,
- * and the Design panel does not take that away. Only the
- * custom-colours section is Professional, as it always was.
+ * No plan lock on colour sets: Essentials could already pick any set, and the
+ * Design panel does not take that away. Only the custom-colours section is
+ * Professional, as it always was.
  */
 
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { Check } from 'lucide-react';
 import type { SiteLook } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useDraftSiteLook } from '@/hooks/use-draft-site-look';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
-import { LOOK_SUMMARIES, type LookSummary } from '@/lib/site-looks/look-summaries';
 import { LogosSection } from './LogosSection';
 import { PresetCards, type PresetCardData } from './preset-cards';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
@@ -57,7 +51,6 @@ export function DesignPanel({
 }: DesignPanelProps) {
   const design = useSiteDesign(communityId);
   const save = useSaveSiteDesign(communityId);
-  const draftLook = useDraftSiteLook(communityId);
 
   if (design.isError) {
     return (
@@ -84,35 +77,9 @@ export function DesignPanel({
 
   const look = nextLook(design.data);
   const presetName = new Map(presets.map((p) => [p.slug, p.displayName]));
-  // A look's id is its layout id (D2), so the look that will publish is the one
-  // whose id is the layout the draft-over-live design carries. None when the
-  // site is on a layout that predates the looks.
-  const selectedLookId = LOOK_SUMMARIES.find((summary) => summary.id === look.layoutId)?.id ?? null;
-  // The look the website has now, which is where "choosing a look" can lead back to.
-  const liveLookId = LOOK_SUMMARIES.find((summary) => summary.id === design.data.live.layoutId)?.id ?? null;
-  const busy = save.isPending || draftLook.isPending;
+  const busy = save.isPending;
   const customColoursActive =
     look.customCssOverrides != null && Object.keys(look.customCssOverrides).length > 0;
-
-  function chooseLook(summary: LookSummary) {
-    if (summary.id === selectedLookId) return;
-    // Choosing the look the website already has takes the drafted one back, which
-    // leaves nothing of the look to publish. The counts the route returns cannot
-    // tell the panel so: a way back with nothing edited still counts the sections
-    // it put back (5 replaced, 1 added and 1 removed, Heritage to Bayfront), and a
-    // switch that keeps every edited section counts as nothing, the same as one
-    // that changed nothing. The panel knows which look is live.
-    const returnsToLive = summary.id === liveLookId;
-    draftLook.mutate(summary.id, {
-      onSuccess: () =>
-        toast.success(
-          returnsToLive
-            ? 'Your website already uses this look.'
-            : `Now using ${summary.name}. Publish to put it on your website.`,
-        ),
-      onError: (err) => toast.error(err.message),
-    });
-  }
 
   function chooseColourSet(slug: string) {
     if (look.themePresetSlug === slug) return;
@@ -130,60 +97,17 @@ export function DesignPanel({
 
   return (
     <div className="space-y-8" data-testid="tool-panel-design">
-      <p className="text-sm text-content-secondary">
-        A look sets your site&apos;s design and the sections on its home page. Sections you&apos;ve
-        edited stay as they are. Look and colour changes wait until you publish.
-      </p>
-
       <section aria-labelledby="design-look-heading" className="space-y-3">
-        <div className="flex items-baseline justify-between gap-2">
-          <h3 id="design-look-heading" className="text-sm font-semibold text-content">
-            Look
-          </h3>
-          <span className="text-xs text-content-tertiary">Your edits stay</span>
-        </div>
-        {selectedLookId === null ? (
-          <p data-testid="design-older-look-note" className="text-sm text-content-secondary">
-            Your site uses an older look. Choose one below to switch to it.
-          </p>
-        ) : null}
-        <div role="radiogroup" aria-label="Look" className="space-y-2">
-          {LOOK_SUMMARIES.map((summary) => {
-            const selected = summary.id === selectedLookId;
-            return (
-              <button
-                key={summary.id}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                disabled={busy}
-                data-testid={`design-look-${summary.id}`}
-                onClick={() => chooseLook(summary)}
-                className={`w-full rounded-[var(--radius-md)] border p-3 text-left transition-colors disabled:opacity-60 ${
-                  selected
-                    ? 'border-interactive ring-2 ring-interactive'
-                    : 'border-edge hover:border-interactive-hover'
-                }`}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="block text-sm font-semibold text-content">{summary.name}</span>
-                  {selected ? (
-                    <span
-                      aria-hidden="true"
-                      className="inline-flex items-center gap-1 rounded-full bg-interactive px-2 py-0.5 text-xs font-medium text-content-inverse"
-                    >
-                      <Check className="h-3 w-3" />
-                      Selected
-                    </span>
-                  ) : null}
-                </span>
-                <span className="mt-1 block text-xs text-content-secondary">
-                  {summary.description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <h3 id="design-look-heading" className="text-sm font-semibold text-content">
+          Look
+        </h3>
+        <p className="text-sm text-content-secondary">
+          A look sets how your whole website is laid out and what your home page starts with. You
+          choose it on the look picker. Sections you&apos;ve edited stay as they are.
+        </p>
+        <Button asChild variant="outline" className="min-h-11 md:min-h-9">
+          <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
+        </Button>
       </section>
 
       <section aria-labelledby="design-colours-heading" className="space-y-3">

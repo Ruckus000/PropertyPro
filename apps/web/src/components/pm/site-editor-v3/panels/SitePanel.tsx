@@ -329,7 +329,7 @@ export function SitePanel({
 
           <div className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
-              <Label htmlFor="site-association-name">Association name</Label>
+              <Label htmlFor="site-association-name">Community name</Label>
               <CharacterCount
                 value={associationName}
                 max={FOOTER_ASSOCIATION_NAME_MAX_LENGTH}
@@ -343,7 +343,7 @@ export function SitePanel({
               placeholder={community.name}
             />
             <p className="text-sm text-content-tertiary">
-              Used in the copyright line. Leave blank to use your community name.
+              Shown in your footer&apos;s copyright line. Leave blank to use the name in your community profile.
             </p>
           </div>
 

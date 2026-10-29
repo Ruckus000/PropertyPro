@@ -76,7 +76,7 @@ const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpD
 });
 // Type-only: erased at build, so the chunk is not pulled in.
 import type { HelpAction } from './help/guides';
-import type { SettingsTabId } from './settings/SettingsView';
+import { DEFAULT_SETTINGS_TAB, type SettingsTabId } from './settings/settings-tabs';
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
   { ssr: false, loading: () => null },
@@ -208,6 +208,13 @@ export interface EditorRootProps {
    * is remounted by the page switch it triggers.
    */
   initialPages: SitePageSummary[];
+  /**
+   * The area to open on, from `?view=settings&tab=<id>` (`parseEditorLocation`).
+   * Absent means the Website view, as every link to the editor has always meant.
+   */
+  initialView?: EditorView;
+  /** The Site settings tab to open on when `initialView` is `'settings'`. */
+  initialSettingsTab?: SettingsTabId;
 }
 
 /**
@@ -254,6 +261,8 @@ export function EditorRoot({
   presets,
   hasSiteCustomCss,
   initialPages,
+  initialView = 'website',
+  initialSettingsTab = DEFAULT_SETTINGS_TAB,
 }: EditorRootProps) {
   const { data: blocks } = useContentBlocks(communityId);
   // The Documents tool's count, reported by the code-split `RecordsAttention`.
@@ -282,12 +291,15 @@ export function EditorRoot({
   } = useSiteDiff(communityId);
   // Closed by default — the v4 builder opens on the page, not on a panel.
   const [activeTool, setActiveTool] = useState<EditorToolId | null>(null);
-  // v4 Phase 5: the page being built, or the site's settings.
-  const [view, setView] = useState<EditorView>('website');
-  // A Settings tab a Help guide's "Show me" asked for; see `SettingsView`.
-  const [settingsTabRequest, setSettingsTabRequest] = useState<{ tab: SettingsTabId } | null>(
-    null,
-  );
+  // v4 Phase 5: the page being built, or Site settings.
+  const [view, setView] = useState<EditorView>(initialView);
+  // The Site settings tab showing, or asked for by a link or a Help guide's
+  // "Show me". Lives here, above the page-keyed provider, because choosing a
+  // page in the Pages tab remounts the whole shell and `SettingsView`'s own
+  // state with it. `SettingsView` reports every change, so this is also what a
+  // remounted view opens on.
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>(initialSettingsTab);
+  const settingsTabRequest = useMemo(() => ({ tab: settingsTab }), [settingsTab]);
   // v4 Phase 3: the Help drawer, open beside whichever area is showing.
   const [helpOpen, setHelpOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -840,8 +852,8 @@ export function EditorRoot({
   }, []);
   const handleViewChange = useCallback((next: EditorView) => {
     setView(next);
-    // Spent: the PM's own switch opens Settings on its first tab again.
-    setSettingsTabRequest(null);
+    // Spent: the PM's own switch opens Site settings on its first tab again.
+    setSettingsTab(DEFAULT_SETTINGS_TAB);
   }, []);
   const handleHelpToggle = useCallback(() => setHelpOpen((open) => !open), []);
   const handleHelpClose = useCallback(() => setHelpOpen(false), []);
@@ -854,7 +866,7 @@ export function EditorRoot({
       setActiveTool(action.tool);
     } else if (action.kind === 'settings') {
       setView('settings');
-      setSettingsTabRequest({ tab: action.tab });
+      setSettingsTab(action.tab);
     } else {
       setPublishOpen(true);
     }
@@ -958,6 +970,20 @@ export function EditorRoot({
               hasSiteCustomDomain={hasSiteCustomDomain}
               onOpenDocuments={handleOpenDocuments}
               tabRequest={settingsTabRequest}
+              onTabChange={setSettingsTab}
+              pagesPanel={{
+                selectedPageId: effectivePageId,
+                restoreFocusToSelectedRow: focusSelectedRow,
+                onFocusRestored: handleFocusRestored,
+                onSelectPage: handleSelectPage,
+                onPageRemoved: handlePageRemoved,
+              }}
+              designPanel={{
+                presets,
+                hasSiteCustomCss,
+                theme: resolveStylingTheme(canvasContext),
+              }}
+              noticePanel={{ hasPublishedSite, initialNotice }}
             />
           ) : null
         }

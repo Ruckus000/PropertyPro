@@ -47,15 +47,15 @@ export interface EditorTopBarPageProps {
 export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
 
 /**
- * The editor's two areas (v4 builder, Phase 5): the page being built, and the
- * site's settings. The design also drew a Documents view; documents stay a rail
+ * The editor's two areas (v4 builder, Phase 5): the page being built, and Site
+ * settings. The design also drew a Documents view; documents stay a rail
  * tool that links into the library, so there is no third area to switch to.
  */
 export type EditorView = 'website' | 'settings';
 
 const VIEWS: readonly { id: EditorView; label: string; icon: LucideIcon }[] = [
   { id: 'website', label: 'Website', icon: LayoutTemplate },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'settings', label: 'Site settings', icon: Settings },
 ];
 
 const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[] = [

@@ -29,6 +29,7 @@ import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
+import { parseEditorLocation } from '@/components/pm/site-editor-v3/settings/settings-tabs';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
 import { listSitePages, toSitePageSummary } from '@/lib/services/site-pages-service';
@@ -87,6 +88,13 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
   const communityId = rawId;
+  // `?view=settings&tab=<id>` opens Site settings on that tab (the website
+  // home links to it). Nothing here is trusted: an unknown tab is General, and
+  // the community, role and plan checks below apply to this URL like any other.
+  const location = parseEditorLocation({
+    view: params['view'],
+    tab: params['tab'],
+  });
 
   let userId: string;
   try {
@@ -245,6 +253,8 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         // is open.
         presets={presets}
         initialPages={initialPages}
+        initialView={location.view}
+        initialSettingsTab={location.tab}
       />
     </EditorFrame>
   );

@@ -3,9 +3,8 @@
  *
  * `LOOKS` (`./looks`) is the registry of record, and it carries each look's
  * default sections and the block schemas and switch planner behind them. A list
- * of looks that only shows names (the Design panel, an editor chunk that is
- * loaded on a tab click and has next to no size budget to spare) should not
- * import all that, so this module repeats just the part a list needs.
+ * of looks that only shows names (the look picker and the website home) should
+ * not import all that, so this module repeats just the part a list needs.
  *
  * A copy needs a test that ties it to the original: `look-summaries.test.ts`
  * compares every id, name and description with `LOOKS`, in order, and checks that

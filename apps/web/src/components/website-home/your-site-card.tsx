@@ -141,6 +141,11 @@ export function YourSiteCard({
         <Button asChild variant="outline" className={TOUCH}>
           <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
         </Button>
+        <Button asChild variant="outline" className={TOUCH}>
+          <Link href={`/pm/website-editor?communityId=${communityId}&view=settings&tab=general`}>
+            Site settings
+          </Link>
+        </Button>
         {previousSnapshotId !== null && (
           <Button
             type="button"

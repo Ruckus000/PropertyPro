@@ -26,6 +26,9 @@ function Swatch({ color, label }: { color?: string; label: string }) {
   if (!color) return null;
   return (
     <span
+      // `aria-label` is not allowed on a span with no role (axe:
+      // aria-prohibited-attr), which the Design tab's audit caught.
+      role="img"
       aria-label={`${label} ${color}`}
       title={`${label}: ${color}`}
       className="inline-block h-5 w-5 rounded border border-edge"

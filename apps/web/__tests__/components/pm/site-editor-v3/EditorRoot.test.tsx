@@ -72,15 +72,37 @@ vi.mock('next/dynamic', () => ({
         ? ({
             onOpenDocuments,
             tabRequest,
+            onTabChange,
+            pagesPanel,
+            designPanel,
+            noticePanel,
           }: {
             onOpenDocuments: () => void;
             tabRequest?: { tab: string } | null;
+            onTabChange?: (tab: string) => void;
+            pagesPanel: {
+              selectedPageId: number | null;
+              onSelectPage: (pageId: number) => void;
+            };
+            designPanel: { presets: unknown[]; hasSiteCustomCss: boolean };
+            noticePanel: { hasPublishedSite: boolean };
           }) => (
             <>
               <button type="button" onClick={onOpenDocuments}>
                 Settings stand-in: open Documents
               </button>
               <p>Requested tab: {tabRequest?.tab ?? 'none'}</p>
+              <button type="button" onClick={() => onTabChange?.('pages')}>
+                Settings stand-in: show Pages
+              </button>
+              <button type="button" onClick={() => pagesPanel.onSelectPage(SECOND_PAGE_ID)}>
+                Settings stand-in: edit the second page
+              </button>
+              <p>
+                Settings stand-in props: page {String(pagesPanel.selectedPageId)}, published{' '}
+                {String(noticePanel.hasPublishedSite)}, custom css{' '}
+                {String(designPanel.hasSiteCustomCss)}, {designPanel.presets.length} colour sets
+              </p>
             </>
           )
       : // The Help drawer, as a stand-in exposing its callbacks; its content
@@ -499,12 +521,17 @@ interface RootOptions {
    */
   canvasContext?: unknown;
   hasPublishedSite?: boolean;
+  /** `?view=settings&tab=<id>`, as the page parses it. */
+  initialView?: 'website' | 'settings';
+  initialSettingsTab?: string;
 }
 
 function rootElement({
   initialPages = [seededHome],
   canvasContext = null,
   hasPublishedSite = true,
+  initialView,
+  initialSettingsTab,
 }: RootOptions = {}) {
   return (
     <EditorRoot
@@ -534,6 +561,8 @@ function rootElement({
       // the Pages panel has ever been opened — that id is what every block
       // write is scoped by.
       initialPages={initialPages}
+      initialView={initialView}
+      initialSettingsTab={initialSettingsTab as never}
     />
   );
 }
@@ -722,7 +751,7 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
     expect(screen.queryByTestId('site-editor-tool-site')).not.toBeInTheDocument();
     expect(screen.queryByTestId('site-editor-tool-domain')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     expect(screen.getByText('Settings stand-in: open Documents')).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
 
@@ -732,13 +761,56 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
 
   it("Settings' link to the records returns to the page with Documents open", async () => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     await userEvent.click(screen.getByText('Settings stand-in: open Documents'));
 
     expect(screen.getByTestId('site-editor-tool-documents')).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+  });
+});
+
+describe('EditorRoot — Site settings opened from the address (combined plan Task 27)', () => {
+  it('?view=settings&tab=pages opens Site settings on Pages, with no rail', () => {
+    renderRoot({ initialView: 'settings', initialSettingsTab: 'pages' });
+
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+  });
+
+  it('opens on the website, with the rail, when the address names no view', () => {
+    renderRoot();
+
+    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.queryByText(/Requested tab/)).not.toBeInTheDocument();
+  });
+
+  it('hands the Pages, Design and Notice tabs what the tools had', () => {
+    renderRoot({ initialView: 'settings', hasPublishedSite: false });
+
+    expect(
+      screen.getByText(
+        `Settings stand-in props: page ${HOME_PAGE_ID}, published false, custom css false, 0 colour sets`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Choosing a page remounts the shell (the page-keyed provider), and with it
+  // the view's own state. Without the tab living here, the view dropped back to
+  // General the moment a page was chosen in the Pages tab.
+  // Revert check: drop `onTabChange={setSettingsTab}` in the SettingsView render.
+  it('stays on the tab the PM chose when choosing a page remounts the editor', async () => {
+    renderRoot({ initialView: 'settings' });
+    await userEvent.click(screen.getByRole('button', { name: 'Settings stand-in: show Pages' }));
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Settings stand-in: edit the second page' }),
+    );
+
+    expect(screen.getByText(/Settings stand-in props: page 77/)).toBeInTheDocument();
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
   });
 });
 
@@ -761,7 +833,7 @@ describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
 
   it('"Show me" for a tool closes the drawer and opens that tool on the page', async () => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     await userEvent.click(helpButtons()[0]!);
     await userEvent.click(screen.getByRole('button', { name: 'Show me: tool' }));
 
@@ -777,8 +849,8 @@ describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
 
     // The PM's own switch afterwards opens Settings on its first tab again.
     await userEvent.click(screen.getByRole('button', { name: 'Website' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByText('Requested tab: none')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    expect(screen.getByText('Requested tab: general')).toBeInTheDocument();
   });
 });
 
@@ -1454,7 +1526,7 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     ['Go to Pages', 'site-editor-tool-pages'],
   ])("Publish's %s from Settings returns to the page with its tool open", async (action, tool) => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: action }));
 

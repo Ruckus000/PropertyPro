@@ -19,9 +19,6 @@
  * All three share one mutation scope, so they run one at a time, in the order
  * they were asked for: clicking two cards quickly drafts them in that order
  * (the last one wins), and Publish waits for a card's draft to land.
- *
- * The Design panel keeps its own `useDraftSiteLook` for the same PATCH; that
- * panel stops listing looks once this picker exists (Task 27).
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSitePublishToken } from '@/hooks/use-content-blocks';
