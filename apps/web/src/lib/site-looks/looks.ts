@@ -238,7 +238,7 @@ export interface LiveHomePage {
 /**
  * What a switch is:
  * - `switch`: to a look the page is not on;
- * - `already-drafted`: to the look already drafted; the page stays as it is;
+ * - `already-drafted`: to the look already drafted; nothing changes;
  * - `live-look`: to the live look, with no other layout drafted; nothing changes;
  * - `back-to-live`: to the live look from another drafted layout; the page
  *   returns to what is live.

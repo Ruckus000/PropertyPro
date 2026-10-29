@@ -505,15 +505,41 @@ describe('draftLookSwitch', () => {
     expect(second.scoped.insert).not.toHaveBeenCalled();
     expect(second.scoped.softDelete).not.toHaveBeenCalled();
     expect(counts).toEqual({ replaced: 0, kept: 6, added: 0, removed: 0 });
-    // Only the look is saved again, in the transaction, with its own audit row.
-    expect(mocks.mergeBranding).toHaveBeenCalledWith(
-      COMMUNITY_ID,
-      { draftLook: lookBranding('plain-simple') },
-      second.tx,
-    );
-    expect(auditActions()).toEqual([
-      expect.objectContaining({ action: 'site_design_draft_saved', resourceType: 'community' }),
-    ]);
+    // Nothing is written for the look either, so no audit row.
+    expect(mocks.mergeBranding).not.toHaveBeenCalled();
+    expect(auditActions()).toEqual([]);
+  });
+
+  it('re-selecting the drafted look keeps a colour the manager changed since, and writes nothing', async () => {
+    // Heritage was picked on its card, then the manager changed the drafted
+    // primary colour. "Publish this look" runs the same switch again.
+    const published = publishedRows(look('bayfront').sections);
+    const heritageDrafts = look('heritage').sections.map((section, i) => ({
+      id: 700 + i,
+      pageId: HOME_PAGE_ID,
+      blockType: section.blockType,
+      blockOrder: i + 1,
+      content: structuredClone(section.content),
+      isDraft: true,
+    }));
+    const { scoped, tx } = setUp({
+      community: {
+        communityType: 'condo_718',
+        branding: { ...lookBranding('bayfront'), draftLook: { ...lookBranding('heritage'), primaryColor: '#123456' } },
+      },
+      homeRows: [...published, ...heritageDrafts],
+    });
+
+    const counts = await draftLookSwitch(COMMUNITY_ID, 'heritage', { actorUserId: ACTOR });
+
+    expect(counts).toEqual({ replaced: 0, kept: 6, added: 0, removed: 0 });
+    // The drafted colour is not put back to the colour set's: nothing is saved
+    // over the draft look, no section is written, and there is no audit row.
+    expect(mocks.mergeBranding).not.toHaveBeenCalled();
+    expect(scoped.insert).not.toHaveBeenCalled();
+    expect(scoped.softDelete).not.toHaveBeenCalled();
+    expect(mocks.logAuditEvent).not.toHaveBeenCalled();
+    expect(tx.execute).toHaveBeenCalledTimes(1); // the lock, and nothing after it
   });
 
   describe('back to the live look', () => {

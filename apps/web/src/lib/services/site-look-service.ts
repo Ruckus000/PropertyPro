@@ -186,9 +186,10 @@ export async function applyLookAtCreation(
  *
  * What is written follows the plan's kind:
  * - `switch`: the planned sections, and the look as the draft look.
- * - `already-drafted` (the look is drafted already): no section, and the look
- *   saved again. "Publish this look" runs the switch after the card's own, and
- *   the manager may have edited the drafted page in between.
+ * - `already-drafted` (the look is drafted already): nothing at all.
+ *   "Publish this look" runs the switch after the card's own, and whatever the
+ *   manager changed in between, on the page or in the drafted colours and
+ *   fonts, stays as they left it.
  * - `live-look` (the live look, nothing else drafted): nothing at all.
  * - `back-to-live` (the live look, another layout drafted): the sections
  *   return to what is live, and the drafted look is withdrawn, so no design
@@ -235,7 +236,7 @@ export async function draftLookSwitch(
       );
     }
 
-    if (kind === 'switch' || kind === 'already-drafted') {
+    if (kind === 'switch') {
       await writeDraftDesign(communityId, design, { actorUserId: opts.actorUserId, executor });
     } else if (kind === 'back-to-live') {
       await withdrawDraftDesign(communityId, SWITCHED_LOOK_FIELDS, { actorUserId: opts.actorUserId, executor });

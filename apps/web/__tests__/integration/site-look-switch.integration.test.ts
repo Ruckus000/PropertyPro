@@ -22,6 +22,7 @@ import {
   removeSiteBlock,
   upsertPublishedBlock,
 } from '@/lib/services/site-blocks-service';
+import { saveDraftDesign } from '@/lib/services/site-design-service';
 import { applyLookAtCreation, draftLookSwitch } from '@/lib/services/site-look-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { getLook, type LookId } from '@/lib/site-looks/looks';
@@ -142,6 +143,13 @@ describeDb('site looks (db-backed integration)', () => {
         ),
       )
       .orderBy(asc(siteBlocks.blockOrder));
+  }
+
+  async function auditRowCount(communityId: number): Promise<number> {
+    const rows = await state.sqlClient.unsafe<Array<{ count: string }>>(
+      `SELECT count(*) AS count FROM compliance_audit_log WHERE community_id = ${communityId}`,
+    );
+    return Number(rows[0]?.count ?? 0);
   }
 
   async function draftRowCount(communityId: number): Promise<number> {
@@ -285,20 +293,29 @@ describeDb('site looks (db-backed integration)', () => {
     expect(await applyLookAtCreation(communityId, 'hoa_720')).toEqual({ applied: false, lookId: 'palm-grove' });
     expect(await liveSections(communityId)).toEqual(lookSections('palm-grove'));
 
-    // Untouched, so the switch is exactly Heritage. Saving it again (Publish
-    // this look repeats the card's draft) leaves those drafts exactly as they
-    // are: the same rows, not new copies.
+    // Untouched, so the switch is exactly Heritage. The manager then changes
+    // the drafted primary colour. Running the switch again (Publish this look
+    // repeats the card's draft) writes nothing at all: the same draft rows, the
+    // changed colour, and no audit row.
     const first = await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    await saveDraftDesign(communityId, { primaryColor: '#123456' }, { actorUserId });
     const drafts = await draftRows(communityId);
+    const auditRowsBefore = await auditRowCount(communityId);
     const second = await draftLookSwitch(communityId, 'heritage', { actorUserId });
     expect(first.kept).toBe(0);
     expect(second).toEqual({ replaced: 0, kept: lookSections('heritage').length, added: 0, removed: 0 });
     expect(await draftRows(communityId)).toEqual(drafts);
+    expect(await auditRowCount(communityId)).toBe(auditRowsBefore);
+    expect((await readCommunity(communityId)).branding.draftLook).toMatchObject({ primaryColor: '#123456' });
 
     await publish(communityId);
 
+    // Heritage is live, with the manager's colour.
     expect(await liveSections(communityId)).toEqual(lookSections('heritage'));
-    expect((await readCommunity(communityId)).branding).toMatchObject(lookBranding('heritage'));
+    expect((await readCommunity(communityId)).branding).toMatchObject({
+      ...lookBranding('heritage'),
+      primaryColor: '#123456',
+    });
   });
 
   it('running a switch again for the drafted look moves nothing it kept', async () => {
