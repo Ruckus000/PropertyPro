@@ -81,6 +81,11 @@ interface Call {
 let calls: Call[];
 let liveNoticeStatus: number;
 let liveNoticeMessage: string;
+/** The live site's publish token, as `/blocks` reports it. */
+let liveToken: string;
+let publishStatus: number;
+/** While set, the compliance PATCH waits for it: a link in flight. */
+let holdLink: Promise<void> | null;
 
 function respond(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -119,7 +124,9 @@ function data(over: Partial<WebsiteHomeData> = {}, records: Partial<WebsiteHomeD
     },
     lastPublish: { publishedAt: '2026-10-26T16:00:00.000Z', byName: 'Maria Lopez' },
     history: null,
-    canRestorePrevious: true,
+    previousSnapshotId: 29,
+  publishToken: '2026-10-26T16:00:00.000Z',
+  sitePublished: true,
     liveNotice: { sentAt: null, dismissedAt: null, ownerCount: 12, offerable: false },
     records: {
       level: 'required',
@@ -162,6 +169,9 @@ beforeEach(() => {
   calls = [];
   liveNoticeStatus = 200;
   liveNoticeMessage = '';
+  liveToken = '2026-10-26T16:00:00.000Z';
+  publishStatus = 200;
+  holdLink = null;
   global.fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'https://app.example.com');
     const method = init?.method ?? 'GET';
@@ -172,7 +182,10 @@ beforeEach(() => {
     });
     switch (url.pathname) {
       case '/api/v1/compliance':
+        if (holdLink) await holdLink;
         return respond(200, { data: {} });
+      case '/api/v1/pm/site/drafts':
+        return respond(200, { data: { ok: true, discardedCount: 1 } });
       case '/api/v1/pm/site/live-notice':
         if (liveNoticeStatus !== 200) {
           return respond(liveNoticeStatus, { error: { code: 'CONFLICT', message: liveNoticeMessage } });
@@ -185,10 +198,11 @@ beforeEach(() => {
           data: { data: [{ id: 30, restorable: true }, { id: 29, restorable: true }], pagination: { nextCursor: null, hasMore: false, pageSize: 2 } },
         });
       case '/api/v1/pm/site/blocks':
-        return respond(200, { data: { blocks: [], publishedBlocks: [], latestPublishedAt: '2026-10-26T16:00:00.000Z' } });
+        return respond(200, { data: { blocks: [], publishedBlocks: [], latestPublishedAt: liveToken } });
       case '/api/v1/pm/site/publish/revert':
         return respond(200, { data: { ok: true } });
       case '/api/v1/pm/site/publish':
+        if (publishStatus !== 200) return respond(publishStatus, { error: { code: 'CONFLICT', message: 'Conflict' } });
         return respond(200, { data: { published: true, publishedAt: NOW, promotedCount: 2, retiredCount: 0 } });
       default:
         return respond(404, { error: { message: 'not found' } });
@@ -317,6 +331,57 @@ describe('records', () => {
     expect(screen.getByText(/2 records are still missing\. We'll remind you again on/)).toBeInTheDocument();
   });
 
+  it('while any link is in flight, no other match can be chosen', async () => {
+    let release!: () => void;
+    holdLink = new Promise<void>((resolve) => (release = resolve));
+    const user = renderHome(
+      data({}, {
+        candidates: {
+          [BUDGET.itemId]: [{ documentId: 31, title: '2026 Budget' }],
+          [MINUTES.itemId]: [{ documentId: 31, title: '2026 Budget' }],
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Use 2026 Budget for Annual budget' }));
+
+    // The other row's match is the same file: it cannot be used while the first link runs.
+    expect(screen.getByRole('button', { name: 'Use 2026 Budget for Meeting minutes' })).toBeDisabled();
+    release();
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+  });
+
+  it('after a row is linked and the refresh removes it, focus moves to the Records heading', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const before = data({}, { candidates: { [BUDGET.itemId]: [{ documentId: 30, title: '2025 Budget' }] } });
+    const ui = (d: WebsiteHomeData) => (
+      <QueryClientProvider client={client}>
+        <WebsiteHome communityId={COMMUNITY_ID} data={d} published={false} now={NOW} timeZone="America/New_York" />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui(before));
+    const user = userEvent.setup();
+
+    const use = screen.getByRole('button', { name: 'Use 2025 Budget for Annual budget' });
+    await user.click(use);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    // The refreshed page no longer lists the budget.
+    rerender(ui(data({}, { missing: [MINUTES], candidates: {} })));
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Records' })).toHaveFocus();
+  });
+
+  it('while snoozed, Show them now shows the list for this visit without changing the snooze', async () => {
+    const user = renderHome(data({}, { snoozedUntil: '2026-11-02T16:00:00.000Z' }));
+    expect(alert()).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Show them now' }));
+
+    expect(alert()).not.toBeNull();
+    expect(within(alert()!).getByText('Annual budget')).toBeInTheDocument();
+    expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+  });
+
   it('below the threshold shows the recommended note and no alert', () => {
     renderHome(data({}, { level: 'recommended', missing: [], conditional: [] }));
 
@@ -393,9 +458,15 @@ describe('other sections', () => {
     expect(screen.queryByText(offer)).not.toBeInTheDocument();
     cleanup();
 
-    // Offerable, but never published: not yet.
-    renderHome(data({ liveNotice: live, lastPublish: null }));
+    // Offerable, but the site is not public: not yet.
+    renderHome(data({ liveNotice: live, sitePublished: false }));
     expect(screen.queryByText(offer)).not.toBeInTheDocument();
+    cleanup();
+
+    // A site live from creation with no publish in the log yet (Keep this look):
+    // the offer shows, because the site IS public.
+    renderHome(data({ liveNotice: live, sitePublished: true, lastPublish: null }));
+    expect(screen.getByText(offer)).toBeInTheDocument();
     cleanup();
 
     const user = renderHome(data({ liveNotice: live }));
@@ -500,7 +571,7 @@ describe('restore', () => {
   });
 
   it('nothing to restore offers no Restore', () => {
-    renderHome(data({ canRestorePrevious: false }));
+    renderHome(data({ previousSnapshotId: null }));
 
     expect(screen.queryByRole('button', { name: 'Restore previous version' })).not.toBeInTheDocument();
   });
@@ -520,9 +591,41 @@ describe('restore', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Restore' }));
 
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
-    expect(calls.filter((call) => call.method === 'POST').map((call) => [call.path, call.body])).toEqual([
-      ['/api/v1/pm/site/publish/revert', { communityId: COMMUNITY_ID, snapshotId: 29 }],
-      ['/api/v1/pm/site/publish', { communityId: COMMUNITY_ID, expectedPublishedAt: '2026-10-26T16:00:00.000Z' }],
+    // Unpublished edits (pages included) are cleared first, then the version
+    // named at page load is staged and published under the page-load token.
+    expect(calls.filter((call) => call.method !== 'GET').map((call) => [call.method, call.path, call.body])).toEqual([
+      ['DELETE', '/api/v1/pm/site/drafts', { communityId: COMMUNITY_ID }],
+      ['POST', '/api/v1/pm/site/publish/revert', { communityId: COMMUNITY_ID, snapshotId: 29 }],
+      ['POST', '/api/v1/pm/site/publish', { communityId: COMMUNITY_ID, expectedPublishedAt: '2026-10-26T16:00:00.000Z' }],
+    ]);
+  });
+
+  it('refuses, writing nothing, when someone published since the page opened', async () => {
+    liveToken = '2026-10-28T09:00:00.000Z';
+    const user = renderHome();
+
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }));
+
+    expect(
+      await screen.findByText('Someone published the site since this page opened. Reload the page and try again.'),
+    ).toBeInTheDocument();
+    expect(calls.filter((call) => call.method !== 'GET')).toEqual([]);
+  });
+
+  it('a publish refused after the revert says the site was not changed, and clears the staged version', async () => {
+    publishStatus = 409;
+    const user = renderHome();
+
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    await user.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Restore' }));
+
+    expect(await screen.findByText("Your site wasn't changed. Unpublished edits were cleared.")).toBeInTheDocument();
+    expect(calls.filter((call) => call.method !== 'GET').map((call) => `${call.method} ${call.path}`)).toEqual([
+      'DELETE /api/v1/pm/site/drafts',
+      'POST /api/v1/pm/site/publish/revert',
+      'POST /api/v1/pm/site/publish',
+      'DELETE /api/v1/pm/site/drafts',
     ]);
   });
 });

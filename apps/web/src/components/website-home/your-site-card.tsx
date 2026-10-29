@@ -21,8 +21,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CircleAlert, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { PublishConflictError } from '@/hooks/use-publish-site';
-import { useRestorePreviousSite } from '@/hooks/use-restore-previous-site';
+import { RestoreError, useRestorePreviousSite } from '@/hooks/use-restore-previous-site';
 import { LOOK_SUMMARIES } from '@/lib/site-looks/look-summaries';
 import type { LookId } from '@/lib/site-looks/looks';
 import { TOUCH } from './touch';
@@ -36,7 +35,10 @@ export interface YourSiteCardProps {
   liveLookId: LookId | null;
   lastPublish: { publishedAt: string; byName: string | null } | null;
   history: Array<{ snapshotId: number; publishedAt: string; byName: string | null; restorable: boolean }> | null;
-  canRestorePrevious: boolean;
+  /** The version before the last publish, when it can be restored (`WebsiteHomeData.previousSnapshotId`). */
+  previousSnapshotId: number | null;
+  /** The publish token the page loaded with; Restore refuses if the live site has moved on. */
+  publishToken: string | null;
   /** When the page was rendered, ISO 8601. */
   now: string;
   /** Formats a date and time, in the community's time zone. */
@@ -61,12 +63,8 @@ export function relativeTime(iso: string, now: string, formatDateTime: (iso: str
 }
 
 function restoreFailure(error: unknown): string {
-  if (error instanceof PublishConflictError) {
-    return 'Someone published the site since this page opened. Reload the page and try again.';
-  }
-  return error instanceof Error && error.message
-    ? error.message
-    : "We couldn't restore your site just now. Please try again.";
+  // Every failure the hook reports is a sentence written for this person.
+  return error instanceof RestoreError ? error.message : "We couldn't restore your site just now. Please try again.";
 }
 
 export function YourSiteCard({
@@ -74,12 +72,16 @@ export function YourSiteCard({
   liveLookId,
   lastPublish,
   history,
-  canRestorePrevious,
+  previousSnapshotId,
+  publishToken,
   now,
   formatDateTime,
 }: YourSiteCardProps) {
   const router = useRouter();
-  const { restoreLatest, restoreSnapshot } = useRestorePreviousSite(communityId);
+  const { restoreLatest, restoreSnapshot } = useRestorePreviousSite(communityId, {
+    publishToken,
+    previousSnapshotId,
+  });
   const [pending, setPending] = useState<Pending | null>(null);
   const [restoringKind, setRestoringKind] = useState<Pending['kind'] | null>(null);
   const restoring = restoringKind !== null;
@@ -139,7 +141,7 @@ export function YourSiteCard({
         <Button asChild variant="outline" className={TOUCH}>
           <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
         </Button>
-        {canRestorePrevious && (
+        {previousSnapshotId !== null && (
           <Button
             type="button"
             variant="outline"

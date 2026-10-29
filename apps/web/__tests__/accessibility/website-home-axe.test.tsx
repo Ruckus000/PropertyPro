@@ -13,7 +13,7 @@
  * run over a container that rendered nothing passes trivially.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { axe } from 'vitest-axe';
@@ -57,7 +57,9 @@ const DATA: WebsiteHomeData = {
     { snapshotId: 29, publishedAt: '2026-10-20T16:00:00.000Z', byName: null, restorable: true },
     { snapshotId: 28, publishedAt: '2026-09-01T16:00:00.000Z', byName: null, restorable: false },
   ],
-  canRestorePrevious: true,
+  previousSnapshotId: 29,
+  publishToken: '2026-10-26T16:00:00.000Z',
+  sitePublished: true,
   liveNotice: { sentAt: null, dismissedAt: null, ownerCount: 12, offerable: true },
   records: {
     level: 'required',
@@ -91,11 +93,17 @@ const DATA: WebsiteHomeData = {
 };
 
 beforeEach(() => {
-  global.fetch = vi.fn(async () => ({
-    ok: true,
-    status: 200,
-    json: async () => ({ data: { enabled: false, acknowledgedAt: null } }),
-  })) as unknown as typeof fetch;
+  global.fetch = vi.fn(async (input: string) => {
+    const body = String(input).startsWith('/api/v1/document-categories')
+      ? {
+          data: {
+            data: [{ id: 3, name: 'Financial Records', slug: 'financial-records', description: null }],
+            pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+          },
+        }
+      : { data: { enabled: false, acknowledgedAt: null } };
+    return { ok: true, status: 200, json: async () => body };
+  }) as unknown as typeof fetch;
 });
 
 function renderHome(data: WebsiteHomeData) {
@@ -147,7 +155,7 @@ describe('website home — axe', () => {
     const { container } = renderHome({
       ...DATA,
       history: null,
-      canRestorePrevious: false,
+      previousSnapshotId: null,
       lastPublish: null,
       upcomingMeetings: [],
       records: { ...DATA.records, level: 'recommended', missing: [], conditional: [], candidates: {} },
@@ -159,5 +167,27 @@ describe('website home — axe', () => {
     const results = await axe(container);
 
     expect(results).toHaveNoViolations();
+  });
+
+  it('has none with the upload dialog open, which takes and keeps focus', async () => {
+    const user = userEvent.setup();
+    const { baseElement } = renderHome(DATA);
+    await expectSections(['Records']);
+    const upload = screen.getByRole('button', { name: 'Upload: Annual budget' });
+
+    await user.click(upload);
+
+    // A real dialog, titled, with the content loaded (not a stub, not a spinner).
+    const dialog = await screen.findByRole('dialog', { name: 'Upload Document' });
+    expect(await within(dialog).findByText('Financial Records')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+
+    const results = await axe(baseElement);
+    expect(results).toHaveNoViolations();
+
+    // Closing returns focus to the row's Upload button.
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(upload).toHaveFocus());
   });
 });

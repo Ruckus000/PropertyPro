@@ -217,6 +217,16 @@ describe('autoLinkedRecordCount', () => {
     ).toBe(1);
   });
 
+  it('counts only records still posted: a draft or deleted document is missing instead', () => {
+    expect(
+      autoLinkedRecordCount([
+        posted({ documentId: 10, autoLinkedDocumentId: 10 }),
+        item({ documentId: 12, autoLinkedDocumentId: 12, documentState: 'draft' }),
+        item({ documentId: 13, autoLinkedDocumentId: 13, documentState: 'deleted' }),
+      ]),
+    ).toBe(1);
+  });
+
   it('does not count two nulls as a match', () => {
     expect(
       autoLinkedRecordCount([

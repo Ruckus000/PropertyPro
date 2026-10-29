@@ -177,14 +177,18 @@ export function conditionalRecordItems(
 }
 
 /**
- * Items whose record was linked by automatic matching and still is. A manual
- * relink moves `documentId` and leaves `autoLinkedDocumentId` behind. The
- * null check comes first: two nulls are equal.
+ * Items whose record was linked by automatic matching and still is, and whose
+ * document is still posted. A manual relink moves `documentId` and leaves
+ * `autoLinkedDocumentId` behind. The null check comes first: two nulls are
+ * equal. A document since taken back to a draft or deleted is listed as missing
+ * (`missingRecordItems`), so it is not counted here as well.
  */
 export function autoLinkedRecordCount(items: readonly ChecklistItemData[]): number {
   return items.filter(
     (item) =>
-      item.autoLinkedDocumentId != null && item.documentId === item.autoLinkedDocumentId,
+      item.autoLinkedDocumentId != null &&
+      item.documentId === item.autoLinkedDocumentId &&
+      item.documentState === 'posted',
   ).length;
 }
 

@@ -27,7 +27,9 @@ const {
   liveNoticeMock,
   listMeetingsForCommunityMock,
   getUserPreferenceMock,
+  latestPublishedAtMock,
 } = vi.hoisted(() => ({
+  latestPublishedAtMock: vi.fn(),
   listRecordCandidatesMock: vi.fn(),
   historyMock: vi.fn(),
   liveNoticeMock: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('@/lib/db/public-community-reader', () => ({
   getPublicCommunityScopedReader: () => ({
     listMeetings: listMeetingsMock,
     listAnnouncements: listAnnouncementsMock,
+    getLatestPublishedAt: latestPublishedAtMock,
   }),
 }));
 vi.mock('@/lib/compliance/load-checklist-with-status', () => ({
@@ -167,6 +170,7 @@ beforeEach(() => {
   liveNoticeMock.mockResolvedValue(LIVE_NOTICE);
   listMeetingsForCommunityMock.mockResolvedValue([]);
   getUserPreferenceMock.mockResolvedValue(null);
+  latestPublishedAtMock.mockResolvedValue(null);
   userRows = [];
 });
 
@@ -401,7 +405,8 @@ describe('loadWebsiteHome', () => {
       { __inArray: { col: 'users.id', vals: ['user-a', 'user-blank'] } },
     );
     expect(essentials.lastPublish).toEqual({ publishedAt: '2026-10-27T15:00:00.000Z', byName: 'Maria Lopez' });
-    expect(essentials.canRestorePrevious).toBe(true);
+    // The version before the last publish, named at page load.
+    expect(essentials.previousSnapshotId).toBe(29);
     expect(essentials.history).toBeNull();
 
     const professional = await loadWebsiteHome(COMMUNITY_ID, USER_ID, { includeHistory: true });
@@ -419,13 +424,45 @@ describe('loadWebsiteHome', () => {
       pagination: { nextCursor: null, hasMore: false, pageSize: 10 },
     });
     const once = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
-    expect(once.canRestorePrevious).toBe(false);
+    expect(once.previousSnapshotId).toBeNull();
     expect(once.lastPublish).toEqual({ publishedAt: '2026-10-27T15:00:00.000Z', byName: null });
     // No actor, no read of users.
     expect(selectFromMock).not.toHaveBeenCalledWith(expect.objectContaining({ __table: 'users' }), expect.anything(), expect.anything());
 
     const never = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
     expect(never.lastPublish).toBeNull();
-    expect(never.canRestorePrevious).toBe(false);
+    expect(never.previousSnapshotId).toBeNull();
+  });
+
+  it('a version too old to restore is not offered', async () => {
+    historyMock.mockResolvedValue({
+      data: [snapshot(30, '2026-10-27T15:00:00.000Z', null), snapshot(29, '2026-10-20T15:00:00.000Z', null, false)],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 10 },
+    });
+
+    expect((await loadWebsiteHome(COMMUNITY_ID, USER_ID)).previousSnapshotId).toBeNull();
+  });
+
+  it('reads the publish token the publish route checks, and whether the site is public', async () => {
+    latestPublishedAtMock.mockResolvedValue(new Date('2026-10-27T15:00:01.000Z'));
+    getCommunityPublicInfoMock.mockResolvedValue({
+      id: COMMUNITY_ID,
+      name: 'Sunset Condos',
+      slug: 'sunset-condos',
+      communityType: 'condo_718',
+      sitePublishedAt: new Date('2026-10-01T00:00:00.000Z'),
+    });
+
+    const home = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
+    expect(home.publishToken).toBe('2026-10-27T15:00:01.000Z');
+    expect(home.sitePublished).toBe(true);
+
+    getCommunityPublicInfoMock.mockResolvedValue({
+      id: COMMUNITY_ID, name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718', sitePublishedAt: null,
+    });
+    latestPublishedAtMock.mockResolvedValue(null);
+    const unpublished = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
+    expect(unpublished.sitePublished).toBe(false);
+    expect(unpublished.publishToken).toBeNull();
   });
 });

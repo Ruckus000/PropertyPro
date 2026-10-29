@@ -154,8 +154,20 @@ export interface WebsiteHomeData {
     /** False once retention has cleared the version's content; the entry stays in the log. */
     restorable: boolean;
   }> | null;
-  /** Whether the version before the last publish can be restored (one-step Restore, on every plan). */
-  canRestorePrevious: boolean;
+  /**
+   * The version before the last publish (the second-newest snapshot), when it
+   * can still be restored: one-step Restore, on every plan. Read at page load,
+   * so Restore puts back the version the person saw named, never a newer one.
+   */
+  previousSnapshotId: number | null;
+  /**
+   * The site's publish token at page load: max `published_at` over its
+   * published sections, the value the publish route checks. Restore refuses
+   * when the live site has moved on since (a colleague published).
+   */
+  publishToken: string | null;
+  /** The site is public (`site_published_at` set), as every site is from creation. */
+  sitePublished: boolean;
   liveNotice: SiteLiveNoticeState;
   records: {
     level: RequirementLevel;
@@ -195,7 +207,7 @@ export async function loadWebsiteHome(
   const hasRecords = communityType !== 'apartment';
   const now = new Date();
 
-  const [checklist, candidatesByItem, historyPage, liveNotice, meetings, storedSnooze] = await Promise.all([
+  const [checklist, candidatesByItem, historyPage, liveNotice, meetings, storedSnooze, publishToken] = await Promise.all([
     loadRecordsChecklist(communityId, communityType),
     hasRecords ? listRecordCandidates(communityId) : Promise.resolve<RecordCandidates>({}),
     paginateSitePublishHistory({ communityId, pageSize: HISTORY_LIMIT }),
@@ -205,6 +217,7 @@ export async function loadWebsiteHome(
       endUtcExclusive: new Date(now.getTime() + HOME_MEETINGS_WINDOW_DAYS * DAY_MS),
     }),
     getUserPreference(userId, recordsAlertSnoozeKey(communityId)),
+    getPublicCommunityScopedReader(communityId).getLatestPublishedAt(),
   ]);
   const facts = await buildSiteFacts(communityId, info, checklist);
 
@@ -236,7 +249,9 @@ export async function loadWebsiteHome(
           restorable: entry.restorable,
         }))
       : null,
-    canRestorePrevious: entries[1]?.restorable === true,
+    previousSnapshotId: entries[1]?.restorable === true ? entries[1].id : null,
+    publishToken: publishToken ? publishToken.toISOString() : null,
+    sitePublished: info.sitePublishedAt != null,
     liveNotice,
     records: {
       level: requirementLevel(subject),

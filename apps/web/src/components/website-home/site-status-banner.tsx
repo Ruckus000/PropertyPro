@@ -7,8 +7,8 @@
  * been updated instead. Both show the address, **View site** and **Copy link**.
  *
  * While the one-time "Email owners" offer stands (D10: not sent, not dismissed,
- * at least one owner) and the site has been published at least once, it asks
- * whether to tell owners. **Email owners** sends once; a refusal from the
+ * at least one owner) and the site is public (`site_published_at`, set from the
+ * day the community is created), it asks whether to tell owners. **Email owners** sends once; a refusal from the
  * server (already sent, dismissed by a colleague, no owners) is shown as the
  * server words it. **Not now** retires the offer.
  */
@@ -27,7 +27,7 @@ export interface SiteStatusBannerProps {
   siteUrl: string;
   /** Arrived from a publish (`?published=1`). */
   published: boolean;
-  /** Show the "Email owners" offer: offerable and published at least once. */
+  /** Show the "Email owners" offer: offerable, and the site is public. */
   offerEmail: boolean;
 }
 

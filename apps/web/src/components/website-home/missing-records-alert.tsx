@@ -21,7 +21,7 @@
  * After any change the page is refreshed (`router.refresh`), so the list is
  * read again by the page's loader rather than patched here.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { BellOff, CircleAlert, CircleCheck, Clock, FileText, TriangleAlert } from 'lucide-react';
@@ -72,17 +72,52 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
   const [snoozedUntil, setSnoozedUntil] = useState(records.snoozedUntil);
   const [linkingId, setLinkingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<{ itemId: number; text: string } | null>(null);
+  // "Show them now" while snoozed: this visit only, the stored snooze is unchanged.
+  const [showWhileSnoozed, setShowWhileSnoozed] = useState(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  // The Upload button that opened the upload dialog, to return focus to when it closes.
+  const uploadOpener = useRef<HTMLElement | null>(null);
+  // Set when a row's action succeeded; the refresh that follows usually removes the row.
+  const focusAfterRefresh = useRef(false);
+
+  // When the refreshed list no longer has the row that held focus, focus would
+  // fall to the page itself; put it on the section's heading instead.
+  useEffect(() => {
+    if (!focusAfterRefresh.current) return;
+    focusAfterRefresh.current = false;
+    const active = document.activeElement;
+    if (!active || active === document.body || !active.isConnected) heading.current?.focus();
+  }, [records]);
+
+  // The dialog is unmounted on close, so focus is put back here, after the
+  // dialog's own clean-up. A row the refresh removed has no button to return
+  // to; the effect above then takes focus to the heading.
+  useEffect(() => {
+    if (uploading !== null || !uploadOpener.current) return;
+    const opener = uploadOpener.current;
+    uploadOpener.current = null;
+    const timer = window.setTimeout(() => {
+      if (opener.isConnected) opener.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [uploading]);
 
   if (records.level === 'none') return null;
 
   const { missing, conditional, autoLinked, candidates } = records;
+
+  /** A row's action succeeded: read the list again, and keep focus on the section. */
+  function done() {
+    focusAfterRefresh.current = true;
+    router.refresh();
+  }
 
   async function link(item: MissingRecord, documentId: number, failure: string) {
     setLinkingId(item.itemId);
     setRowError(null);
     try {
       await linkDocument.mutateAsync({ itemId: item.itemId, documentId });
-      router.refresh();
+      done();
     } catch {
       setRowError({ itemId: item.itemId, text: failure });
     } finally {
@@ -103,6 +138,8 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
   function renderRow(item: MissingRecord, kind: 'missing' | 'conditional') {
     const matches = candidates[item.itemId] ?? [];
     const busy = linkingId === item.itemId;
+    // While any link is in flight, no other match can be chosen: one file must not fill two records.
+    const linking = linkingId !== null;
     const state = STATE[item.state];
     return (
       <li key={item.itemId} className="rounded-md border border-edge bg-surface-card p-3">
@@ -128,7 +165,10 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
               className={TOUCH}
               aria-label={`Upload: ${item.title}`}
               disabled={busy}
-              onClick={() => setUploading(item)}
+              onClick={(event) => {
+                uploadOpener.current = event.currentTarget;
+                setUploading(item);
+              }}
             >
               Upload
             </Button>
@@ -160,7 +200,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
                     size="sm"
                     className={TOUCH}
                     aria-label={`Use ${match.title} for ${item.title}`}
-                    disabled={busy}
+                    disabled={linking}
                     onClick={() =>
                       void link(item, match.documentId, `We couldn't link ${match.title} to ${item.title}. Please try again.`)
                     }
@@ -190,15 +230,20 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
         Many associations post these records anyway.
       </p>
     );
-  } else if (missing.length > 0 && snoozedUntil) {
+  } else if (missing.length > 0 && snoozedUntil && !showWhileSnoozed) {
     body = (
-      <p className="flex items-start gap-2 text-sm text-content-secondary">
-        <BellOff className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-        <span>
-          {missing.length} {plural(missing.length, 'record is', 'records are')} still missing. We&apos;ll remind you
-          again on {formatDate(snoozedUntil)}.
-        </span>
-      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="flex items-start gap-2 text-sm text-content-secondary">
+          <BellOff className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <span>
+            {missing.length} {plural(missing.length, 'record is', 'records are')} still missing. We&apos;ll remind you
+            again on {formatDate(snoozedUntil)}.
+          </span>
+        </p>
+        <Button type="button" variant="link" className={cn('h-auto px-0', TOUCH)} onClick={() => setShowWhileSnoozed(true)}>
+          Show them now
+        </Button>
+      </div>
     );
   } else if (missing.length > 0) {
     body = (
@@ -257,7 +302,12 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
 
   return (
     <section id="records" aria-labelledby="records-heading" className="scroll-mt-6 space-y-3">
-      <h2 id="records-heading" className="text-lg font-semibold text-content">
+      <h2
+        id="records-heading"
+        ref={heading}
+        tabIndex={-1}
+        className="text-lg font-semibold text-content outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
         Records
       </h2>
       {body}
@@ -285,7 +335,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
           item={applying}
           onDone={(marked) => {
             setApplying(null);
-            if (marked) router.refresh();
+            if (marked) done();
           }}
         />
       )}

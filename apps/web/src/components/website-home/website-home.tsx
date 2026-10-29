@@ -70,8 +70,8 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
         communityName={facts.profile.name}
         siteUrl={facts.siteUrl}
         published={published}
-        // Owners are told once the site has been published at least once.
-        offerEmail={data.liveNotice.offerable && data.lastPublish !== null}
+        // Owners are told once the site is public: `site_published_at`, set from creation.
+        offerEmail={data.liveNotice.offerable && data.sitePublished}
       />
 
       <MissingRecordsAlert communityId={communityId} records={data.records} formatDate={format.date} />
@@ -86,7 +86,8 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
         liveLookId={facts.liveLookId}
         lastPublish={data.lastPublish}
         history={data.history}
-        canRestorePrevious={data.canRestorePrevious}
+        previousSnapshotId={data.previousSnapshotId}
+        publishToken={data.publishToken}
         now={now}
         formatDateTime={format.dateTime}
       />
