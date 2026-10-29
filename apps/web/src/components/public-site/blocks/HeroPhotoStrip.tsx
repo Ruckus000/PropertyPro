@@ -28,16 +28,24 @@
  * motion is a better answer than building it and then suppressing it.
  */
 import type { ResolvedHeroPhoto } from '@propertypro/shared';
+import { cn } from '@/lib/utils';
 import { heroPhotoImgAttributes, heroPhotoKey } from './hero-photo-img';
 
 export interface HeroPhotoStripProps {
   photos: readonly ResolvedHeroPhoto[];
   /** Disambiguates element ids when more than one hero renders in a preview. */
   blockId: number;
+  /**
+   * What the strip sits on: a dark hero (the default, and the legacy hero's
+   * primary band) or a look's light page. It picks a focus ring and dots that
+   * stay visible there; white ones vanish on a light page.
+   */
+  surface?: 'dark' | 'light';
 }
 
-export function HeroPhotoStrip({ photos, blockId }: HeroPhotoStripProps) {
+export function HeroPhotoStrip({ photos, blockId, surface = 'dark' }: HeroPhotoStripProps) {
   const slideId = (index: number) => `hero-${blockId}-photo-${index}`;
+  const ring = surface === 'light' ? 'focus-visible:ring-primary' : 'focus-visible:ring-content-inverse';
 
   return (
     <div className="mt-10">
@@ -51,7 +59,10 @@ export function HeroPhotoStrip({ photos, blockId }: HeroPhotoStripProps) {
         // scroll container is the accessible-name-and-operability requirement
         // for an overflow region.
         tabIndex={0}
-        className="flex snap-x snap-mandatory gap-4 overflow-x-auto rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse"
+        className={cn(
+          'flex snap-x snap-mandatory gap-4 overflow-x-auto rounded-md focus-visible:outline-none focus-visible:ring-2',
+          ring,
+        )}
       >
         {photos.map((photo, index) => {
           // An upload or a stock photo alike: see ./hero-photo-img.
@@ -92,11 +103,11 @@ export function HeroPhotoStrip({ photos, blockId }: HeroPhotoStripProps) {
               // The dots are the only labelled way to reach a specific photo,
               // so each needs its position in its accessible name.
               aria-label={`Go to photo ${index + 1} of ${photos.length}`}
-              className="block h-6 w-6 rounded-full p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse"
+              className={cn('block h-6 w-6 rounded-full p-2 focus-visible:outline-none focus-visible:ring-2', ring)}
             >
               <span
                 aria-hidden="true"
-                className="block h-2 w-2 rounded-full bg-white/60"
+                className={cn('block h-2 w-2 rounded-full', surface === 'light' ? 'bg-primary' : 'bg-white/60')}
               />
             </a>
           </li>

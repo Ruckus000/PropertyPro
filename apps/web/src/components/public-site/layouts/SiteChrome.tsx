@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { PublicSiteHeader } from '@/components/public-site/PublicSiteHeader';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
+import { LookHero } from '@/components/public-site/blocks/HeroBlock';
+import { LOOK_STYLES, type LookLayoutId, type LookStyle } from './look-styles';
 import type { LayoutId, LayoutProps } from './types';
 
 /**
@@ -12,20 +14,22 @@ import type { LayoutId, LayoutProps } from './types';
  * ## Why this is its own component
  *
  * A "template" in the Design panel is a layout plus a colour set. The three
- * layouts differ ONLY in this chrome — no block renderer reads the `layout`
- * prop it is given — so a canvas that rendered blocks without the chrome
- * showed the same thing whichever template was chosen. The editor canvas and
- * the preview now render the real chrome around the real block views, which
- * is what makes "what you see is what publishes" true for the template too.
+ * legacy layouts differ ONLY in this chrome; the four looks differ in it and in
+ * their hero, which `HeroBlock` draws from the `layout` prop (`LOOK_STYLES`). So
+ * a canvas that rendered blocks without the chrome showed the same thing
+ * whichever template was chosen. The editor canvas and the preview now render
+ * the real chrome around the real block views, which is what makes "what you
+ * see is what publishes" true for the template too.
  *
  * It is a plain synchronous component with no data access, for the same reason
  * the block *views* are (`blocks/types.ts`): the canvas is a client tree that
  * re-renders on every keystroke, and an async server component cannot sit in
- * it. The server layouts (`Tidewater`, `Boulevard`, `Sable`) compose this with
- * the async block renderers; the canvas composes it with the block views.
+ * it. The server layouts (`Tidewater`, `Boulevard`, `Sable` and the four looks)
+ * compose this with the async block renderers; the canvas composes it with the
+ * block views.
  *
- * The markup here is the layouts' own, moved — not redesigned. A layout test
- * that passed before the move passes after it.
+ * The legacy layouts' markup here is their own, moved — not redesigned. A
+ * layout test that passed before the move passes after it.
  */
 
 /** The shape `PublicSiteHeader` takes (`CommunityTheme`), from the layout props. */
@@ -130,7 +134,57 @@ interface LayoutChrome {
 }
 
 /**
- * What tells the three layouts apart. Static strings, deliberately — Tailwind's
+ * A look's sections, by `LookStyle.sectionTint`.
+ *
+ * `alternate` puts every other section on the theme's secondary colour, read
+ * from `--theme-secondary` itself: Tailwind's `secondary` is a grey TEXT token,
+ * not the theme's. It counts the sections that rendered, so a section left out
+ * for having nothing to show never breaks the rhythm. The editor canvas wraps
+ * each section in its selection frame, which this does not match, so the canvas
+ * shows no bands; it shows the empty sections too, so it could not predict where
+ * the bands fall anyway. The previews and the live site show them.
+ */
+const SECTION_RHYTHM: Record<LookStyle['sectionTint'], string> = {
+  alternate: '[&>section:nth-of-type(even)]:bg-[var(--theme-secondary)]',
+  none: 'divide-y divide-edge',
+};
+
+/**
+ * Where a look's sections put the accent, by `LookStyle.accentUse`. A look whose
+ * accent is a background colour (Bayfront's gold, Plain & Simple's pale yellow)
+ * never sets text in it, so a section's accent-coloured text, such as an
+ * announcement's "Pinned", is redrawn in the primary. A look whose accent is a
+ * text colour sets its dates in it.
+ */
+const ACCENT_TEXT: Record<LookStyle['accentUse'], string> = {
+  background: '[&_.text-accent]:text-primary',
+  text: '[&_time]:text-accent',
+};
+
+/** A look's page without a hero block (a sub-page always) opens with its text hero: the heading alone. */
+function lookEmptyHero(look: LookStyle) {
+  return function LookEmptyHero({ heading }: { heading: string }) {
+    return <LookHero look={look} headline={heading} />;
+  };
+}
+
+/**
+ * The chrome of one of the four looks, from its `LOOK_STYLES` entry: section
+ * headings in the theme's primary colour, its section rhythm and its accent
+ * rule, plus anything particular to it.
+ */
+function lookChrome(id: LookLayoutId, root: string, list?: string): LayoutChrome {
+  const look = LOOK_STYLES[id];
+  return {
+    root: cn('flex flex-col font-body text-content', root),
+    main: 'flex-1',
+    list: cn('[&_h2]:text-primary', SECTION_RHYTHM[look.sectionTint], ACCENT_TEXT[look.accentUse], list),
+    EmptyHero: lookEmptyHero(look),
+  };
+}
+
+/**
+ * What tells the layouts apart. Static strings, deliberately — Tailwind's
  * scanner and `guard:class-resolution` both need to see every class as written.
  */
 const LAYOUT_CHROME: Record<LayoutId, LayoutChrome> = {
@@ -152,6 +206,20 @@ const LAYOUT_CHROME: Record<LayoutId, LayoutChrome> = {
     list: 'mx-auto max-w-6xl',
     EmptyHero: SableEmptyHero,
   },
+  // Photo-led and modern: a white page under a full-bleed photo.
+  bayfront: lookChrome('bayfront', 'bg-surface-card'),
+  // Formal: the page on the theme's paper-like secondary, each section heading
+  // ruled off in the primary.
+  heritage: lookChrome(
+    'heritage',
+    'bg-[var(--theme-secondary)]',
+    '[&_h2]:border-b-2 [&_h2]:border-primary [&_h2]:pb-3',
+  ),
+  // Warm and friendly: a white page, the photo with the welcome on a card.
+  'palm-grove': lookChrome('palm-grove', 'bg-surface-card'),
+  // No photos needed: a white page, and every text size one step up
+  // (`.large-text`, the app's own large-text scale in tokens.css).
+  'plain-simple': lookChrome('plain-simple', 'large-text bg-surface-card'),
 };
 
 export interface SiteChromeProps {

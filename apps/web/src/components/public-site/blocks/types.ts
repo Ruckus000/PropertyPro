@@ -35,7 +35,19 @@ export interface ResolvedTheme {
   bodyFont: string;
 }
 
-export const LAYOUT_IDS = ['tidewater', 'boulevard', 'sable'] as const;
+/**
+ * The three legacy layouts, then the four looks (D2: a look's id is its layout's
+ * id). How a look draws itself is `LOOK_STYLES` in `../layouts/look-styles`.
+ */
+export const LAYOUT_IDS = [
+  'tidewater',
+  'boulevard',
+  'sable',
+  'bayfront',
+  'heritage',
+  'palm-grove',
+  'plain-simple',
+] as const;
 export type LayoutId = (typeof LAYOUT_IDS)[number];
 
 /** One section of the page being rendered, as the layouts hand it to each block. */

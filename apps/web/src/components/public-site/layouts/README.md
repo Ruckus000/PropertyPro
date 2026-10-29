@@ -1,12 +1,21 @@
 # Public-Site Layouts
 
-Layouts own the page chrome of public community sites. Three ship in v1:
+Layouts own the page chrome of public community sites. Three legacy layouts keep rendering the sites
+that use them, and four looks (website builder Phase 2B) are what managers pick from:
 
-| Slug      | File             | Status               | Brand fit                                                                                  |
-|-----------|------------------|----------------------|--------------------------------------------------------------------------------------------|
-| tidewater | `Tidewater.tsx`  | **Shipped (PR #1b)** | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
-| boulevard | `Boulevard.tsx`  | **Shipped (PR #7)**  | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
-| sable     | `Sable.tsx`      | **Shipped (PR #7)**  | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
+| Slug         | File              | Status               | Brand fit                                                                                  |
+|--------------|-------------------|----------------------|--------------------------------------------------------------------------------------------|
+| tidewater    | `Tidewater.tsx`   | **Shipped (PR #1b)** | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
+| boulevard    | `Boulevard.tsx`   | **Shipped (PR #7)**  | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
+| sable        | `Sable.tsx`       | **Shipped (PR #7)**  | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
+| bayfront     | `Bayfront.tsx`    | Look                 | Photo-led and modern — full-bleed photo hero, alternating section bands, pill buttons.     |
+| heritage     | `Heritage.tsx`    | Look                 | Formal and official — words beside a framed photo, ruled headings, square corners.         |
+| palm-grove   | `PalmGrove.tsx`   | Look                 | Warm and friendly — the welcome on a card over a wide photo, alternating bands, rounded.   |
+| plain-simple | `PlainSimple.tsx` | Look                 | No photos needed — a text hero, every text size one step up, hairline rules.               |
+
+A look's id, layout id and preset slug are the same string. How a look draws its hero, its section
+rhythm, its corners and its accent is `LOOK_STYLES` in `look-styles.ts`, read by `HeroBlock` and
+`SiteChrome`; its colours and fonts are its `site_theme_presets` row (migration 0097).
 
 ## Architecture
 
