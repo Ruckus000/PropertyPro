@@ -9,8 +9,9 @@
  *   site, in one click. It sends the site's publish token
  *   (`useSitePublishToken`), so a site published elsewhere since the page
  *   loaded is refused (409) instead of being overwritten.
- * - `keepCurrent()`: PATCH `{ keepCurrent: true }`. Keeps the live look and
- *   marks the website setup done.
+ * - `keepCurrent()`: PATCH `{ keepCurrent: true, withdrawDraftedLook: true }`.
+ *   Keeps the live look, taking a drafted one back off on any live layout (the
+ *   manager's own edits stay), and marks the website setup done.
  *
  * All three share one mutation scope, so they run one at a time, in the order
  * they were asked for: clicking two cards quickly drafts them in that order
@@ -72,7 +73,7 @@ export function useSiteLook(communityId: number) {
       requestJson(LOOK_URL, {
         method: 'PATCH',
         headers: JSON_HEADERS,
-        body: JSON.stringify({ communityId, keepCurrent: true }),
+        body: JSON.stringify({ communityId, keepCurrent: true, withdrawDraftedLook: true }),
       }),
     onSuccess: invalidateSite,
   });

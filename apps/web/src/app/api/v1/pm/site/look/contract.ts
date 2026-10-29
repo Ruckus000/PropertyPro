@@ -11,6 +11,10 @@
  *     marks the website setup complete, which retires the dashboard card, and
  *     the "Customize your portal" checklist item. The completion moment is
  *     stamped once, so keeping again changes nothing. It answers `{ ok: true }`.
+ *     With `withdrawDraftedLook: true` (the look picker's Keep this look) it
+ *     first takes a drafted look back off (`withdrawDraftedLook`), whatever
+ *     the live layout is, keeping the manager's edits. The dashboard card's
+ *     Dismiss leaves it out, so a look drafted elsewhere is not discarded.
  *
  * The body is a strict union, so a request is exactly one of the two: both
  * keys, neither, `keepCurrent: false` and any other key are 400s. `lookId` is
@@ -33,7 +37,14 @@ const communityId = z.number().int().positive();
 
 const siteLookPatchBody = z.union([
   z.object({ communityId, lookId: z.enum(LOOK_IDS) }).strict(),
-  z.object({ communityId, keepCurrent: z.literal(true) }).strict(),
+  z
+    .object({
+      communityId,
+      keepCurrent: z.literal(true),
+      /** Also take a drafted look back off the site (the look picker's Keep this look). */
+      withdrawDraftedLook: z.literal(true).optional(),
+    })
+    .strict(),
 ]);
 
 /** What a switch did to the home page's sections (`LookSwitchCounts`). */

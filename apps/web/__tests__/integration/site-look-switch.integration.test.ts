@@ -23,7 +23,12 @@ import {
   upsertPublishedBlock,
 } from '@/lib/services/site-blocks-service';
 import { saveDraftDesign } from '@/lib/services/site-design-service';
-import { applyLookAtCreation, draftLookSwitch, loadLookSwitchInput } from '@/lib/services/site-look-service';
+import {
+  applyLookAtCreation,
+  draftLookSwitch,
+  loadLookSwitchInput,
+  withdrawDraftedLook,
+} from '@/lib/services/site-look-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { getLook, planLookSwitch, planLookSwitchWithCounts, type LookId } from '@/lib/site-looks/looks';
 import { resolveLookPreviewBranding } from '@/lib/public-site/preview-overrides';
@@ -556,6 +561,55 @@ describeDb('site looks (db-backed integration)', () => {
     await draftLookSwitch(b, 'heritage', { actorUserId });
     await publish(b);
     expectKeptWithTheEdit(await liveSections(b), liveB, editB);
+  });
+
+  it('Keep this look over an older layout takes a drafted look back off, keeping an edit made since', async () => {
+    // A site still on a legacy layout with its starter pack: no look card can
+    // return to it, so the look picker's Keep this look withdraws by the live rows.
+    const communityId = await createCommunity('legacy-keep', 'condo_718');
+    expect((await applyStarterPackToCommunity(communityId, 'condo_718')).applied).toBe(true);
+    await updateBrandingForCommunity(communityId, { layoutId: 'tidewater' });
+    const live = await liveSections(communityId);
+    const liveHeroSlot = await liveSlotOf(communityId, 'hero');
+
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    expect(pendingLook((await readCommunity(communityId)).branding as CommunityBranding)).toMatchObject({
+      layoutId: 'heritage',
+    });
+    // The manager then edits the drafted hero, the way the editor saves an edit.
+    const heroSlot = (await draftRows(communityId)).find((row) => row.blockType === 'hero')?.blockOrder ?? liveHeroSlot;
+    await upsertPublishedBlock({ communityId, actorUserId, blockType: 'hero', blockOrder: heroSlot, content: EDITED_HERO, isDraft: true });
+
+    expect(await withdrawDraftedLook(communityId, { actorUserId })).toEqual({ withdrawn: true });
+
+    // Exactly that edit is left, over the live hero; no look is drafted any more.
+    const drafts = await draftRows(communityId);
+    expect(drafts.map(({ blockOrder, blockType, content }) => ({ blockOrder, blockType, content }))).toEqual([
+      { blockOrder: liveHeroSlot, blockType: 'hero', content: EDITED_HERO },
+    ]);
+    const { branding } = await readCommunity(communityId);
+    expect(pendingLook(branding as CommunityBranding)).toEqual({});
+    expect(branding.layoutId).toBe('tidewater');
+    // Nothing more to take back.
+    expect(await withdrawDraftedLook(communityId, { actorUserId })).toEqual({ withdrawn: false });
+
+    // A later Publish puts live the edit and nothing of the look.
+    await publish(communityId);
+    expect(await liveSections(communityId)).toEqual(
+      live.map((section) => (section.blockType === 'hero' ? { blockType: 'hero', content: EDITED_HERO } : section)),
+    );
+    expect((await readCommunity(communityId)).branding.layoutId).toBe('tidewater');
+  });
+
+  it('Keep this look with nothing drafted writes nothing', async () => {
+    const communityId = await createCommunity('keep-nothing', 'condo_718');
+    await applyLookAtCreation(communityId, 'condo_718');
+    const audits = await auditRowCount(communityId);
+
+    expect(await withdrawDraftedLook(communityId, { actorUserId })).toEqual({ withdrawn: false });
+
+    expect(await draftRowCount(communityId)).toBe(0);
+    expect(await auditRowCount(communityId)).toBe(audits);
   });
 
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {

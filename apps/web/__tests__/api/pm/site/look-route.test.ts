@@ -28,7 +28,11 @@ const {
   assertNotDemoGraceMock,
   publishCommunitySiteMock,
   notifyResidentsMock,
+  withdrawDraftedLookMock,
+  captureExceptionMock,
 } = vi.hoisted(() => ({
+  withdrawDraftedLookMock: vi.fn(),
+  captureExceptionMock: vi.fn(),
   publishCommunitySiteMock: vi.fn(),
   notifyResidentsMock: vi.fn(),
   draftLookSwitchMock: vi.fn(),
@@ -41,7 +45,17 @@ const {
   assertNotDemoGraceMock: vi.fn(),
 }));
 
-vi.mock('@/lib/services/site-look-service', () => ({ draftLookSwitch: draftLookSwitchMock }));
+vi.mock('@/lib/services/site-look-service', () => ({
+  draftLookSwitch: draftLookSwitchMock,
+  withdrawDraftedLook: withdrawDraftedLookMock,
+}));
+// The error handler reports a 500 through `withScope` and the same
+// `captureException`; the scope is a stub that only takes tags.
+vi.mock('@sentry/nextjs', () => ({
+  captureException: captureExceptionMock,
+  withScope: (callback: (scope: { setTag: () => void; setUser: () => void }) => void) =>
+    callback({ setTag: () => {}, setUser: () => {} }),
+}));
 vi.mock('@/lib/api/branding', () => ({ markSiteOnboardingComplete: markSiteOnboardingCompleteMock }));
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({ tryAutoComplete: tryAutoCompleteMock }));
 vi.mock('@propertypro/db', () => ({ logAuditEvent: logAuditEventMock }));
@@ -83,6 +97,7 @@ const TOKEN = '2026-10-01T12:00:00.000Z';
 /** Everything the route can write or trigger, in one list: for "nothing happened" assertions. */
 const sideEffects = () => [
   draftLookSwitchMock,
+  withdrawDraftedLookMock,
   publishCommunitySiteMock,
   markSiteOnboardingCompleteMock,
   tryAutoCompleteMock,
@@ -100,6 +115,7 @@ beforeEach(() => {
   markSiteOnboardingCompleteMock.mockResolvedValue(undefined);
   tryAutoCompleteMock.mockResolvedValue(undefined);
   logAuditEventMock.mockResolvedValue(undefined);
+  withdrawDraftedLookMock.mockResolvedValue({ withdrawn: true });
   publishCommunitySiteMock.mockResolvedValue({
     published: true,
     publishedAt: PUBLISHED_AT,
@@ -204,6 +220,8 @@ describe('PATCH /api/v1/pm/site/look — the body', () => {
     ['an unknown key beside a look', { communityId: COMMUNITY_ID, lookId: 'heritage', layoutId: 'sable' }],
     ['an unknown key beside keepCurrent', { communityId: COMMUNITY_ID, keepCurrent: true, primaryColor: '#000000' }],
     ['no communityId', { lookId: 'heritage' }],
+    ['withdrawDraftedLook: false', { communityId: COMMUNITY_ID, keepCurrent: true, withdrawDraftedLook: false }],
+    ['withdrawDraftedLook beside a look', { communityId: COMMUNITY_ID, lookId: 'heritage', withdrawDraftedLook: true }],
   ])('rejects %s', async (_label, body) => {
     const res = await PATCH(patchRequest(body));
 
@@ -272,6 +290,28 @@ describe('PATCH /api/v1/pm/site/look — keepCurrent', () => {
     await PATCH(patchRequest({ communityId: COMMUNITY_ID, keepCurrent: true }));
 
     expect(draftLookSwitchMock).not.toHaveBeenCalled();
+    // The dashboard card's Dismiss: a look drafted elsewhere is left alone.
+    expect(withdrawDraftedLookMock).not.toHaveBeenCalled();
+  });
+
+  it('with withdrawDraftedLook, takes the drafted look back off before marking anything', async () => {
+    const calls: string[] = [];
+    withdrawDraftedLookMock.mockImplementation(async () => {
+      calls.push('withdraw');
+      return { withdrawn: true };
+    });
+    markSiteOnboardingCompleteMock.mockImplementation(async () => void calls.push('onboarding'));
+    tryAutoCompleteMock.mockImplementation(async () => void calls.push('checklist'));
+
+    const res = await PATCH(patchRequest({ communityId: COMMUNITY_ID, keepCurrent: true, withdrawDraftedLook: true }));
+
+    expect(res.status).toBe(200);
+    expect(withdrawDraftedLookMock).toHaveBeenCalledWith(COMMUNITY_ID, { actorUserId: 'user-1' });
+    expect(calls).toEqual(['withdraw', 'onboarding', 'checklist']);
+    expect(draftLookSwitchMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ newValues: { keepCurrent: true, withdrawDraftedLook: true } }),
+    );
   });
 
   it('audits the decision as an update of the site look', async () => {
@@ -363,6 +403,28 @@ describe('POST /api/v1/pm/site/look — publish a look in one click', () => {
     expect(markSiteOnboardingCompleteMock).not.toHaveBeenCalled();
     expect(tryAutoCompleteMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('reports, and does not return, a failure after the publish has committed', async () => {
+    // The site is live by then: a 500 would tell the manager a publish failed that did not.
+    const onboardingFailure = new Error('db down');
+    markSiteOnboardingCompleteMock.mockRejectedValueOnce(onboardingFailure);
+    const auditFailure = new Error('audit down');
+    logAuditEventMock.mockRejectedValueOnce(auditFailure);
+
+    const res = await POST(
+      postRequest({ communityId: COMMUNITY_ID, lookId: 'heritage', expectedPublishedAt: TOKEN }),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ publishedAt: PUBLISHED_AT.toISOString(), lookId: 'heritage' });
+    expect(captureExceptionMock).toHaveBeenCalledWith(onboardingFailure, expect.objectContaining({
+      tags: { site_look_after_publish: 'mark_onboarding' },
+    }));
+    expect(captureExceptionMock).toHaveBeenCalledWith(auditFailure, expect.objectContaining({
+      tags: { site_look_after_publish: 'audit' },
+    }));
+    expect(tryAutoCompleteMock).toHaveBeenCalledWith(COMMUNITY_ID, 'user-1', 'customize_portal');
   });
 
   it('passes a null token through for a site never published', async () => {

@@ -18,6 +18,7 @@ import type { SiteFacts } from '@/lib/services/website-home-service';
 
 const {
   pushMock,
+  refreshMock,
   toastErrorMock,
   redirectMock,
   requireAuthMock,
@@ -27,6 +28,7 @@ const {
   loadSiteFactsMock,
 } = vi.hoisted(() => ({
   pushMock: vi.fn(),
+  refreshMock: vi.fn(),
   toastErrorMock: vi.fn(),
   redirectMock: vi.fn((url: string) => {
     // Mirror next/navigation: redirect() throws to halt rendering.
@@ -42,7 +44,7 @@ const {
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
   redirect: redirectMock,
 }));
 vi.mock('sonner', () => ({ toast: { error: toastErrorMock, success: vi.fn() } }));
@@ -344,31 +346,132 @@ describe('LookPicker — choosing and publishing', () => {
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Another editor published changes.'));
     expect(pushMock).not.toHaveBeenCalled();
+    // Published elsewhere: the page reloads its facts and the publish token.
+    expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
-  it('Keep this look takes a chosen card back to the live look, keeps it, and opens the website home', async () => {
+  it('does not reload the page for a refusal that is not a conflict', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        return ok({ blocks: [], publishedBlocks: [], latestPublishedAt: TOKEN });
+      }
+      return { ok: false, status: 403, json: async () => ({ error: { code: 'FORBIDDEN', message: 'Not allowed' } }) };
+    });
+    renderPicker(facts({ draftLookId: 'heritage' }));
+
+    await waitFor(() => expect(publishButton()).toBeEnabled());
+    await user.click(publishButton());
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Not allowed'));
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  const KEEP = { communityId: COMMUNITY_ID, keepCurrent: true, withdrawDraftedLook: true };
+
+  it('Keep this look keeps the live look, taking a chosen card back off, and opens the website home', async () => {
     const user = userEvent.setup();
     renderPicker(facts({ draftLookId: 'heritage' }));
 
     await user.click(screen.getByRole('button', { name: 'Keep this look' }));
 
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/pm/website?communityId=${COMMUNITY_ID}`));
-    expect(writes()).toEqual([
-      { method: 'PATCH', url: '/api/v1/pm/site/look', body: { communityId: COMMUNITY_ID, lookId: 'bayfront' } },
-      { method: 'PATCH', url: '/api/v1/pm/site/look', body: { communityId: COMMUNITY_ID, keepCurrent: true } },
-    ]);
+    expect(writes()).toEqual([{ method: 'PATCH', url: '/api/v1/pm/site/look', body: KEEP }]);
   });
 
-  it('Keep this look on the live look only keeps it', async () => {
+  it('Keep this look over an older layout with a look drafted takes the look back off too', async () => {
+    // No card stands for the live layout, so the withdraw is asked of the server,
+    // which plans the way back from the live rows rather than from a look.
     const user = userEvent.setup();
-    renderPicker();
+    renderPicker(facts({ liveLookId: null, draftLookId: 'heritage' }));
+    const keepButton = screen.getByRole('button', { name: 'Keep this look' });
+    expect(keepButton).toBeEnabled();
+
+    await user.click(keepButton);
+
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/pm/website?communityId=${COMMUNITY_ID}`));
+    expect(writes()).toEqual([{ method: 'PATCH', url: '/api/v1/pm/site/look', body: KEEP }]);
+  });
+
+  it('holds the cards and Publish still from the click on Keep until the page moves on', async () => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH' && 'keepCurrent' in JSON.parse(String(init.body))) await held;
+      return base(url, init);
+    });
+    renderPicker(facts({ draftLookId: 'heritage' }));
+    await waitFor(() => expect(publishButton()).toBeEnabled());
 
     await user.click(screen.getByRole('button', { name: 'Keep this look' }));
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith(`/pm/website?communityId=${COMMUNITY_ID}`));
-    expect(writes()).toEqual([
-      { method: 'PATCH', url: '/api/v1/pm/site/look', body: { communityId: COMMUNITY_ID, keepCurrent: true } },
-    ]);
+    expect(publishButton()).toBeDisabled();
+    for (const name of [/^Bayfront/, /^Heritage/, /^Palm Grove/, /^Plain & Simple/]) {
+      expect(card(name)).toBeDisabled();
+    }
+    release();
+    await waitFor(() => expect(pushMock).toHaveBeenCalled());
+    // Still held after success: the page is on its way to the website home.
+    expect(publishButton()).toBeDisabled();
+  });
+
+  it('lets the cards be used again when keeping fails', async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (!init?.method || init.method === 'GET') {
+        return ok({ blocks: [], publishedBlocks: [], latestPublishedAt: TOKEN });
+      }
+      return { ok: false, status: 403, json: async () => ({ error: { code: 'FORBIDDEN', message: 'Not allowed' } }) };
+    });
+    renderPicker(facts({ draftLookId: 'heritage' }));
+
+    await user.click(screen.getByRole('button', { name: 'Keep this look' }));
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Not allowed'));
+    expect(card(/^Bayfront/)).toBeEnabled();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('LookPicker — layout', () => {
+  it('every control above the publish bar scrolls clear of it when focused', () => {
+    // The bar is sticky at the bottom of the page's scroller: a control scrolled
+    // into view by Tab stops at its bottom edge, so without a bottom scroll margin
+    // taller than the bar it lands underneath it (WCAG 2.4.11).
+    renderPicker();
+    const bar = screen.getByTestId('publish-bar');
+    const focusables = Array.from(
+      document.querySelectorAll<HTMLElement>('a[href], button, [tabindex]:not([tabindex="-1"])'),
+    ).filter((el) => !bar.contains(el));
+
+    // The profile link, four cards, two size buttons, the preview box.
+    expect(focusables).toHaveLength(8);
+    for (const el of focusables) {
+      expect({ el: el.outerHTML.slice(0, 60), classes: el.className.split(/\s+/) }).toEqual({
+        el: el.outerHTML.slice(0, 60),
+        classes: expect.arrayContaining(['scroll-mb-56', 'md:scroll-mb-28']),
+      });
+    }
+  });
+
+  it('thumbnails take their width from the card, so the cards reflow at 320 px', () => {
+    renderPicker();
+    const cards = screen.getAllByRole('listitem').filter((li) => li.querySelector('[data-testid="look-preview-frame"]'));
+    expect(cards).toHaveLength(4);
+
+    for (const li of cards) {
+      // A grid item may shrink below its content.
+      expect(li).toHaveClass('min-w-0');
+      const wrapper = li.querySelector('[data-testid="look-preview-frame"]')!.parentElement!;
+      // No fixed pixel width: the card's width, at the page's proportions.
+      expect(wrapper.style.width).toBe('');
+      expect(wrapper).toHaveClass('w-full', 'max-w-full');
+      expect(wrapper.style.aspectRatio).toBe('1120 / 800');
+    }
   });
 });
 

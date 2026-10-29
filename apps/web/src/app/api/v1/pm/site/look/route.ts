@@ -19,6 +19,7 @@
  * also leaves its own `community_site` row, which the service writes inside the
  * transaction that stages the drafts.
  */
+import { captureException } from '@sentry/nextjs';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -29,7 +30,7 @@ import { runRoute } from '@/lib/api/run-route';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
-import { draftLookSwitch } from '@/lib/services/site-look-service';
+import { draftLookSwitch, withdrawDraftedLook } from '@/lib/services/site-look-service';
 import { publishCommunitySite } from '@/lib/services/site-blocks-service';
 import { siteLookPatchContract, siteLookPostContract } from './contract';
 
@@ -49,6 +50,9 @@ export const PATCH = withErrorHandler(
     const userId = await ensurePmAccess(communityId);
 
     if ('keepCurrent' in body) {
+      // First, so the site is never marked as keeping a look that is still
+      // drafted to replace it. It audits its own write when it withdraws one.
+      if (body.withdrawDraftedLook) await withdrawDraftedLook(communityId, { actorUserId: userId });
       await markSiteOnboardingComplete(communityId);
       await logAuditEvent({
         userId,
@@ -56,7 +60,7 @@ export const PATCH = withErrorHandler(
         action: 'update',
         resourceType: 'site_look',
         resourceId: String(communityId),
-        newValues: { keepCurrent: true },
+        newValues: body.withdrawDraftedLook ? { keepCurrent: true, withdrawDraftedLook: true } : { keepCurrent: true },
       });
       // Never throws: a checklist failure must not undo a decision already made.
       await tryAutoComplete(communityId, userId, 'customize_portal');
@@ -84,7 +88,8 @@ export const PATCH = withErrorHandler(
  *      other pending edit alike. A stale `expectedPublishedAt` is its 409, and
  *      nothing below runs.
  *   3. `markSiteOnboardingComplete`: the moment the manager first chose a look
- *      (stamped once).
+ *      (stamped once). It and the audit row run after the publish has
+ *      committed, so a failure in either is reported to Sentry, not returned.
  *   4. `tryAutoComplete(…, 'customize_portal')`: the checklist item.
  *
  * Publishing never emails residents or owners: that is the website home's own
@@ -95,6 +100,15 @@ export const PATCH = withErrorHandler(
  * as the manager's choice, so onboarding and the checklist item are marked, and
  * it answers `publishedAt: null`.
  */
+/** Runs a step that follows a committed publish; a failure goes to Sentry instead of the response. */
+async function afterPublish(step: string, communityId: number, work: () => Promise<unknown>): Promise<void> {
+  try {
+    await work();
+  } catch (err) {
+    captureException(err, { tags: { site_look_after_publish: step }, extra: { communityId } });
+  }
+}
+
 export const POST = withErrorHandler(
   runRoute(siteLookPostContract, async ({ body, communityId }) => {
     const userId = await ensurePmAccess(communityId);
@@ -105,16 +119,21 @@ export const POST = withErrorHandler(
       actorUserId: userId,
       expectedPublishedAt: body.expectedPublishedAt ? new Date(body.expectedPublishedAt) : null,
     });
-    await markSiteOnboardingComplete(communityId);
     const publishedAt = result.published ? result.publishedAt.toISOString() : null;
-    await logAuditEvent({
-      userId,
-      communityId,
-      action: 'update',
-      resourceType: 'site_look',
-      resourceId: String(communityId),
-      newValues: { lookId: body.lookId, publishedAt },
-    });
+    // The publish has committed: the site is live with the look. A failure in
+    // what follows is reported, not returned, so the manager is not told a
+    // publish failed that did not (and does not publish again over it).
+    await afterPublish('mark_onboarding', communityId, () => markSiteOnboardingComplete(communityId));
+    await afterPublish('audit', communityId, () =>
+      logAuditEvent({
+        userId,
+        communityId,
+        action: 'update',
+        resourceType: 'site_look',
+        resourceId: String(communityId),
+        newValues: { lookId: body.lookId, publishedAt },
+      }),
+    );
     // Never throws: a checklist failure must not undo a publish already made.
     await tryAutoComplete(communityId, userId, 'customize_portal');
     return { publishedAt, lookId: body.lookId };

@@ -26,6 +26,7 @@ import { Check, ExternalLink, Info, Monitor, Radio, Smartphone } from 'lucide-re
 import type { CommunityType } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { useSiteLook } from '@/hooks/use-site-look';
+import { ApiRequestError } from '@/lib/api/request-json';
 import { LOOK_SUMMARIES, type LookSummary } from '@/lib/site-looks/look-summaries';
 import type { LookId } from '@/lib/site-looks/looks';
 import type { SiteFacts } from '@/lib/services/website-home-service';
@@ -37,7 +38,7 @@ const LIST_LIMIT = 50;
 
 /** The page each preview lays out, before a card scales it down. */
 const PAGE_WIDTH = { computer: 1120, phone: 390 } as const;
-const THUMBNAIL = { width: 1120, height: 800, scale: 0.25 } as const;
+const THUMBNAIL = { width: 1120, height: 800 } as const;
 /** Tall enough for most home pages; the preview box scrolls over it. */
 const PREVIEW_HEIGHT = 2400;
 
@@ -56,6 +57,14 @@ const UNIT_NOUN: Record<CommunityType, [string, string]> = {
 
 /** Touch targets: 44 px below 768 px, the default height above. */
 const TOUCH = 'min-h-11 md:min-h-9';
+/**
+ * The publish bar is sticky at the bottom of the page's scroller, so a control
+ * scrolled into view by Tab would stop with its bottom edge under the bar
+ * (WCAG 2.4.11). Every focusable above the bar keeps a bottom scroll margin
+ * taller than the bar: about 190 px stacked below 768 px (14rem is 252 px at
+ * the app's 18 px root), about 80 px in one row above (7rem is 126 px).
+ */
+const CLEARS_BAR = 'scroll-mb-56 md:scroll-mb-28';
 
 export interface LookPickerProps {
   communityId: number;
@@ -101,11 +110,14 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
   const { selectLook, publishLook, keepCurrent, tokenReady } = useSiteLook(communityId);
   const [selected, setSelected] = useState<LookId | null>(facts.draftLookId ?? facts.liveLookId);
   const [device, setDevice] = useState<Device>('computer');
+  // From the click on Keep this look until the page has moved on, so no card
+  // or Publish can be used in between (and none is while a draft it waits on lands).
+  const [keeping, setKeeping] = useState(false);
   const headingId = useId();
 
   const liveName = lookName(facts.liveLookId);
   const selectedName = lookName(selected);
-  const busy = publishLook.isPending || keepCurrent.isPending;
+  const busy = publishLook.isPending || keeping;
   const canPublish = selected !== null && selected !== facts.liveLookId && tokenReady && !busy;
 
   function choose(look: LookSummary) {
@@ -131,21 +143,25 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
             : `/pm/website?communityId=${communityId}`,
         );
       },
-      onError: (err) => toast.error(err.message),
+      onError: (err) => {
+        toast.error(err.message);
+        // Published elsewhere since this page loaded: reload its facts and the
+        // publish token, so the next click is checked against the site as it is.
+        if (err instanceof ApiRequestError && err.status === 409) router.refresh();
+      },
     });
   }
 
   async function keep() {
+    setKeeping(true);
     try {
-      // A card chosen here is a drafted look; keeping the live look takes it
-      // back first, so it cannot go live with some later, unrelated Publish.
-      if (facts.liveLookId && selected !== facts.liveLookId) {
-        await selectLook.mutateAsync(facts.liveLookId);
-        setSelected(facts.liveLookId);
-      }
+      // Keeps the live look and takes a drafted one back off, on any live
+      // layout (a legacy one included), so it cannot go live with some later,
+      // unrelated Publish. The manager's own edits stay drafted.
       await keepCurrent.mutateAsync();
       router.push(`/pm/website?communityId=${communityId}`);
     } catch (err) {
+      setKeeping(false);
       toast.error(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     }
   }
@@ -187,6 +203,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
             'inline-flex items-center text-base text-interactive underline-offset-4 hover:underline',
             'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
             TOUCH,
+            CLEARS_BAR,
           )}
         >
           Change these in your Community profile
@@ -215,7 +232,8 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
               <li
                 key={look.id}
                 className={cn(
-                  'relative flex flex-col gap-3 rounded-md border bg-surface-card p-3',
+                  // min-w-0: a grid item may shrink below its content, so the card reflows at 320 px.
+                  'relative flex min-w-0 flex-col gap-3 rounded-md border bg-surface-card p-3',
                   isSelected ? 'border-interactive ring-2 ring-interactive' : 'border-edge',
                 )}
               >
@@ -225,8 +243,8 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
                   title={`${look.name} preview`}
                   width={THUMBNAIL.width}
                   height={THUMBNAIL.height}
-                  scale={THUMBNAIL.scale}
-                  className="mx-auto rounded-sm border border-edge"
+                  fit
+                  className="rounded-sm border border-edge"
                 />
                 {/* The button covers the whole card (after:inset-0), preview included. */}
                 <button
@@ -241,6 +259,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
                     'focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-focus',
                     'disabled:cursor-not-allowed',
                     TOUCH,
+                    CLEARS_BAR,
                   )}
                 >
                   <span className="text-base font-semibold text-content">{look.name}</span>
@@ -294,6 +313,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
                     ? 'bg-interactive-subtle font-semibold text-interactive'
                     : 'text-content-secondary hover:bg-surface-hover',
                   TOUCH,
+                  CLEARS_BAR,
                 )}
               >
                 <Icon aria-hidden="true" className="size-4" />
@@ -307,7 +327,11 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
           aria-label={`${selectedName ?? 'Your site'} on a ${device === 'computer' ? 'computer' : 'phone'}`}
           // Scrolls with the keyboard too: the frame inside is inert.
           tabIndex={0}
-          className="max-h-[70vh] overflow-auto rounded-md border border-edge bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className={cn(
+            'max-h-[70vh] overflow-auto rounded-md border border-edge bg-surface-muted',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+            CLEARS_BAR,
+          )}
         >
           <LookPreviewFrame
             communityId={communityId}
@@ -320,7 +344,9 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
         </div>
       </section>
 
-      <div className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-edge bg-surface-card py-4 md:flex-row md:items-center md:justify-between">
+      <div
+        data-testid="publish-bar"
+        className="sticky bottom-0 z-10 flex flex-col gap-3 border-t border-edge bg-surface-card py-4 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1 text-base">
           <p className="font-medium text-content">Nothing changes until you click Publish</p>
           {pending > 0 && (
@@ -339,7 +365,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
               <span className="sr-only">(opens in a new tab)</span>
             </a>
           </Button>
-          <Button variant="outline" className={TOUCH} onClick={() => void keep()} disabled={busy} loading={keepCurrent.isPending}>
+          <Button variant="outline" className={TOUCH} onClick={() => void keep()} disabled={busy} loading={keeping}>
             Keep this look
           </Button>
           <Button className={TOUCH} onClick={publish} disabled={!canPublish} loading={publishLook.isPending}>

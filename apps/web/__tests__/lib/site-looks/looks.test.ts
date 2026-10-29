@@ -36,6 +36,7 @@ import {
   lookIdForLayout,
   planLookSwitch,
   planLookSwitchWithCounts,
+  planReturnToLive,
   suggestedLookFor,
   type LiveSection,
   type LookDefinition,
@@ -646,6 +647,41 @@ describe('planLookSwitch', () => {
         ),
       );
       // Exactly that edit is staged: the hero's draft in slot 1, and no reorder.
+      const { drafts, tombstones } = staged(live, back.sections);
+      expect(drafts).toEqual([expect.objectContaining({ slot: 1, blockType: 'hero', content: { headline: 'Harbor Pointe' } })]);
+      expect(tombstones).toEqual([]);
+    });
+
+    it('a drafted look comes back off a legacy live page, keeping the edit made since (Keep this look)', () => {
+      // A site still on a legacy layout, showing a starter pack. No card can
+      // return to it (its live layout is no look), so the picker's Keep this
+      // look plans the way back from the live rows alone.
+      const pack: LookSection[] = [
+        { blockType: 'hero', content: { headline: 'Welcome' } },
+        { blockType: 'announcements', content: { limit: 3, timeWindowDays: 30 } },
+        { blockType: 'meetings', content: { limit: 10, timeWindowDays: 30 } },
+        { blockType: 'contact', content: { showBoard: true, showManagement: true } },
+      ];
+      const live = livePage(pack);
+      const forward = planLookSwitch({
+        current: live,
+        outgoingDefaults: [pack],
+        draftedLookId: null,
+        live: null,
+        incoming: heritage,
+      });
+      const drafted = edited(staged(live, forward).page, 'hero', { headline: 'Harbor Pointe' });
+
+      const back = planReturnToLive(drafted, [heritage.sections], live);
+
+      expect(back.kind).toBe('back-to-live');
+      // The live page in its live order, with the hero the manager edited.
+      expect(back.sections.map(({ blockType, content }) => ({ blockType, content }))).toEqual(
+        live.map(({ blockType, content }) =>
+          blockType === 'hero' ? { blockType, content: { headline: 'Harbor Pointe' } } : { blockType, content },
+        ),
+      );
+      // Only that edit is left to publish; Heritage's own sections are gone.
       const { drafts, tombstones } = staged(live, back.sections);
       expect(drafts).toEqual([expect.objectContaining({ slot: 1, blockType: 'hero', content: { headline: 'Harbor Pointe' } })]);
       expect(tombstones).toEqual([]);
