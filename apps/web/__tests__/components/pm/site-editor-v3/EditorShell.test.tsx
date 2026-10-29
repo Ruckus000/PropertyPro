@@ -68,9 +68,6 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       help={null}
       helpOpen={false}
       onHelpToggle={() => {}}
-      mode="free"
-      onModeChange={() => {}}
-      steps={<p>steps body</p>}
       communityId={42}
       hasPublishedSite
       initialNotice={null}
@@ -426,112 +423,5 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
     renderShell();
     expect(screen.queryByText('settings body')).not.toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
-  });
-});
-
-describe('EditorShell — Guided mode (v4 Phase 3)', () => {
-  function renderGuided(activeTool: React.ComponentProps<typeof EditorShell>['activeTool'] = null) {
-    const onActiveToolChange = vi.fn();
-    const onHelpToggle = vi.fn();
-    renderShell({ mode: 'guided', activeTool, onActiveToolChange, onHelpToggle } as never);
-    return { onActiveToolChange, onHelpToggle };
-  }
-
-  it('has no rail, and shows Next steps when no tool is chosen', async () => {
-    renderGuided();
-    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
-    // Code-split: the tabs arrive with their chunk.
-    expect(await screen.findByRole('tab', { name: 'Next steps' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByText('steps body')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Close panel' })).not.toBeInTheDocument();
-  });
-
-  it('moves between tabs with the arrow keys, choosing as it goes', async () => {
-    const user = userEvent.setup();
-    const { onActiveToolChange } = renderGuided();
-    (await screen.findByRole('tab', { name: 'Next steps' })).focus();
-    await user.keyboard('{ArrowRight}');
-    expect(onActiveToolChange).toHaveBeenLastCalledWith('pages');
-    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveFocus();
-    await user.keyboard('{ArrowLeft}{ArrowLeft}');
-    expect(onActiveToolChange).toHaveBeenLastCalledWith('design');
-  });
-
-  it('keeps one tab in the Tab order', async () => {
-    renderGuided('design');
-    await screen.findByRole('tab', { name: 'Design' });
-    expect(screen.getAllByRole('tab').filter((t) => t.tabIndex === 0)).toEqual([
-      screen.getByRole('tab', { name: 'Design' }),
-    ]);
-  });
-
-  it("gives a tool the tabs don't name its title and a way back", async () => {
-    const user = userEvent.setup();
-    const { onActiveToolChange } = renderGuided('notice');
-    expect(await screen.findByRole('tab', { name: 'Next steps' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
-    expect(screen.getByRole('heading', { name: 'Urgent notice' })).toBeVisible();
-    expect(screen.getByText('panel:notice')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Back to next steps' }));
-    expect(onActiveToolChange).toHaveBeenCalledWith(null);
-  });
-
-  it('opens Help from beside the tabs, not as a tab', async () => {
-    const user = userEvent.setup();
-    const { onHelpToggle } = renderGuided();
-    await screen.findByRole('tab', { name: 'Next steps' });
-    const help = screen.getAllByRole('button', { name: 'Help' }).find((b) => b.textContent === 'Help');
-    await user.click(help!);
-    expect(onHelpToggle).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('tab', { name: 'Help' })).not.toBeInTheDocument();
-  });
-});
-
-describe('EditorShell — the top bar mode switch', () => {
-  it('is a radio group whose arrows switch mode', async () => {
-    const user = userEvent.setup();
-    const onModeChange = vi.fn();
-    renderShell({ mode: 'free', onModeChange });
-    const group = await screen.findByRole('radiogroup', { name: 'Editing mode' });
-    expect(screen.getByRole('radio', { name: 'Free edit' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'Guided' })).toHaveAttribute('tabindex', '-1');
-    screen.getByRole('radio', { name: 'Free edit' }).focus();
-    await user.keyboard('{ArrowLeft}');
-    expect(onModeChange).toHaveBeenCalledWith('guided');
-    expect(group).toBeInTheDocument();
-  });
-
-  it('is left off the Settings view', async () => {
-    // Load the code-split switch first (on the Website view), so its absence
-    // below is the view's doing, not a chunk that had not arrived yet.
-    const { unmount } = renderShell();
-    await screen.findByRole('radiogroup', { name: 'Editing mode' });
-    unmount();
-    renderShell({ view: 'settings' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(screen.queryByRole('radiogroup', { name: 'Editing mode' })).not.toBeInTheDocument();
-  });
-});
-
-// The tour finds its targets by `data-tour`; a renamed attribute would make
-// it skip steps silently, so every anchor is asserted in both modes.
-describe('EditorShell — tour anchors', () => {
-  it('has the Free-edit anchors', () => {
-    renderShell({ mode: 'free' });
-    for (const name of ['tools', 'page', 'publish']) {
-      expect(document.querySelector(`[data-tour="${name}"]`)).not.toBeNull();
-    }
-  });
-
-  it('has the Guided anchors', () => {
-    renderShell({ mode: 'guided' });
-    for (const name of ['steps', 'page', 'publish']) {
-      expect(document.querySelector(`[data-tour="${name}"]`)).not.toBeNull();
-    }
   });
 });

@@ -14,8 +14,7 @@
  * The snooze is the caller's own state, not a change to the community: it is a
  * `user_preferences` row keyed by the session's user id (`site_records_alert:
  * <communityId>`) and written with `mergeUserPreference`, so a caller can only
- * ever touch their own and no audit row is written (as for the editor's
- * preferences, `/api/v1/pm/site-editor/preferences`).
+ * ever touch their own and no audit row is written.
  */
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';

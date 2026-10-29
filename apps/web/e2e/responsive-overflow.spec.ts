@@ -70,7 +70,6 @@ test.describe('responsive overflow', () => {
   for (const [label, buildPath] of [
     ['compliance', (id: number) => `/communities/${id}/compliance`],
     ['documents', (id: number) => `/communities/${id}/documents`],
-    ['website onboarding wizard', (id: number) => `/pm/onboarding/website?communityId=${id}`],
     // Added 2026-09-14. Carries the two defects the audit fixed on this route:
     // `FinanceKpiRow`'s four-up grid (was `lg:grid-cols-4`, which widens at the
     // exact pixel the rail costs the column 340px) and `RecentPayments`, whose
@@ -122,14 +121,14 @@ test.describe('responsive overflow', () => {
 });
 
 /**
- * The wizard's live-preview iframe must contain the community's site and nothing else.
+ * The site-preview iframe must contain the community's site and nothing else.
  *
  * `/pm/site-preview` used to live under `app/(authenticated)/`, whose layout renders
  * `AppShell` unconditionally — so a ~490px iframe contained the entire app (rail, search,
  * breadcrumb trail, billing banners) in mobile-drawer mode. The route now sits in the
- * shell-less `(site-preview)` group. Route groups do not change URLs, so no existing test
- * could have caught either the regression or the fix: `wizard-live-preview.test.tsx`
- * asserts the iframe `src` string, which was correct throughout.
+ * shell-less `(site-preview)` group. Route groups do not change URLs, so no unit test
+ * could have caught either the regression or the fix: asserting the iframe `src` string
+ * passes whichever group the route lives in.
  */
 test.describe('site preview chrome', () => {
   test.setTimeout(120_000);

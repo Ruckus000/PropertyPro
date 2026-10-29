@@ -26,11 +26,7 @@ import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { getPageShellContext } from '@/lib/request/page-shell-context';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
-import {
-  getBrandingForCommunity,
-  getCommunityPublicInfo,
-  getSiteOnboardingCompletedAt,
-} from '@/lib/api/branding';
+import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
@@ -110,7 +106,6 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     communityInfo,
     canvasContext,
     branding,
-    onboardingCompletedAt,
     siteQuotaBytes,
     unitCount,
     presets,
@@ -125,11 +120,6 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // `loadCanvasContext` above already reads it, so this resolves from the
     // same request-scoped result rather than issuing a second SELECT.
     getBrandingForCommunity(communityId),
-    // The canonical "wizard never finished" signal, stamped by the wizard's
-    // final-step publish. Read here rather than inferred from branding, for the
-    // same reason the legacy editor read it: `branding.layoutId` being unset was
-    // a substitute heuristic and got this wrong.
-    getSiteOnboardingCompletedAt(communityId),
     // The Site panel's storage meter. Usage is resolved from the same cached
     // `branding` read as the settings below — no extra query — but the quota
     // needs the plan, and that IS a lookup of its own. Through the service's
@@ -143,7 +133,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // v4 Phase 2b: decides whether Florida's website rules apply at all.
     // `null` = unknown (pre-0081 rows the backfill could not recover).
     getCommunityUnitCount(communityId),
-    // v4 Phase 4: the Design panel's colour sets — the wizard's catalog.
+    // v4 Phase 4: the Design panel's colour sets.
     listThemePresetsForWizard(),
   ]);
 
@@ -254,7 +244,6 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         // (`useSiteDesign`), because it is drafted and changes while the editor
         // is open.
         presets={presets}
-        showWizardBanner={onboardingCompletedAt === null}
         initialPages={initialPages}
       />
     </EditorFrame>

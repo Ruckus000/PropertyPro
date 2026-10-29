@@ -91,6 +91,11 @@
     "accepts and opens the document; plus the apartment dashboard branch. Measured",
     "against a full local stack (agent sandbox) before being added: 2 passed.",
     "",
+    "2026-10-29: the `website onboarding wizard` block leaves `responsive-overflow`",
+    "(the wizard route is now a redirect to the website home), so expectedTestCount",
+    "goes 61 -> 60. Counted with `playwright test --config playwright.ci.config.ts",
+    "--list | grep -c chromium`: 61 before, 60 after; responsive-overflow alone 8 -> 7.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -114,5 +119,5 @@
     "responsive-overflow.spec.ts",
     "support-access.spec.ts"
   ],
-  "expectedTestCount": 61
+  "expectedTestCount": 60
 }

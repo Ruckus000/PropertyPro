@@ -54,9 +54,6 @@ vi.mock('@/lib/api/branding', () => ({
   // `@propertypro/db/unsafe` → drizzle, which throws at module load without
   // DATABASE_URL, i.e. green locally and red in the DB-less CI unit job.
   getBrandingForCommunity: vi.fn().mockResolvedValue(null),
-  // Same reason again: the page reads this to decide whether to show the
-  // wizard-entry banner, and the real module hits the DB at module load.
-  getSiteOnboardingCompletedAt: vi.fn().mockResolvedValue(new Date()),
 }));
 vi.mock('@/lib/utils/community-url', () => ({
   buildCommunityUrl: (slug: string, path: string) => `https://${slug}.example.com${path}`,

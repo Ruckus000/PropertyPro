@@ -78,8 +78,6 @@ function idle() {
 
 const onClose = vi.fn();
 const onShowMe = vi.fn();
-const onModeChange = vi.fn();
-const onStartTour = vi.fn();
 
 function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>> = {}) {
   return render(
@@ -89,9 +87,6 @@ function renderDrawer(overrides: Partial<React.ComponentProps<typeof HelpDrawer>
       onClose={onClose}
       onShowMe={onShowMe}
       canPublish
-      mode="free"
-      onModeChange={onModeChange}
-      onStartTour={onStartTour}
       {...overrides}
     />,
   );
@@ -253,37 +248,12 @@ describe('HelpDrawer — search', () => {
   });
 });
 
-describe('HelpDrawer — the tour', () => {
-  it('starts the tour after asking the drawer to close', async () => {
-    const user = userEvent.setup();
+describe('HelpDrawer — what it no longer offers', () => {
+  it('has no tour and no editing-mode switch on its home screen', () => {
     renderDrawer();
-    await user.click(screen.getByRole('button', { name: /take the 1-minute tour/i }));
-    expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onStartTour).toHaveBeenCalledTimes(1);
-    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
-      onStartTour.mock.invocationCallOrder[0]!,
-    );
-  });
-});
-
-describe('HelpDrawer — How you work', () => {
-  it('shows the current mode pressed and switches to the other', async () => {
-    const user = userEvent.setup();
-    renderDrawer({ mode: 'free' });
-    const group = screen.getByRole('group', { name: 'How you work' });
-    expect(within(group).getByRole('button', { name: /free edit/i })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await user.click(within(group).getByRole('button', { name: /guided/i }));
-    expect(onModeChange).toHaveBeenCalledWith('guided');
-  });
-
-  it('does not re-send the mode already chosen', async () => {
-    const user = userEvent.setup();
-    renderDrawer({ mode: 'guided' });
-    await user.click(screen.getByRole('button', { name: /guided/i, pressed: true }));
-    expect(onModeChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /tour/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'How you work' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /guided|free edit/i })).not.toBeInTheDocument();
   });
 });
 

@@ -65,14 +65,6 @@ describe('checkPageStateCopy', () => {
     expect(errors()).toContain(`${rel}:2`);
   });
 
-  it('FAILS (1) in the onboarding wizard too, not only the editor', () => {
-    scaffold();
-    const rel = 'apps/web/src/components/pm/onboarding-wizard/finish.tsx';
-    write(rel, "toast('Your page will go live in a minute');\n");
-    expect(checkPageStateCopy(base, {})).toBe(1);
-    expect(errors()).toContain(rel);
-  });
-
   it('skips comment lines, exempt lines, and the describer modules', () => {
     scaffold();
     write(
@@ -98,9 +90,9 @@ describe('checkPageStateCopy', () => {
 
   it('REFUSES (2) when a scan root is missing', () => {
     scaffold();
-    rmSync(join(base, 'apps/web/src/components/pm/onboarding-wizard'), { recursive: true });
+    rmSync(join(base, 'apps/web/src/lib/site-editor'), { recursive: true });
     expect(checkPageStateCopy(base, {})).toBe(2);
-    expect(errors()).toContain('apps/web/src/components/pm/onboarding-wizard');
+    expect(errors()).toContain('apps/web/src/lib/site-editor');
   });
 
   it('REFUSES (2) when the roots hold no .ts/.tsx file', () => {

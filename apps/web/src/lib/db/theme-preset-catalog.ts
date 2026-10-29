@@ -10,7 +10,7 @@
  * wizard surface that consumes them is gated.
  *
  * Note what the callers do NOT do: both page callers
- * (pm/onboarding/website, pm/site-preview) check membership + role only.
+ * (pm/site-preview, pm/website-editor) check membership + role only.
  * The `hasSiteEditor` plan gate lives on the mutating route, not on this
  * read path.
  */

@@ -129,8 +129,8 @@ export const getBrandingForCommunity = cache(async (
  * Read the site-onboarding completion timestamp for a community.
  * Returns `null` when the wizard has never been completed (the prod default
  * for every existing row). Callers use null-vs-set to decide whether to
- * surface the "customize your site" prompts (WizardEntryBanner, dashboard
- * banner, communities-table "Site" pill).
+ * surface the "customize your site" prompts (dashboard banner,
+ * communities-table "Site" pill).
  *
  * communities is the root tenant table (no communityId column), so this
  * queries by primary key via the unscoped client — same contract as

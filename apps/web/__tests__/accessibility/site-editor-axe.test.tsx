@@ -291,9 +291,6 @@ describe('Website builder v4 chrome — axe', () => {
             help={null}
             helpOpen={false}
             onHelpToggle={() => {}}
-            mode="free"
-            onModeChange={() => {}}
-            steps={null}
             communityId={7}
             hasPublishedSite
             initialNotice={null}

@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest';
  * A demo whose trial has ended is read-only until it expires
  * (`assertNotDemoGrace`). Twelve PM site routes once wrote anyway, because the
  * check is a per-route call and nothing noticed a route without it. This scans
- * every route under `api/v1/pm/site/` plus the onboarding website step and
- * requires the call in any file exporting a write verb.
+ * every route under `api/v1/pm/site/` and requires the call in any file
+ * exporting a write verb.
  *
  * It checks the FILE, not each verb: a route whose GET and PATCH share one
  * access helper passes on the helper's call. The per-route unit tests pin the
@@ -33,10 +33,7 @@ function routeFiles(dir: string): string[] {
   });
 }
 
-const files = [
-  ...routeFiles(path.join(pmApi, 'site')),
-  path.join(pmApi, 'onboarding/website/route.ts'),
-];
+const files = routeFiles(path.join(pmApi, 'site'));
 const writeRoutes = files.filter((f) => WRITE_VERB.test(fs.readFileSync(f, 'utf8')));
 
 describe('every PM site write route refuses a demo in its grace window', () => {

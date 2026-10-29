@@ -31,7 +31,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { cn } from '@/lib/utils';
 import { HelpArticleBody } from '@/components/help/help-article-body';
 import {
   useContextualHelp,
@@ -40,7 +39,7 @@ import {
   type HelpArticleResult,
 } from '@/hooks/use-help';
 import type { EditorView } from '../EditorTopBar';
-import { HELP_DRAWER_ID, type EditorMode } from '../tools';
+import { HELP_DRAWER_ID } from '../tools';
 import { EDITOR_GUIDES, GUIDE_GROUPS, sortGuides, type HelpAction } from './guides';
 
 export interface HelpDrawerProps {
@@ -55,17 +54,7 @@ export interface HelpDrawerProps {
    * rather than offered as a button that does nothing.
    */
   canPublish: boolean;
-  /** Guided or Free edit: "How you work" switches it, at every screen width. */
-  mode: EditorMode;
-  onModeChange: (mode: EditorMode) => void;
-  /** "Take the 1-minute tour". The drawer has already asked to close. */
-  onStartTour: () => void;
 }
-
-const MODE_CARDS: readonly { mode: EditorMode; title: string; body: string }[] = [
-  { mode: 'guided', title: 'Guided', body: 'A checklist walks you through each step.' },
-  { mode: 'free', title: 'Free edit', body: 'Every tool is one click away.' },
-];
 
 /**
  * The route the guides are tagged for. A literal, not `usePathname()`:
@@ -151,9 +140,6 @@ export function HelpDrawer({
   onClose,
   onShowMe,
   canPublish,
-  mode,
-  onModeChange,
-  onStartTour,
 }: HelpDrawerProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<OpenGuide | null>(null);
@@ -387,19 +373,6 @@ export function HelpDrawer({
               </section>
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onStartTour();
-                  }}
-                  className={ROW_CLASS}
-                >
-                  <span className="text-sm font-medium text-content">Take the 1-minute tour</span>
-                  <span className="text-sm text-content-secondary">
-                    We point out each part of the screen.
-                  </span>
-                </button>
                 {guidesQuery.isPending ? <ListSkeleton /> : null}
                 {/*
                   A failed list is not worth an error banner: search above and
@@ -433,40 +406,6 @@ export function HelpDrawer({
                 />
               </>
             )}
-
-            {!isSearching ? (
-              <section aria-labelledby="help-drawer-mode" className="space-y-2">
-                <h3 id="help-drawer-mode" className="text-sm font-semibold text-content">
-                  How you work
-                </h3>
-                {/* Pressed buttons, not radios: both stay in the Tab order, which the
-                    radio pattern's arrow keys would not. */}
-                <div role="group" aria-labelledby="help-drawer-mode" className="grid grid-cols-2 gap-2">
-                  {MODE_CARDS.map((card) => {
-                    const checked = card.mode === mode;
-                    return (
-                      <button
-                        key={card.mode}
-                        type="button"
-                        aria-pressed={checked}
-                        onClick={() => {
-                          if (!checked) onModeChange(card.mode);
-                        }}
-                        className={cn(
-                          'flex flex-col gap-1 rounded-[var(--radius-md)] p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                          checked
-                            ? 'border-2 border-interactive'
-                            : 'border border-edge hover:bg-surface-hover',
-                        )}
-                      >
-                        <span className="text-sm font-semibold text-content">{card.title}</span>
-                        <span className="text-xs text-content-secondary">{card.body}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            ) : null}
 
             <div className="space-y-3 border-t border-edge pt-4">
               {/*

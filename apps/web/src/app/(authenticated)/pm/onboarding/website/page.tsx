@@ -1,103 +1,42 @@
+// breadcrumbs:exempt — redirect-only page
 /**
- * PR #5b · Onboarding wizard for the public community site.
+ * Redirect from the retired website onboarding wizard to the website home.
  *
- * Route: /pm/onboarding/website/?communityId=X
- * Auth: a management role (property_manager / root_manager) required.
+ * Route: /pm/onboarding/website?communityId=X → /pm/website?communityId=X
  *
- * All five steps are live: layout + theme chooser, identity, welcome
- * message, and confirm-publish (which stamps site_onboarding_completed_at).
+ * ## Why the route still exists at all
+ *
+ * A community's site is live from day one now, and the only onboarding choice
+ * is the look, made on the website home's look picker. The wizard is gone, but
+ * its path is in the wild: help-article deep links, PM bookmarks, browser
+ * history, and a few in-app links not yet repointed. Deleting it outright would
+ * 404 all of them.
+ *
+ * ## Why this is a temporary redirect, not `permanentRedirect`
+ *
+ * `redirect()` answers 307. A 308 is cached hard by browsers and CDNs and is
+ * effectively impossible to retract; this is a route retirement, so a 307
+ * leaves room to change our minds.
+ *
+ * No auth or role check here on purpose: the redirect leaks nothing, and the
+ * destination re-runs the full session / role / tenancy / plan chain.
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
-import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
-import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
-import { WizardLayoutThemePreview } from '@/components/pm/onboarding-wizard/WizardLayoutThemePreview';
-import { IdentityEditor } from '@/components/pm/onboarding-wizard/IdentityEditor';
-import { WelcomeMessageEditor } from '@/components/pm/onboarding-wizard/WelcomeMessageEditor';
-import { ConfirmPublish } from '@/components/pm/onboarding-wizard/ConfirmPublish';
-import { PageBody } from '@/components/shared/page-body';
-import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
 }
 
-export default async function WebsiteOnboardingPage({ searchParams }: PageProps) {
+export default async function WebsiteOnboardingRedirectPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const rawId = Number(params['communityId']);
 
-  // No community in scope — bounce to the portfolio rather than rendering a
-  // community-scoped page with none, which leaves the shell resolving
-  // community = null and swapping the PM rail for the community nav. Matches
-  // what /pm/site-preview already does.
+  // No community in scope: bounce to the portfolio rather than forwarding to a
+  // page that would only bounce again.
   if (!Number.isInteger(rawId) || rawId <= 0) {
     redirect('/pm/dashboard/communities');
   }
 
-  const communityId = rawId;
-  let userId: string;
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
-
-  const membership = await requireCommunityMembership(communityId, userId!);
-  if (!hasRole(membership, PM_MANAGER_ROLES)) {
-    redirect('/pm/dashboard/communities?reason=invalid-selection');
-  }
-
-  const [branding, community, presets] = await Promise.all([
-    getBrandingForCommunity(communityId),
-    getCommunityPublicInfo(communityId),
-    listThemePresetsForWizard(),
-  ]);
-
-  return (
-    <PageBody width="content" spacing="none">
-      <PageHeader title="Customize your community site" />
-      {community && (
-        <p className="mb-6 text-sm text-content-secondary">
-          Current URL:{' '}
-          <code className="rounded bg-surface-muted px-1 py-0.5 text-xs">
-            {community.slug}.getpropertypro.com
-          </code>
-        </p>
-      )}
-
-      <WizardLayoutThemePreview
-        communityId={communityId}
-        presets={presets}
-        initialLayoutId={branding?.layoutId ?? null}
-        initialPresetSlug={branding?.themePresetSlug ?? null}
-      />
-
-      <div className="mt-6">
-        <IdentityEditor
-          communityId={communityId}
-          initialName={community?.name ?? null}
-          initialTagline={branding?.tagline ?? null}
-          establishedYear={null}
-          heroFallbackHeadline={community?.name ? `Welcome to ${community.name}` : 'Welcome'}
-        />
-      </div>
-
-      <div className="mt-6">
-        <WelcomeMessageEditor
-          communityId={communityId}
-          defaultHeadline={community?.name ? `Welcome to ${community.name}` : 'Welcome'}
-        />
-      </div>
-
-      <div className="mt-6">
-        <ConfirmPublish
-          communityId={communityId}
-          communitySlug={community?.slug ?? null}
-        />
-      </div>
-    </PageBody>
-  );
+  redirect(`/pm/website?communityId=${rawId}`);
 }

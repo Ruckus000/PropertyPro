@@ -15,11 +15,10 @@
  * (`/pm/website/looks`) exists; the Design tab then keeps colours, fonts and
  * logos and links to the picker instead of listing looks.
  *
- * The colour-set grid is the wizard's own `PresetCards`, so a set looks the same
- * in both places.
+ * The colour-set grid is `PresetCards`.
  *
- * No plan lock on looks or colour sets: Essentials could already pick any set in
- * the wizard, and the Design panel does not take that away. Only the
+ * No plan lock on looks or colour sets: Essentials could already pick any set,
+ * and the Design panel does not take that away. Only the
  * custom-colours section is Professional, as it always was.
  */
 
@@ -29,14 +28,11 @@ import type { SiteLook } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  PresetCards,
-  type PresetCardData,
-} from '@/components/pm/onboarding-wizard/PresetChooser';
 import { useDraftSiteLook } from '@/hooks/use-draft-site-look';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
 import { LOOK_SUMMARIES, type LookSummary } from '@/lib/site-looks/look-summaries';
 import { LogosSection } from './LogosSection';
+import { PresetCards, type PresetCardData } from './preset-cards';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
 
 export interface DesignPanelProps {

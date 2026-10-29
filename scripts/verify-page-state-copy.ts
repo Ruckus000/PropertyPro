@@ -45,10 +45,8 @@
 // loudly on new copy and is corrected by a human reading one line; a narrow
 // whitelist fails silently and is corrected by a review round.
 //
-// Scope covers the editor, the onboarding wizard (which round 10 caught making a
-// false publish claim, and which was out of scope by construction until now) and
-// lib/site-editor. The module itself is excluded by path — it is where these
-// sentences are supposed to live.
+// Scope covers the editor and lib/site-editor. The module itself is excluded by
+// path — it is where these sentences are supposed to live.
 //
 // Escape hatch: `// page-state-copy:exempt — <reason>` on the offending line.
 //
@@ -64,7 +62,6 @@ import { isMainModule } from './lib/is-main-module';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const SCAN_ROOTS = [
   'apps/web/src/components/pm/site-editor-v3',
-  'apps/web/src/components/pm/onboarding-wizard',
   'apps/web/src/lib/site-editor',
 ];
 /**
