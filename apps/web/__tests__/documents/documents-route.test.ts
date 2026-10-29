@@ -475,6 +475,23 @@ describe('POST /api/v1/documents', () => {
     expect(autoLinkDocumentMock).not.toHaveBeenCalled();
   });
 
+  it('skipAutoLink leaves the upload for the caller to link, and the document is still posted', async () => {
+    const res = await POST(jsonPost({ ...VALID_CREATE_BODY, skipAutoLink: true }));
+
+    expect(res.status).toBe(200);
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ draft: false }),
+    );
+    expect(autoLinkDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('skipAutoLink only means something when it is true', async () => {
+    const res = await POST(jsonPost({ ...VALID_CREATE_BODY, skipAutoLink: false }));
+
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
   it('an auto-link failure does not fail the upload', async () => {
     const failure = new Error('checklist read failed');
     autoLinkDocumentMock.mockRejectedValueOnce(failure);
