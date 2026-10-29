@@ -25,10 +25,10 @@
  * name field acts as the slug.
  */
 import { cache } from 'react';
-import { announcements, communities, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
+import { announcements, buildSourceTypeFilter, communities, complianceChecklistItems, documentCategories, documents, meetings, siteBlocks, sitePageRedirects, sitePages, userRoles, users } from '@propertypro/db';
 // AUTHZ: Public-site reader — unauthenticated context, no TenantContext available; every method applies an explicit community_id predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from '@propertypro/db/filters';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from '@propertypro/db/filters';
 import {
   BOARD_DESIGNATIONS,
   TOMBSTONE_BLOCK_TYPE,
@@ -37,6 +37,7 @@ import {
   type DocumentCategory,
 } from '@propertypro/shared';
 import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
+import { RECORD_GROUP_LABELS } from '@/lib/site-editor/records-status';
 
 export interface PublicAnnouncement {
   id: number;
@@ -151,6 +152,12 @@ export interface PublicMeeting {
 }
 
 export interface PublicContactInfo {
+  /**
+   * The community's public contact, from `communities.contact_*`, or null when
+   * the management toggle is off or none of the three is set. Each field is
+   * trimmed and null when blank. `contact_email` is the ONLY email this
+   * section ever carries.
+   */
   management: {
     name: string | null;
     email: string | null;
@@ -160,6 +167,24 @@ export interface PublicContactInfo {
     name: string;
     title: string;
   }>;
+  /**
+   * The association's address on one line ("100 Palm Way, Suite 4, Miami, FL
+   * 33101"), or null when there is neither a street line nor a city. Not behind
+   * either toggle: it is the association's, not a person's.
+   */
+  address: string | null;
+  /** The office hours as written in the Community profile (trimmed), or null. Not behind either toggle. */
+  officeHours: string | null;
+}
+
+/**
+ * One group of the association's official records and how many are posted for
+ * owners. A count and a label, deliberately nothing that identifies a record.
+ */
+export interface PublicOwnerRecordGroup {
+  category: keyof typeof RECORD_GROUP_LABELS;
+  label: string;
+  postedCount: number;
 }
 
 export interface PublicScopedReader {
@@ -302,8 +327,70 @@ export interface PublicScopedReader {
   /** PR #4 — upcoming meetings within window. */
   listMeetings(opts: { limit: number; timeWindowDays: number }): Promise<PublicMeeting[]>;
 
-  /** PR #4 follow-up — community management contact + public board roster. */
+  /**
+   * PR #4 follow-up — community management contact + public board roster, plus
+   * the office address and hours from the Community profile.
+   *
+   * `showManagement` gates only the management contact and `showBoard` only the
+   * roster; the address and hours come back whichever is on, so a Contact
+   * section can show them with both switched off. The community row is therefore
+   * always read. Everything is null / empty when it has not been given.
+   */
   getContactInfo(opts: { showBoard: boolean; showManagement: boolean }): Promise<PublicContactInfo>;
+
+  /**
+   * How many official records are posted for owners, per group — the public
+   * Documents section's owner summary. COUNTS ONLY: a title, document id or
+   * file path never leaves this method.
+   *
+   * Counts the community's applicable, undeleted checklist items whose linked
+   * document is posted (`posted_at` set), undeleted and of a source type owners
+   * can reach (`library` or `authored`, never `violation_evidence`), grouped by
+   * the item's category, keeping the five groups the editor names
+   * (`RECORD_GROUP_LABELS`) in that order. A group with nothing posted is absent.
+   *
+   * Deliberately NOT gated on `documents.public_access`. The section tells
+   * visitors that owners can sign in to see the records, so what it counts is
+   * what owners can see: posted, not deleted, reachable, and linked to a
+   * requirement.
+   */
+  listOwnerRecordGroups(): Promise<PublicOwnerRecordGroup[]>;
+}
+
+/** The text without the whitespace around it, or null when that leaves nothing (or it is not text). */
+function trimmedOrNull(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * The association's address on one line, from the Community profile: street,
+ * second line, city, state and ZIP, whichever were given, in that order.
+ *
+ * Null unless there is a street line or a city. A state, a ZIP or a "Suite 4" on
+ * its own does not tell a visitor where to go, and a public page that prints one
+ * as an "address" would look like it does. This is not the CAN-SPAM sender address
+ * (`formatCommunityPostalAddress`), which refuses anything partial: a website can
+ * show "Miami, FL" where an email footer may not.
+ */
+function buildPublicAddress(parts: {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+}): string | null {
+  const street = trimmedOrNull(parts.addressLine1);
+  const city = trimmedOrNull(parts.city);
+  if (street === null && city === null) return null;
+
+  const stateAndZip = [trimmedOrNull(parts.state), trimmedOrNull(parts.zipCode)]
+    .filter((part): part is string => part !== null)
+    .join(' ');
+  return [street, trimmedOrNull(parts.addressLine2), city, stateAndZip === '' ? null : stateAndZip]
+    .filter((part): part is string => part !== null)
+    .join(', ');
 }
 
 /**
@@ -740,17 +827,23 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
 
     async getContactInfo(opts) {
       const [communityRows, boardRows] = await Promise.all([
-        opts.showManagement
-          ? db
-            .select({
-              contactName: communities.contactName,
-              contactEmail: communities.contactEmail,
-              contactPhone: communities.contactPhone,
-            })
-            .from(communities)
-            .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
-            .limit(1)
-          : Promise.resolve([]),
+        // Always read, whatever the toggles: the office address and hours are not
+        // gated by them. Only `contact_*` is, further down, on `showManagement`.
+        db
+          .select({
+            contactName: communities.contactName,
+            contactEmail: communities.contactEmail,
+            contactPhone: communities.contactPhone,
+            officeHours: communities.officeHours,
+            addressLine1: communities.addressLine1,
+            addressLine2: communities.addressLine2,
+            city: communities.city,
+            state: communities.state,
+            zipCode: communities.zipCode,
+          })
+          .from(communities)
+          .where(and(eq(communities.id, communityId), isNull(communities.deletedAt)))
+          .limit(1),
         opts.showBoard
           ? db
             .select({
@@ -774,13 +867,11 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       ]);
 
       const community = communityRows[0];
-      const management = community
-        && (community.contactName || community.contactEmail || community.contactPhone)
-        ? {
-          name: community.contactName ?? null,
-          email: community.contactEmail ?? null,
-          phone: community.contactPhone ?? null,
-        }
+      const contactName = trimmedOrNull(community?.contactName);
+      const contactEmail = trimmedOrNull(community?.contactEmail);
+      const contactPhone = trimmedOrNull(community?.contactPhone);
+      const management = opts.showManagement && (contactName || contactEmail || contactPhone)
+        ? { name: contactName, email: contactEmail, phone: contactPhone }
         : null;
 
       return {
@@ -789,7 +880,51 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           name: row.fullName,
           title: row.displayTitle ?? (isBoardPresident(row.designation) ? 'Board President' : 'Board Member'),
         })),
+        address: community ? buildPublicAddress(community) : null,
+        officeHours: trimmedOrNull(community?.officeHours),
       };
+    },
+
+    async listOwnerRecordGroups() {
+      // AUTHZ: public read of aggregate counts only — one number per record group,
+      // no title, id or path. The anonymous visitor learns how many records exist,
+      // never which; the records themselves stay behind owner sign-in.
+      const rows = await db
+        .select({
+          category: complianceChecklistItems.category,
+          postedCount: sql<number>`count(*)::int`,
+        })
+        .from(complianceChecklistItems)
+        .innerJoin(documents, eq(documents.id, complianceChecklistItems.documentId))
+        .where(
+          and(
+            eq(complianceChecklistItems.communityId, communityId),
+            eq(complianceChecklistItems.isApplicable, true),
+            isNull(complianceChecklistItems.deletedAt),
+            // The record itself. Its community is checked on its own: nothing in
+            // the schema stops an item linking another community's document, and
+            // this count is public.
+            eq(documents.communityId, communityId),
+            // A draft is not posted, and a deleted file is not a record.
+            isNotNull(documents.postedAt),
+            isNull(documents.deletedAt),
+            // Owners reach library and authored documents only. A requirement can
+            // be hand-linked to a violation photo, which the documents UI never
+            // shows them, so it is not a record they can sign in to see.
+            buildSourceTypeFilter(),
+          ),
+        )
+        .groupBy(complianceChecklistItems.category);
+
+      const countByCategory = new Map(rows.map((row) => [row.category, row.postedCount]));
+      return (Object.keys(RECORD_GROUP_LABELS) as Array<keyof typeof RECORD_GROUP_LABELS>).flatMap(
+        (category) => {
+          const postedCount = countByCategory.get(category) ?? 0;
+          return postedCount > 0
+            ? [{ category, label: RECORD_GROUP_LABELS[category], postedCount }]
+            : [];
+        },
+      );
     },
   };
 }

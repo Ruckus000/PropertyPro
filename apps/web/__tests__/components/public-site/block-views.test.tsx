@@ -8,21 +8,24 @@
  * the canvas will break at a distance from the change that caused it.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { AnnouncementsBlockView } from '@/components/public-site/blocks/AnnouncementsBlockView';
 import { DocumentsBlockView } from '@/components/public-site/blocks/DocumentsBlockView';
 import { MeetingsBlockView } from '@/components/public-site/blocks/MeetingsBlockView';
-import { ContactBlockView } from '@/components/public-site/blocks/ContactBlockView';
+import { ContactBlockView, contactHasContent } from '@/components/public-site/blocks/ContactBlockView';
 import type { PublicCommunity } from '@/components/public-site/blocks/types';
+import type { PublicContactInfo } from '@/lib/db/public-community-reader';
 
 const COMMUNITY: PublicCommunity = {
   id: 7,
   slug: 'sunset-condos',
   name: 'Sunset Condos',
+  shortName: null,
   logoUrl: null,
   communityType: 'condo_718',
   city: 'Miami',
   state: 'FL',
+  unitCount: null,
   timezone: 'America/New_York',
 };
 
@@ -280,6 +283,182 @@ describe('ContactBlockView', () => {
     expect(screen.getByText('Coastal')).toBeInTheDocument();
     expect(screen.queryByText('Email')).not.toBeInTheDocument();
     expect(screen.queryByText('Phone')).not.toBeInTheDocument();
+  });
+
+  describe('the office address and hours', () => {
+    const office = { address: '100 Palm Way, Miami, FL 33101', officeHours: 'Mon-Fri, 9-5' };
+
+    it('renders both in a card of their own, beside management and the board', () => {
+      render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management, board, ...office }}
+          community={COMMUNITY}
+        />,
+      );
+
+      const card = screen.getByRole('region', { name: 'Office' });
+      expect(within(card).getByRole('heading', { level: 3, name: 'Office' })).toBeInTheDocument();
+      expect(within(card).getByText('Address')).toBeInTheDocument();
+      expect(within(card).getByText('100 Palm Way, Miami, FL 33101')).toBeInTheDocument();
+      expect(within(card).getByText('Office hours')).toBeInTheDocument();
+      expect(within(card).getByText('Mon-Fri, 9-5')).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Management contact' })).toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Board roster' })).toBeInTheDocument();
+    });
+
+    it('renders on their own, with no management and no board', () => {
+      render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], ...office }}
+          community={COMMUNITY}
+        />,
+      );
+
+      expect(screen.getByRole('region', { name: 'Office' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Management contact' })).not.toBeInTheDocument();
+      expect(screen.queryByText('Contact information will be posted here soon.')).not.toBeInTheDocument();
+    });
+
+    it('renders only the row that is set', () => {
+      const { rerender } = render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: office.address, officeHours: null }}
+          community={COMMUNITY}
+        />,
+      );
+      expect(screen.getByRole('heading', { level: 3, name: 'Address' })).toBeInTheDocument();
+      expect(screen.getByText(office.address)).toBeInTheDocument();
+      expect(screen.queryByText('Office hours')).not.toBeInTheDocument();
+
+      rerender(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: null, officeHours: office.officeHours }}
+          community={COMMUNITY}
+        />,
+      );
+      expect(screen.getByRole('heading', { level: 3, name: 'Office' })).toBeInTheDocument();
+      expect(screen.getByText('Office hours')).toBeInTheDocument();
+      expect(screen.queryByText('Address')).not.toBeInTheDocument();
+    });
+
+    it('titles the card "Address" until office hours are set, then "Office"', () => {
+      // The address on file is the property's location, not a promise of an office.
+      const { rerender } = render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: office.address, officeHours: null }}
+          community={COMMUNITY}
+        />,
+      );
+      const card = screen.getByRole('region', { name: 'Address' });
+      expect(within(card).getAllByText('Address')).toHaveLength(1);
+      expect(within(card).getByText(office.address)).toBeInTheDocument();
+      // The address is plain text under its heading, not a row of a list.
+      expect(card.querySelector('dl')).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Office' })).not.toBeInTheDocument();
+
+      // Blank hours are not hours.
+      rerender(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: office.address, officeHours: '   ' }}
+          community={COMMUNITY}
+        />,
+      );
+      expect(screen.getByRole('region', { name: 'Address' })).toBeInTheDocument();
+
+      rerender(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], ...office }}
+          community={COMMUNITY}
+        />,
+      );
+      const withHours = screen.getByRole('region', { name: 'Office' });
+      expect(within(withHours).getByText('Address')).toBeInTheDocument();
+      expect(within(withHours).getByText('Office hours')).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Address' })).not.toBeInTheDocument();
+    });
+
+    it('treats blank text as not set, so the card and its placeholder behave', () => {
+      render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: '   ', officeHours: '' }}
+          community={COMMUNITY}
+        />,
+      );
+
+      expect(screen.queryByRole('region', { name: /^(Office|Address)$/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Contact information will be posted here soon.')).toBeInTheDocument();
+    });
+
+    it('keeps the line breaks a manager typed into the office hours', () => {
+      render(
+        <ContactBlockView
+          blockId={4}
+          content={content}
+          data={{ management: null, board: [], address: null, officeHours: 'Mon-Fri, 9-5\nSat, 10-2' }}
+          community={COMMUNITY}
+        />,
+      );
+
+      // The text node is the whole value; `whitespace-pre-line` is what turns its
+      // newline into a visible break.
+      const hours = screen.getByText((_, el) => el?.tagName === 'DD' && el.textContent === 'Mon-Fri, 9-5\nSat, 10-2');
+      expect(hours).toHaveClass('whitespace-pre-line');
+    });
+  });
+
+  it('renders no empty Management card for a record whose fields are all blank', () => {
+    render(
+      <ContactBlockView
+        blockId={4}
+        content={content}
+        data={{ management: { name: '  ', email: '', phone: null }, board, address: null, officeHours: null }}
+        community={COMMUNITY}
+      />,
+    );
+
+    expect(screen.queryByRole('region', { name: 'Management contact' })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Board roster' })).toBeInTheDocument();
+  });
+});
+
+describe('ContactBlockView placeholder follows contactHasContent', () => {
+  // The shell asks `contactHasContent` whether to render at all; the view asks it
+  // whether to draw its placeholder. Each case states the expected answer outright,
+  // so the table is not just the function agreeing with itself.
+  const content = { showManagement: true, showBoard: true } as never;
+  const none: PublicContactInfo = { management: null, board: [], address: null, officeHours: null };
+  const cases: Array<[string, PublicContactInfo, boolean]> = [
+    ['nothing at all', none, false],
+    ['a management record of blanks', { ...none, management: { name: ' ', email: '', phone: null } }, false],
+    ['a blank address and blank hours', { ...none, address: '  ', officeHours: '' }, false],
+    ['management only', { ...none, management: { name: 'Coastal', email: null, phone: null } }, true],
+    ['an address only', { ...none, address: '100 Palm Way' }, true],
+    ['office hours only', { ...none, officeHours: 'Mon-Fri, 9-5' }, true],
+    ['a board only', { ...none, board: [{ name: 'Sam Whitfield', title: 'President' }] }, true],
+  ];
+
+  it.each(cases)('%s', (_label, data, hasContent) => {
+    render(<ContactBlockView blockId={4} content={content} data={data} community={COMMUNITY} />);
+
+    expect(contactHasContent(data)).toBe(hasContent);
+    const placeholder = screen.queryByText('Contact information will be posted here soon.');
+    expect(placeholder === null).toBe(hasContent);
   });
 });
 

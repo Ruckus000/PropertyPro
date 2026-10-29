@@ -13,10 +13,17 @@ export interface PublicCommunity {
   id: number;
   slug: string;
   name: string;
+  /** Everyday form of `name` for headlines; null when the community has not set one. */
+  shortName: string | null;
   logoUrl: string | null;
   communityType: 'condo_718' | 'hoa_720' | 'apartment';
   city: string | null;
   state: string | null;
+  /**
+   * Units (condo) or parcels (HOA). Null is "not known", never zero; only a
+   * positive whole number resolves `{{units}}`.
+   */
+  unitCount: number | null;
   timezone: string;
 }
 

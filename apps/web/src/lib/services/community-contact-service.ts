@@ -11,6 +11,12 @@
 import { communities, createScopedClient } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 
+/**
+ * A database handle: the pool's, or an open transaction's. Taken from
+ * `createScopedClient`'s own signature so the two cannot drift.
+ */
+type Executor = NonNullable<Parameters<typeof createScopedClient>[1]>;
+
 export interface CommunityContact {
   contactName: string | null;
   contactEmail: string | null;
@@ -62,19 +68,25 @@ export interface UpdatedCommunityContact {
  * - `contact`: the post-update contact shape, suitable for the response
  *   payload.
  *
+ * Pass `executor` (the handle of a `db.transaction` callback) when this write
+ * must commit or roll back together with others, as the community profile save
+ * does. Left out, it writes on the pool exactly as before. This function does
+ * not audit: its caller does.
+ *
  * Caller is responsible for authorization (`membership.isAdmin`) and demo-
  * grace assertion before invoking.
  */
 export async function updateCommunityContact(
   communityId: number,
   patch: UpdateCommunityContactPatch,
+  executor?: Executor,
 ): Promise<UpdatedCommunityContact> {
   const updateData: Record<string, unknown> = {};
   if (patch.contactName !== undefined) updateData['contactName'] = patch.contactName;
   if (patch.contactEmail !== undefined) updateData['contactEmail'] = patch.contactEmail;
   if (patch.contactPhone !== undefined) updateData['contactPhone'] = patch.contactPhone;
 
-  const scoped = createScopedClient(communityId);
+  const scoped = createScopedClient(communityId, executor);
   const updated = await scoped.update(
     communities,
     updateData,

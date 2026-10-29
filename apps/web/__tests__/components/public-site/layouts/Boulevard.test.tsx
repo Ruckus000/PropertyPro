@@ -17,10 +17,12 @@ const community = {
   id: 1,
   slug: 'sunset-hoa',
   name: 'Sunset HOA',
+  shortName: null,
   logoUrl: null,
   communityType: 'hoa_720' as const,
   city: 'Orlando',
   state: 'FL',
+  unitCount: null,
   timezone: 'America/New_York',
 };
 const theme = {

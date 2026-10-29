@@ -27,8 +27,22 @@ import type { CommunityBranding, CustomCssOverrides } from '@propertypro/shared'
 export interface CommunityPublicInfo {
   id: number;
   name: string;
+  /**
+   * Everyday form of `name` for headlines (`{{name}}` prefers it). Null when the
+   * community has not set one.
+   */
+  shortName: string | null;
   slug: string;
   communityType: string;
+  /**
+   * The facts linked fields resolve from (`{{city}}`, `{{units}}`) and the public
+   * site hands its layout. Null is "not given": sign-up collects a city, but a
+   * community made another way may have none, and a unit count is unknown until
+   * someone supplies it. Consumers must treat null as missing, never as blank or 0.
+   */
+  city: string | null;
+  state: string | null;
+  unitCount: number | null;
   sitePublishedAt: Date | null;
   /**
    * Website editor v3 Phase 7 — the urgent notice banner.
@@ -58,8 +72,12 @@ export const getCommunityPublicInfo = cache(async (
     .select({
       id: communities.id,
       name: communities.name,
+      shortName: communities.shortName,
       slug: communities.slug,
       communityType: communities.communityType,
+      city: communities.city,
+      state: communities.state,
+      unitCount: communities.unitCount,
       sitePublishedAt: communities.sitePublishedAt,
       urgentNoticeText: communities.urgentNoticeText,
       urgentNoticeExpiresAt: communities.urgentNoticeExpiresAt,

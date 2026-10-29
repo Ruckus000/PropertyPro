@@ -6,10 +6,12 @@ const CONTEXT = {
     id: 1,
     slug: 's',
     name: 'Sunset',
+    shortName: null,
     logoUrl: 'https://cdn/logo.webp',
     communityType: 'condo_718' as const,
     city: null,
     state: null,
+    unitCount: null,
     timezone: 'America/New_York',
   },
   theme: {

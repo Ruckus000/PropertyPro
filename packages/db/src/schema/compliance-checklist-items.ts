@@ -8,7 +8,7 @@
  * not stored as a column — this prevents stale status values.
  */
 import { sql } from 'drizzle-orm';
-import { bigint, bigserial, boolean, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { bigint, bigserial, boolean, check, index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documents } from './documents';
 
@@ -36,6 +36,16 @@ export const complianceChecklistItems = pgTable(
     documentId: bigint('document_id', { mode: 'number' })
       .references(() => documents.id, { onDelete: 'set null' }),
     /**
+     * Set only by automatic linking, in the same statement that sets `documentId`
+     * (which is guarded by `document_id IS NULL`). An item counts as auto-linked
+     * while `documentId = autoLinkedDocumentId`: a later manual relink or unlink
+     * moves `documentId` and leaves this behind, so nothing needs cleaning up.
+     * NULL = never auto-linked. SET NULL if the document row is deleted, as
+     * `documentId` is.
+     */
+    autoLinkedDocumentId: bigint('auto_linked_document_id', { mode: 'number' })
+      .references(() => documents.id, { onDelete: 'set null' }),
+    /**
      * Date the linked document was posted/uploaded (UTC).
      * Used to calculate 30-day posting deadlines and rolling windows.
      */
@@ -59,6 +69,13 @@ export const complianceChecklistItems = pgTable(
      * Distinct from isConditional (template-level hint); isApplicable is the user's decision.
      */
     isApplicable: boolean('is_applicable').notNull().default(true),
+    /**
+     * Why the manager marked this item "doesn't apply", in their words (1-200
+     * characters). Only meaningful while `isApplicable` is false. NULL = no reason
+     * recorded, which includes every row marked before this column existed; that
+     * is why the database bounds the length but cannot require a reason.
+     */
+    notApplicableReason: text('not_applicable_reason'),
     /** Who last modified this item */
     lastModifiedBy: uuid('last_modified_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -69,5 +86,18 @@ export const complianceChecklistItems = pgTable(
     uniqueIndex('compliance_checklist_community_template_key_active')
       .on(table.communityId, table.templateKey)
       .where(sql`${table.deletedAt} is null`),
+    // Which items does this document satisfy? `unlinkChecklistItemsForDocument`
+    // filters on `document_id`, and nothing indexed it. Partial because most items
+    // carry no document and soft-deleted rows are never asked about.
+    // Mirrors migration 0095.
+    index('compliance_checklist_items_document_id_idx')
+      .on(table.documentId)
+      .where(sql`${table.documentId} IS NOT NULL AND ${table.deletedAt} IS NULL`),
+    // Length bound on the reason. NULL passes a CHECK, so an item with no reason
+    // is fine; an empty string is not. Mirrors migration 0095.
+    check(
+      'compliance_checklist_items_not_applicable_reason_len',
+      sql`char_length(${table.notApplicableReason}) BETWEEN 1 AND 200`,
+    ),
   ],
 );

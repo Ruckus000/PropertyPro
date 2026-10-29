@@ -17,10 +17,12 @@ const community = {
   id: 1,
   slug: 'sable-apartments',
   name: 'Sable Apartments',
+  shortName: null,
   logoUrl: null,
   communityType: 'apartment' as const,
   city: 'Tampa',
   state: 'FL',
+  unitCount: null,
   timezone: 'America/New_York',
 };
 const theme = {

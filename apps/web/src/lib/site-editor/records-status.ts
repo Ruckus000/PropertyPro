@@ -26,13 +26,28 @@ export interface RecordsGroup {
   draftDocumentId: number | null;
 }
 
-const GROUPS: readonly { category: string; label: string }[] = [
+const GROUPS = [
   { category: 'governing_documents', label: 'Governing documents' },
   { category: 'financial_records', label: 'Financial records' },
   { category: 'meeting_records', label: 'Meeting records' },
   { category: 'insurance', label: 'Insurance' },
   { category: 'operations', label: 'Contracts and inspections' },
-];
+] as const;
+
+type RecordGroupCategory = (typeof GROUPS)[number]['category'];
+
+/**
+ * The name of each group of official records, keyed by the checklist category
+ * that feeds it, in the order the groups are listed. Built from `GROUPS`, which
+ * stays the single source: the editor's Documents tool and the public Documents
+ * section name the same groups the same way (`Object.keys` follows `GROUPS`).
+ */
+export const RECORD_GROUP_LABELS: Readonly<Record<RecordGroupCategory, string>> = Object.freeze(
+  Object.fromEntries(GROUPS.map(({ category, label }) => [category, label])) as Record<
+    RecordGroupCategory,
+    string
+  >,
+);
 
 /** Worst first, so a group shows its most urgent problem. */
 const SEVERITY: Record<RecordsStatus, number> = {

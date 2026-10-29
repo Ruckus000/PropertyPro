@@ -171,10 +171,12 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
             id: community!.id,
             slug: community!.slug,
             name: community!.name,
+            shortName: community!.shortName,
             logoUrl: headerLogoUrl,
             communityType,
-            city: null,
-            state: null,
+            city: community!.city,
+            state: community!.state,
+            unitCount: community!.unitCount,
             timezone: 'America/New_York',
           }}
           theme={{

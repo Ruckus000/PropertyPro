@@ -3,6 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock @propertypro/db (schema + client exports) BEFORE importing the helper.
 // This prevents drizzle.ts from being evaluated (which requires DATABASE_URL).
 vi.mock('@propertypro/db', () => ({
+  // The gate every documents-UI read shares (library + authored, never
+  // violation_evidence). A sentinel here, so the reader's use of it can be
+  // asserted; what the real one does is proved against Postgres in
+  // __tests__/integration/public-owner-record-groups.integration.test.ts.
+  buildSourceTypeFilter: vi.fn(() => ({ __sourceTypeFilter: 'owner-visible' })),
   siteBlocks: {
     id: 'siteBlocks.id',
     communityId: 'siteBlocks.communityId',
@@ -33,6 +38,7 @@ vi.mock('@propertypro/db', () => ({
     filePath: 'documents.filePath',
     fileName: 'documents.fileName',
     publicAccess: 'documents.publicAccess',
+    sourceType: 'documents.sourceType',
     createdAt: 'documents.createdAt',
     updatedAt: 'documents.updatedAt',
     deletedAt: 'documents.deletedAt',
@@ -42,6 +48,15 @@ vi.mock('@propertypro/db', () => ({
     id: 'documentCategories.id',
     communityId: 'documentCategories.communityId',
     name: 'documentCategories.name',
+  },
+  complianceChecklistItems: {
+    id: 'complianceChecklistItems.id',
+    communityId: 'complianceChecklistItems.communityId',
+    category: 'complianceChecklistItems.category',
+    documentId: 'complianceChecklistItems.documentId',
+    title: 'complianceChecklistItems.title',
+    isApplicable: 'complianceChecklistItems.isApplicable',
+    deletedAt: 'complianceChecklistItems.deletedAt',
   },
   meetings: {
     id: 'meetings.id',
@@ -58,6 +73,12 @@ vi.mock('@propertypro/db', () => ({
     contactName: 'communities.contactName',
     contactEmail: 'communities.contactEmail',
     contactPhone: 'communities.contactPhone',
+    officeHours: 'communities.officeHours',
+    addressLine1: 'communities.addressLine1',
+    addressLine2: 'communities.addressLine2',
+    city: 'communities.city',
+    state: 'communities.state',
+    zipCode: 'communities.zipCode',
     deletedAt: 'communities.deletedAt',
   },
   users: {
@@ -111,6 +132,12 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
   lte: (col: unknown, val: unknown) => ({ __lte: { col, val } }),
   or: (...args: unknown[]) => ({ __or: args }),
+  // A tagged template, as drizzle's `sql` is. Keeps the text so the aggregate
+  // in listOwnerRecordGroups can be asserted by what it computes.
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    __sql: strings.join('?'),
+    values,
+  }),
 }));
 
 // Mock the unscoped client BEFORE importing the helper
@@ -119,6 +146,7 @@ const mockSelectChain = {
   leftJoin: vi.fn().mockReturnThis(),
   innerJoin: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
+  groupBy: vi.fn().mockReturnThis(),
   orderBy: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   // Terminal — returns a Promise of an array
@@ -144,6 +172,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: () => mockDb,
 }));
 
+import { buildSourceTypeFilter } from '@propertypro/db';
 import { BOARD_DESIGNATIONS } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '../../../src/lib/db/public-community-reader';
 
@@ -157,6 +186,7 @@ describe('getPublicCommunityScopedReader', () => {
     mockSelectChain.leftJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.innerJoin.mockReturnValue(mockSelectChain);
     mockSelectChain.where.mockReturnValue(mockSelectChain);
+    mockSelectChain.groupBy.mockReturnValue(mockSelectChain);
     mockSelectChain.orderBy.mockReturnValue(mockSelectChain);
     mockSelectChain.limit.mockReturnValue(mockSelectChain);
     mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
@@ -191,6 +221,11 @@ describe('getPublicCommunityScopedReader', () => {
   it('exposes getContactInfo method', async () => {
     const reader = getPublicCommunityScopedReader(42);
     expect(typeof reader.getContactInfo).toBe('function');
+  });
+
+  it('exposes listOwnerRecordGroups method', async () => {
+    const reader = getPublicCommunityScopedReader(42);
+    expect(typeof reader.listOwnerRecordGroups).toBe('function');
   });
 
   it('rejects non-positive communityId', () => {
@@ -1048,6 +1083,8 @@ describe('getPublicCommunityScopedReader', () => {
         { name: 'Ava Nguyen', title: 'Board President' },
         { name: 'Miles Carter', title: 'Board Member' },
       ],
+      address: null,
+      officeHours: null,
     });
     expect(result.board[0]).not.toHaveProperty('email');
     expect(result.board[0]).not.toHaveProperty('phone');
@@ -1063,7 +1100,7 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     const result = await reader.getContactInfo({ showBoard: true, showManagement: true });
 
-    expect(result).toEqual({ management: null, board: [] });
+    expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
   });
 
   // ---------------------------------------------------------------------------
@@ -1075,7 +1112,9 @@ describe('getPublicCommunityScopedReader', () => {
     const reader = getPublicCommunityScopedReader(42);
     await reader.getContactInfo({ showBoard: true, showManagement: false });
 
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    // Call 0 is the community row (office address and hours, read whichever
+    // toggles are on); the board query is call 1.
+    const whereCall = mockSelectChain.where.mock.calls[1]![0];
     expect(whereCall).toHaveProperty('__and');
     // designation inArray predicate present with BOARD_DESIGNATIONS values
     const designationClause = whereCall.__and.find(
@@ -1100,9 +1139,9 @@ describe('getPublicCommunityScopedReader', () => {
   });
 
   it('getContactInfo title falls back from designation when displayTitle is null (no presetKey)', async () => {
-    // showManagement=false → the board query is the only query issued,
-    // so its rows are the FIRST queued result.
-    queueQueryResults([
+    // The community row (office address and hours) is read whichever toggles are
+    // on, so it takes the FIRST queued result and the board rows are the second.
+    queueQueryResults([], [
       { fullName: 'Pat Prez', displayTitle: null, designation: 'board_president' },
       { fullName: 'Mel Member', displayTitle: null, designation: 'board_member' },
       { fullName: 'Tia Treasurer', displayTitle: 'Treasurer', designation: 'board_member' },
@@ -1118,12 +1157,355 @@ describe('getPublicCommunityScopedReader', () => {
     ]);
   });
 
-  it('getContactInfo skips disabled sections without issuing their queries', async () => {
+  it('getContactInfo skips the board query when the board is off, but still reads the office details', async () => {
     const reader = getPublicCommunityScopedReader(42);
     const result = await reader.getContactInfo({ showBoard: false, showManagement: false });
 
-    expect(result).toEqual({ management: null, board: [] });
-    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
+    // One read: the community row (address and hours). No roster join.
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+    expect(mockSelectChain.innerJoin).not.toHaveBeenCalled();
+  });
+
+  describe('getContactInfo — the Community profile', () => {
+    // The Contact section shows the association's address and office hours from the
+    // Community profile, each only when set. Management details stay behind their
+    // toggle; these two do not, because they are the association's, not a person's.
+    type ProfileRow = Record<
+      | 'contactName'
+      | 'contactEmail'
+      | 'contactPhone'
+      | 'officeHours'
+      | 'addressLine1'
+      | 'addressLine2'
+      | 'city'
+      | 'state'
+      | 'zipCode',
+      string | null
+    >;
+    const PROFILE_ROW: ProfileRow = {
+      contactName: null,
+      contactEmail: null,
+      contactPhone: null,
+      officeHours: null,
+      addressLine1: null,
+      addressLine2: null,
+      city: null,
+      state: null,
+      zipCode: null,
+    };
+
+    async function addressFor(row: Partial<ProfileRow>): Promise<string | null> {
+      queueQueryResults([{ ...PROFILE_ROW, ...row }]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+      return result.address;
+    }
+
+    it('builds one address line from line 1, line 2, city, state and ZIP', async () => {
+      queueQueryResults([
+        {
+          ...PROFILE_ROW,
+          addressLine1: '100 Palm Way',
+          addressLine2: 'Suite 4',
+          city: 'Miami',
+          state: 'FL',
+          zipCode: '33101',
+          officeHours: 'Mon-Fri, 9-5',
+        },
+      ]);
+
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+
+      expect(result.address).toBe('100 Palm Way, Suite 4, Miami, FL 33101');
+      expect(result.officeHours).toBe('Mon-Fri, 9-5');
+    });
+
+    it('leaves out a line it was not given and joins the rest', async () => {
+      expect(
+        await addressFor({ addressLine1: '100 Palm Way', city: 'Miami', state: 'FL', zipCode: '33101' }),
+      ).toBe('100 Palm Way, Miami, FL 33101');
+      expect(await addressFor({ addressLine1: '100 Palm Way', city: 'Miami', state: 'FL' })).toBe(
+        '100 Palm Way, Miami, FL',
+      );
+      expect(await addressFor({ addressLine1: '100 Palm Way', city: 'Miami' })).toBe(
+        '100 Palm Way, Miami',
+      );
+      expect(await addressFor({ addressLine1: '100 Palm Way' })).toBe('100 Palm Way');
+      // A city alone is enough to place the association; the rule asks for a
+      // street line or a city, not both.
+      expect(await addressFor({ city: 'Miami', state: 'FL', zipCode: '33101' })).toBe(
+        'Miami, FL 33101',
+      );
+    });
+
+    it('is null when there is no street line and no city', async () => {
+      // A state, a ZIP or a "Suite 4" on their own do not tell a visitor where to go.
+      expect(await addressFor({})).toBeNull();
+      expect(await addressFor({ state: 'FL', zipCode: '33101' })).toBeNull();
+      expect(await addressFor({ addressLine2: 'Suite 4', state: 'FL' })).toBeNull();
+    });
+
+    it('treats blank and whitespace-only fields as not set, and trims the rest', async () => {
+      expect(await addressFor({ addressLine1: '   ', city: '', state: 'FL', zipCode: ' ' })).toBeNull();
+      expect(
+        await addressFor({
+          addressLine1: '  100 Palm Way ',
+          addressLine2: '   ',
+          city: ' Miami',
+          state: 'FL ',
+          zipCode: ' 33101 ',
+        }),
+      ).toBe('100 Palm Way, Miami, FL 33101');
+    });
+
+    it('returns office hours trimmed, and null when they are blank', async () => {
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: '  Mon-Fri, 9-5  ' }]);
+      const reader = getPublicCommunityScopedReader(42);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBe(
+        'Mon-Fri, 9-5',
+      );
+
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: '   ' }]);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBeNull();
+
+      queueQueryResults([{ ...PROFILE_ROW, officeHours: null }]);
+      expect((await reader.getContactInfo({ showBoard: false, showManagement: false })).officeHours).toBeNull();
+    });
+
+    it('keeps the management contact behind its toggle while the address and hours show', async () => {
+      const row = {
+        ...PROFILE_ROW,
+        contactName: 'Jane Manager',
+        contactEmail: 'jane@example.com',
+        contactPhone: '555-0100',
+        addressLine1: '100 Palm Way',
+        city: 'Miami',
+        officeHours: 'Mon-Fri, 9-5',
+      };
+      queueQueryResults([row]);
+      const off = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: false,
+      });
+
+      expect(off.management).toBeNull();
+      expect(JSON.stringify(off)).not.toContain('jane@example.com');
+      expect(JSON.stringify(off)).not.toContain('Jane Manager');
+      expect(off.address).toBe('100 Palm Way, Miami');
+      expect(off.officeHours).toBe('Mon-Fri, 9-5');
+
+      queueQueryResults([row]);
+      const on = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+      expect(on.management).toEqual({
+        name: 'Jane Manager',
+        email: 'jane@example.com',
+        phone: '555-0100',
+      });
+    });
+
+    it('treats a blank contact email as not set rather than passing the blank on', async () => {
+      queueQueryResults([
+        { ...PROFILE_ROW, contactName: 'Jane Manager', contactEmail: '   ', contactPhone: '555-0100' },
+      ]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result.management).toEqual({ name: 'Jane Manager', email: null, phone: '555-0100' });
+    });
+
+    it('has no management contact when every field is blank', async () => {
+      queueQueryResults([
+        { ...PROFILE_ROW, contactName: ' ', contactEmail: '', contactPhone: '  ' },
+      ]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result.management).toBeNull();
+    });
+
+    it("shows no one's email but the community's public contact email", async () => {
+      // Pinned at the projection, where a second email column would have to appear:
+      // the community query reads `contact_email` and nothing else that is an
+      // address, and the board roster reads a name and a title.
+      queueQueryResults([PROFILE_ROW], []);
+      await getPublicCommunityScopedReader(42).getContactInfo({ showBoard: true, showManagement: true });
+
+      const communityProjection = mockDb.select.mock.calls[0]![0] as Record<string, unknown>;
+      const boardProjection = mockDb.select.mock.calls[1]![0] as Record<string, unknown>;
+
+      expect(communityProjection).toEqual({
+        contactName: 'communities.contactName',
+        contactEmail: 'communities.contactEmail',
+        contactPhone: 'communities.contactPhone',
+        officeHours: 'communities.officeHours',
+        addressLine1: 'communities.addressLine1',
+        addressLine2: 'communities.addressLine2',
+        city: 'communities.city',
+        state: 'communities.state',
+        zipCode: 'communities.zipCode',
+      });
+      expect(Object.keys(boardProjection).sort()).toEqual(['designation', 'displayTitle', 'fullName']);
+    });
+
+    it('reads the community row for its own, undeleted community only', async () => {
+      queueQueryResults([PROFILE_ROW]);
+      await getPublicCommunityScopedReader(42).getContactInfo({ showBoard: false, showManagement: false });
+
+      // With the toggles off this is the ONLY query, so it is where call 0.
+      const where = mockSelectChain.where.mock.calls[0]![0] as { __and: unknown[] };
+      expect(where.__and).toEqual([
+        { __eq: { col: 'communities.id', val: 42 } },
+        { __isNull: 'communities.deletedAt' },
+      ]);
+    });
+
+    it('returns nothing for a community that is gone', async () => {
+      queueQueryResults([]);
+      const result = await getPublicCommunityScopedReader(42).getContactInfo({
+        showBoard: false,
+        showManagement: true,
+      });
+
+      expect(result).toEqual({ management: null, board: [], address: null, officeHours: null });
+    });
+  });
+
+  describe('listOwnerRecordGroups', () => {
+    /**
+     * The public Documents section tells an anonymous visitor how many official
+     * records the association has posted for its owners, per group. It is the one
+     * read that turns the owner-only checklist into public output, so each
+     * predicate is asserted by name and the projection is pinned to a label and a
+     * number — a title, a document id or a file path leaving here would expose
+     * what the owners' sign-in exists to protect.
+     */
+    type Clause = { __eq?: { col: string; val: unknown }; __isNull?: string; __isNotNull?: string };
+
+    function whereClauses(): Clause[] {
+      return mockSelectChain.where.mock.calls[0]![0].__and as Clause[];
+    }
+
+    function equalities(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__eq !== undefined ? [c.__eq] : []));
+    }
+
+    function nullChecks(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__isNull !== undefined ? [c.__isNull] : []));
+    }
+
+    function notNullChecks(clauses: Clause[]) {
+      return clauses.flatMap((c) => (c.__isNotNull !== undefined ? [c.__isNotNull] : []));
+    }
+
+    it('counts only posted, undeleted, linked records of applicable items', async () => {
+      queueQueryResults([{ category: 'financial_records', postedCount: 3 }]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      const groups = await reader.listOwnerRecordGroups();
+
+      expect(groups).toEqual([
+        { category: 'financial_records', label: 'Financial records', postedCount: 3 },
+      ]);
+
+      const clauses = whereClauses();
+      // Items: this community's, applicable, not deleted.
+      expect(equalities(clauses)).toEqual(
+        expect.arrayContaining([
+          { col: 'complianceChecklistItems.communityId', val: 42 },
+          { col: 'complianceChecklistItems.isApplicable', val: true },
+        ]),
+      );
+      expect(nullChecks(clauses)).toContain('complianceChecklistItems.deletedAt');
+      // Their record: in the same community, posted (not a draft), not deleted.
+      expect(equalities(clauses)).toContainEqual({ col: 'documents.communityId', val: 42 });
+      expect(notNullChecks(clauses)).toContain('documents.postedAt');
+      expect(nullChecks(clauses)).toContain('documents.deletedAt');
+      // Linked: the document is joined on the item's own document_id, so an item
+      // with no record has nothing to count.
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledTimes(1);
+      expect(mockSelectChain.innerJoin).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'documents.id' }),
+        { __eq: { col: 'documents.id', val: 'complianceChecklistItems.documentId' } },
+      );
+      // One count per category.
+      expect(mockSelectChain.groupBy).toHaveBeenCalledTimes(1);
+      expect(mockSelectChain.groupBy).toHaveBeenCalledWith('complianceChecklistItems.category');
+    });
+
+    it('binds the query to the reader\'s community, not a caller-supplied one', async () => {
+      const reader = getPublicCommunityScopedReader(99);
+
+      await reader.listOwnerRecordGroups();
+
+      const communityIds = equalities(whereClauses())
+        .filter((c) => c.col.endsWith('.communityId'))
+        .map((c) => c.val);
+      expect(communityIds).toEqual([99, 99]);
+    });
+
+    it('counts only records an owner can reach, never violation evidence', async () => {
+      // A checklist item can be hand-linked to ANY document in its community,
+      // including a violation photo (source_type = violation_evidence). Owners
+      // never reach those through the documents UI, so a public count of the
+      // records they can sign in to see must not include them. The reader uses
+      // the same gate every documents-UI read uses, with its default set.
+      const reader = getPublicCommunityScopedReader(42);
+
+      await reader.listOwnerRecordGroups();
+
+      expect(vi.mocked(buildSourceTypeFilter)).toHaveBeenCalledWith();
+      expect(whereClauses()).toContainEqual({ __sourceTypeFilter: 'owner-visible' });
+    });
+
+    it('keeps only the five record groups, in the order the editor lists them', async () => {
+      queueQueryResults([
+        { category: 'operations', postedCount: 1 },
+        { category: 'something_else', postedCount: 9 },
+        { category: 'governing_documents', postedCount: 5 },
+        { category: 'meeting_records', postedCount: 0 },
+        { category: 'insurance', postedCount: 2 },
+      ]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      const groups = await reader.listOwnerRecordGroups();
+
+      expect(groups).toEqual([
+        { category: 'governing_documents', label: 'Governing documents', postedCount: 5 },
+        { category: 'insurance', label: 'Insurance', postedCount: 2 },
+        { category: 'operations', label: 'Contracts and inspections', postedCount: 1 },
+      ]);
+    });
+
+    it('returns no groups when no applicable item has a posted record', async () => {
+      queueQueryResults([]);
+      const reader = getPublicCommunityScopedReader(42);
+
+      await expect(reader.listOwnerRecordGroups()).resolves.toEqual([]);
+    });
+
+    it('selects a category and a count only — never a title, id or file path', async () => {
+      const reader = getPublicCommunityScopedReader(42);
+
+      await reader.listOwnerRecordGroups();
+
+      const projection = mockDb.select.mock.calls[0]![0] as Record<string, unknown>;
+      expect(Object.keys(projection).sort()).toEqual(['category', 'postedCount']);
+      expect(projection['category']).toBe('complianceChecklistItems.category');
+      expect(projection['postedCount']).toMatchObject({ __sql: expect.stringContaining('count(*)') });
+    });
   });
 
   describe('getPublicDocumentFile', () => {

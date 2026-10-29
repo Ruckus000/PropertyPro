@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { AmenitiesBlock } from '@/components/public-site/blocks/AmenitiesBlock';
 import type { BlockRendererProps } from '@/components/public-site/blocks/types';
 
-const community = { id: 1, slug: 's', name: 'X', logoUrl: null, communityType: 'condo_718' as const, city: null, state: null, timezone: 'America/New_York' };
+const community = { id: 1, slug: 's', name: 'X', shortName: null, logoUrl: null, communityType: 'condo_718' as const, city: null, state: null, unitCount: null, timezone: 'America/New_York' };
 const theme = { primaryColor: '#000', secondaryColor: '#fff', accentColor: '#0f0', headingFont: 'Inter', bodyFont: 'Inter' };
 
 function makeProps(content: unknown): BlockRendererProps {

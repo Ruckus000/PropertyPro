@@ -18,7 +18,7 @@ vi.mock('@/lib/utils/html-sanitizer', () => ({
   sanitizeHtml: (s: string) => s.replace(/<script[^>]*>.*?<\/script>/gi, ''),
 }));
 
-const community = { id: 1, slug: 's', name: 'X', logoUrl: null, communityType: 'condo_718' as const, city: null, state: null, timezone: 'America/New_York' };
+const community = { id: 1, slug: 's', name: 'X', shortName: null, logoUrl: null, communityType: 'condo_718' as const, city: null, state: null, unitCount: null, timezone: 'America/New_York' };
 const theme = { primaryColor: '#000', secondaryColor: '#fff', accentColor: '#0f0', headingFont: 'Inter', bodyFont: 'Inter' };
 
 function makeProps(content: unknown): BlockRendererProps {
@@ -28,11 +28,12 @@ function makeProps(content: unknown): BlockRendererProps {
 describe('<AnnouncementsBlock>', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders an empty state when no announcements exist', async () => {
+  it('renders nothing when no announcements exist', async () => {
     listAnnouncementsMock.mockResolvedValueOnce([]);
     const ui = await AnnouncementsBlock(makeProps({ limit: 5, timeWindowDays: 30 }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText(/No announcements yet/i)).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/No announcements yet/i)).toBeNull();
   });
 
   it('renders a list of announcements', async () => {

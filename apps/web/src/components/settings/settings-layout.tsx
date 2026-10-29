@@ -72,15 +72,27 @@ export function SettingsCardHeader({
   title,
   description,
   titleAs: Title = 'h3',
+  titleId,
+  descriptionId,
 }: {
   title: React.ReactNode;
   description?: React.ReactNode;
   titleAs?: 'h3' | 'h4';
+  /** For a wrapper that names itself by this title (`aria-labelledby`). */
+  titleId?: string;
+  /** For a wrapper that describes itself by this description (`aria-describedby`). */
+  descriptionId?: string;
 }) {
   return (
     <div className="space-y-1 px-5 py-4">
-      <Title className="text-base font-semibold text-content">{title}</Title>
-      {description ? <p className="text-sm text-content-secondary">{description}</p> : null}
+      <Title id={titleId} className="text-base font-semibold text-content">
+        {title}
+      </Title>
+      {description ? (
+        <p id={descriptionId} className="text-sm text-content-secondary">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }
