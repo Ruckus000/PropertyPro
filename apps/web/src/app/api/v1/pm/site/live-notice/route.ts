@@ -27,6 +27,7 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import {
   claimSiteLiveNotice,
   dismissSiteLiveNotice,
+  getSiteLiveNoticeState,
   releaseSiteLiveNotice,
 } from '@/lib/services/site-live-notice-service';
 import { notifyResidentsOfSitePublish } from '@/lib/services/site-publish-notification';
@@ -51,8 +52,19 @@ export const POST = withErrorHandler(
     const { userId, membership } = await ensurePmAccess(communityId);
     requirePermission(membership, 'announcements', 'write');
 
+    // Before claiming: the one send must not be spent on nobody.
+    if ((await getSiteLiveNoticeState(communityId)).ownerCount === 0) {
+      throw new ConflictError('There are no owners to email yet.');
+    }
+
     if (!(await claimSiteLiveNotice(communityId))) {
-      throw new ConflictError('Owners have already been emailed that the site is live.');
+      // The claim also fails when the offer was dismissed; say which it was.
+      const state = await getSiteLiveNoticeState(communityId);
+      throw new ConflictError(
+        state.sentAt === null && state.dismissedAt !== null
+          ? "This email was dismissed, so it wasn't sent."
+          : 'Owners have already been emailed that the site is live.',
+      );
     }
 
     const result = await notifyResidentsOfSitePublish({
@@ -60,6 +72,8 @@ export const POST = withErrorHandler(
       actorUserId: userId,
       summary: SITE_LIVE_SUMMARY,
       audience: 'owners_only',
+      intro: 'Your community now has a website.',
+      linkLabel: 'Visit the website',
     });
 
     if (result.status === 'failed') {

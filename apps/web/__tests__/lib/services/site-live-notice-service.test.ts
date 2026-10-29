@@ -127,7 +127,13 @@ describe('claimSiteLiveNotice', () => {
     expect(updateMock).toHaveBeenCalledWith(
       tables.communities,
       { siteLiveNoticeSentAt: expect.any(Date) },
-      { __isNull: tables.communities.siteLiveNoticeSentAt },
+      {
+        __and: [
+          { __isNull: tables.communities.siteLiveNoticeSentAt },
+          // A dismissal wins: a dismissed offer can no longer be claimed.
+          { __isNull: tables.communities.siteLiveNoticeDismissedAt },
+        ],
+      },
     );
 
     // The row was already claimed: the guarded UPDATE changes nothing.

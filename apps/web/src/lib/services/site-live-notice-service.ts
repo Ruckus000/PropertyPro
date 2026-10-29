@@ -75,15 +75,17 @@ export async function getSiteLiveNoticeState(communityId: number): Promise<SiteL
 
 /**
  * Claim the send: `UPDATE communities SET site_live_notice_sent_at = now()
- * WHERE id = $1 AND site_live_notice_sent_at IS NULL`. True when this call
- * changed the row, so exactly one of any number of concurrent callers wins.
+ * WHERE id = $1 AND site_live_notice_sent_at IS NULL AND
+ * site_live_notice_dismissed_at IS NULL`. True when this call changed the row,
+ * so exactly one of any number of concurrent callers wins, and a dismissal
+ * always beats a send that has not been claimed yet.
  */
 export async function claimSiteLiveNotice(communityId: number): Promise<boolean> {
   const scoped = createScopedClient(communityId);
   const changed = await scoped.update(
     communities,
     { siteLiveNoticeSentAt: new Date() },
-    isNull(communities.siteLiveNoticeSentAt),
+    and(isNull(communities.siteLiveNoticeSentAt), isNull(communities.siteLiveNoticeDismissedAt)),
   );
   return changed.length === 1;
 }

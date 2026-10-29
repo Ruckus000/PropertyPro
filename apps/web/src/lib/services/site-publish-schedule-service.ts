@@ -438,6 +438,7 @@ export async function processDueSitePublishes(
         expectedPublishedAt: null,
       });
 
+      // ponytail: only schedules created by pre-deploy tabs carry notify_summary; the editor no longer sets it. Trigger: remove after the deploy-skew window, once no pending schedule carries notify_summary.
       if (result.published && row.notify_summary) {
         // Fire-and-report: the publish has committed, so a notification failure
         // must not mark the schedule failed. It is recorded by the notifier's

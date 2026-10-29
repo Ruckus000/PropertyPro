@@ -15,6 +15,7 @@ const {
   claimMock,
   releaseMock,
   dismissMock,
+  stateMock,
   notifyMock,
   logAuditEventMock,
   requireAuthMock,
@@ -25,6 +26,7 @@ const {
   claimMock: vi.fn(),
   releaseMock: vi.fn(),
   dismissMock: vi.fn(),
+  stateMock: vi.fn(),
   notifyMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   requireAuthMock: vi.fn(),
@@ -37,6 +39,7 @@ vi.mock('@/lib/services/site-live-notice-service', () => ({
   claimSiteLiveNotice: claimMock,
   releaseSiteLiveNotice: releaseMock,
   dismissSiteLiveNotice: dismissMock,
+  getSiteLiveNoticeState: stateMock,
 }));
 vi.mock('@/lib/services/site-publish-notification', () => ({
   notifyResidentsOfSitePublish: notifyMock,
@@ -62,6 +65,8 @@ const post = (body: unknown = { communityId: COMMUNITY_ID }) => POST(request('PO
 const patch = (body: unknown = { communityId: COMMUNITY_ID, dismissed: true }) =>
   PATCH(request('PATCH', body));
 
+const STATE = { sentAt: null, dismissedAt: null, ownerCount: 31, offerable: true };
+
 const manager = (role = 'property_manager') => ({
   role,
   communityId: COMMUNITY_ID,
@@ -79,6 +84,7 @@ beforeEach(() => {
   claimMock.mockResolvedValue(true);
   releaseMock.mockResolvedValue(undefined);
   dismissMock.mockResolvedValue(undefined);
+  stateMock.mockResolvedValue(STATE);
   logAuditEventMock.mockResolvedValue(undefined);
   notifyMock.mockResolvedValue({ status: 'sent', announcementId: 7, recipientCount: 31 });
 });
@@ -96,8 +102,32 @@ describe('POST /api/v1/pm/site/live-notice', () => {
       actorUserId: 'user-1',
       summary: 'Our community website is live',
       audience: 'owners_only',
+      intro: 'Your community now has a website.',
+      linkLabel: 'Visit the website',
     });
     expect(releaseMock).not.toHaveBeenCalled();
+  });
+
+  it('a dismissed offer is a 409 with its own message, and nothing is sent', async () => {
+    claimMock.mockResolvedValue(false);
+    stateMock.mockResolvedValue({ ...STATE, dismissedAt: '2026-10-29T12:00:00.000Z', offerable: false });
+
+    const res = await post();
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.message).toBe("This email was dismissed, so it wasn't sent.");
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+
+  it('with no owners it is a 409 before the claim is spent', async () => {
+    stateMock.mockResolvedValue({ ...STATE, ownerCount: 0, offerable: false });
+
+    const res = await post();
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.message).toBe('There are no owners to email yet.');
+    expect(claimMock).not.toHaveBeenCalled();
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it('claims the send before making it', async () => {

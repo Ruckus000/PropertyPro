@@ -45,6 +45,7 @@ export const POST = withErrorHandler(
     // — before the publish — means a caller who may publish but may not
     // announce is refused outright rather than having the site go live and the
     // notification silently dropped afterwards.
+    // ponytail: compatibility path for tabs opened before the Email owners deploy; the editor no longer sends notifyResidents, so only pre-deploy tabs reach it. Trigger: remove after the deploy-skew window, once no pending schedule carries notify_summary.
     if (body.notifyResidents) {
       requirePermission(membership, 'announcements', 'write');
     }
@@ -90,6 +91,7 @@ export const POST = withErrorHandler(
     // returns its outcome instead, and that outcome goes on the wire — a PM who
     // ticked the box is told what really happened rather than being left to
     // assume residents were reached.
+    // ponytail: same compatibility path as the gate above. Trigger: remove after the deploy-skew window, once no pending schedule carries notify_summary.
     if (body.notifyResidents && result.published) {
       const residentNotification = await notifyResidentsOfSitePublish({
         communityId,

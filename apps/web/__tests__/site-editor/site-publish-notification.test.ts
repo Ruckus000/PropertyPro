@@ -127,6 +127,29 @@ describe('notifyResidentsOfSitePublish', () => {
     );
   });
 
+  it('the default wording is the site-update wording; the live notice words its own', async () => {
+    const inApp = () => createNotificationsMock.mock.calls.at(-1)![1].body as string;
+    const body = () => createAnnouncementMock.mock.calls.at(-1)![1].body as string;
+
+    await notifyResidentsOfSitePublish(INPUT);
+    expect(body()).toMatch(
+      /^<p>The community website has been updated\.<\/p><p><a href="[^"]*sunset-condos[^"]*">View the updated site<\/a><\/p>$/,
+    );
+    expect(inApp()).toBe('The community website has been updated.');
+
+    await notifyResidentsOfSitePublish({
+      ...INPUT,
+      summary: 'Our community website is live',
+      audience: 'owners_only',
+      intro: 'Your community now has a website.',
+      linkLabel: 'Visit the website',
+    });
+    expect(body()).toContain('<p>Your community now has a website.</p>');
+    expect(body()).toContain('>Visit the website</a>');
+    expect(body()).not.toMatch(/has been updated|View the updated site/);
+    expect(inApp()).toBe('Your community now has a website.');
+  });
+
   it('delivers as the publishing user, so the email signature carries their title', async () => {
     await notifyResidentsOfSitePublish(INPUT);
 

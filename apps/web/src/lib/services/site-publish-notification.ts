@@ -75,7 +75,18 @@ export interface NotifyResidentsOfSitePublishInput {
    * from drifting apart.
    */
   audience?: 'all' | 'owners_only';
+  /**
+   * The body's first line, and the in-app notification's body. Defaults to the
+   * site-update wording. The one-time "site is live" notice passes its own, so
+   * it never claims the site "has been updated".
+   */
+  intro?: string;
+  /** The link's text under the intro. Defaults to the site-update wording. */
+  linkLabel?: string;
 }
+
+const DEFAULT_INTRO = 'The community website has been updated.';
+const DEFAULT_LINK_LABEL = 'View the updated site';
 
 /** Escape before interpolating PM text into the announcement body HTML. */
 function escapeHtml(value: string): string {
@@ -119,6 +130,8 @@ export async function notifyResidentsOfSitePublish({
   actorUserId,
   summary,
   audience = 'all',
+  intro = DEFAULT_INTRO,
+  linkLabel = DEFAULT_LINK_LABEL,
 }: NotifyResidentsOfSitePublishInput): Promise<SitePublishNotificationResult> {
   const trimmed = summary.trim();
 
@@ -130,9 +143,9 @@ export async function notifyResidentsOfSitePublish({
   const title = trimmed;
   const body = sanitizeHtml(
     [
-      '<p>The community website has been updated.</p>',
+      `<p>${escapeHtml(intro)}</p>`,
       siteUrl
-        ? `<p><a href="${escapeHtml(siteUrl)}">View the updated site</a></p>`
+        ? `<p><a href="${escapeHtml(siteUrl)}">${escapeHtml(linkLabel)}</a></p>`
         : '',
     ]
       .filter(Boolean)
@@ -167,7 +180,7 @@ export async function notifyResidentsOfSitePublish({
     {
       category: 'announcement',
       title,
-      body: 'The community website has been updated.',
+      body: intro,
       actionUrl: `/announcements/${announcementId}`,
       sourceType: 'announcement',
       sourceId: String(announcementId),
