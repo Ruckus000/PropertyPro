@@ -13,6 +13,7 @@
  *
  * A look id, its layout id and its preset slug are the same string (D2).
  */
+import type { ContrastIssueOptions } from '@propertypro/shared';
 import type { LayoutId } from '../blocks/types';
 
 /**
@@ -88,4 +89,18 @@ export function lookStyleFor(layout: LayoutId): LookStyle | null {
 export function paintsSecondary(layout: LayoutId): boolean {
   const look = lookStyleFor(layout);
   return look !== null && (look.pageBackground === 'secondary' || look.sectionTint === 'alternate');
+}
+
+/**
+ * What the publish contrast check needs to know about a layout: whether it
+ * paints the secondary colour, and how a look paints its accent. A legacy
+ * layout gets neither, so the check keeps its original pairs.
+ */
+export function contrastOptionsFor(layout: LayoutId): Omit<ContrastIssueOptions, 'severity'> {
+  const look = lookStyleFor(layout);
+  if (look === null) return {};
+  return {
+    layoutPaintsSecondary: paintsSecondary(layout),
+    lookAccent: { accentUse: look.accentUse, onAccent: look.onAccent },
+  };
 }

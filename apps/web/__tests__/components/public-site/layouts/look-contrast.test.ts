@@ -21,6 +21,7 @@ import { contrastIssues, contrastRatio } from '@propertypro/shared';
 import { tokenDefinitions, toHex } from '@propertypro/tokens';
 import {
   LOOK_STYLES,
+  contrastOptionsFor,
   paintsSecondary,
   type LookLayoutId,
 } from '@/components/public-site/layouts/look-styles';
@@ -106,8 +107,8 @@ describe("every look's colour pairs pass AA", () => {
   });
 });
 
-describe('the publish contrast check on the secondary colour', () => {
-  it('checks it on the layouts that paint it behind text, and only those', () => {
+describe('the publish contrast check on the looks', () => {
+  it('checks the secondary colour on the layouts that paint it behind text, and only those', () => {
     // Heritage's page, and the section bands of Bayfront and Palm Grove.
     expect(LOOK_IDS.filter((id) => paintsSecondary(id)).sort()).toEqual(['bayfront', 'heritage', 'palm-grove']);
     for (const layout of ['tidewater', 'boulevard', 'sable', 'plain-simple'] as const) {
@@ -115,12 +116,32 @@ describe('the publish contrast check on the secondary colour', () => {
     }
   });
 
-  it.each(LOOK_IDS)("raises no secondary-colour warning for %s's own preset", (id) => {
-    const { primaryColor, accentColor, secondaryColor } = SITE_LOOK_PRESETS[id];
-    const issues = contrastIssues(
-      { primaryColor, accentColor, secondaryColor },
-      { severity: 'warning', layoutPaintsSecondary: paintsSecondary(id) },
-    );
-    expect(issues.filter((i) => i.field === 'secondaryColor')).toEqual([]);
+  it('reads a look as LOOK_STYLES says it paints, and a legacy layout as it always has', () => {
+    for (const layout of ['tidewater', 'boulevard', 'sable'] as const) {
+      expect(contrastOptionsFor(layout), layout).toEqual({});
+    }
+    for (const id of LOOK_IDS) {
+      const { accentUse, onAccent } = LOOK_STYLES[id];
+      expect(contrastOptionsFor(id), id).toEqual({
+        layoutPaintsSecondary: paintsSecondary(id),
+        lookAccent: { accentUse, onAccent },
+      });
+    }
+  });
+
+  it('raises no accent or secondary-colour warning for any look on its own preset', () => {
+    // The pairs the looks introduced or changed. A look switch copies its preset's
+    // colours into the draft, so this is what a new site meets at its first publish.
+    const warnings = LOOK_IDS.flatMap((id) => {
+      const { primaryColor, accentColor, secondaryColor } = SITE_LOOK_PRESETS[id];
+      return contrastIssues(
+        { primaryColor, accentColor, secondaryColor },
+        { severity: 'warning', ...contrastOptionsFor(id) },
+      )
+        .filter((issue) => issue.field === 'accentColor' || issue.field === 'secondaryColor')
+        .map((issue) => `${id}: ${issue.message}`);
+    });
+    // The message names each look and pair in full when this fails.
+    expect(warnings, warnings.join('\n')).toEqual([]);
   });
 });

@@ -1941,3 +1941,38 @@ describe("PublishSheet — contrast on a look's secondary colour", () => {
     expect(screen.getByText(/^default dark text on your accent colour/)).toBeInTheDocument();
   });
 });
+
+describe('PublishSheet — the accent, as the look paints it', () => {
+  /*
+   * Palm Grove puts white text on its terracotta accent (4.99:1). The original
+   * pair, default dark text on the accent (3.56:1), would warn every new HOA
+   * site about a pair its page never paints.
+   *
+   * Revert check (production line): `accentPairs` in `contrastIssues` returning
+   * the original pair for every look. The first case goes red.
+   */
+  const PALM_GROVE = { primaryColor: '#2D5E4A', accentColor: '#B4532A', secondaryColor: '#FBF6EA' };
+
+  it("raises no colour warning for Palm Grove's own colours on Palm Grove", () => {
+    renderSheet({ brandColors: PALM_GROVE, layout: 'palm-grove' });
+
+    expect(screen.queryByText(/accent colour|secondary colour/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the original accent pair for the same colours on a legacy layout', () => {
+    renderSheet({ brandColors: PALM_GROVE, layout: 'tidewater' });
+
+    expect(
+      screen.getByText(/^default dark text on your accent colour has a contrast ratio of 3\.56:1/),
+    ).toBeInTheDocument();
+  });
+
+  it("warns, without blocking, when a custom accent fails the pair Palm Grove paints", () => {
+    renderSheet({ brandColors: { ...PALM_GROVE, accentColor: '#E9A23B' }, layout: 'palm-grove' });
+
+    expect(
+      screen.getByText(/^white text on your accent colour has a contrast ratio of 2\.17:1, below the 4\.5:1/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+  });
+});

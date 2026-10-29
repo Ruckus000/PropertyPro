@@ -28,6 +28,11 @@
  * 4.5:1, and the primary as headings on it at 3:1. Both are advisory even at the
  * write path. A legacy layout paints none of it, and its sites see nothing new.
  *
+ * The accent is checked as the site's look paints it (`lookAccent`): the white or
+ * default dark text a look sets on its accent, or a text accent on white and on
+ * the secondary colour. Without a look, as on every legacy layout, it keeps the
+ * original pair, default dark text on the accent.
+ *
  * NOT checked, on purpose:
  *   - `--theme-primary-hover`, which is `darkenHex(primary, 15)` — a monotone
  *     luminance reduction against white, so if the primary/white pair passes,
@@ -105,6 +110,7 @@ const TEXT_INVERSE = '#FFFFFF'; // gray-0    → text.inverse
 const SURFACE_PAGE = '#FBF7F1'; // sand-50   → surface.page
 const BRAND_SURFACE = '#FCF1ED'; // coral-50 → status.brand.background
 const TEXT_PRIMARY = '#111827'; // gray-900  → text.primary
+const SURFACE_CARD = '#FFFEFC'; // sand-0    → surface.card, the "white" the looks paint
 
 /** The theme colours this gate can see, already resolved by the caller. */
 export interface ResolvedBrandColors {
@@ -112,6 +118,14 @@ export interface ResolvedBrandColors {
   accentColor: string;
   /** Checked only when `layoutPaintsSecondary` says the layout paints it. */
   secondaryColor?: string;
+}
+
+/** How a look paints its accent colour (its `LOOK_STYLES` entry in apps/web). */
+export interface LookAccent {
+  /** `text`: the accent is a text colour; `background`: text sits on it. */
+  accentUse: 'text' | 'background';
+  /** The text on an accent background: white (`inverse`) or default dark (`text`). Unused for `text`. */
+  onAccent: 'inverse' | 'text';
 }
 
 export interface ContrastIssueOptions {
@@ -132,6 +146,12 @@ export interface ContrastIssueOptions {
    * Absent means no, which is right for every legacy layout.
    */
   layoutPaintsSecondary?: boolean;
+  /**
+   * How the site's look paints its accent; the accent is checked as it is
+   * actually used. Absent, as for every legacy layout, keeps the original pair:
+   * default dark text on the accent.
+   */
+  lookAccent?: LookAccent;
 }
 
 interface CheckedPair {
@@ -149,7 +169,8 @@ interface CheckedPair {
   onSecondary?: true;
 }
 
-const CHECKED_PAIRS: CheckedPair[] = [
+/** The primary colour's pairs, the same on every layout. */
+const PRIMARY_PAIRS: CheckedPair[] = [
   {
     field: 'primaryColor',
     colorKey: 'primaryColor',
@@ -188,15 +209,61 @@ const CHECKED_PAIRS: CheckedPair[] = [
     label: 'your primary colour as text on the brand tint',
     alwaysWarning: true,
   },
+];
+
+/** The original accent pair: every legacy layout's, and a look's whose accent sits under dark text. */
+const DARK_TEXT_ON_ACCENT: CheckedPair = {
+  field: 'accentColor',
+  colorKey: 'accentColor',
+  against: TEXT_PRIMARY,
+  label: 'default dark text on your accent colour',
+  alwaysWarning: true,
+};
+
+/** A look whose accent sits under white text. */
+const WHITE_TEXT_ON_ACCENT: CheckedPair = {
+  field: 'accentColor',
+  colorKey: 'accentColor',
+  against: TEXT_INVERSE,
+  label: 'white text on your accent colour',
+  alwaysWarning: true,
+};
+
+/** A look whose accent is a text colour: on white, and on the secondary colour where the layout paints it. */
+const ACCENT_AS_TEXT: CheckedPair[] = [
   {
     field: 'accentColor',
     colorKey: 'accentColor',
-    against: TEXT_PRIMARY,
-    label: 'default dark text on your accent colour',
+    against: SURFACE_CARD,
+    label: 'your accent colour as text on white',
     alwaysWarning: true,
   },
-  // The secondary colour, where a look paints it behind text. Advisory: the
-  // colour has never been checked, and must not start blocking anything.
+  {
+    field: 'accentColor',
+    colorKey: 'accentColor',
+    against: { colorKey: 'secondaryColor' },
+    label: 'your accent colour as text on your secondary colour',
+    alwaysWarning: true,
+    onSecondary: true,
+  },
+];
+
+/**
+ * The accent pairs to check: what the layout actually paints. A legacy layout
+ * (no `look`) keeps the original pair. All are advisory even at the write path,
+ * as the accent pair always has been.
+ */
+function accentPairs(look: LookAccent | undefined): CheckedPair[] {
+  if (look === undefined) return [DARK_TEXT_ON_ACCENT];
+  if (look.accentUse === 'text') return ACCENT_AS_TEXT;
+  return [look.onAccent === 'inverse' ? WHITE_TEXT_ON_ACCENT : DARK_TEXT_ON_ACCENT];
+}
+
+/**
+ * The secondary colour, where a look paints it behind text. Advisory: the
+ * colour has never been checked, and must not start blocking anything.
+ */
+const SECONDARY_PAIRS: CheckedPair[] = [
   {
     field: 'secondaryColor',
     colorKey: 'secondaryColor',
@@ -226,12 +293,12 @@ const CHECKED_PAIRS: CheckedPair[] = [
  */
 export function contrastIssues(
   colors: ResolvedBrandColors,
-  { severity, layoutPaintsSecondary = false }: ContrastIssueOptions,
+  { severity, layoutPaintsSecondary = false, lookAccent }: ContrastIssueOptions,
 ): Issue[] {
   const issues: Issue[] = [];
   const seenUnparseable = new Set<string>();
 
-  for (const pair of CHECKED_PAIRS) {
+  for (const pair of [...PRIMARY_PAIRS, ...accentPairs(lookAccent), ...SECONDARY_PAIRS]) {
     if (pair.onSecondary && !layoutPaintsSecondary) continue;
 
     const value = colors[pair.colorKey];
@@ -241,7 +308,7 @@ export function contrastIssues(
         issues.push({
           field: pair.field,
           message: `"${String(value)}" is not a 6-digit hex colour like #C2533A, so the site falls back to its default instead.`,
-          severity: pair.onSecondary ? 'warning' : 'error',
+          severity: pair.colorKey === 'secondaryColor' ? 'warning' : 'error',
         });
       }
       continue;

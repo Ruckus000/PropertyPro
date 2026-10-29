@@ -81,7 +81,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import type { LayoutId } from '@/components/public-site/blocks/types';
-import { paintsSecondary } from '@/components/public-site/layouts/look-styles';
+import { contrastOptionsFor } from '@/components/public-site/layouts/look-styles';
 import { useSitePublishToken } from '@/hooks/use-content-blocks';
 import {
   usePublishSite,
@@ -135,11 +135,12 @@ export interface PublishSheetProps {
    */
   brandColors?: ResolvedBrandColors;
   /**
-   * The layout this publish puts live: the draft look's, else the live one. A
-   * look that paints the secondary colour behind text (Heritage's page, the
-   * section bands of Bayfront and Palm Grove) also gets text and headings
-   * checked on it, from `brandColors.secondaryColor`. Omit and the advisories
-   * cover the primary and accent only, as they always have.
+   * The layout this publish puts live: the draft look's, else the live one. On
+   * a look, the accent is checked as that look uses it, and a look that paints
+   * the secondary colour behind text (Heritage's page, the section bands of
+   * Bayfront and Palm Grove) also gets text and headings checked on it, from
+   * `brandColors.secondaryColor` (`contrastOptionsFor`). Omit, or pass a legacy
+   * layout, and the advisories are the original pairs.
    */
   layout?: LayoutId;
   /**
@@ -469,10 +470,13 @@ function PublishSheetBody({
     // Advisory at publish on purpose: branding is unstaged and already live on
     // the public site, so blocking here cannot un-ship a bad ratio — it would
     // only stop an unrelated copy fix. See the note on `contrastIssues`.
+    // On a look, the colours are checked as that look paints them (the secondary
+    // where it is painted, the accent as it is used); a legacy layout, or none
+    // passed, keeps the original pairs.
     const contrast = brandColors
       ? contrastIssues(brandColors, {
           severity: 'warning',
-          layoutPaintsSecondary: layout !== undefined && paintsSecondary(layout),
+          ...(layout === undefined ? {} : contrastOptionsFor(layout)),
         })
       : [];
     /*

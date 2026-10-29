@@ -256,3 +256,107 @@ describe('contrastIssues — the secondary colour a look paints', () => {
     expect(after).toEqual(before);
   });
 });
+
+describe('contrastIssues — the accent, as each look paints it', () => {
+  const ON_WHITE_TEXT = { accentUse: 'background', onAccent: 'inverse' } as const; // Palm Grove
+  const ON_DARK_TEXT = { accentUse: 'background', onAccent: 'text' } as const; // Bayfront, Plain & Simple
+  const AS_TEXT = { accentUse: 'text', onAccent: 'inverse' } as const; // Heritage
+
+  /** The accent's issues, each named by its label. */
+  function accentLabels(issues: ReturnType<typeof contrastIssues>) {
+    return issues.filter((i) => i.field === 'accentColor').map((i) => i.message.split(' has a contrast ratio')[0]);
+  }
+
+  it('keeps the original pair without a look: default dark text on the accent', () => {
+    // Heritage's bronze, on a legacy layout: dark text on it is 2.83:1.
+    const issues = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#7A5B27' }, { severity: 'warning' });
+    expect(accentLabels(issues)).toEqual(['default dark text on your accent colour']);
+  });
+
+  it('checks white text on an accent a look puts white text on', () => {
+    // Palm Grove's terracotta takes white at 4.99:1, though dark text on it would be 3.56:1.
+    const own = contrastIssues(
+      { primaryColor: '#2D5E4A', accentColor: '#B4532A' },
+      { severity: 'warning', lookAccent: ON_WHITE_TEXT },
+    );
+    expect(accentLabels(own)).toEqual([]);
+
+    // A custom gold accent fails white text: 2.17:1.
+    const gold = contrastIssues(
+      { primaryColor: '#2D5E4A', accentColor: '#E9A23B' },
+      { severity: 'warning', lookAccent: ON_WHITE_TEXT },
+    ).filter((i) => i.field === 'accentColor');
+    expect(gold).toHaveLength(1);
+    expect(gold[0]!.message).toMatch(/^white text on your accent colour has a contrast ratio of 2\.17:1, below the 4\.5:1/);
+    expect(gold[0]!.severity).toBe('warning');
+  });
+
+  it('checks default dark text on an accent a look puts dark text on', () => {
+    // Bayfront's gold takes dark text at 8.19:1; a custom bronze accent fails at 2.83:1.
+    const own = contrastIssues(
+      { primaryColor: '#0B4F5C', accentColor: '#E9A23B' },
+      { severity: 'warning', lookAccent: ON_DARK_TEXT },
+    );
+    expect(accentLabels(own)).toEqual([]);
+
+    const bronze = contrastIssues(
+      { primaryColor: '#0B4F5C', accentColor: '#7A5B27' },
+      { severity: 'warning', lookAccent: ON_DARK_TEXT },
+    ).filter((i) => i.field === 'accentColor');
+    expect(bronze).toHaveLength(1);
+    expect(bronze[0]!.message).toMatch(/^default dark text on your accent colour has a contrast ratio of 2\.83:1/);
+  });
+
+  it('checks a text accent on white and on the secondary colour the layout paints', () => {
+    const options = { severity: 'warning' as const, lookAccent: AS_TEXT, layoutPaintsSecondary: true };
+    // Heritage's bronze reads at 6.21:1 on white and 5.90:1 on its cream.
+    const own = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#7A5B27', secondaryColor: '#FBF8F1' }, options);
+    expect(accentLabels(own)).toEqual([]);
+
+    // A custom tan accent fails as text on both: 2.24:1 and 2.13:1.
+    const tan = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#C9A86A', secondaryColor: '#FBF8F1' }, options);
+    expect(accentLabels(tan)).toEqual([
+      'your accent colour as text on white',
+      'your accent colour as text on your secondary colour',
+    ]);
+
+    // #8E6A2F passes on white (4.90:1) and fails on a darker cream (3.99:1): the pairs are separate.
+    const darkerCream = contrastIssues(
+      { primaryColor: '#1D2B4A', accentColor: '#8E6A2F', secondaryColor: '#F0E6D2' },
+      options,
+    );
+    expect(accentLabels(darkerCream)).toEqual(['your accent colour as text on your secondary colour']);
+  });
+
+  it('checks a text accent on the secondary colour only where the layout paints it', () => {
+    const issues = contrastIssues(
+      { primaryColor: '#1D2B4A', accentColor: '#C9A86A', secondaryColor: '#FBF8F1' },
+      { severity: 'warning', lookAccent: AS_TEXT },
+    );
+    expect(accentLabels(issues)).toEqual(['your accent colour as text on white']);
+  });
+
+  it('keeps every accent pair advisory, even at the write path', () => {
+    // A mid grey fails every accent pair: white on it 4.48:1, dark text 3.96:1, as text on white 4.44:1.
+    for (const lookAccent of [ON_WHITE_TEXT, ON_DARK_TEXT, AS_TEXT]) {
+      const issues = contrastIssues(
+        { primaryColor: '#1D2B4A', accentColor: '#777777', secondaryColor: '#999999' },
+        { severity: 'error', lookAccent, layoutPaintsSecondary: true },
+      ).filter((i) => i.field === 'accentColor');
+      expect(issues.length, lookAccent.accentUse).toBeGreaterThan(0);
+      expect(publishBlocked(issues)).toBe(false);
+    }
+  });
+
+  it('still reports an unparseable accent once, as an error, under a look', () => {
+    for (const lookAccent of [ON_WHITE_TEXT, ON_DARK_TEXT, AS_TEXT]) {
+      const issues = contrastIssues(
+        { primaryColor: '#1D2B4A', accentColor: '#abc', secondaryColor: '#FBF8F1' },
+        { severity: 'warning', lookAccent, layoutPaintsSecondary: true },
+      ).filter((i) => i.field === 'accentColor');
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({ severity: 'error' });
+      expect(issues[0]!.message).toMatch(/6-digit hex/);
+    }
+  });
+});
