@@ -5,7 +5,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
-import { recordsNeedingAttention, summarizeRecords } from '@/lib/site-editor/records-status';
+import {
+  autoLinkedRecordCount,
+  conditionalRecordItems,
+  missingRecordItems,
+  recordsNeedingAttention,
+  summarizeRecords,
+} from '@/lib/site-editor/records-status';
 
 let nextId = 1;
 function item(overrides: Partial<ChecklistItemData>): ChecklistItemData {
@@ -112,5 +118,91 @@ describe('recordsNeedingAttention', () => {
       item({ category: 'insurance', documentId: 2, documentState: 'draft' }),
     ]);
     expect(recordsNeedingAttention(groups)).toBe(2);
+  });
+});
+
+const COVERED = { communityType: 'condo_718', unitCount: 60 };
+
+describe('missingRecordItems', () => {
+  it('below the threshold nothing is missing', () => {
+    const items = [item({}), item({ documentId: 3, documentState: 'draft' })];
+    expect(missingRecordItems(items, COVERED)).toHaveLength(2);
+    expect(missingRecordItems(items, { communityType: 'condo_718', unitCount: 24 })).toEqual([]);
+    expect(missingRecordItems(items, { communityType: 'apartment', unitCount: 500 })).toEqual([]);
+  });
+
+  it('a record linked to a draft is not_posted', () => {
+    const [missing] = missingRecordItems(
+      [item({ id: 77, templateKey: '718_budget', status: 'overdue', documentId: 42, documentState: 'draft' })],
+      COVERED,
+    );
+    expect(missing).toEqual({
+      itemId: 77,
+      templateKey: '718_budget',
+      title: 'Item',
+      category: 'governing_documents',
+      state: 'not_posted',
+    });
+  });
+
+  it('a deleted file is nothing_posted, a posted file past its window is out_of_date, a current one is not listed', () => {
+    const states = missingRecordItems(
+      [
+        item({ documentId: 9, documentState: 'deleted' }),
+        item({
+          status: 'overdue',
+          documentId: 1,
+          documentState: 'posted',
+          documentPostedAt: '2020-01-01T00:00:00.000Z',
+          rollingWindow: { months: 12 },
+        }),
+        posted(),
+      ],
+      COVERED,
+    ).map((m) => m.state);
+    expect(states).toEqual(['nothing_posted', 'out_of_date']);
+  });
+
+  it('items marked not applicable are excluded', () => {
+    const items = [
+      item({ status: 'not_applicable', isApplicable: false }),
+      item({ isApplicable: false }),
+    ];
+    expect(missingRecordItems(items, COVERED)).toEqual([]);
+    expect(conditionalRecordItems(items, COVERED)).toEqual([]);
+  });
+
+  it('conditional items are only in conditionalRecordItems', () => {
+    const conditional = item({ id: 5, isConditional: true });
+    expect(missingRecordItems([conditional], COVERED)).toEqual([]);
+    expect(conditionalRecordItems([conditional], COVERED).map((m) => m.itemId)).toEqual([5]);
+    // The other way round: an ordinary item is never offered as conditional.
+    expect(conditionalRecordItems([item({ id: 6 })], COVERED)).toEqual([]);
+    // Once a conditional item has a record it is no longer a question.
+    expect(conditionalRecordItems([posted({ isConditional: true })], COVERED)).toEqual([]);
+  });
+});
+
+describe('autoLinkedRecordCount', () => {
+  it('ignores items relinked by hand', () => {
+    expect(
+      autoLinkedRecordCount([
+        posted({ documentId: 10, autoLinkedDocumentId: 10 }),
+        // Relinked to another file: the auto link is left behind.
+        posted({ documentId: 11, autoLinkedDocumentId: 10 }),
+        // Unlinked afterwards.
+        item({ documentId: null, autoLinkedDocumentId: 10 }),
+      ]),
+    ).toBe(1);
+  });
+
+  it('does not count two nulls as a match', () => {
+    expect(
+      autoLinkedRecordCount([
+        item({ documentId: null, autoLinkedDocumentId: null }),
+        item({ documentId: null }),
+        item({ documentId: 4, autoLinkedDocumentId: null }),
+      ]),
+    ).toBe(0);
   });
 });
