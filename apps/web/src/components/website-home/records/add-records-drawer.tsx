@@ -88,6 +88,8 @@ interface Outcome {
   key: string;
   ok: boolean;
   text: string;
+  /** The file posted to Documents but could not be linked to its record. */
+  postedUnlinked?: boolean;
 }
 
 function sentence(message: string): string {
@@ -243,6 +245,7 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
         record({
           key: row.key,
           ok: false,
+          postedUnlinked: documentId != null,
           text:
             documentId != null
               ? `${name} is posted, but we couldn't link it to ${item.title}. Press Post to try the link again.`
@@ -423,6 +426,11 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
                       </li>
                     ))}
                   </ul>
+                  {outcomes.some((outcome) => outcome.postedUnlinked) && (
+                    <p className="mt-2 text-sm text-content-secondary">
+                      A file that posted but couldn&apos;t be linked stays in Documents, so nothing is lost.
+                    </p>
+                  )}
                 </div>
               </section>
             )}

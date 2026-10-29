@@ -27,14 +27,14 @@ import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { getUserPreference, mergeUserPreference } from '@/lib/services/user-preferences-service';
+import {
+  RECORDS_ALERT_SNOOZE_MS,
+  readSnoozedUntil,
+  recordsAlertSnoozeKey as snoozeKey,
+} from '@/lib/site-editor/records-alert-snooze';
 import { missingRecordItems } from '@/lib/site-editor/records-status';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import { recordsAlertGetContract, recordsAlertPatchContract } from './contract';
-
-/** Seven days, in milliseconds (D11). */
-const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
-
-const snoozeKey = (communityId: number) => `site_records_alert:${communityId}`;
 
 /** The website routes' gate, minus the community step the runner has already taken. */
 async function ensurePmAccess(communityId: number, { write }: { write: boolean }) {
@@ -45,17 +45,6 @@ async function ensurePmAccess(communityId: number, { write }: { write: boolean }
   requireRole(membership, PM_MANAGER_ROLES, 'Only property managers can see the website records alert');
   await requirePlanFeature(communityId, 'hasSiteEditor');
   return { userId, membership };
-}
-
-/** The stored snooze when it is still in force, else null. Reads only the key this route writes. */
-function readSnoozedUntil(stored: unknown, now: number): string | null {
-  const value =
-    typeof stored === 'object' && stored !== null
-      ? (stored as Record<string, unknown>)['snoozedUntil']
-      : undefined;
-  if (typeof value !== 'string') return null;
-  const until = new Date(value).getTime();
-  return Number.isNaN(until) || until <= now ? null : value;
 }
 
 export const GET = withErrorHandler(
@@ -81,7 +70,7 @@ export const GET = withErrorHandler(
 export const PATCH = withErrorHandler(
   runRoute(recordsAlertPatchContract, async ({ communityId }) => {
     const { userId } = await ensurePmAccess(communityId, { write: true });
-    const snoozedUntil = new Date(Date.now() + SNOOZE_MS).toISOString();
+    const snoozedUntil = new Date(Date.now() + RECORDS_ALERT_SNOOZE_MS).toISOString();
     await mergeUserPreference(userId, snoozeKey(communityId), { snoozedUntil });
     return { snoozedUntil };
   }),

@@ -287,6 +287,30 @@ describe('RequirementsPill', () => {
     expect(trigger).toHaveClass('text-status-danger');
   });
 
+  it('the red records pill opens on how many records are missing, linked to the website home', async () => {
+    const user = userEvent.setup();
+    checklist.data = records(9, 12);
+    renderWith(pill());
+
+    await user.click(screen.getByRole('button', { name: 'Records: 9 of 12 posted' }));
+
+    expect(await screen.findByText('3 records are still missing')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'See which ones' })).toHaveAttribute(
+      'href',
+      '/pm/website?communityId=7#records',
+    );
+  });
+
+  it('the green pill lists no missing records', async () => {
+    const user = userEvent.setup();
+    renderWith(pill());
+
+    await user.click(screen.getByRole('button', { name: 'Required items: all set' }));
+
+    await screen.findByText('Required by Florida law');
+    expect(screen.queryByText(/still missing/)).not.toBeInTheDocument();
+  });
+
   it('keeps naming a hidden section first, whatever the records say', () => {
     checklist.data = records(9, 12);
     editor.blocks = [block(3, 'meetings', { content: { hidden: true } }), block(4, 'documents')];

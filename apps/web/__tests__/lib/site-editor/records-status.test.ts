@@ -181,6 +181,27 @@ describe('missingRecordItems', () => {
     // Once a conditional item has a record it is no longer a question.
     expect(conditionalRecordItems([posted({ isConditional: true })], COVERED)).toEqual([]);
   });
+
+  it('a conditional item whose record is a draft or out of date is missing, never "all set"', () => {
+    const draft = item({ id: 7, isConditional: true, status: 'overdue', documentId: 3, documentState: 'draft' });
+    const stale = item({
+      id: 8,
+      isConditional: true,
+      status: 'overdue',
+      documentId: 4,
+      documentState: 'posted',
+      documentPostedAt: '2020-01-01T00:00:00.000Z',
+      rollingWindow: { months: 12 },
+    });
+    const current = posted({ id: 9, isConditional: true });
+
+    expect(missingRecordItems([draft, stale, current], COVERED).map((m) => [m.itemId, m.state])).toEqual([
+      [7, 'not_posted'],
+      [8, 'out_of_date'],
+    ]);
+    // Neither is offered as "does this apply?" either: it has a record.
+    expect(conditionalRecordItems([draft, stale], COVERED)).toEqual([]);
+  });
 });
 
 describe('autoLinkedRecordCount', () => {

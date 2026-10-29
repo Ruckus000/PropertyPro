@@ -12,12 +12,19 @@ import {
   categoryRequiresRedactionAttestation,
 } from "@/components/documents/redaction-attestation-field";
 
-interface UploadDocumentModalProps {
+export interface UploadDocumentModalProps {
   communityId: number;
   defaultTitle: string;
   categoryName: string;
   onUploaded: (documentId: number) => void;
   onClose: () => void;
+  /**
+   * Ask the server not to link the document to a record itself. For a caller
+   * that links it, in `onUploaded`, to the record the person chose: posting a
+   * document otherwise links it to the one record it fits, which can be a
+   * different record, so one file would fill two.
+   */
+  skipAutoLink?: boolean;
 }
 
 export function UploadDocumentModal({
@@ -26,6 +33,7 @@ export function UploadDocumentModal({
   categoryName,
   onUploaded,
   onClose,
+  skipAutoLink = false,
 }: UploadDocumentModalProps) {
   const [title, setTitle] = useState(defaultTitle);
   const [file, setFile] = useState<File | null>(null);
@@ -80,6 +88,7 @@ export function UploadDocumentModal({
         categoryId: resolvedCategoryId,
         file,
         redactionAttested,
+        ...(skipAutoLink ? { skipAutoLink: true } : {}),
       });
       setWarnings(result.warnings);
       // Clear the file AND the attestation before the early-return below. On a

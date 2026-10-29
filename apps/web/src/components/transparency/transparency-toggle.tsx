@@ -156,7 +156,9 @@ export function TransparencyToggle({ communityId, subdomain }: Props) {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm text-content-secondary">
-              <StatusBadge status={enabled ? 'completed' : 'neutral'} showLabel={false} />
+              {/* Hidden from assistive tech: the words beside it say the same, and a label on
+                  a span with no role is not read (axe aria-prohibited-attr). */}
+              <StatusBadge status={enabled ? 'completed' : 'neutral'} showLabel={false} aria-hidden="true" />
               <span>{enabled ? 'Page is live' : 'Page is not publicly visible'}</span>
             </div>
             <Button disabled={saving || needsAcknowledgment} type="submit">

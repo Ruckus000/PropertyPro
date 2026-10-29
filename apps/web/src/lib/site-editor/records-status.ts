@@ -137,9 +137,12 @@ function toMissing(item: ChecklistItemData, state: MissingRecord['state']): Miss
 }
 
 /**
- * The records a covered association still owes the website: applicable,
- * non-conditional items whose record is not up and current. Empty below the
- * statute's size threshold and for apartments, where nothing is owed.
+ * The records a covered association still owes the website: applicable items
+ * whose record is not up and current. A conditional item is owed once it has a
+ * record (a draft, or a posted file that has gone out of date), as
+ * `summarizeRecords` counts it; with no record it is a question for
+ * `conditionalRecordItems` instead. Empty below the statute's size threshold
+ * and for apartments, where nothing is owed.
  *
  * The state is the same one `summarizeRecords` reads off the loader's derived
  * status, so a link to a draft or a deleted file is `not_posted` /
@@ -151,7 +154,7 @@ export function missingRecordItems(
 ): MissingRecord[] {
   if (requirementLevel(subject) !== 'required') return [];
   return items.flatMap((item) => {
-    if (item.isApplicable === false || item.isConditional) return [];
+    if (item.isApplicable === false || (item.isConditional && !hasRecord(item))) return [];
     const state = itemStatus(item);
     return state === 'up_to_date' ? [] : [toMissing(item, state)];
   });

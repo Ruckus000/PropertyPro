@@ -493,4 +493,21 @@ describe('closing', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
   });
+
+  it('says a file that posted but could not be linked stays in Documents', async () => {
+    const note = "A file that posted but couldn't be linked stays in Documents, so nothing is lost.";
+    linkMock.mockRejectedValueOnce(new Error('PATCH failed: 500'));
+    const { user } = renderDrawer({ missing: [BYLAWS, BUDGET] });
+    await drop(user, pdf('bylaws.pdf'));
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+
+    await screen.findByText(/bylaws.pdf is posted, but we couldn't link it/);
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+
+    // A file that simply posted says nothing of the kind.
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+    await screen.findByText('Posted bylaws.pdf as Bylaws.');
+    expect(screen.queryByText(note)).not.toBeInTheDocument();
+  });
 });

@@ -59,22 +59,12 @@ function pageExistsForPathname(pathname: string): boolean {
   return walk(segments, APP_ROOT);
 }
 
-/**
- * Pages an action points at before the page exists.
- *
- * ponytail: `/pm/website` (the website home) lands in Task 26 of the website
- * builder, in the same PR as the nav and checklist links that now point at it.
- * Trigger: Task 26 adds `pm/website/page.tsx`; delete this set in that commit.
- */
-const PENDING_PAGES = new Set(['/pm/website']);
-
 describe('ACTION_ROUTES — every href resolves to a real page', () => {
   it.each(Object.entries(ACTION_ROUTES))(
     '%s resolves to an existing page.tsx',
     (key, action) => {
       const href = action.href(CID);
       const pathname = href.split('?')[0] ?? href;
-      if (PENDING_PAGES.has(pathname)) return;
       expect(
         pageExistsForPathname(pathname),
         `ACTION_ROUTES["${key}"] => ${href} — no page.tsx found at ${pathname}`,

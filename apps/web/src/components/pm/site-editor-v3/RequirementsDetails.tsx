@@ -11,6 +11,7 @@
  */
 
 import { useId, useState } from 'react';
+import Link from 'next/link';
 import { CircleCheck, TriangleAlert } from 'lucide-react';
 import { requiredSectionStatute } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
@@ -23,10 +24,22 @@ export interface RequirementsDetailsProps {
   onClose: () => void;
   onGoToSection: (target: SlotTarget) => void;
   onAddSection: () => void;
+  /**
+   * Records the statute names that the website still lacks
+   * (`missingRecordItems`). The pill reads "Records: 9 of 12 posted" for them,
+   * so the list says so too and links to the website home's Records section,
+   * rather than showing only sections that are all in place.
+   */
+  missingRecordCount?: number;
 }
 
-export function RequirementsDetails({ onClose, onGoToSection, onAddSection }: RequirementsDetailsProps) {
-  const { level, statuses, lawFor, showSection, subject, threshold, unitCountUnknown } =
+export function RequirementsDetails({
+  onClose,
+  onGoToSection,
+  onAddSection,
+  missingRecordCount = 0,
+}: RequirementsDetailsProps) {
+  const { level, statuses, lawFor, showSection, subject, threshold, unitCountUnknown, communityId } =
     useRequiredSections();
   if (threshold === null) return null;
   const statute = requiredSectionStatute(subject.communityType);
@@ -108,6 +121,25 @@ export function RequirementsDetails({ onClose, onGoToSection, onAddSection }: Re
             ) : null}
           </li>
         ))}
+        {missingRecordCount > 0 ? (
+          <li className="flex items-start gap-2.5 border-t border-edge-subtle py-2.5 first:border-t-0">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-danger" aria-hidden="true" />
+            <span className="min-w-0 flex-1 text-sm">
+              <span className="block font-medium text-content">
+                {missingRecordCount === 1
+                  ? '1 record is still missing'
+                  : `${missingRecordCount} records are still missing`}
+              </span>
+              <Link
+                href={`/pm/website?communityId=${communityId}#records`}
+                onClick={onClose}
+                className="text-xs font-medium text-content-link underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+              >
+                See which ones
+              </Link>
+            </span>
+          </li>
+        ) : null}
       </ul>
       <UnitCountField />
     </>

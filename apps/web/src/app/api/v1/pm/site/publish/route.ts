@@ -64,12 +64,13 @@ export const POST = withErrorHandler(
       expectedPublishedAt,
     });
 
-    // Wizard final-step publish marks onboarding complete. Done after (and
-    // outside) the publish transaction on purpose: completion is a separate
-    // concern from draft-promotion, and the wizard should mark complete even
-    // when the publish was a no-op (`nothing-to-publish` rolls back the tx but
-    // is not an error — the PM still finished the wizard). Errors from
-    // publishCommunitySite short-circuit before reaching here.
+    // A caller that asks for it marks website setup complete. No caller in the
+    // app sends the flag today (the look picker's Publish marks setup complete
+    // through the look route); it stays for tabs opened before that change.
+    // Done after (and outside) the publish transaction on purpose: completion
+    // is a separate concern from draft-promotion, and it holds even when the
+    // publish was a no-op (`nothing-to-publish` rolls back the tx but is not an
+    // error). Errors from publishCommunitySite short-circuit before reaching here.
     if (body.markOnboardingComplete) {
       await markSiteOnboardingComplete(communityId);
     }

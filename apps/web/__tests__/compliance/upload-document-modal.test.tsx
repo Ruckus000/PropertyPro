@@ -119,3 +119,48 @@ describe('UploadDocumentModal redaction attestation', () => {
     expect(screen.getByRole('button', { name: 'Upload & Link' })).toBeDisabled();
   });
 });
+
+describe('UploadDocumentModal skipAutoLink', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useDocumentUploadMock.mockReturnValue({
+      uploadDocument: uploadDocumentMock,
+      isUploading: false,
+      progress: 0,
+      error: null,
+    });
+    // A category that needs no attestation, so one click uploads.
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [{ id: 3, name: 'Governing Documents', slug: 'governing-documents', description: null }],
+      isLoading: false,
+      error: null,
+      resolveCategoryId: () => 3,
+    });
+    uploadDocumentMock.mockResolvedValue({ document: { id: 21 }, warnings: [] });
+  });
+
+  async function upload(skipAutoLink?: boolean) {
+    const { container } = render(
+      <UploadDocumentModal
+        communityId={133}
+        defaultTitle="Bylaws"
+        categoryName="Governing Documents"
+        onUploaded={vi.fn()}
+        onClose={vi.fn()}
+        {...(skipAutoLink === undefined ? {} : { skipAutoLink })}
+      />,
+    );
+    chooseFile(container, 'bylaws.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Upload & Link' }));
+    await vi.waitFor(() => expect(uploadDocumentMock).toHaveBeenCalledTimes(1));
+    return uploadDocumentMock.mock.calls[0]![0] as Record<string, unknown>;
+  }
+
+  it('asks the server not to link the document itself when the caller links it', async () => {
+    expect(await upload(true)).toMatchObject({ skipAutoLink: true });
+  });
+
+  it('sends the request it always has without the prop', async () => {
+    expect(await upload()).not.toHaveProperty('skipAutoLink');
+  });
+});
