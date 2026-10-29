@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { applyStarterPackMock, seedBrandingMock, captureExceptionMock } = vi.hoisted(() => ({
+const { applyLookMock, applyStarterPackMock, seedBrandingMock, captureExceptionMock } = vi.hoisted(() => ({
+  applyLookMock: vi.fn(),
   applyStarterPackMock: vi.fn(),
   seedBrandingMock: vi.fn(),
   captureExceptionMock: vi.fn(),
 }));
 
+// The look service decides which look a type gets and publishes it
+// (site-look-service.test.ts and new-community-look.integration.test.ts); this
+// file is about the wrapper both creation paths call.
+vi.mock('@/lib/services/site-look-service', () => ({
+  applyLookAtCreation: applyLookMock,
+}));
+// The two halves a new community used to get. They are mocked so a test can
+// show they no longer run, not so the wrapper can call them.
 vi.mock('@/lib/services/starter-pack-service', () => ({
   applyStarterPackToCommunity: applyStarterPackMock,
 }));
@@ -22,35 +31,68 @@ describe('seedNewCommunitySite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    applyStarterPackMock.mockResolvedValue({ applied: true, blockCount: 5, packSlug: 'condo-v1' });
-    seedBrandingMock.mockResolvedValue(undefined);
+    applyLookMock.mockResolvedValue({ applied: true, lookId: 'bayfront' });
   });
 
-  it('applies the starter pack and the default branding for the community type', async () => {
-    await seedNewCommunitySite(42, 'hoa_720');
-    expect(applyStarterPackMock).toHaveBeenCalledWith(42, 'hoa_720');
-    expect(seedBrandingMock).toHaveBeenCalledWith(42, 'hoa_720');
+  it('a condo gets the bayfront look with published sections', async () => {
+    await seedNewCommunitySite(42, 'condo_718');
+
+    // One call: the look service picks the look for the type and publishes its
+    // layout, colours and sections together.
+    expect(applyLookMock).toHaveBeenCalledTimes(1);
+    expect(applyLookMock).toHaveBeenCalledWith(42, 'condo_718');
     expect(captureExceptionMock).not.toHaveBeenCalled();
+    // Neither of the two pre-look halves runs any more: a starter pack on the
+    // type's legacy layout is exactly what the look replaces.
+    expect(applyStarterPackMock).not.toHaveBeenCalled();
+    expect(seedBrandingMock).not.toHaveBeenCalled();
   });
 
-  it('still seeds the branding when the starter pack fails, and reports the failure', async () => {
-    const err = new Error('pack catalog unreachable');
-    applyStarterPackMock.mockRejectedValue(err);
+  it('an apartment gets plain & simple', async () => {
+    applyLookMock.mockResolvedValue({ applied: true, lookId: 'plain-simple' });
+
+    await seedNewCommunitySite(7, 'apartment');
+
+    expect(applyLookMock).toHaveBeenCalledTimes(1);
+    expect(applyLookMock).toHaveBeenCalledWith(7, 'apartment');
+    expect(applyStarterPackMock).not.toHaveBeenCalled();
+    expect(seedBrandingMock).not.toHaveBeenCalled();
+  });
+
+  it('an HOA gets palm grove', async () => {
+    applyLookMock.mockResolvedValue({ applied: true, lookId: 'palm-grove' });
+
+    await seedNewCommunitySite(9, 'hoa_720');
+
+    expect(applyLookMock).toHaveBeenCalledTimes(1);
+    expect(applyLookMock).toHaveBeenCalledWith(9, 'hoa_720');
+  });
+
+  it('a failure is reported, never thrown', async () => {
+    const err = new Error('colour set missing');
+    applyLookMock.mockRejectedValue(err);
+
     await expect(seedNewCommunitySite(42, 'condo_718')).resolves.toBeUndefined();
-    expect(seedBrandingMock).toHaveBeenCalledWith(42, 'condo_718');
+
+    expect(captureExceptionMock).toHaveBeenCalledTimes(1);
     expect(captureExceptionMock).toHaveBeenCalledWith(
       err,
-      expect.objectContaining({ tags: { site_seed: 'starter_pack' } }),
+      expect.objectContaining({ tags: { site_seed: 'look' }, extra: { communityId: 42 } }),
     );
+    // Logged too, and nothing falls back to the starter pack: a community that
+    // just got created keeps whatever site a retry (or the editor) can finish.
+    expect(console.error).toHaveBeenCalledWith('applyLookAtCreation failed', expect.objectContaining({ communityId: 42 }));
+    expect(applyStarterPackMock).not.toHaveBeenCalled();
+    expect(seedBrandingMock).not.toHaveBeenCalled();
   });
 
-  it('never throws when the branding fails, and reports it', async () => {
-    const err = new Error('layout catalog unreachable');
-    seedBrandingMock.mockRejectedValue(err);
-    await expect(seedNewCommunitySite(42, 'apartment')).resolves.toBeUndefined();
-    expect(captureExceptionMock).toHaveBeenCalledWith(
-      err,
-      expect.objectContaining({ tags: { site_seed: 'branding' } }),
-    );
+  it('a community that already has a site is left as it is', async () => {
+    // A provisioning retry: the look service skips a community with published
+    // sections, and that is not a failure.
+    applyLookMock.mockResolvedValue({ applied: false, lookId: 'bayfront' });
+
+    await expect(seedNewCommunitySite(42, 'condo_718')).resolves.toBeUndefined();
+
+    expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 });

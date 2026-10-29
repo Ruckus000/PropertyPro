@@ -1,7 +1,7 @@
 /**
- * The look service: a new community's suggested look, published at creation;
- * a look switch saved as a draft; and the loader both the switch and the look
- * previews plan from.
+ * The look service: a new community's suggested look, published at creation
+ * (and a prospect demo's, filled on entry); a look switch saved as a draft; and
+ * the loader both the switch and the look previews plan from.
  *
  * The statements are mocked here, but the design save is real
  * (`resolveDesign` / `writeDraftDesign`, down to `mergeBranding`), so these
@@ -31,6 +31,7 @@ vi.mock('@propertypro/db', () => ({
   communities: {
     id: 'communities.id',
     communityType: 'communities.community_type',
+    isDemo: 'communities.is_demo',
     branding: 'communities.branding',
     sitePublishedAt: 'communities.site_published_at',
   },
@@ -69,7 +70,12 @@ import {
   sitePages as sitePagesTable,
   siteStarterPacks as siteStarterPacksTable,
 } from '@propertypro/db';
-import { applyLookAtCreation, draftLookSwitch, loadLookSwitchInput } from '@/lib/services/site-look-service';
+import {
+  applyLookAtCreation,
+  draftLookSwitch,
+  fillDemoCommunitySite,
+  loadLookSwitchInput,
+} from '@/lib/services/site-look-service';
 import { LOOK_IDS, getLook, type LookId, type LookSection } from '@/lib/site-looks/looks';
 import { SITE_LOOK_PRESETS } from '../../fixtures/site-look-presets';
 
@@ -146,6 +152,10 @@ interface World {
   homeRows?: BlockRow[];
   /** The answers to "has this community any published section?", in order. */
   publishedChecks?: unknown[][];
+  /** The community's own row as `fillDemoCommunitySite` reads it; absent when no such community. */
+  demo?: { communityType: string; isDemo: boolean };
+  /** Every section row the community ever had, removed ones included. */
+  everBlocks?: unknown[];
 }
 
 /** One scoped client for every scope: it answers each read by table (and, for site_blocks, by predicate). */
@@ -161,6 +171,8 @@ function buildScoped(world: World = {}) {
       if (predicate.includes('site_blocks.page_id')) return world.homeRows ?? [];
       return [];
     }),
+    selectFrom: vi.fn(async (_table: unknown, _fields: unknown, _where: unknown) => (world.demo ? [world.demo] : [])),
+    queryIncludingDeleted: vi.fn(async (_table: unknown) => world.everBlocks ?? []),
     insert: vi.fn(async (_table: unknown, _values: InsertedBlock) => [{ id: 1 }]),
     update: vi.fn(async (_table: unknown, _values: unknown, _where: unknown) => []),
     softDelete: vi.fn(async (_table: unknown, _where: unknown) => []),
@@ -338,6 +350,140 @@ describe('applyLookAtCreation', () => {
 
     expect(mocks.updateBrandingForCommunity).not.toHaveBeenCalled();
     expect(client.transaction).not.toHaveBeenCalled();
+  });
+
+  it("keepBrand writes the look's layout and colour-set name but not its colours or fonts", async () => {
+    const { scoped } = setUp({ publishedChecks: [[], []] });
+
+    const result = await applyLookAtCreation(COMMUNITY_ID, 'condo_718', { keepBrand: true });
+
+    expect(result).toEqual({ applied: true, lookId: 'bayfront' });
+    // A community that wears its own colours and fonts keeps them: the branding
+    // patch names only the layout and the colour set, so the merge leaves every
+    // other branding field where it is.
+    expect(mocks.updateBrandingForCommunity).toHaveBeenCalledTimes(1);
+    expect(mocks.updateBrandingForCommunity).toHaveBeenCalledWith(COMMUNITY_ID, {
+      layoutId: 'bayfront',
+      themePresetSlug: 'bayfront',
+    });
+    // The sections are the look's all the same.
+    expect(scoped.insert).toHaveBeenCalledTimes(look('bayfront').sections.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fillDemoCommunitySite
+// ---------------------------------------------------------------------------
+
+describe('fillDemoCommunitySite', () => {
+  it('a prospect demo with no section rows gets its suggested look', async () => {
+    const { scoped, tx, updates } = setUp({
+      demo: { communityType: 'hoa_720', isDemo: true },
+      everBlocks: [],
+      publishedChecks: [[], []],
+    });
+
+    await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
+
+    // It read the community's own row, and every section row it ever had.
+    expect(scoped.selectFrom).toHaveBeenCalledWith(
+      communitiesTable,
+      { communityType: 'communities.community_type', isDemo: 'communities.is_demo' },
+      { __eq: ['communities.id', COMMUNITY_ID] },
+    );
+    expect(scoped.queryIncludingDeleted).toHaveBeenCalledTimes(1);
+
+    // The HOA's look, live: every section published in order, on a published
+    // home page, and the site stamped as published.
+    const sections = look('palm-grove').sections;
+    expect(insertedBlocks(scoped)).toEqual(
+      sections.map((section, i) => ({
+        communityId: COMMUNITY_ID,
+        pageId: HOME_PAGE_ID,
+        blockType: section.blockType,
+        blockOrder: i + 1,
+        isDraft: false,
+        publishedAt: expect.any(Date),
+        content: section.content,
+      })),
+    );
+    expect(mocks.ensureHomePage).toHaveBeenCalledWith(COMMUNITY_ID, tx, { publishedAt: expect.any(Date) });
+    expect(updates.find((u) => u.table === communitiesTable)?.values).toEqual({ sitePublishedAt: expect.any(Date) });
+  });
+
+  it("a prospect demo keeps the prospect's own colours and fonts", async () => {
+    // The admin demo form requires all five, and the whole demo wears them: its
+    // website, its dashboard and its mobile preview. Only the layout and the
+    // colour set's name are the look's.
+    setUp({ demo: { communityType: 'condo_718', isDemo: true }, publishedChecks: [[], []] });
+
+    await fillDemoCommunitySite(COMMUNITY_ID);
+
+    expect(mocks.updateBrandingForCommunity).toHaveBeenCalledTimes(1);
+    expect(mocks.updateBrandingForCommunity).toHaveBeenCalledWith(COMMUNITY_ID, {
+      layoutId: 'bayfront',
+      themePresetSlug: 'bayfront',
+    });
+  });
+
+  it('a demo with any section row, even a removed one, is left alone', async () => {
+    // Removing a section soft-deletes it, so a prospect who emptied the site
+    // leaves a row behind that keeps it empty.
+    const { scoped, client } = setUp({
+      demo: { communityType: 'hoa_720', isDemo: true },
+      everBlocks: [{ id: 5, blockType: 'hero', deletedAt: new Date('2026-10-01T00:00:00Z') }],
+    });
+
+    await fillDemoCommunitySite(COMMUNITY_ID);
+
+    // Nothing written: no branding, no transaction, no section.
+    expect(mocks.updateBrandingForCommunity).not.toHaveBeenCalled();
+    expect(client.transaction).not.toHaveBeenCalled();
+    expect(scoped.insert).not.toHaveBeenCalled();
+    // The removed row is what kept it out: that read ran, and nothing after it,
+    // not even the look service's own published-sections check.
+    expect(scoped.queryIncludingDeleted).toHaveBeenCalledTimes(1);
+    expect(scoped.queryWhere).not.toHaveBeenCalled();
+  });
+
+  it("a community that isn't a demo is left alone", async () => {
+    const { scoped, client } = setUp({ demo: { communityType: 'condo_718', isDemo: false } });
+
+    await fillDemoCommunitySite(COMMUNITY_ID);
+
+    expect(scoped.queryIncludingDeleted).not.toHaveBeenCalled();
+    expect(mocks.updateBrandingForCommunity).not.toHaveBeenCalled();
+    expect(client.transaction).not.toHaveBeenCalled();
+    expect(scoped.insert).not.toHaveBeenCalled();
+  });
+
+  it('a community that does not exist is left alone', async () => {
+    const { scoped, client } = setUp({});
+
+    await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
+
+    expect(scoped.queryIncludingDeleted).not.toHaveBeenCalled();
+    expect(client.transaction).not.toHaveBeenCalled();
+  });
+
+  it('never throws: a failure is logged, and the demo entry goes on', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mocks.createScopedClient.mockImplementation(() => {
+        throw new Error('db down');
+      });
+      await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith('fillDemoCommunitySite failed', expect.objectContaining({ communityId: COMMUNITY_ID }));
+
+      // The same when the look itself cannot be published (a colour set missing).
+      log.mockClear();
+      mocks.listThemePresetsForWizard.mockResolvedValue([]);
+      setUp({ demo: { communityType: 'condo_718', isDemo: true }, publishedChecks: [[]] });
+      await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith('fillDemoCommunitySite failed', expect.objectContaining({ communityId: COMMUNITY_ID }));
+    } finally {
+      log.mockRestore();
+    }
   });
 });
 

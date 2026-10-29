@@ -1,7 +1,9 @@
 /**
- * Give a brand-new community its starting website: the starter pack's
- * published sections on a published Home page, and the community type's
- * default layout and colour set.
+ * Give a brand-new community its website, live from the moment it exists: the
+ * suggested look for its type (a condo gets Bayfront, an HOA Palm Grove, an
+ * apartment Plain & Simple), with the look's layout, colours, fonts and
+ * sections published on a published Home page. The manager never has to build
+ * a site; picking a different look is one click later.
  *
  * Both community-creation paths call this right after the community exists:
  * `createCommunityForPm` (PM-created communities, and provisioning's
@@ -10,41 +12,32 @@
  * it, so a founder who had just paid reached "Live — owners can find you now"
  * with a site that had no pages at all.
  *
- * Best-effort, and each half separately: a failure is logged and reported,
- * never thrown, because losing a community that was just created (or failing
- * a paid signup's provisioning) is worse than an empty site the manager can
- * fill in the editor. A starter-pack failure does not skip the branding.
+ * Best-effort: a failure is logged and reported, never thrown, because losing a
+ * community that was just created (or failing a paid signup's provisioning) is
+ * worse than an empty site the manager can fill in the editor.
  *
- * Safe to call again: `applyStarterPackToCommunity` skips a community that has
- * published sections (checked under the community row lock), and
- * `seedDefaultSiteBranding` skips one that already has a layout. Provisioning
- * retries depend on that.
+ * Safe to call again: `applyLookAtCreation` skips a community that has
+ * published sections (checked under the community row lock) and writes the
+ * branding before the sections, so a retry finishes a site an earlier failure
+ * left half-built. Provisioning retries depend on that. It leaves
+ * `site_onboarding_completed_at` null, so the "customize your site" prompts
+ * still show.
  *
  * AUTHZ: the caller must have just created the community (see
- * `applyStarterPackToCommunity`).
+ * `applyLookAtCreation`).
  */
 import { captureException } from '@sentry/nextjs';
 import type { CommunityType } from '@propertypro/shared';
-import { seedDefaultSiteBranding } from '@/lib/api/branding';
-import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { applyLookAtCreation } from '@/lib/services/site-look-service';
 
 export async function seedNewCommunitySite(
   communityId: number,
   communityType: CommunityType,
 ): Promise<void> {
   try {
-    await applyStarterPackToCommunity(communityId, communityType);
+    await applyLookAtCreation(communityId, communityType);
   } catch (err) {
-    console.error('applyStarterPackToCommunity failed', { communityId, err });
-    captureException(err, { tags: { site_seed: 'starter_pack' }, extra: { communityId } });
-  }
-
-  // Leaves site_onboarding_completed_at null, so the "customize your site"
-  // prompts still show.
-  try {
-    await seedDefaultSiteBranding(communityId, communityType);
-  } catch (err) {
-    console.error('seedDefaultSiteBranding failed', { communityId, err });
-    captureException(err, { tags: { site_seed: 'branding' }, extra: { communityId } });
+    console.error('applyLookAtCreation failed', { communityId, err });
+    captureException(err, { tags: { site_seed: 'look' }, extra: { communityId } });
   }
 }

@@ -309,12 +309,13 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
 
   ctx.communityId = communityId;
 
-  // The starter website, as `createCommunityForPm` gives every PM-created
-  // community. Runs on an adopting retry too, which is safe (both halves skip a
-  // community already seeded) and fills a site an earlier run's failure left
-  // empty. Riding on this step rather than a new one: `provisioning_jobs.status`
-  // is pinned by a CHECK constraint. Never throws, so a paid signup is never
-  // failed over its website.
+  // The website, live from day one with the type's suggested look, as
+  // `createCommunityForPm` gives every PM-created community. Runs on an adopting
+  // retry too, which is safe (it skips a community that already has published
+  // sections) and fills a site an earlier run's failure left empty. Riding on
+  // this step rather than a new one: `provisioning_jobs.status` is pinned by a
+  // CHECK constraint. Never throws, so a paid signup is never failed over its
+  // website.
   await seedNewCommunitySite(communityId, ctx.signup.communityType);
 }
 

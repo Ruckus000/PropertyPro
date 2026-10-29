@@ -4,6 +4,7 @@
  * - `applyLookAtCreation`: a new community goes live with its suggested look
  *   (D6). The look's layout, colour set, colours and fonts are written live, and
  *   its sections are published on a published home page.
+ * - `fillDemoCommunitySite`: a prospect demo gets the same on its first entry.
  * - `draftLookSwitch`: the manager picks a look (D9). It is saved as a DRAFT in
  *   the editor's own draft layer, in one transaction: the home page's sections
  *   as draft rows and tombstones, and the look as `branding.draftLook`. The
@@ -19,11 +20,13 @@
  *
  * AUTHZ: callers authorize. `applyLookAtCreation` runs for a community the
  * caller has just created, or a demo it is provisioning, before anyone is a
- * member of it (the same footing as `applyStarterPackToCommunity`). The caller
- * of `draftLookSwitch` has verified a manager role in the community and the
- * `hasSiteEditor` plan feature (the website routes' gate). `loadLookSwitchInput`
- * reads one community's site and the platform's starter packs, and writes
- * nothing.
+ * member of it (the same footing as `applyStarterPackToCommunity`).
+ * `fillDemoCommunitySite` is called by the demo entry routes after the demo
+ * instance is validated, and writes only to a community that is a demo. The
+ * caller of `draftLookSwitch` has verified a manager role in the community and
+ * the `hasSiteEditor` plan feature (the website routes' gate).
+ * `loadLookSwitchInput` reads one community's site and the platform's starter
+ * packs, and writes nothing.
  */
 import {
   communities,
@@ -95,6 +98,19 @@ export interface LookSwitchInput extends Omit<PlanLookSwitchInput, 'incoming'> {
   outgoingLayoutId: string | null;
 }
 
+/** What `applyLookAtCreation` can be asked to do differently. */
+export interface ApplyLookOptions {
+  /**
+   * Leave the colours and fonts the community already wears alone: the look
+   * supplies its layout and its colour set's name, but not the colour set's
+   * colours and fonts. For a prospect demo, which is created with the
+   * prospect's own brand (the admin demo form requires all five fields) and
+   * shows it on its website, dashboard and mobile preview alike; a new look
+   * must not repaint a sales demo.
+   */
+  keepBrand?: boolean;
+}
+
 /**
  * Publish a new community's suggested look (D6): its layout, colour set,
  * colours and fonts written live, and its sections published on a published
@@ -115,10 +131,14 @@ export interface LookSwitchInput extends Omit<PlanLookSwitchInput, 'incoming'> {
  * The branding is resolved the way a design save resolves it (`resolveDesign`)
  * before anything is written, so a missing colour set fails cleanly: a site
  * without its look's colours and fonts is not the look.
+ *
+ * Pass `keepBrand` for a community that already wears its own colours and fonts
+ * (a prospect demo, `fillDemoCommunitySite`): see `ApplyLookOptions`.
  */
 export async function applyLookAtCreation(
   communityId: number,
   communityType: CommunityType,
+  options: ApplyLookOptions = {},
 ): Promise<{ applied: boolean; lookId: LookId }> {
   const look = requireLook(suggestedLookFor(communityType));
   const lookId = look.id;
@@ -126,7 +146,10 @@ export async function applyLookAtCreation(
   if (await hasPublishedSections(createScopedClient(communityId))) return { applied: false, lookId };
 
   const design = await resolveDesign({ layoutId: look.layoutId, themePresetSlug: look.presetSlug });
-  await updateBrandingForCommunity(communityId, design);
+  await updateBrandingForCommunity(
+    communityId,
+    options.keepBrand ? { layoutId: design.layoutId, themePresetSlug: design.themePresetSlug } : design,
+  );
 
   const applied = await withCommunityLock(communityId, async (tx, scoped) => {
     // Again under the lock: a racing call may have published the look since.
@@ -167,6 +190,48 @@ export async function applyLookAtCreation(
   });
 
   return { applied, lookId };
+}
+
+/**
+ * A prospect demo's website, on entry: the suggested look for its type, the
+ * same as a new community's (D6), kept in the prospect's own colours and fonts
+ * (`keepBrand`). Demo communities are built by `seedCommunity` (the admin app's
+ * demo creation and the local demo seed), which, unlike `createCommunityForPm`,
+ * gives them no site at all: a prospect opening the website editor found an
+ * empty page.
+ *
+ * The admin app cannot import this service, so the web app's demo entry routes
+ * call it instead, which also fills demos created before this existed. A no-op
+ * for a community that is not a demo, or that has had any section.
+ *
+ * A community that has ever had a section row (a draft, or one removed: removal
+ * soft-deletes) is left alone, so a prospect who empties the site keeps it
+ * empty.
+ *
+ * ponytail: runs on every demo entry (two small reads once filled), and the
+ * removed rows it relies on are purged after 30 days (`cleanupSoftDeletedSiteBlocks`),
+ * about a demo's lifetime. Moving this into `seedCommunity` (it needs
+ * `ensureHomePage` in packages/db) ends both. Trigger: a demo lives past the
+ * 30-day purge, so the look would re-apply to an emptied site.
+ *
+ * Best-effort, like `seedNewCommunitySite`: a failure is logged and never
+ * blocks the entry.
+ */
+export async function fillDemoCommunitySite(communityId: number): Promise<void> {
+  try {
+    const scoped = createScopedClient(communityId);
+    const [community] = (await scoped.selectFrom(
+      communities,
+      { communityType: communities.communityType, isDemo: communities.isDemo },
+      eq(communities.id, communityId),
+    )) as unknown as Array<{ communityType: CommunityType; isDemo: boolean }>;
+    if (!community?.isDemo) return;
+    // Removed rows included: they are the point here.
+    if ((await scoped.queryIncludingDeleted(siteBlocks)).length > 0) return;
+    await applyLookAtCreation(communityId, community.communityType, { keepBrand: true });
+  } catch (err) {
+    console.error('fillDemoCommunitySite failed', { communityId, err });
+  }
 }
 
 /**
