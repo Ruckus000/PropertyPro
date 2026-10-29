@@ -57,6 +57,7 @@ export * from './branding';
 export * from './compliance/templates';
 export * from './compliance/posting-deadline';
 export * from './compliance/fine-caps';
+export * from './compliance/record-matching';
 export * from './access-policies';
 export * from './default-document-categories';
 export * from './rbac-matrix';
