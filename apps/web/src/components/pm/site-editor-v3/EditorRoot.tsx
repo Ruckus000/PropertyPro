@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
 import { isStagedForRemoval } from '@/lib/site-editor/describe-page-state';
 import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
@@ -289,6 +290,11 @@ export function EditorRoot({
   // v4 device preview. Session-only: a PM who checks the phone layout and
   // reloads should come back to the full-width canvas they edit on.
   const [device, setDevice] = useState<PreviewDevice>('desktop');
+  // The size switcher shows from `lg` up. Below it (an iPad turned to portrait)
+  // the canvas is full width, whatever size was picked: a phone-width frame
+  // with no switcher to undo it would leave the PM stuck.
+  const belowLg = useMediaQuery('(max-width: 1023px)');
+  const effectiveDevice: PreviewDevice = belowLg ? 'desktop' : device;
 
   // Which page the editor is editing. `null` until the PM picks one, at which
   // point the server seed's home page stands in — `initialPages` is home-first,
@@ -928,7 +934,7 @@ export function EditorRoot({
         onSelectPage={handlePickPage}
         onManagePages={handleGoToPages}
         changeCount={diff.changes.length}
-        device={device}
+        device={effectiveDevice}
         onDeviceChange={setDevice}
         requirements={
           <RequirementsPill onGoToSection={handleGoToSlot} onAddSection={handleGoToAdd} />
@@ -1097,7 +1103,7 @@ export function EditorRoot({
             communityId={communityId}
             context={canvasContext}
             onAddSection={handleInsertAt}
-            device={device}
+            device={effectiveDevice}
             nav={canvasNav}
             footer={canvasFooter}
             page={canvasPage}

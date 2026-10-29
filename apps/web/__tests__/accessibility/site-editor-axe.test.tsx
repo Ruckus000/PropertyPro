@@ -67,6 +67,8 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useContentBlocks: () => ({ data: contentBlocks.data, isPending: false, isError: false }),
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
+  addSectionMutationKey: (communityId: number) => ['site-editor', 'add-section', communityId],
+  useAddSectionInFlight: () => false,
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 

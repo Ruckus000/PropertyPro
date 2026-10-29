@@ -47,7 +47,7 @@
  * requestJson() is B6 work.
  */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { TOMBSTONE_BLOCK_TYPE } from '@propertypro/shared';
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 // Both type-only, so neither the contract module nor api-contract enters
@@ -200,10 +200,29 @@ export interface UpsertContentBlockInput {
   pageId?: number | null;
 }
 
-export function useUpsertContentBlock(communityId: number) {
+/**
+ * The key every write that adds a section carries (the Add a part dialog and
+ * its image flow). Closing the dialog mid-write unmounts the component holding
+ * the mutation, so a reopened dialog asks the cache, by this key, whether an
+ * add is still in flight: its slot maths would otherwise reuse the same slot.
+ */
+export function addSectionMutationKey(communityId: number) {
+  return ['site-editor', 'add-section', communityId] as const;
+}
+
+/** Whether an add (`addSectionMutationKey`) is in flight, from this dialog or a closed one. */
+export function useAddSectionInFlight(communityId: number): boolean {
+  return useIsMutating({ mutationKey: addSectionMutationKey(communityId) }) > 0;
+}
+
+export function useUpsertContentBlock(
+  communityId: number,
+  options: { mutationKey?: readonly unknown[] } = {},
+) {
   const qc = useQueryClient();
   const selectedPageId = useSelectedSitePage();
   return useMutation<void, Error, UpsertContentBlockInput>({
+    ...(options.mutationKey ? { mutationKey: options.mutationKey } : {}),
     mutationFn: async ({ pageId, ...input }) => {
       const res = await fetch('/api/v1/pm/site/blocks', {
         method: 'PATCH',

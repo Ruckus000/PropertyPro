@@ -382,9 +382,11 @@ vi.mock('sonner', () => ({
 
 // The shell asks `(max-width: 767px)`: false = desktop. True would render the
 // phone gate and there would be no top bar to assert on.
-const media = vi.hoisted(() => ({ narrow: false }));
+// `belowLg` answers the editor's own `(max-width: 1023px)`, where the preview
+// size switcher is hidden; every other query reads `narrow`.
+const media = vi.hoisted(() => ({ narrow: false, belowLg: false }));
 vi.mock('@/hooks/use-media-query', () => ({
-  useMediaQuery: () => media.narrow,
+  useMediaQuery: (query: string) => (query === '(max-width: 1023px)' ? media.belowLg : media.narrow),
   useIsDesktop: () => true,
 }));
 
@@ -470,6 +472,8 @@ vi.mock('@/hooks/use-content-blocks', () => ({
     data: queries.isPending || queries.isError ? undefined : queries.published,
   }),
   useSitePublishToken: () => ({ ...base(), data: null }),
+  addSectionMutationKey: (communityId: number) => ['site-editor', 'add-section', communityId],
+  useAddSectionInFlight: () => false,
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: writes.upsertAsync, isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -674,8 +678,27 @@ beforeEach(() => {
   queries.isError = false;
   queries.error = null;
   media.narrow = false;
+  media.belowLg = false;
   recordsAlert.missingCount = 0;
   recordsAlert.calls = [];
+});
+
+describe('EditorRoot — preview size below lg', () => {
+  it('a phone-width preview goes back to full width below lg, where the size switcher is hidden', async () => {
+    const { rerender, container } = renderRoot({ canvasContext: STUB_CANVAS });
+    await userEvent.click(screen.getByRole('button', { name: 'Preview on a phone' }));
+    expect(container.querySelector('[data-device]')).toHaveAttribute('data-device', 'phone');
+
+    // An iPad turned to portrait.
+    media.belowLg = true;
+    rerender(rootElement({ canvasContext: STUB_CANVAS }));
+    expect(container.querySelector('[data-device]')).toHaveAttribute('data-device', 'desktop');
+
+    // Turned back: the size the PM picked is still theirs.
+    media.belowLg = false;
+    rerender(rootElement({ canvasContext: STUB_CANVAS }));
+    expect(container.querySelector('[data-device]')).toHaveAttribute('data-device', 'phone');
+  });
 });
 
 describe('EditorRoot — Publish button wiring', () => {

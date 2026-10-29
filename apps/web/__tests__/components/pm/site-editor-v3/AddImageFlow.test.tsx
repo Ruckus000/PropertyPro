@@ -24,6 +24,7 @@ const upsertMutateAsync = vi.hoisted(() => vi.fn());
 // What `useContentBlocks` returns — the whole-site block list the picker
 // derives its candidates from. Reset per test.
 const siteBlocks = vi.hoisted(() => ({ current: [] as unknown[] }));
+const upsertHookArgs = vi.hoisted(() => ({ current: [] as unknown[] }));
 
 vi.mock('@/hooks/use-image-upload', () => ({
   useImageUpload: () => ({ mutateAsync: uploadMutateAsync, isPending: false }),
@@ -39,11 +40,12 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   }),
   usePublishedBlocks: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
   useSitePublishToken: () => ({ data: null, isPending: false, isError: false, refetch: vi.fn() }),
-  useUpsertContentBlock: () => ({
-    mutate: vi.fn(),
-    mutateAsync: upsertMutateAsync,
-    isPending: false,
-  }),
+  addSectionMutationKey: (communityId: number) => ['site-editor', 'add-section', communityId],
+  useAddSectionInFlight: () => false,
+  useUpsertContentBlock: (...args: unknown[]) => {
+    upsertHookArgs.current = args;
+    return { mutate: vi.fn(), mutateAsync: upsertMutateAsync, isPending: false };
+  },
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -98,6 +100,11 @@ beforeEach(() => {
 });
 
 describe('AddImageFlow', () => {
+  it('writes under the add-section key, so a reopened Add a part dialog waits for it', () => {
+    renderFlow();
+    expect(upsertHookArgs.current).toEqual([7, { mutationKey: ['site-editor', 'add-section', 7] }]);
+  });
+
   it('will not submit until a file is chosen AND described', async () => {
     // Alt text is collected BEFORE the upload because finalize requires a
     // non-empty altText — describing afterwards presigns, PUTs the bytes, and
