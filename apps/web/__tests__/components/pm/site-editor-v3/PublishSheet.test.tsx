@@ -1902,14 +1902,14 @@ describe('PublishSheet — Florida-required sections (v4 Phase 2)', () => {
 describe("PublishSheet — contrast on a look's secondary colour", () => {
   /*
    * Heritage's navy and bronze over a slate secondary, which a Pro custom colour
-   * could set: near-black text on it is 1.72:1 and navy headings 1.36:1.
+   * could set: grey caption text on it is 1.36:1, and so are navy headings.
    *
-   * Revert check (production line): the `if (pair.onSecondary &&
-   * !layoutPaintsSecondary) continue;` guard in `contrastIssues`. Without it the
-   * legacy-layout and plain-simple cases below go red.
+   * Revert check (production line): the `!layoutPaintsSecondary` condition in
+   * `contrastIssues`' secondary-pair guard. Without it the legacy-layout and
+   * plain-simple cases below go red.
    */
   const SLATE_SECONDARY = { primaryColor: '#1D2B4A', accentColor: '#7A5B27', secondaryColor: '#374151' };
-  const TEXT_ON_SECONDARY = /^default dark text on your secondary colour has a contrast ratio of 1\.72:1, below the 4\.5:1/;
+  const TEXT_ON_SECONDARY = /^grey caption text on your secondary colour has a contrast ratio of 1\.36:1, below the 4\.5:1/;
   const HEADINGS_ON_SECONDARY = /^your primary colour as headings on your secondary colour has a contrast ratio of 1\.36:1, below the 3:1/;
 
   it.each(['heritage', 'bayfront', 'palm-grove'] as const)(

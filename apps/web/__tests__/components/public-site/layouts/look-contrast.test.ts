@@ -129,17 +129,16 @@ describe('the publish contrast check on the looks', () => {
     }
   });
 
-  it('raises no accent or secondary-colour warning for any look on its own preset', () => {
-    // The pairs the looks introduced or changed. A look switch copies its preset's
-    // colours into the draft, so this is what a new site meets at its first publish.
+  it('raises no contrast advisory at all for any look on its own preset', () => {
+    // Every pair, not only the ones the looks added or changed. A look switch
+    // copies its preset's colours into the draft, so this is what a new site
+    // meets at its first publish.
     const warnings = LOOK_IDS.flatMap((id) => {
       const { primaryColor, accentColor, secondaryColor } = SITE_LOOK_PRESETS[id];
       return contrastIssues(
         { primaryColor, accentColor, secondaryColor },
         { severity: 'warning', ...contrastOptionsFor(id) },
-      )
-        .filter((issue) => issue.field === 'accentColor' || issue.field === 'secondaryColor')
-        .map((issue) => `${id}: ${issue.message}`);
+      ).map((issue) => `${id}: ${issue.message}`);
     });
     // The message names each look and pair in full when this fails.
     expect(warnings, warnings.join('\n')).toEqual([]);

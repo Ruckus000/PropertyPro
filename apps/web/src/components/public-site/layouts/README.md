@@ -16,7 +16,8 @@ that use them, and four looks (website builder Phase 2B) are what managers pick 
 A look's id, layout id and preset slug are the same string. How a look draws its hero, its page colour,
 its section rhythm, its corners and its accent is `LOOK_STYLES` in `look-styles.ts`, read by `HeroBlock`,
 `SiteChrome` and the publish contrast check (`paintsSecondary`); its colours and fonts are its
-`site_theme_presets` row (migration 0097).
+`site_theme_presets` row (migration 0097). The four look files are thin wrappers around
+`LookLayout.tsx`, the one server-only block dispatcher they share.
 
 ## Architecture
 

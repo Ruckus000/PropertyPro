@@ -24,6 +24,7 @@ import { Heritage } from '@/components/public-site/layouts/Heritage';
 import { PalmGrove } from '@/components/public-site/layouts/PalmGrove';
 import { PlainSimple } from '@/components/public-site/layouts/PlainSimple';
 import type { LayoutComponent, SiteBlock } from '@/components/public-site/layouts/types';
+import tailwindConfig from '../../../../tailwind.config';
 
 const received = vi.hoisted(() => ({ props: [] as unknown[] }));
 
@@ -348,17 +349,37 @@ describe('the page around the hero follows LOOK_STYLES', () => {
     expect(painted).toBe(paintsSecondary(id));
   });
 
-  it('.large-text really is a step up: the body size grows from the default', () => {
-    // The class lives in the design tokens; this pins what plain-simple relies on.
-    const css = readFileSync(
+  /** The design tokens' stylesheet, where `.large-text` lives. */
+  function tokensCss(): string {
+    return readFileSync(
       join(__dirname, '..', '..', '..', '..', '..', '..', 'packages', 'ui', 'src', 'styles', 'tokens.css'),
       'utf8',
     );
+  }
+
+  it('.large-text really is a step up: the body size grows from the default', () => {
+    // The class lives in the design tokens; this pins what plain-simple relies on.
+    const css = tokensCss();
     const base = (block: string) => Number(/--font-size-base:\s*([\d.]+)rem/.exec(block)?.[1]);
     const defaultBase = base(css.slice(css.indexOf(':root')));
     const largeBase = base(css.slice(css.indexOf('.large-text {')));
     expect(defaultBase).toBeGreaterThan(0);
     expect(largeBase).toBeGreaterThan(defaultBase);
+  });
+
+  it(".large-text reaches the site's text: every text size reads a variable it redeclares", () => {
+    // The other half: apps/web's Tailwind maps text-xs … text-3xl to
+    // --font-size-*. Without that mapping the class would change the variables
+    // and no text on the page would grow.
+    const sizes = (tailwindConfig.theme?.extend?.fontSize ?? {}) as Record<string, unknown>;
+    const css = tokensCss();
+    const start = css.indexOf('.large-text {');
+    const largeText = css.slice(start, css.indexOf('}', start));
+    const steps = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl'];
+    for (const step of steps) {
+      expect(String(sizes[step]), `text-${step}`).toMatch(new RegExp(`^var\\(--font-size-${step}[,)]`));
+      expect(largeText, `.large-text --font-size-${step}`).toContain(`--font-size-${step}:`);
+    }
   });
 });
 

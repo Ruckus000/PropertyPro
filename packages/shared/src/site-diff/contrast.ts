@@ -24,9 +24,11 @@
  * `--theme-secondary` is consumed by no token, but three of the four looks paint
  * it behind text directly: Heritage's page, and the alternating section bands of
  * Bayfront and Palm Grove. So it is checked exactly when the caller says the
- * site's layout paints it (`layoutPaintsSecondary`): default dark text on it at
- * 4.5:1, and the primary as headings on it at 3:1. Both are advisory even at the
- * write path. A legacy layout paints none of it, and its sites see nothing new.
+ * site's layout paints it (`layoutPaintsSecondary`) and passes it: the grey caption
+ * text (`--text-secondary`) on it at 4.5:1, which is the lightest text the looks
+ * set there, so passing it means the near-black body text passes too; and the
+ * primary as headings on it at 3:1. Both are advisory even at the write path. A
+ * legacy layout paints none of it, and its sites see nothing new.
  *
  * The accent is checked as the site's look paints it (`lookAccent`): the white or
  * default dark text a look sets on its accent, or a text accent on white and on
@@ -110,13 +112,17 @@ const TEXT_INVERSE = '#FFFFFF'; // gray-0    → text.inverse
 const SURFACE_PAGE = '#FBF7F1'; // sand-50   → surface.page
 const BRAND_SURFACE = '#FCF1ED'; // coral-50 → status.brand.background
 const TEXT_PRIMARY = '#111827'; // gray-900  → text.primary
+const TEXT_SECONDARY = '#4B5563'; // gray-600  → text.secondary
 const SURFACE_CARD = '#FFFEFC'; // sand-0    → surface.card, the "white" the looks paint
 
 /** The theme colours this gate can see, already resolved by the caller. */
 export interface ResolvedBrandColors {
   primaryColor: string;
   accentColor: string;
-  /** Checked only when `layoutPaintsSecondary` says the layout paints it. */
+  /**
+   * Checked only when `layoutPaintsSecondary` says the layout paints it. Absent,
+   * nothing on the secondary colour is checked.
+   */
   secondaryColor?: string;
 }
 
@@ -267,8 +273,10 @@ const SECONDARY_PAIRS: CheckedPair[] = [
   {
     field: 'secondaryColor',
     colorKey: 'secondaryColor',
-    against: TEXT_PRIMARY,
-    label: 'default dark text on your secondary colour',
+    // The lightest text the looks set on it (captions, notes): a section's
+    // `text-content-secondary`. Where it passes, near-black body text does too.
+    against: TEXT_SECONDARY,
+    label: 'grey caption text on your secondary colour',
     alwaysWarning: true,
     onSecondary: true,
   },
@@ -299,7 +307,9 @@ export function contrastIssues(
   const seenUnparseable = new Set<string>();
 
   for (const pair of [...PRIMARY_PAIRS, ...accentPairs(lookAccent), ...SECONDARY_PAIRS]) {
-    if (pair.onSecondary && !layoutPaintsSecondary) continue;
+    // The secondary is checked only where the layout paints it, and only when the
+    // caller passed it.
+    if (pair.onSecondary && (!layoutPaintsSecondary || colors.secondaryColor === undefined)) continue;
 
     const value = colors[pair.colorKey];
     if (value === undefined || parseHex(value) === null) {

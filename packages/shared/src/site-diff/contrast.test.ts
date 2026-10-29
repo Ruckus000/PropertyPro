@@ -170,7 +170,7 @@ describe('contrastIssues', () => {
 describe('contrastIssues — the secondary colour a look paints', () => {
   // Heritage's navy and bronze; each case sets the secondary it is about.
   const LOOK = { primaryColor: '#1D2B4A', accentColor: '#7A5B27' };
-  const TEXT_ON_SECONDARY = 'default dark text on your secondary colour';
+  const TEXT_ON_SECONDARY = 'grey caption text on your secondary colour';
   const HEADINGS_ON_SECONDARY = 'your primary colour as headings on your secondary colour';
 
   /** At publish, on a layout that paints the secondary colour. */
@@ -181,22 +181,42 @@ describe('contrastIssues — the secondary colour a look paints', () => {
     return issues.filter((i) => i.message.startsWith(label));
   }
 
-  it('warns when default dark text on the secondary colour is under 4.5:1', () => {
-    // #808080 is the lightest grey under the line: 4.49:1 against #111827.
-    const issues = about(onLook({ ...LOOK, secondaryColor: '#808080' }), TEXT_ON_SECONDARY);
-    expect(issues).toHaveLength(1);
+  it('warns when grey caption text on the secondary colour is under 4.5:1', () => {
+    // #C7C7C7 is the lightest grey under the line: 4.47:1 against #4B5563.
+    const issues = about(onLook({ ...LOOK, secondaryColor: '#C7C7C7' }), TEXT_ON_SECONDARY);
+    expect(issues, 'grey captions on #C7C7C7 read at 4.47:1 and must warn').toHaveLength(1);
     expect(issues[0]).toMatchObject({ field: 'secondaryColor', severity: 'warning' });
-    expect(issues[0]!.message).toContain('4.49:1, below the 4.5:1 required by WCAG 2.1 AA');
+    expect(issues[0]!.message).toContain('4.47:1, below the 4.5:1 required by WCAG 2.1 AA');
   });
 
-  it('stays quiet about dark text from 4.5:1 up', () => {
-    // #818181, the next grey up, is the first to pass (4.55:1); Heritage's cream is 16.73:1.
-    expect(about(onLook({ ...LOOK, secondaryColor: '#818181' }), TEXT_ON_SECONDARY)).toHaveLength(0);
+  it('stays quiet about caption text from 4.5:1 up', () => {
+    // #C8C8C8, the next grey up, is the first to pass (4.52:1); Heritage's cream is 7.13:1.
+    expect(about(onLook({ ...LOOK, secondaryColor: '#C8C8C8' }), TEXT_ON_SECONDARY)).toHaveLength(0);
     expect(about(onLook({ ...LOOK, secondaryColor: '#FBF8F1' }), TEXT_ON_SECONDARY)).toHaveLength(0);
   });
 
+  it('warns on a tan secondary that near-black text passes but the captions on it fail', () => {
+    // #C4B59A: near-black body text reads at 8.81:1, the grey captions at 3.75:1.
+    const issues = about(onLook({ ...LOOK, secondaryColor: '#C4B59A' }), TEXT_ON_SECONDARY);
+    expect(issues, 'grey captions on tan #C4B59A read at 3.75:1 and must warn').toHaveLength(1);
+    expect(issues[0]!.message).toMatch(/^grey caption text on your secondary colour has a contrast ratio of 3\.75:1/);
+  });
+
+  it('checks nothing on the secondary colour when the caller passes none', () => {
+    // A look layout, but no colour to check: no '"undefined" is not a 6-digit hex colour'.
+    const issues = contrastIssues(LOOK, {
+      severity: 'warning',
+      layoutPaintsSecondary: true,
+      lookAccent: { accentUse: 'text', onAccent: 'inverse' },
+    });
+    const aboutSecondary = issues
+      .filter((i) => i.field === 'secondaryColor' || i.message.includes('secondary colour') || i.message.includes('undefined'))
+      .map((i) => i.message);
+    expect(aboutSecondary, aboutSecondary.join('\n')).toEqual([]);
+  });
+
   it('warns when the primary as headings on the secondary colour is under 3:1', () => {
-    // A white secondary keeps dark text passing, so only the heading pair speaks.
+    // A white secondary keeps caption text passing, so only the heading pair speaks.
     const justUnder = about(
       onLook({ primaryColor: '#959595', accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' }),
       HEADINGS_ON_SECONDARY,
