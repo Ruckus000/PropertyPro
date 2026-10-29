@@ -177,9 +177,19 @@ export function callsRequireCronSecret(source: string): boolean {
   return /\brequireCronSecret\s*\(/.test(stripComments(source));
 }
 
-/** Scan one root. Throws `CannotCheckError` when it cannot be scanned at all. */
-export function scanRoot(root: InternalRoot): { scanned: number; violations: Violation[] } {
-  const absolute = join(repoRoot, root.dir);
+/**
+ * Scan one root. Throws `CannotCheckError` when it cannot be scanned at all.
+ *
+ * `base` is what `root.dir` and the reported paths are relative to. It is the
+ * repo everywhere except the test suite, which passes a temp directory so it
+ * never writes fixture routes into the real working tree, where other guard
+ * tests are walking in parallel.
+ */
+export function scanRoot(
+  root: InternalRoot,
+  base: string = repoRoot,
+): { scanned: number; violations: Violation[] } {
+  const absolute = join(base, root.dir);
 
   // Assert the search root exists BEFORE reporting anything about it.
   let stats;
@@ -215,7 +225,7 @@ export function scanRoot(root: InternalRoot): { scanned: number; violations: Vio
   const violations: Violation[] = [];
 
   for (const file of routeFiles) {
-    const rel = relative(repoRoot, file);
+    const rel = relative(base, file);
     if (exempt.has(rel)) {
       seenExemptions.add(rel);
       continue;

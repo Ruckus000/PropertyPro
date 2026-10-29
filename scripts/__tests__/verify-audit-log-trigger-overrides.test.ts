@@ -1,6 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,8 +15,14 @@ import { fileURLToPath } from 'node:url';
  * got reported as an unauthorized override.
  *
  * The guard is a top-level script with no exported functions, so these are
- * subprocess tests: plant a fixture, run the real script, assert on its exit
- * code.
+ * subprocess tests: build a fixture tree, run the real script over it with
+ * `--root`, assert on its exit code.
+ *
+ * Fixtures go in a temp directory, never in the real working tree. This file
+ * used to plant them under `apps/` and `packages/`, and other guard tests walk
+ * those trees in parallel vitest workers: `verify-call-ceilings.test.ts` would
+ * list a planted file, find it deleted by the time it read it, and exit 2. That
+ * failed the unit suite in 3 of 5 whole-suite runs (2026-10-29).
  */
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
@@ -25,8 +32,24 @@ const tsxBin = join(repoRoot, 'node_modules', '.bin', 'tsx');
 const OVERRIDE_STATEMENT =
   'ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard';
 
-function runGuard(): { status: number; output: string } {
-  const result = spawnSync(tsxBin, [guardScript], {
+/**
+ * The guard's own approved list. It checks each of these against the root it
+ * scans (each must still override the trigger, under `pg_advisory_xact_lock`),
+ * so a fixture tree has to carry them. If the guard's list changes, the
+ * fixture-tree tests fail on a missing file, which points straight here.
+ */
+const APPROVED_FILES = [
+  'apps/web/__tests__/integration/helpers/multi-tenant-test-kit.ts',
+  'apps/web/__tests__/elections/vote-integration.test.ts',
+  'packages/db/__tests__/reconcile-auth-user-id.integration.test.ts',
+  'packages/db/src/seed/community/users.ts',
+];
+
+const OVERRIDE_SOURCE = `const q = ${JSON.stringify(OVERRIDE_STATEMENT)};\n`;
+const APPROVED_SOURCE = `await tx.execute('select pg_advisory_xact_lock(1)');\n${OVERRIDE_SOURCE}`;
+
+function runGuard(args: string[] = []): { status: number; output: string } {
+  const result = spawnSync(tsxBin, [guardScript, ...args], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
@@ -36,52 +59,43 @@ function runGuard(): { status: number; output: string } {
   };
 }
 
-/**
- * Writes `content` to `relPath`, creating any missing parent directories.
- * Returns a cleanup fn that removes ONLY what this call created — a developer
- * with a real `.next/` build tree must not have it deleted by the test suite.
- */
-function plantFixture(relPath: string, content: string): () => void {
-  const abs = join(repoRoot, relPath);
-  const missingDirs: string[] = [];
-  for (let dir = dirname(abs); !existsSync(dir); dir = dirname(dir)) {
-    missingDirs.push(dir);
-  }
-  const shallowestCreated = missingDirs.at(-1);
+let fixtureRoot: string;
 
+function plant(relPath: string, content: string): void {
+  const abs = join(fixtureRoot, relPath);
   mkdirSync(dirname(abs), { recursive: true });
   writeFileSync(abs, content, 'utf8');
-
-  return () => {
-    if (shallowestCreated) {
-      rmSync(shallowestCreated, { recursive: true, force: true });
-    } else {
-      rmSync(abs, { force: true });
-    }
-  };
 }
 
-let cleanup: (() => void) | undefined;
+beforeEach(() => {
+  fixtureRoot = mkdtempSync(join(tmpdir(), 'audit-log-trigger-overrides-'));
+  for (const file of APPROVED_FILES) plant(file, APPROVED_SOURCE);
+});
 
 afterEach(() => {
-  cleanup?.();
-  cleanup = undefined;
+  rmSync(fixtureRoot, { recursive: true, force: true });
 });
 
 describe('guard:audit-log-trigger-overrides', () => {
+  // Read-only: scans the real tree and writes nothing to it.
   it('passes on the working tree as checked in', () => {
     const { status, output } = runGuard();
     expect(output).toContain('Audit-log trigger override guard passed');
     expect(status).toBe(0);
   }, 60_000);
 
-  it('ignores build output — a bundled override in .next must not fail the guard', () => {
-    cleanup = plantFixture(
-      'apps/admin/.next/server/app/api/admin/demos/route.js',
-      `const q = ${JSON.stringify(OVERRIDE_STATEMENT)};\n`,
-    );
+  // Control for every fixture-tree case below: the tree they start from passes,
+  // so a failure in one of them is caused by what that case planted.
+  it('passes on a fixture tree holding only the approved overrides', () => {
+    const { status, output } = runGuard(['--root', fixtureRoot]);
+    expect(output).toContain('Audit-log trigger override guard passed');
+    expect(status).toBe(0);
+  }, 60_000);
 
-    const { status, output } = runGuard();
+  it('ignores build output — a bundled override in .next must not fail the guard', () => {
+    plant('apps/admin/.next/server/app/api/admin/demos/route.js', OVERRIDE_SOURCE);
+
+    const { status, output } = runGuard(['--root', fixtureRoot]);
     expect(output).not.toContain('Unauthorized');
     expect(status).toBe(0);
   }, 60_000);
@@ -89,12 +103,9 @@ describe('guard:audit-log-trigger-overrides', () => {
   it.each(['dist', 'build', '.turbo', '.vercel', 'coverage'])(
     'ignores build output in %s/',
     (dir) => {
-      cleanup = plantFixture(
-        `packages/db/${dir}/bundle.js`,
-        `const q = ${JSON.stringify(OVERRIDE_STATEMENT)};\n`,
-      );
+      plant(`packages/db/${dir}/bundle.js`, OVERRIDE_SOURCE);
 
-      const { status, output } = runGuard();
+      const { status, output } = runGuard(['--root', fixtureRoot]);
       expect(output).not.toContain('Unauthorized');
       expect(status).toBe(0);
     },
@@ -103,11 +114,19 @@ describe('guard:audit-log-trigger-overrides', () => {
 
   it('still fails on an unapproved override in source', () => {
     const relPath = 'apps/web/src/lib/__audit-log-guard-fixture__.ts';
-    cleanup = plantFixture(relPath, `const q = ${JSON.stringify(OVERRIDE_STATEMENT)};\n`);
+    plant(relPath, OVERRIDE_SOURCE);
 
-    const { status, output } = runGuard();
+    const { status, output } = runGuard(['--root', fixtureRoot]);
     expect(output).toContain('Unauthorized compliance_audit_log trigger override(s)');
-    expect(output).toContain(relPath);
+    expect(output).toContain(join(fixtureRoot, relPath));
     expect(status).not.toBe(0);
+  }, 60_000);
+
+  // A bare `--root` must refuse, not fall back to scanning the repo and pass.
+  it('refuses (exit 2) a --root with no directory', () => {
+    const { status, output } = runGuard(['--root']);
+    expect(output).toContain('Usage:');
+    expect(output).not.toContain('guard passed');
+    expect(status).toBe(2);
   }, 60_000);
 });

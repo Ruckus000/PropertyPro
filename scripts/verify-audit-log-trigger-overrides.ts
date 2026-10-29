@@ -7,13 +7,39 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+/**
+ * The tree to scan. Defaults to this repo.
+ *
+ * `--root <dir>` exists for the test suite, which must not plant fixture files
+ * inside the real `apps/` or `packages/`: other guards' tests walk those trees
+ * at the same time in parallel vitest workers, and a file appearing and
+ * vanishing mid-walk made `guard:call-ceilings` list a file it could then no
+ * longer read (exit 2, "could not check"), in a test that has nothing to do
+ * with this one. Tests build a fixture tree in a temp directory instead. The
+ * approved paths below are resolved against the same root, so a fixture tree
+ * must carry them too.
+ */
+function resolveRoot(argv: readonly string[]): string {
+  const index = argv.indexOf('--root');
+  if (index === -1) return resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('--')) {
+    // A bare `--root` must not fall back to the repo: the caller asked to scan
+    // somewhere else, and quietly scanning here instead would pass for the
+    // wrong reason.
+    console.error('Usage: verify-audit-log-trigger-overrides.ts [--root <dir>]');
+    process.exit(2);
+  }
+  return resolve(value);
+}
+
+const root = resolveRoot(process.argv.slice(2));
 const approvedFiles = [
   'apps/web/__tests__/integration/helpers/multi-tenant-test-kit.ts',
   'apps/web/__tests__/elections/vote-integration.test.ts',
   'packages/db/__tests__/reconcile-auth-user-id.integration.test.ts',
   'packages/db/src/seed/community/users.ts',
-].map((file) => resolve(repoRoot, file));
+].map((file) => resolve(root, file));
 
 const overridePattern = /ALTER\s+TABLE\s+compliance_audit_log\s+(?:DISABLE|ENABLE)\s+TRIGGER\s+compliance_audit_log_append_only_guard/i;
 
@@ -50,7 +76,7 @@ function findSourceFiles(directory: string): string[] {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) {
-      if (SKIP_DIR_NAMES.has(entry.name) || path === resolve(repoRoot, 'packages/db/migrations')) {
+      if (SKIP_DIR_NAMES.has(entry.name) || path === resolve(root, 'packages/db/migrations')) {
         continue;
       }
       files.push(...findSourceFiles(path));
@@ -61,7 +87,7 @@ function findSourceFiles(directory: string): string[] {
   return files;
 }
 
-const discoveredFiles = [resolve(repoRoot, 'apps'), resolve(repoRoot, 'packages')]
+const discoveredFiles = [resolve(root, 'apps'), resolve(root, 'packages')]
   .flatMap(findSourceFiles)
   .filter((file) => overridePattern.test(readFileSync(file, 'utf8')));
 
