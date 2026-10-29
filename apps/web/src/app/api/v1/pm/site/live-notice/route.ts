@@ -74,6 +74,7 @@ export const POST = withErrorHandler(
       audience: 'owners_only',
       intro: 'Your community now has a website.',
       linkLabel: 'Visit the website',
+      source: 'site_live_notice',
     });
 
     if (result.status === 'failed') {

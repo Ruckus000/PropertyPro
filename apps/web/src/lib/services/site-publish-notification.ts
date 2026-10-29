@@ -83,6 +83,12 @@ export interface NotifyResidentsOfSitePublishInput {
   intro?: string;
   /** The link's text under the intro. Defaults to the site-update wording. */
   linkLabel?: string;
+  /**
+   * What sent this, as the audit trail records it in `metadata.source`.
+   * Defaults to `'site_publish'`; the one-time live notice passes
+   * `'site_live_notice'`.
+   */
+  source?: 'site_publish' | 'site_live_notice';
 }
 
 const DEFAULT_INTRO = 'The community website has been updated.';
@@ -132,6 +138,7 @@ export async function notifyResidentsOfSitePublish({
   audience = 'all',
   intro = DEFAULT_INTRO,
   linkLabel = DEFAULT_LINK_LABEL,
+  source = 'site_publish',
 }: NotifyResidentsOfSitePublishInput): Promise<SitePublishNotificationResult> {
   const trimmed = summary.trim();
 
@@ -211,7 +218,7 @@ export async function notifyResidentsOfSitePublish({
     // Reuses the existing `announcement_email_sent` action rather than minting a
     // site-publish-specific one: this IS an announcement email send, and the
     // announcements route already writes that action for the same event. The
-    // site-publish origin is carried in `metadata.source` so the trail stays
+    // origin (a publish, or the live notice) is carried in `metadata.source` so the trail stays
     // greppable without splitting one concept across two action names.
     await logAuditEvent({
       userId: actorUserId,
@@ -219,7 +226,7 @@ export async function notifyResidentsOfSitePublish({
       resourceType: 'announcement',
       resourceId: String(announcementId),
       communityId,
-      metadata: { recipientCount, audience, source: 'site_publish' },
+      metadata: { recipientCount, audience, source },
     });
 
     return { status: 'sent', announcementId, recipientCount };
@@ -245,7 +252,7 @@ export async function notifyResidentsOfSitePublish({
         // The reason is an internal error message, never recipient data — the
         // audit log is append-only and manager-readable, so nothing sensitive
         // may enter it.
-        metadata: { source: 'site_publish', reason: messageOf(error) },
+        metadata: { source, reason: messageOf(error) },
       });
     } catch {
       // Deliberately swallowed; the returned `partial` status is the signal.

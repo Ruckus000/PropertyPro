@@ -63,6 +63,9 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const SCAN_ROOTS = [
   'apps/web/src/components/pm/site-editor-v3',
   'apps/web/src/lib/site-editor',
+  // The website home, the look picker and the dashboard's live card say what
+  // the public site shows too.
+  'apps/web/src/components/website-home',
 ];
 /**
  * The describer modules — where these sentences are SUPPOSED to live, so they
@@ -116,6 +119,15 @@ const VISIBILITY_VOCABULARY: RegExp[] = [
  * drained deliberately, lowering the ceiling as they go.
  *
  * Regenerate with `--write-baseline` in a reviewed change, and only downward.
+ *
+ * The website-home entries (added with that scan root, 2026-10-29) were read
+ * one by one and are true by construction, none a page-visibility claim:
+ *   - look-picker.tsx (2): "Live now" on the card whose look IS the live look
+ *     (`facts.liveLookId`), as text and in the card's accessible name.
+ *   - site-details-card.tsx (1): the heading "Details on your site".
+ *   - your-site-card.tsx (2): "{Look} is chosen but not published yet", shown
+ *     only while a drafted look differs from the live one; and "Live now" on
+ *     the newest publish in the version list, which is the live version.
  */
 const BASELINE_PATH = join(repoRoot, 'scripts/page-state-copy-baseline.json');
 
