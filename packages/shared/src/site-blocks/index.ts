@@ -77,6 +77,7 @@ export { boardBlockSchema, type BoardBlockContent } from './board';
 export {
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
+  STOCK_PHOTO_ALT,
   type StockPhotoId,
   type StockHeroPhoto,
 } from './stock-photos';

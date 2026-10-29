@@ -103,6 +103,7 @@ export {
   boardBlockSchema,
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
+  STOCK_PHOTO_ALT,
   DOCUMENT_CATEGORIES,
   documentMatchesSectionCategories,
   LINKED_FIELDS,

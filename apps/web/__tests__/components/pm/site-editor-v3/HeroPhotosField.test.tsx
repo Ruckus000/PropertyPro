@@ -8,10 +8,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HeroPhotosField } from '@/components/pm/site-editor-v3/inspector/forms/fields/HeroPhotosField';
-import type { HeroPhoto } from '@propertypro/shared';
+import { STOCK_PHOTO_ALT, type HeroPhoto } from '@propertypro/shared';
 
 const uploadMock = vi.hoisted(() => vi.fn());
 // Captured so a test can drive a completion the way the real queue would.
@@ -219,13 +219,50 @@ describe('HeroPhotosField — focus after mutation', () => {
   });
 });
 
-describe('HeroPhotosField — stock photos (read-only until the look writers ship)', () => {
-  // D3. A stock photo is one of ours, with no path. Until the writer release
-  // adds its own controls, the field must show it and must never lose it.
+describe('HeroPhotosField — stock photos', () => {
+  // D3. A stock photo is one of ours, with no path: it shows its thumbnail, can be
+  // reworded, removed, moved, swapped for the other one, or replaced by an upload.
   const SUNSET: HeroPhoto = { stock: 'sunset', alt: 'Sunset over the water' };
+  const PALMS: HeroPhoto = { stock: 'palms', alt: 'Palm trees' };
   const POOL: HeroPhoto = { path: '7/hero/pool.jpg', alt: 'The pool' };
 
-  it('shows a stock photo with its thumbnail and its description, read-only', () => {
+  /** The parent's job: hold the list, so a change shows on the next render. */
+  function Harness({ initial, onList }: { initial: HeroPhoto[]; onList?: (l: HeroPhoto[]) => void }) {
+    const [photos, setPhotos] = useState(initial);
+    return (
+      <HeroPhotosField
+        communityId={7}
+        blockOrder={1}
+        photos={photos}
+        onChange={(next) => {
+          setPhotos(next);
+          onList?.(next);
+        }}
+        readDimensions={okDimensions}
+      />
+    );
+  }
+  const thumbSrcs = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+
+  it('a stock photo shows its thumbnail and can be removed or replaced', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Harness initial={[SUNSET, POOL]} />);
+
+    // Its thumbnail, from the site's own folder.
+    expect(thumbSrcs(container)[0]).toBe('/site-looks/sunset.webp');
+
+    // Replaced by the other stock photo: its picture AND its description change.
+    await user.click(screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }));
+    expect(thumbSrcs(container)[0]).toBe('/site-looks/palms.webp');
+    expect(screen.getAllByLabelText('Alt text')[0]).toHaveValue(STOCK_PHOTO_ALT.palms);
+
+    // Removed.
+    await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+    expect(thumbSrcs(container)).toEqual([expect.stringContaining('7/hero/pool.jpg')]);
+  });
+
+  it('shows a stock photo with its thumbnail and an editable description', () => {
     const { view } = renderField([SUNSET, POOL]);
 
     const thumbs = Array.from(view.container.querySelectorAll('img'));
@@ -234,17 +271,21 @@ describe('HeroPhotosField — stock photos (read-only until the look writers shi
     expect(thumbs[0]).toHaveAttribute('alt', '');
     const [stockAlt] = screen.getAllByLabelText('Alt text');
     expect(stockAlt).toHaveValue('Sunset over the water');
-    expect(stockAlt).toHaveAttribute('readonly');
+    expect(stockAlt).not.toHaveAttribute('readonly');
+    expect(stockAlt).toHaveAttribute('maxlength', '200');
     // A stock photo cannot be decorative, so only the upload has the checkbox.
     expect(screen.getAllByLabelText('Decorative')).toHaveLength(1);
   });
 
-  it('does not change a stock photo when its description is typed into', async () => {
+  it("edits a stock photo's description, and nothing else about it", async () => {
     const user = userEvent.setup();
     const { onChange } = renderField([SUNSET, POOL]);
 
-    await user.type(screen.getAllByLabelText('Alt text')[0]!, 'X');
-    expect(onChange).not.toHaveBeenCalled();
+    await user.type(screen.getAllByLabelText('Alt text')[0]!, '!');
+    expect(onChange).toHaveBeenLastCalledWith([
+      { stock: 'sunset', alt: 'Sunset over the water!' },
+      POOL,
+    ]);
   });
 
   it('keeps a stock photo, unchanged, when another photo is removed', async () => {
@@ -253,6 +294,14 @@ describe('HeroPhotosField — stock photos (read-only until the look writers shi
 
     await user.click(screen.getByRole('button', { name: 'Remove photo 2' }));
     expect(onChange).toHaveBeenCalledWith([SUNSET]);
+  });
+
+  it('removes a stock photo like any other', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField([SUNSET, POOL]);
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+    expect(onChange).toHaveBeenCalledWith([POOL]);
   });
 
   it('moves a stock photo like any other, carrying it unchanged', async () => {
@@ -269,6 +318,192 @@ describe('HeroPhotosField — stock photos (read-only until the look writers shi
 
     await user.type(screen.getAllByLabelText('Alt text')[1]!, '!');
     expect(onChange).toHaveBeenLastCalledWith([SUNSET, { path: '7/hero/pool.jpg', alt: 'The pool!' }]);
+  });
+
+  describe('swapping for the other stock photo', () => {
+    it('puts the other photo in the same place, with its own description', async () => {
+      const user = userEvent.setup();
+      const { onChange } = renderField([POOL, SUNSET]);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      );
+      expect(onChange).toHaveBeenCalledWith([
+        POOL,
+        { stock: 'palms', alt: STOCK_PHOTO_ALT.palms },
+      ]);
+    });
+
+    it('swaps back the other way', async () => {
+      const user = userEvent.setup();
+      const { onChange } = renderField([PALMS]);
+
+      await user.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
+      expect(onChange).toHaveBeenCalledWith([{ stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset }]);
+    });
+
+    it('drops a reworded description rather than keep it on a picture it does not describe', async () => {
+      const user = userEvent.setup();
+      const { onChange } = renderField([{ stock: 'sunset', alt: 'Our own wording for the sunset' }]);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      );
+      expect(onChange).toHaveBeenCalledWith([{ stock: 'palms', alt: STOCK_PHOTO_ALT.palms }]);
+    });
+
+    it('is not offered when the other photo is already in the list', () => {
+      renderField([SUNSET, PALMS]);
+      expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
+    });
+
+    it('is not offered for an uploaded photo', () => {
+      renderField([POOL]);
+      expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
+    });
+
+    it('leaves focus in the row after a swap, on the button that swaps back', async () => {
+      // The swap changes the row's key, so the row remounts and the focused
+      // button is gone: without the deferred focus, a keyboard user lands on <body>.
+      const user = userEvent.setup();
+      render(<Harness initial={[SUNSET, POOL]} />);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      );
+
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          screen.getByRole('button', { name: 'Use the sunset photo instead' }),
+        ),
+      );
+    });
+
+    it('announces the change once, in the field live region', async () => {
+      const user = userEvent.setup();
+      const { view } = renderField([SUNSET, POOL]);
+
+      await user.click(
+        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      );
+      await waitFor(() =>
+        expect(view.container.querySelector('[aria-live]')).toHaveTextContent(
+          'Photo 1 changed to the palm-lined street photo.',
+        ),
+      );
+      expect(view.container.querySelectorAll('[aria-live]')).toHaveLength(1);
+    });
+  });
+
+  describe('replacing with an upload', () => {
+    const PICK = 'Replace the sunset photo with your own';
+
+    /** Pick a file for the sunset row, describe it and press the button. */
+    async function stageAndUpload(name = 'beach.jpg', alt = 'The beach') {
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile(name));
+      await userEvent.type(await screen.findByLabelText(`Alt text for ${name}`), alt);
+      await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
+    }
+    const finish = (id = 'staged-1', name = 'beach.jpg', alt = 'The beach') =>
+      act(() => {
+        heroPhotosHook.onUploaded!(
+          { storagePath: '7/hero/beach.jpg', altText: 'SERVER ECHO' },
+          { id, file: imageFile(name), alt, decorative: false },
+        );
+      });
+
+    it('is offered on a stock photo and not on an upload', () => {
+      renderField([SUNSET, POOL]);
+      expect(screen.getAllByLabelText(/^Replace the .* photo with your own$/)).toHaveLength(1);
+      expect(screen.getByLabelText(PICK)).toHaveAttribute('type', 'file');
+    });
+
+    it('names the photo it will replace while the file waits to be described', async () => {
+      renderField([SUNSET, POOL]);
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+
+      expect(await screen.findByText('Replaces the sunset photo.')).toBeInTheDocument();
+      expect(uploadMock).not.toHaveBeenCalled();
+    });
+
+    it('puts the upload in the stock photo\'s place once it lands', async () => {
+      const { onChange } = renderField([SUNSET, POOL]);
+      await stageAndUpload();
+      expect(uploadMock).toHaveBeenCalledTimes(1);
+
+      finish();
+
+      expect(onChange).toHaveBeenCalledWith([{ path: '7/hero/beach.jpg', alt: 'The beach' }, POOL]);
+    });
+
+    it("gives the upload its own description, never the stock photo's or the server's", async () => {
+      const { onChange } = renderField([SUNSET]);
+      await stageAndUpload('beach.jpg', 'People on the beach');
+
+      finish('staged-1', 'beach.jpg', 'People on the beach');
+
+      const written = onChange.mock.calls.at(-1)![0] as HeroPhoto[];
+      expect(written).toEqual([{ path: '7/hero/beach.jpg', alt: 'People on the beach' }]);
+    });
+
+    it('does not use up a place in the list while it waits', async () => {
+      // It takes the stock photo's place, so the list ends the same length: one
+      // place is still free to add to.
+      const six = Array.from({ length: 6 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
+      renderField([SUNSET, ...six]);
+      expect(screen.getByText(/1 of 8 remaining/)).toBeInTheDocument();
+
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+      await screen.findByLabelText('Alt text for beach.jpg');
+
+      expect(screen.getByText(/1 of 8 remaining/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Add photos')).toBeEnabled();
+    });
+
+    it('is still offered when the hero is full', async () => {
+      const seven = Array.from({ length: 7 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
+      renderField([SUNSET, ...seven]);
+
+      // Nothing more can be added…
+      expect(screen.getByLabelText('Add photos')).toBeDisabled();
+      expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+      // …but the stock photo can still be replaced.
+      expect(screen.getByLabelText(PICK)).toBeEnabled();
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+      expect(await screen.findByLabelText('Alt text for beach.jpg')).toBeInTheDocument();
+    });
+
+    it('keeps one waiting file per stock photo: choosing another replaces the first', async () => {
+      const { view } = renderField([SUNSET, POOL]);
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('first.jpg'));
+      await screen.findByLabelText('Alt text for first.jpg');
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('second.jpg'));
+
+      expect(await screen.findByLabelText('Alt text for second.jpg')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Alt text for first.jpg')).not.toBeInTheDocument();
+      expect(view.container.querySelectorAll('[data-staged-row]')).toHaveLength(1);
+    });
+
+    it('adds the photo at the end if the stock photo was removed while it uploaded', async () => {
+      const lists: HeroPhoto[][] = [];
+      render(<Harness initial={[SUNSET, POOL]} onList={(l) => lists.push(l)} />);
+      await stageAndUpload();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+      finish();
+
+      expect(lists.at(-1)).toEqual([POOL, { path: '7/hero/beach.jpg', alt: 'The beach' }]);
+    });
+
+    it('turns down a file the way "Add photos" does, and keeps the stock photo', async () => {
+      const { onChange } = renderField([SUNSET]);
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('huge.jpg', 12 * 1024 * 1024));
+
+      expect(await screen.findByText(/huge\.jpg:/)).toBeInTheDocument();
+      expect(screen.queryByLabelText('Alt text for huge.jpg')).not.toBeInTheDocument();
+      expect(uploadMock).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 });
 

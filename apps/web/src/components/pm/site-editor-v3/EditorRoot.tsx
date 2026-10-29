@@ -139,6 +139,7 @@ import type { SitePanelProps } from './panels/SitePanel';
 import type { EditorView } from './EditorTopBar';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
+import { LinkedFactsProvider } from './inspector/linked-facts-context';
 import { useSiteDiff } from './use-site-diff';
 import { RequiredSectionsProvider, useRequiredSections } from './required-sections-context';
 import { RequirementsPill } from './RequirementsPill';
@@ -1285,7 +1286,15 @@ export function EditorRoot({
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here — except while the
         // page is unknown, where an inspector save would target home.
-        inspector={pagesUnavailable ? null : <Inspector communityId={communityId} />}
+        inspector={
+          pagesUnavailable ? null : (
+            // The hero form previews its linked fields with the facts the canvas
+            // draws them with.
+            <LinkedFactsProvider facts={canvasContext?.community ?? null}>
+              <Inspector communityId={communityId} />
+            </LinkedFactsProvider>
+          )
+        }
       >
         {pagesUnavailable ? (
           // NOT the unfiltered canvas. `blocksForPage(blocks, null)` returns

@@ -23,6 +23,7 @@ import {
   blockSchemaRegistry,
   fingerprint,
   stableStringify,
+  STOCK_PHOTO_ALT,
   type BlockType,
   type CommunityType,
   type StockHeroPhoto,
@@ -70,8 +71,8 @@ function deepFreeze<T>(value: T): T {
 
 // The two stock photos are scenery, never a building an association could take
 // for its own (D3). Heritage shares Bayfront's sunset.
-const SUNSET: StockHeroPhoto = { stock: 'sunset', alt: 'Sunset over the water, with palm trees in silhouette' };
-const PALMS: StockHeroPhoto = { stock: 'palms', alt: 'A quiet street lined with tall palm trees' };
+const SUNSET: StockHeroPhoto = { stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset };
+const PALMS: StockHeroPhoto = { stock: 'palms', alt: STOCK_PHOTO_ALT.palms };
 
 /** Every look lists the same records: all five categories a Documents section can show. */
 const RECORDS: z.input<(typeof blockSchemaRegistry)['documents']> = {

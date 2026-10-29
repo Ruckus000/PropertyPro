@@ -25,6 +25,7 @@ import {
 } from '@/components/pm/site-editor-v3/RecordsAttention';
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
+import { useLinkedFacts } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 import { GuidedTabs as RealGuidedTabs } from '@/components/pm/site-editor-v3/GuidedTabs';
 import { ModeSwitch as RealModeSwitch } from '@/components/pm/site-editor-v3/ModeSwitch';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
@@ -270,7 +271,16 @@ vi.mock('next/dynamic', () => ({
                 inspectorLifecycle.push('unmount');
               };
             }, []);
-            return <p>inspector</p>;
+            // The linked-field facts its forms are given, echoed: a parent that
+            // forgot to provide them would switch the hero form's "Shows as"
+            // line off silently.
+            const facts = useLinkedFacts();
+            return (
+              <>
+                <p>inspector</p>
+                <p data-testid="inspector-facts">{facts === null ? 'no facts' : JSON.stringify(facts)}</p>
+              </>
+            );
           }
         : // The preview, stubbed to echo the ONE prop the parent has to pass.
         //
@@ -752,6 +762,47 @@ describe('EditorRoot — tool panels', () => {
       expect(tile).toHaveAttribute('aria-expanded', 'true');
       expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
     }
+  });
+});
+
+describe('EditorRoot — linked-field facts for the inspector', () => {
+  const HARBOR_CANVAS = {
+    ...STUB_CANVAS,
+    community: {
+      ...STUB_CANVAS.community,
+      name: 'Harbor Pointe Condominium Association, Inc.',
+      shortName: 'Harbor Pointe',
+      city: 'Miami',
+      unitCount: 120,
+    },
+  };
+
+  it("hands the inspector the community's name, short name, city and unit count", () => {
+    // The facts the canvas resolves the page's linked fields with, so the hero
+    // form's "Shows as" line cannot disagree with the page beside it.
+    renderRoot({ canvasContext: HARBOR_CANVAS });
+
+    expect(JSON.parse(screen.getByTestId('inspector-facts').textContent!)).toEqual({
+      name: 'Harbor Pointe Condominium Association, Inc.',
+      shortName: 'Harbor Pointe',
+      city: 'Miami',
+      unitCount: 120,
+    });
+  });
+
+  it('gives it no facts when the community could not be read', () => {
+    renderRoot({ canvasContext: null });
+    expect(screen.getByTestId('inspector-facts')).toHaveTextContent('no facts');
+  });
+
+  it('reads an unset short name, city and unit count as not known', () => {
+    renderRoot({ canvasContext: STUB_CANVAS });
+    expect(JSON.parse(screen.getByTestId('inspector-facts').textContent!)).toEqual({
+      name: 'Sunset Condos',
+      shortName: null,
+      city: null,
+      unitCount: null,
+    });
   });
 });
 

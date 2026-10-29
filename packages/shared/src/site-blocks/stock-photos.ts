@@ -24,6 +24,18 @@ export const STOCK_PHOTO_SRC: Readonly<Record<StockPhotoId, string>> = {
 };
 
 /**
+ * What each stock photo shows, as the description a hero starts with.
+ *
+ * A look gives its hero this text, and the editor puts it on a photo when the
+ * manager swaps one stock photo for the other, so a photo never keeps the other
+ * one's description. A manager may reword it afterwards.
+ */
+export const STOCK_PHOTO_ALT: Readonly<Record<StockPhotoId, string>> = {
+  sunset: 'Sunset over the water, with palm trees in silhouette',
+  palms: 'A quiet street lined with tall palm trees',
+};
+
+/**
  * A hero photo that is one of ours: an id and a description, never a path.
  * Tell it apart from an uploaded photo with `'stock' in photo`.
  */

@@ -369,6 +369,86 @@ describe('PATCH /api/v1/pm/site/blocks', () => {
     }));
   });
 
+  it('PATCHes a quicklinks block (validates via quicklinksBlockSchema)', async () => {
+    const res = await PATCH(
+      makePatchRequest({ communityId: 42, blockType: 'quicklinks', blockOrder: 8, content: {} }),
+    );
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockType: 'quicklinks', blockOrder: 8, content: {} }),
+    );
+  });
+
+  it('PATCHes a hidden quicklinks block, so the eye toggle can write it', async () => {
+    const res = await PATCH(
+      makePatchRequest({
+        communityId: 42,
+        blockType: 'quicklinks',
+        blockOrder: 8,
+        content: { hidden: true },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockType: 'quicklinks', content: { hidden: true } }),
+    );
+  });
+
+  it('PATCHes a board block (validates via boardBlockSchema)', async () => {
+    const res = await PATCH(
+      makePatchRequest({
+        communityId: 42,
+        blockType: 'board',
+        blockOrder: 9,
+        content: { heading: 'Our board' },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(upsertPublishedBlockMock).toHaveBeenCalledWith(
+      expect.objectContaining({ blockType: 'board', blockOrder: 9, content: { heading: 'Our board' } }),
+    );
+  });
+
+  it('does NOT enforce hasSitePolishBlocks for quicklinks or board — both are on every plan', async () => {
+    await PATCH(
+      makePatchRequest({ communityId: 42, blockType: 'quicklinks', blockOrder: 8, content: {} }),
+    );
+    await PATCH(
+      makePatchRequest({ communityId: 42, blockType: 'board', blockOrder: 9, content: {} }),
+    );
+    expect(upsertPublishedBlockMock).toHaveBeenCalledTimes(2);
+    expect(requirePlanFeatureMock).not.toHaveBeenCalledWith(42, 'hasSitePolishBlocks');
+  });
+
+  it('400s a quicklinks block that stores anything but hidden (links are never stored)', async () => {
+    // Which links appear is decided when the page renders; a stored list would
+    // be a second place for a target to go stale.
+    const res = await PATCH(
+      makePatchRequest({
+        communityId: 42,
+        blockType: 'quicklinks',
+        blockOrder: 8,
+        content: { links: [{ label: 'Pool', href: 'https://example.com' }] },
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
+  it('400s a board block that stores a person, or a heading over 80 characters', async () => {
+    for (const content of [
+      { members: [{ name: 'A. Owner', email: 'owner@example.com' }] },
+      { heading: 'x'.repeat(81) },
+      { heading: '   ' },
+    ]) {
+      const res = await PATCH(
+        makePatchRequest({ communityId: 42, blockType: 'board', blockOrder: 9, content }),
+      );
+      expect(res.status, JSON.stringify(content)).toBe(400);
+    }
+    expect(upsertPublishedBlockMock).not.toHaveBeenCalled();
+  });
+
   it('PATCHes a faq block (Pro+) and enforces hasSitePolishBlocks', async () => {
     const body = {
       communityId: 42,

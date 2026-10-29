@@ -63,6 +63,8 @@ const NOT_ROOTS: Record<string, string> = {
   'components/pm/site-editor-v3/canvas/CanvasBlock.tsx': 'inside the Canvas frame',
   // Reads a layout's contrast options for the publish checks; renders no public-site component.
   'components/pm/site-editor-v3/publish/PublishSheet.tsx': 'a type and look-styles data only',
+  // Reads the Board members view's default heading for its placeholder; renders no public-site component.
+  'components/pm/site-editor-v3/inspector/forms/BoardForm.tsx': 'a string constant only',
   // Types and data helpers only — they render nothing.
   'lib/public-site/layout-resolver.ts': 'types only',
   'lib/public-site/preview-overrides.ts': 'types only',

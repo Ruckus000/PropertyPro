@@ -1,12 +1,20 @@
 'use client';
 
 import { useCallback } from 'react';
-import { heroBlockSchema, resolveHeroPhotos, type HeroPhoto } from '@propertypro/shared';
+import {
+  heroBlockSchema,
+  parseLinkedText,
+  resolveHeroPhotos,
+  resolveLinkedText,
+  type HeroPhoto,
+  type LinkedFacts,
+} from '@propertypro/shared';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useUpdateHeroBlock } from '@/hooks/use-hero-block';
 import { useBlockForm } from '../use-block-form';
+import { useLinkedFacts } from '../linked-facts-context';
 import { HeroPhotosField } from './fields/HeroPhotosField';
 import type { BlockFormProps } from '../types';
 
@@ -66,6 +74,31 @@ function isDescribed(photo: HeroPhoto): boolean {
   return photo.decorative === true || (photo.alt ?? '').length > 0;
 }
 
+/** What the "Shows as" line says when every sentence drops. */
+const NOTHING_SHOWN = "nothing. It uses a detail your Community profile doesn't have yet.";
+
+/**
+ * What the page will show for these words, for the "Shows as" line, or null when
+ * the line would add nothing: the community's facts are not known, or the words
+ * use no linked detail and so show as typed.
+ *
+ * Resolved exactly as `HeroBlock` resolves them (`resolveLinkedText` with the
+ * canvas's facts), because a line that disagrees with the page is worse than none.
+ * A headline that drops whole shows the community's name, as the page does to keep
+ * its heading; a subtitle that drops whole shows nothing, and says why. Which
+ * sentences dropped is the author's to see: the line holds what is left.
+ */
+function shownAs(
+  text: string,
+  facts: LinkedFacts | null,
+  { nameStandsIn }: { nameStandsIn: boolean },
+): string | null {
+  if (facts === null || !parseLinkedText(text).some((part) => part.kind === 'field')) return null;
+  const resolved =
+    resolveLinkedText(text, facts) || (nameStandsIn ? resolveLinkedText('{{name}}', facts) : '');
+  return resolved === '' ? NOTHING_SHOWN : resolved;
+}
+
 /**
  * Draft -> stored shape.
  *
@@ -88,8 +121,9 @@ function toCanonical(draft: HeroDraft): unknown | null {
   if ((ctaText.length === 0) !== (ctaTarget.length === 0)) return null;
 
   const photos = draft.photos.map((photo): HeroPhoto => {
-    // Unchanged: the form shows a stock photo's description read-only.
-    if ('stock' in photo) return { stock: photo.stock, alt: photo.alt };
+    // A stock photo is described, never decorative; its description is the
+    // manager's to reword, trimmed like an upload's.
+    if ('stock' in photo) return { stock: photo.stock, alt: photo.alt.trim() };
     return photo.decorative === true
       ? { path: photo.path, decorative: true as const }
       : { path: photo.path, alt: (photo.alt ?? '').trim() };
@@ -131,6 +165,14 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
   const ctaTextId = `hero-cta-text-${blockOrder}`;
   const ctaTargetId = `hero-cta-target-${blockOrder}`;
 
+  // The words are saved as typed, tokens and all, so a rename in Settings shows
+  // on the site; these lines only say what the page does with them today.
+  const facts = useLinkedFacts();
+  const headlineShows = shownAs(draft.headline, facts, { nameStandsIn: true });
+  const subtitleShows = shownAs(draft.subtitle, facts, { nameStandsIn: false });
+  const headlineShowsId = `${headlineId}-shows-as`;
+  const subtitleShowsId = `${subtitleId}-shows-as`;
+
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
@@ -143,8 +185,14 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
           value={draft.headline}
           maxLength={HEADLINE_MAX}
           required
+          aria-describedby={headlineShows === null ? undefined : headlineShowsId}
           onChange={(event) => setDraft((prev) => ({ ...prev, headline: event.target.value }))}
         />
+        {headlineShows !== null && (
+          <p id={headlineShowsId} className="break-words text-xs text-content-secondary">
+            {`Shows as: ${headlineShows}`}
+          </p>
+        )}
       </div>
 
       <div className="space-y-1.5">
@@ -155,8 +203,14 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
           maxLength={SUBTITLE_MAX}
           rows={3}
           placeholder="Optional"
+          aria-describedby={subtitleShows === null ? undefined : subtitleShowsId}
           onChange={(event) => setDraft((prev) => ({ ...prev, subtitle: event.target.value }))}
         />
+        {subtitleShows !== null && (
+          <p id={subtitleShowsId} className="break-words text-xs text-content-secondary">
+            {`Shows as: ${subtitleShows}`}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2">

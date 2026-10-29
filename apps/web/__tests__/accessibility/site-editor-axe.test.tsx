@@ -20,6 +20,10 @@ import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-contex
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
+import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
+import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardForm';
+import { QuickLinksForm } from '@/components/pm/site-editor-v3/inspector/forms/QuickLinksForm';
+import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
 import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
@@ -53,6 +57,16 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+}));
+
+// The hero form writes through its own endpoint, and its photo field reaches the
+// upload queue. Same rule as above — each module COMPLETELY.
+vi.mock('@/hooks/use-hero-block', () => ({
+  useHeroBlock: () => ({ data: null }),
+  useUpdateHeroBlock: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock('@/hooks/use-hero-photos', () => ({
+  useHeroPhotos: () => ({ uploads: [], upload: vi.fn(), dismiss: vi.fn(), isUploading: false }),
 }));
 
 // Phase 8. Same rule as above — mock the module COMPLETELY.
@@ -571,6 +585,67 @@ describe('Site settings + footer — axe (Phase 8)', () => {
         showStatutoryLine
       />,
     );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Website builder writers — axe', () => {
+  // Each form is rendered on its own, in the state a manager meets it in, and
+  // something only that state draws is found BEFORE the audit: an audit of a
+  // skeleton or an empty tree passes for the wrong reason.
+
+  it('has no violations in the Quick links form', async () => {
+    const { container } = render(
+      <QuickLinksForm communityId={7} blockType="quicklinks" blockOrder={4} content={{}} />,
+    );
+    expect(screen.getByText(/Quick links fills itself in/)).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Board members form', async () => {
+    const { container } = render(
+      <BoardForm
+        communityId={7}
+        blockType="board"
+        blockOrder={5}
+        content={{ heading: 'Our board' }}
+      />,
+    );
+    expect(screen.getByLabelText('Heading')).toHaveValue('Our board');
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the hero form with linked fields and a stock photo', async () => {
+    const { container } = render(
+      <LinkedFactsProvider
+        facts={{
+          name: 'Harbor Pointe Condominium Association, Inc.',
+          shortName: 'Harbor Pointe',
+          city: 'Miami',
+          unitCount: 120,
+        }}
+      >
+        <HeroForm
+          communityId={7}
+          blockType="hero"
+          blockOrder={1}
+          content={{
+            headline: 'Welcome to {{name}}',
+            subtitle: '{{units}} homes in {{city}}. Notices and records.',
+            photos: [
+              { stock: 'sunset', alt: 'Sunset over the water' },
+              { path: '7/hero/pool.jpg', alt: 'The pool' },
+            ],
+          }}
+        />
+      </LinkedFactsProvider>,
+    );
+    // The preview lines, the stock photo's own controls and the upload's.
+    expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 });
