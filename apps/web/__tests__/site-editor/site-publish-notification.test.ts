@@ -80,6 +80,53 @@ describe('notifyResidentsOfSitePublish', () => {
     });
   });
 
+  it('notifyResidentsOfSitePublish defaults to audience all', async () => {
+    await notifyResidentsOfSitePublish(INPUT);
+
+    expect(createAnnouncementMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ audience: 'all' }),
+    );
+    expect(createNotificationsMock).toHaveBeenCalledWith(
+      42,
+      expect.anything(),
+      'all',
+      'user-1',
+    );
+    expect(queueDeliveryMock).toHaveBeenCalledWith(expect.objectContaining({ audience: 'all' }));
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ audience: 'all' }) }),
+    );
+  });
+
+  it('owners_only reaches the announcement, the in-app recipients, the email recipients and the audit row', async () => {
+    /*
+     * Announcement audience is enforced in several places that each pick their
+     * own recipients, and they have disagreed before. All four read the one
+     * `audience` input; this pins each of them.
+     */
+    await notifyResidentsOfSitePublish({ ...INPUT, audience: 'owners_only' });
+
+    expect(createAnnouncementMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ audience: 'owners_only' }),
+    );
+    expect(createNotificationsMock).toHaveBeenCalledWith(
+      42,
+      expect.anything(),
+      'owners_only',
+      'user-1',
+    );
+    expect(queueDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: 'owners_only' }),
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ audience: 'owners_only', source: 'site_publish' }),
+      }),
+    );
+  });
+
   it('delivers as the publishing user, so the email signature carries their title', async () => {
     await notifyResidentsOfSitePublish(INPUT);
 
