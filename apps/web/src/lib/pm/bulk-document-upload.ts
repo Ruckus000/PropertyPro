@@ -9,7 +9,9 @@
  * that per-community Promise.allSettled error capture stays at the route)
  * and for verifying PM permissions for each communityId BEFORE invoking.
  */
+import { captureException } from '@sentry/nextjs';
 import { createScopedClient, documents } from '@propertypro/db';
+import { autoLinkCommunityRecords } from '@/lib/services/record-auto-link-service';
 
 export interface BulkDocumentInput {
   fileName: string;
@@ -48,6 +50,20 @@ export async function insertBulkDocumentsForCommunity(params: {
       uploadedBy,
     });
     created++;
+  }
+
+  // Bulk rows are inserted posted, so link the records they unambiguously fill
+  // (D12), once for the whole batch. Bookkeeping: a failure is reported, never
+  // thrown, because the documents are already saved.
+  if (created > 0) {
+    try {
+      await autoLinkCommunityRecords(communityId, uploadedBy);
+    } catch (err) {
+      captureException(err, {
+        tags: { record_auto_link: 'bulk_upload' },
+        extra: { communityId },
+      });
+    }
   }
   return { created };
 }

@@ -21,6 +21,7 @@
  * (warnings spread only when non-empty).
  * DELETE wire shape preserved: `{ data: { deleted: true, id } }`.
  */
+import { captureException } from '@sentry/nextjs';
 import { runRoute, withEnvelope } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -54,6 +55,7 @@ import {
   type DocumentPublishAudit,
 } from '@/lib/services/documents-service';
 import { unlinkChecklistItemsForDocument } from '@/lib/services/compliance-service';
+import { autoLinkDocument } from '@/lib/services/record-auto-link-service';
 import {
   documentsCreateContract,
   documentsDeleteContract,
@@ -159,6 +161,16 @@ export const POST = withErrorHandler(
     });
 
     void completeDocumentSteps(effectiveCommunityId, userId, body.categoryId);
+
+    // A draft is not posted, so it fills no record until it is (PATCH `{ posted: true }`).
+    if (!body.draft) {
+      await autoLinkPostedDocument(
+        effectiveCommunityId,
+        Number((result.document as Record<string, unknown>)['id']),
+        userId,
+        'document_upload',
+      );
+    }
 
     return withEnvelope(result.document, {
       warnings: result.warnings.length > 0 ? result.warnings : undefined,
@@ -373,6 +385,10 @@ async function changePostedState(params: {
     metadata: posted ? { change: 'posted' } : { change: 'unposted', complianceLinksCleared: true },
   });
 
+  if (posted) {
+    await autoLinkPostedDocument(communityId, id, userId, 'document_post');
+  }
+
   if (posted && existing.sourceType === 'library') {
     await sendDocumentPostedNotifications({
       communityId,
@@ -383,4 +399,25 @@ async function changePostedState(params: {
   }
 
   return { id, posted };
+}
+
+/**
+ * Link a just-posted document to the Florida record it is, when the evidence is
+ * unambiguous (`autoLinkDocument`, D12). Bookkeeping only: the document is
+ * already saved and posted, so a failure here is reported, never thrown.
+ */
+async function autoLinkPostedDocument(
+  communityId: number,
+  documentId: number,
+  userId: string,
+  trigger: 'document_upload' | 'document_post',
+): Promise<void> {
+  try {
+    await autoLinkDocument(communityId, documentId, userId);
+  } catch (err) {
+    captureException(err, {
+      tags: { record_auto_link: trigger },
+      extra: { communityId, documentId },
+    });
+  }
 }
