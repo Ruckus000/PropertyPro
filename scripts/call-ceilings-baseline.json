@@ -203,6 +203,9 @@
   "apps/web/src/lib/services/site-blocks-service.ts": {
     "unscoped": 8
   },
+  "apps/web/src/lib/services/site-look-service.ts": {
+    "unscoped": 1
+  },
   "apps/web/src/lib/services/site-pages-service.ts": {
     "unscoped": 7
   },

@@ -1,0 +1,440 @@
+/**
+ * The looks registry and the look-switch planner (website builder, Phase 2B).
+ *
+ * `planLookSwitch` decides what a look switch does to the home page for both the
+ * draft it writes and the preview it shows (D5), so its rules are pinned here
+ * case by case: an untouched site becomes exactly the new look; edited and
+ * hidden sections keep their content and slot; the new look's own sections fill
+ * in around them.
+ */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
+
+// looks.ts must stay free of the database: the look previews and the client-side
+// picker render from it, and `@propertypro/db` throws at load without a
+// DATABASE_URL. If anything in its import graph reached the database, one of
+// these factories would run and the import below would fail with its message.
+vi.mock('@propertypro/db', () => {
+  throw new Error('looks.ts must not import @propertypro/db');
+});
+vi.mock('@propertypro/db/unsafe', () => {
+  throw new Error('looks.ts must not import @propertypro/db/unsafe');
+});
+
+import { blockSchemaRegistry, resolveLinkedText, type LinkedFacts } from '@propertypro/shared';
+import { LAYOUT_IDS } from '@/components/public-site/blocks/types';
+import { LOOK_STYLES } from '@/components/public-site/layouts/look-styles';
+import {
+  LOOKS,
+  LOOK_IDS,
+  getLook,
+  lookIdForLayout,
+  planLookSwitch,
+  planLookSwitchWithCounts,
+  suggestedLookFor,
+  type LookDefinition,
+  type LookSection,
+  type SiteSection,
+} from '@/lib/site-looks/looks';
+import { SITE_LOOK_PRESETS } from '../../fixtures/site-look-presets';
+
+function look(id: string): LookDefinition {
+  const found = getLook(id);
+  if (!found) throw new Error(`No look "${id}"`);
+  return found;
+}
+
+/** A home page exactly as a look would have published it, with row ids. */
+function siteFrom(sections: readonly LookSection[], firstId = 100): SiteSection[] {
+  return sections.map((section, i) => ({
+    id: firstId + i,
+    blockType: section.blockType,
+    content: structuredClone(section.content),
+  }));
+}
+
+/** A look's sections as the planner hands them back: no row id. */
+function asPlanned(sections: readonly LookSection[]): SiteSection[] {
+  return sections.map(({ blockType, content }) => ({ blockType, content }));
+}
+
+function sectionOf(sections: readonly LookSection[], blockType: string): LookSection {
+  const found = sections.find((s) => s.blockType === blockType);
+  if (!found) throw new Error(`No ${blockType} section`);
+  return found;
+}
+
+function types(sections: readonly { blockType: string }[]): string[] {
+  return sections.map((s) => s.blockType);
+}
+
+const EDITED_HERO = {
+  headline: 'Harbor Pointe',
+  subtitle: 'Notices and records for Harbor Pointe owners.',
+};
+
+// ---------------------------------------------------------------------------
+// The registry
+// ---------------------------------------------------------------------------
+
+describe('the looks registry', () => {
+  it('lists the four looks, each drawn by the layout and colour set of its own id (D2)', () => {
+    expect([...LOOK_IDS]).toEqual(['bayfront', 'heritage', 'palm-grove', 'plain-simple']);
+    expect(LOOKS.map((l) => l.id)).toEqual([...LOOK_IDS]);
+    for (const l of LOOKS) {
+      expect(l.layoutId).toBe(l.id);
+      expect(l.presetSlug).toBe(l.id);
+      expect(LAYOUT_IDS).toContain(l.layoutId);
+      expect(LOOK_STYLES).toHaveProperty(l.id);
+      expect(getLook(l.id)).toBe(l);
+    }
+    expect(getLook('tidewater')).toBeNull();
+    expect(getLook('')).toBeNull();
+  });
+
+  it("every look's sections parse with blockSchemaRegistry", () => {
+    const failures: string[] = [];
+    for (const l of LOOKS) {
+      for (const section of l.sections) {
+        const parsed = blockSchemaRegistry[section.blockType].safeParse(section.content);
+        if (!parsed.success) failures.push(`${l.id} ${section.blockType}: ${parsed.error.message}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('every look starts with its welcome section and has exactly one of each section type', () => {
+    for (const l of LOOKS) {
+      expect(l.sections[0]?.blockType).toBe('hero');
+      expect(new Set(types(l.sections)).size).toBe(l.sections.length);
+    }
+  });
+
+  it('no look uses a Professional-only section type', () => {
+    // FAQ, gallery and amenities need `hasSitePolishBlocks` (Professional); every
+    // look has to work fully on every plan.
+    const professionalOnly = new Set(['faq', 'gallery', 'amenities']);
+    const used = LOOKS.flatMap((l) => l.sections.map((s) => `${l.id}:${s.blockType}`));
+    expect(used.filter((entry) => professionalOnly.has(entry.split(':')[1]!))).toEqual([]);
+  });
+
+  it('a look with Board members leaves the board out of its Contact section (D16)', () => {
+    for (const l of LOOKS) {
+      const contact = sectionOf(l.sections, 'contact').content as { showBoard: boolean };
+      expect({ look: l.id, showBoard: contact.showBoard }).toEqual({
+        look: l.id,
+        showBoard: !types(l.sections).includes('board'),
+      });
+    }
+  });
+
+  it('every look keeps the sections Florida law asks associations to post', () => {
+    // A look switch never removes a section type the incoming look has, so this
+    // is what keeps a switch from taking away the site's Meetings or Documents.
+    for (const l of LOOKS) {
+      expect(types(l.sections)).toEqual(expect.arrayContaining(['meetings', 'documents']));
+    }
+  });
+
+  it('the presets mirrored for tests match migration 0097', () => {
+    const sql = readFileSync(
+      path.resolve(__dirname, '../../../../../packages/db/migrations/0097_site_looks_catalog.sql'),
+      'utf8',
+    );
+    const presetInsert = sql.slice(
+      sql.indexOf('INSERT INTO site_theme_presets'),
+      sql.indexOf('INSERT INTO site_layout_metadata'),
+    );
+    expect(presetInsert).not.toBe('');
+
+    expect(Object.keys(SITE_LOOK_PRESETS).sort()).toEqual([...LOOK_IDS].sort());
+    for (const l of LOOKS) {
+      // The row as 0097 writes it: slug, display name, description, then the
+      // tokens as one compact JSON literal. The fixture's keys are in the
+      // migration's order, so JSON.stringify reproduces the literal exactly.
+      const row = `('${l.presetSlug}', '${l.name}', '${l.description}',\n   '${JSON.stringify(SITE_LOOK_PRESETS[l.id])}'::jsonb,`;
+      expect(presetInsert).toContain(row);
+    }
+  });
+
+  it("every look's welcome copy keeps a full sentence with no city and no unit count", () => {
+    // Review Focus 2: with a fact missing, only the sentence that held it goes.
+    const missingFacts: LinkedFacts = {
+      name: 'Harbor Pointe Condominium Association, Inc.',
+      shortName: null,
+      city: null,
+      unitCount: null,
+    };
+    const failures: string[] = [];
+    for (const l of LOOKS) {
+      const hero = sectionOf(l.sections, 'hero').content as { headline: string; subtitle?: string };
+      const headline = resolveLinkedText(hero.headline, missingFacts);
+      const subtitle = resolveLinkedText(hero.subtitle ?? '', missingFacts);
+      if (headline === '' || headline.includes('{{')) failures.push(`${l.id} headline: "${headline}"`);
+      if (!/^[A-Z][^{}]*[.!?]$/.test(subtitle)) failures.push(`${l.id} subtitle: "${subtitle}"`);
+    }
+    expect(failures).toEqual([]);
+
+    // And with every fact known, the copy uses them.
+    const allFacts: LinkedFacts = { name: 'Harbor Pointe', shortName: null, city: 'Naples', unitCount: 120 };
+    const bayfrontHero = sectionOf(look('bayfront').sections, 'hero').content as { subtitle: string };
+    expect(resolveLinkedText(bayfrontHero.subtitle, allFacts)).toBe(
+      '120 homes in Naples. Meeting notices, news and community records, all in one place.',
+    );
+  });
+
+  it('suggestedLookFor maps condo, HOA and apartment', () => {
+    expect(suggestedLookFor('condo_718')).toBe('bayfront');
+    expect(suggestedLookFor('hoa_720')).toBe('palm-grove');
+    expect(suggestedLookFor('apartment')).toBe('plain-simple');
+  });
+
+  it('lookIdForLayout names a look only for one of the four look layouts', () => {
+    expect(lookIdForLayout('heritage')).toBe('heritage');
+    expect(lookIdForLayout('plain-simple')).toBe('plain-simple');
+    // The legacy layouts, and no layout at all, are not looks.
+    expect(lookIdForLayout('tidewater')).toBeNull();
+    expect(lookIdForLayout('boulevard')).toBeNull();
+    expect(lookIdForLayout('sable')).toBeNull();
+    expect(lookIdForLayout(null)).toBeNull();
+    expect(lookIdForLayout(undefined)).toBeNull();
+    expect(lookIdForLayout('Heritage')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// planLookSwitch (D5)
+// ---------------------------------------------------------------------------
+
+describe('planLookSwitch', () => {
+  const bayfront = look('bayfront');
+  const heritage = look('heritage');
+  const plainSimple = look('plain-simple');
+
+  it('an untouched site becomes exactly the incoming look, in its order', () => {
+    // Every pair of looks. Bayfront to Plain & Simple is the telling one: Plain
+    // & Simple puts Meetings before Announcements, so replacing sections in
+    // their slots would keep Bayfront's order instead.
+    for (const from of LOOKS) {
+      for (const to of LOOKS) {
+        const result = planLookSwitch({
+          current: siteFrom(from.sections),
+          outgoingDefaults: [from.sections],
+          incoming: to,
+        });
+        expect({ from: from.id, to: to.id, result }).toEqual({
+          from: from.id,
+          to: to.id,
+          result: asPlanned(to.sections),
+        });
+      }
+    }
+
+    // A page the manager only reordered is still untouched: it takes the look's order.
+    const [hero, quicklinks, announcements, meetings, documents, contact] = siteFrom(bayfront.sections);
+    const reordered = [hero!, documents!, contact!, quicklinks!, meetings!, announcements!];
+    expect(planLookSwitch({ current: reordered, outgoingDefaults: [bayfront.sections], incoming: heritage })).toEqual(
+      asPlanned(heritage.sections),
+    );
+
+    // "Untouched" compares parsed content, so a section stored with the schema's
+    // defaults filled in (as the editor saves it) is still untouched.
+    const savedByTheEditor = bayfront.sections.map((s, i) => ({
+      id: 200 + i,
+      blockType: s.blockType,
+      content: blockSchemaRegistry[s.blockType].parse(s.content),
+    }));
+    expect(
+      planLookSwitch({ current: savedByTheEditor, outgoingDefaults: [bayfront.sections], incoming: heritage }),
+    ).toEqual(asPlanned(heritage.sections));
+
+    // A site with no sections at all is untouched too.
+    expect(planLookSwitch({ current: [], outgoingDefaults: [bayfront.sections], incoming: heritage })).toEqual(
+      asPlanned(heritage.sections),
+    );
+  });
+
+  it('an edited hero keeps its text and slot; untouched neighbours are replaced in place', () => {
+    // Review Focus 4.
+    const current = siteFrom(bayfront.sections);
+    current[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
+
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: heritage });
+
+    expect(result).toEqual([
+      { id: 100, blockType: 'hero', content: EDITED_HERO },
+      // Bayfront's Quick links is untouched and Heritage has none: removed.
+      sectionOf(heritage.sections, 'announcements'),
+      sectionOf(heritage.sections, 'meetings'),
+      sectionOf(heritage.sections, 'documents'),
+      sectionOf(heritage.sections, 'board'),
+      sectionOf(heritage.sections, 'contact'),
+    ]);
+    // Replaced, not kept: Heritage shows five announcements where Bayfront shows three.
+    expect(result[1]?.content).toEqual({ limit: 5 });
+  });
+
+  it('a hidden section stays hidden', () => {
+    // Review Focus 4. A hidden section never matches a default, so it is kept
+    // with its content and slot, and no visible copy of its type is added.
+    const current = siteFrom(bayfront.sections);
+    const meetingsSlot = types(current).indexOf('meetings');
+    current[meetingsSlot] = { id: 999, blockType: 'meetings', content: { limit: 5, hidden: true } };
+
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: plainSimple });
+
+    expect(result[meetingsSlot]).toEqual({ id: 999, blockType: 'meetings', content: { limit: 5, hidden: true } });
+    expect(types(result).filter((t) => t === 'meetings')).toHaveLength(1);
+    // Its untouched neighbours become Plain & Simple's, in their own slots.
+    expect(types(result)).toEqual(['hero', 'quicklinks', 'announcements', 'meetings', 'documents', 'contact']);
+    expect(result[0]).toEqual(sectionOf(plainSimple.sections, 'hero'));
+  });
+
+  it('switching to heritage inserts Board members after Documents', () => {
+    // The manager moved Documents above Meetings and edited the hero. Board
+    // members, which the site does not have, goes right after Documents (the
+    // section before it in Heritage's order), wherever Documents now is.
+    const [hero, quicklinks, announcements, meetings, documents, contact] = siteFrom(bayfront.sections);
+    const current = [{ ...hero!, content: EDITED_HERO }, quicklinks!, announcements!, documents!, meetings!, contact!];
+
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: heritage });
+
+    expect(types(result)).toEqual(['hero', 'announcements', 'documents', 'board', 'meetings', 'contact']);
+    expect(result[3]).toEqual(sectionOf(heritage.sections, 'board'));
+  });
+
+  it("a section the page lacks, with nothing before it in the look's order, goes first", () => {
+    // A legacy page with no welcome section, and Announcements the manager edited.
+    const current: SiteSection[] = [{ id: 300, blockType: 'announcements', content: { limit: 2 } }];
+
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: heritage });
+
+    expect(result[0]).toEqual(sectionOf(heritage.sections, 'hero'));
+    expect(types(result)).toEqual(['hero', 'announcements', 'meetings', 'documents', 'board', 'contact']);
+    expect(result[1]).toEqual({ id: 300, blockType: 'announcements', content: { limit: 2 } });
+  });
+
+  it('leaving heritage removes an untouched Board members', () => {
+    const current = siteFrom(heritage.sections);
+    current[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
+
+    const result = planLookSwitch({ current, outgoingDefaults: [heritage.sections], incoming: bayfront });
+
+    expect(result).toEqual([
+      { id: 100, blockType: 'hero', content: EDITED_HERO },
+      // Quick links, which Heritage does not have, goes right after the hero.
+      sectionOf(bayfront.sections, 'quicklinks'),
+      sectionOf(bayfront.sections, 'announcements'),
+      sectionOf(bayfront.sections, 'meetings'),
+      sectionOf(bayfront.sections, 'documents'),
+      sectionOf(bayfront.sections, 'contact'),
+    ]);
+
+    // A Board members section the manager edited is theirs, and stays.
+    const editedBoard = siteFrom(heritage.sections);
+    const boardSlot = types(editedBoard).indexOf('board');
+    editedBoard[boardSlot] = { id: 555, blockType: 'board', content: { heading: 'Our volunteers' } };
+    const kept = planLookSwitch({ current: editedBoard, outgoingDefaults: [heritage.sections], incoming: bayfront });
+    expect(kept).toContainEqual({ id: 555, blockType: 'board', content: { heading: 'Our volunteers' } });
+  });
+
+  it("a legacy site's starter-pack sections count as untouched, for any pack version", () => {
+    // Version 1 is migration 0004's condo pack, as `site_starter_packs.blocks`
+    // holds it and as it was inserted into every site it was applied to.
+    const condoV1: LookSection[] = [
+      {
+        blockType: 'hero',
+        content: {
+          headline: 'Welcome',
+          subtitle: 'A welcoming Florida community.',
+          ctaText: 'Resident Login',
+          ctaTarget: '/auth/login',
+        },
+      },
+      { blockType: 'announcements', content: { limit: 5, timeWindowDays: 30 } },
+      { blockType: 'meetings', content: { limit: 10, timeWindowDays: 30 } },
+      { blockType: 'documents', content: { limit: 5, includeCategories: ['budget', 'minutes', 'financial'] } },
+      { blockType: 'contact', content: { showBoard: true, showManagement: true } },
+    ];
+    const condoV2: LookSection[] = [
+      { blockType: 'hero', content: { headline: 'Welcome to our community' } },
+      { blockType: 'announcements', content: { limit: 4 } },
+      { blockType: 'meetings', content: { limit: 6 } },
+      { blockType: 'text', content: { body: 'Our community has a pool and a clubhouse.' } },
+      { blockType: 'contact', content: { showBoard: false, showManagement: true } },
+    ];
+    const packs = [condoV1, condoV2];
+
+    for (const pack of packs) {
+      const result = planLookSwitch({ current: siteFrom(pack), outgoingDefaults: packs, incoming: bayfront });
+      expect(result).toEqual(asPlanned(bayfront.sections));
+    }
+
+    // jsonb hands keys back in its own order; that is still the same section.
+    const reordered = siteFrom(condoV1);
+    reordered[1] = { id: 101, blockType: 'announcements', content: { timeWindowDays: 30, limit: 5 } };
+    expect(planLookSwitch({ current: reordered, outgoingDefaults: packs, incoming: bayfront })).toEqual(
+      asPlanned(bayfront.sections),
+    );
+
+    // A section matching no version is the manager's, and stays in its slot.
+    const edited = siteFrom(condoV1);
+    edited[2] = { id: 102, blockType: 'meetings', content: { limit: 7, timeWindowDays: 30 } };
+    const result = planLookSwitch({ current: edited, outgoingDefaults: packs, incoming: bayfront });
+    expect(result[3]).toEqual({ id: 102, blockType: 'meetings', content: { limit: 7, timeWindowDays: 30 } });
+    expect(types(result)).toEqual(['hero', 'quicklinks', 'announcements', 'meetings', 'documents', 'contact']);
+  });
+
+  it('keeps a section whose content does not parse, or whose type it does not know', () => {
+    const current: SiteSection[] = [
+      ...siteFrom(bayfront.sections),
+      // limit is capped at 20, so this fails its schema.
+      { id: 900, blockType: 'announcements', content: { limit: 500 } },
+    ];
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: heritage });
+    expect(result).toContainEqual({ id: 900, blockType: 'announcements', content: { limit: 500 } });
+  });
+
+  it("uses each of the incoming look's sections once", () => {
+    // Two untouched Announcements: the first takes Heritage's, the second goes,
+    // rather than showing Heritage's Announcements twice.
+    const [hero, quicklinks, announcements, meetings, documents, contact] = siteFrom(bayfront.sections);
+    const current = [
+      { ...hero!, content: EDITED_HERO },
+      quicklinks!,
+      announcements!,
+      { ...announcements!, id: 300 },
+      meetings!,
+      documents!,
+      contact!,
+    ];
+
+    const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], incoming: heritage });
+
+    expect(types(result)).toEqual(['hero', 'announcements', 'meetings', 'documents', 'board', 'contact']);
+  });
+
+  it('counts what it replaced, kept, added and removed', () => {
+    const edited = siteFrom(bayfront.sections);
+    edited[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
+    expect(
+      planLookSwitchWithCounts({ current: edited, outgoingDefaults: [bayfront.sections], incoming: heritage }),
+    ).toMatchObject({ kept: 1, replaced: 4, removed: 1, added: 1 });
+
+    // An untouched site: each section pairs with the incoming one of its type.
+    expect(
+      planLookSwitchWithCounts({
+        current: siteFrom(bayfront.sections),
+        outgoingDefaults: [bayfront.sections],
+        incoming: heritage,
+      }),
+    ).toMatchObject({ kept: 0, replaced: 5, removed: 1, added: 1 });
+  });
+
+  it('hands back copies, so changing the plan never changes the look', () => {
+    const result = planLookSwitch({ current: [], outgoingDefaults: [], incoming: heritage });
+    (result[1]!.content as { limit: number }).limit = 20;
+    expect(sectionOf(look('heritage').sections, 'announcements').content).toEqual({ limit: 5 });
+  });
+});
