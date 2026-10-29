@@ -46,7 +46,9 @@ interface StagedPhoto {
   /**
    * The stock photo this file takes the place of when it lands, rather than
    * joining the end of the list. Held by id, not position, because the list can
-   * be reordered while the file waits.
+   * be reordered while the file waits. It counts only while that photo is in the
+   * list (`replacingRows`); a removal or a swap moves or clears it
+   * (`followStockPhoto`).
    */
   replaces?: StockPhotoId;
 }
@@ -61,6 +63,28 @@ interface StagedPhoto {
 function swapTarget(photos: readonly HeroPhoto[], current: StockPhotoId): StockPhotoId | null {
   const taken = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
   return STOCK_PHOTO_IDS.find((id) => id !== current && !taken.has(id)) ?? null;
+}
+
+/**
+ * The waiting files that will take a stock photo's place, by row id; every other
+ * waiting file needs a place of its own.
+ *
+ * A file takes a stock photo's place only while that photo is in the list, and only
+ * one file can take it (the first, which is also the order they land in). A second
+ * file aimed at the same photo, or one aimed at a photo that has gone, lands at the
+ * end. The counter and the "Add photos" control are built on this, and the hero holds
+ * at most MAX_HERO_PHOTOS.
+ */
+function replacingRows(
+  staged: readonly StagedPhoto[],
+  photos: readonly HeroPhoto[],
+): ReadonlySet<string> {
+  const places = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
+  const replacing = new Set<string>();
+  for (const row of staged) {
+    if (row.replaces !== undefined && places.delete(row.replaces)) replacing.add(row.id);
+  }
+  return replacing;
 }
 
 export interface HeroPhotosFieldProps {
@@ -166,9 +190,11 @@ export function HeroPhotosField({
 
   // Staged rows hold a slot too, or picking 8 then picking 8 again would
   // stage 16 for a list capped at 8. One that replaces a stock photo does not:
-  // it takes that photo's place, so the list ends the same length.
-  const remaining =
-    MAX_HERO_PHOTOS - photos.length - staged.filter((row) => row.replaces === undefined).length;
+  // it takes that photo's place, so the list ends the same length. Which ones do
+  // is read from the list as it is now, not remembered, so an edit from outside
+  // the field cannot leave a file counted as free.
+  const replacing = replacingRows(staged, photos);
+  const remaining = MAX_HERO_PHOTOS - photos.length - (staged.length - replacing.size);
   const allDescribed = staged.every((row) => row.decorative || row.alt.trim().length > 0);
   const canUpload = staged.length > 0 && allDescribed && !isUploading;
 
@@ -211,9 +237,26 @@ export function HeroPhotosField({
     focusAfterRef.current = { index: target, action: 'move' };
   };
 
+  /**
+   * A stock photo has left the list, removed or swapped for `to`. The file waiting
+   * to take its place follows it to `to`, or, with no `to`, becomes an ordinary add
+   * that needs a place of its own. Left alone it would land at the end of a full hero
+   * as a ninth photo, under a note still promising a replacement.
+   */
+  const followStockPhoto = (from: StockPhotoId, to?: StockPhotoId) =>
+    setStaged((prev) =>
+      prev.map((row) => {
+        if (row.replaces !== from) return row;
+        const { replaces: _from, ...ordinary } = row;
+        return to === undefined ? ordinary : { ...ordinary, replaces: to };
+      }),
+    );
+
   const remove = (index: number) => {
+    const removed = photos[index];
     const next = photos.filter((_, i) => i !== index);
     onChange(next);
+    if (removed !== undefined && 'stock' in removed) followStockPhoto(removed.stock);
     setAnnouncement(
       next.length === 0
         ? 'Photo removed. No photos left.'
@@ -233,6 +276,7 @@ export function HeroPhotosField({
     // would tell a screen-reader user about a picture that is not there.
     next[index] = { stock: other, alt: STOCK_PHOTO_ALT[other] };
     onChange(next);
+    followStockPhoto(current.stock, other);
     setAnnouncement(`Photo ${index + 1} changed to the ${STOCK_PHOTO_NAME[other]} photo.`);
     focusAfterRef.current = { index, action: 'swap' };
   };
@@ -385,8 +429,10 @@ export function HeroPhotosField({
                         data-swap
                         // The docked column is 320px wide and the longest label
                         // ("…the palm-lined street photo instead") is wider than
-                        // the row, so let it wrap rather than run off the edge.
-                        className="h-auto max-w-full whitespace-normal py-1.5 text-left"
+                        // the row, so let it wrap rather than run off the edge. The
+                        // height is a floor for that reason: 44px below 768px and
+                        // 36px from there up (the touch-target rule in design.md).
+                        className="h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-9"
                         onClick={() => swapStock(index)}
                       >
                         {`Use the ${STOCK_PHOTO_NAME[swapTo]} photo instead`}
@@ -512,7 +558,7 @@ export function HeroPhotosField({
                   </Button>
                 </div>
 
-                {row.replaces !== undefined && (
+                {row.replaces !== undefined && replacing.has(row.id) && (
                   <p className="text-xs text-content-secondary">
                     {`Replaces the ${STOCK_PHOTO_NAME[row.replaces]} photo.`}
                   </p>

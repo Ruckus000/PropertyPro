@@ -11,6 +11,13 @@
 import { z } from 'zod';
 import { hiddenSchema } from './types';
 
+/**
+ * The heading the section shows when the manager has not given it one. The public
+ * view draws it, and the editor's form shows it as the placeholder, so both read
+ * it here and cannot disagree.
+ */
+export const DEFAULT_BOARD_HEADING = 'Board of Directors';
+
 export const boardBlockSchema = z
   .object({
     /**

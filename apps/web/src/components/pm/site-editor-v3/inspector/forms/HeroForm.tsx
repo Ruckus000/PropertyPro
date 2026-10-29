@@ -2,8 +2,10 @@
 
 import { useCallback } from 'react';
 import {
+  MAX_HERO_PHOTOS,
   heroBlockSchema,
   parseLinkedText,
+  resolveHeroHeadline,
   resolveHeroPhotos,
   resolveLinkedText,
   type HeroPhoto,
@@ -82,21 +84,19 @@ const NOTHING_SHOWN = "nothing. It uses a detail your Community profile doesn't 
  * the line would add nothing: the community's facts are not known, or the words
  * use no linked detail and so show as typed.
  *
- * Resolved exactly as `HeroBlock` resolves them (`resolveLinkedText` with the
- * canvas's facts), because a line that disagrees with the page is worse than none.
- * A headline that drops whole shows the community's name, as the page does to keep
- * its heading; a subtitle that drops whole shows nothing, and says why. Which
- * sentences dropped is the author's to see: the line holds what is left.
+ * `resolve` is the page's own rule for the field, so a line that disagrees with the
+ * page is not possible: `resolveHeroHeadline` for the headline (which shows the
+ * community's name when it drops whole, to keep the page's heading) and
+ * `resolveLinkedText` for the subtitle (which then shows nothing, and the line says
+ * why). Which sentences dropped is the author's to see: the line holds what is left.
  */
 function shownAs(
   text: string,
   facts: LinkedFacts | null,
-  { nameStandsIn }: { nameStandsIn: boolean },
+  resolve: (text: string, facts: LinkedFacts) => string,
 ): string | null {
   if (facts === null || !parseLinkedText(text).some((part) => part.kind === 'field')) return null;
-  const resolved =
-    resolveLinkedText(text, facts) || (nameStandsIn ? resolveLinkedText('{{name}}', facts) : '');
-  return resolved === '' ? NOTHING_SHOWN : resolved;
+  return resolve(text, facts) || NOTHING_SHOWN;
 }
 
 /**
@@ -107,7 +107,10 @@ function shownAs(
  * would then refuse:
  *   - headline is required;
  *   - CTA text and target are all-or-nothing (the schema's refine);
- *   - every photo needs alt text unless it is marked decorative.
+ *   - every photo needs alt text unless it is marked decorative;
+ *   - at most MAX_HERO_PHOTOS photos. The photo field keeps to that itself, so this
+ *     is the last guard rather than the usual one; without it a ninth photo would
+ *     make the route refuse every autosave until one was taken away.
  *
  * `heroImagePath`/`heroImageAlt` are never written back. Saving migrates the
  * row to `photos`, and the schema refuses content carrying both shapes.
@@ -119,6 +122,8 @@ function toCanonical(draft: HeroDraft): unknown | null {
   const ctaText = draft.ctaText.trim();
   const ctaTarget = draft.ctaTarget.trim();
   if ((ctaText.length === 0) !== (ctaTarget.length === 0)) return null;
+
+  if (draft.photos.length > MAX_HERO_PHOTOS) return null;
 
   const photos = draft.photos.map((photo): HeroPhoto => {
     // A stock photo is described, never decorative; its description is the
@@ -168,8 +173,9 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
   // The words are saved as typed, tokens and all, so a rename in Settings shows
   // on the site; these lines only say what the page does with them today.
   const facts = useLinkedFacts();
-  const headlineShows = shownAs(draft.headline, facts, { nameStandsIn: true });
-  const subtitleShows = shownAs(draft.subtitle, facts, { nameStandsIn: false });
+  const headlineShows = shownAs(draft.headline, facts, resolveHeroHeadline);
+  const subtitleShows = shownAs(draft.subtitle, facts, resolveLinkedText);
+  const overPhotoLimit = draft.photos.length > MAX_HERO_PHOTOS;
   const headlineShowsId = `${headlineId}-shows-as`;
   const subtitleShowsId = `${subtitleId}-shows-as`;
 
@@ -242,7 +248,14 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
         onChange={(photos) => setDraft((prev) => ({ ...prev, photos }))}
       />
 
-      {isIncomplete && (
+      {overPhotoLimit && (
+        <p className="text-xs text-status-danger">
+          {`The hero can show up to ${MAX_HERO_PHOTOS} photos. Remove one to save your changes.`}
+        </p>
+      )}
+
+      {/* Too many photos has its sentence above; this one is for what else can be missing. */}
+      {isIncomplete && !overPhotoLimit && (
         <p className="text-xs text-status-danger">
           Add a headline, describe every photo (or mark it decorative), and fill in both the
           button label and link — or neither — before this section can be saved.

@@ -11,7 +11,7 @@
  * canvas renders it directly and a manager needs to see where the section sits.
  * The public site never reaches that branch: the shell renders nothing first.
  */
-import type { BoardBlockContent } from '@propertypro/shared';
+import { DEFAULT_BOARD_HEADING, type BoardBlockContent } from '@propertypro/shared';
 import type { BlockViewProps } from './types';
 
 export interface BoardMember {
@@ -22,8 +22,6 @@ export interface BoardMember {
 export interface BoardData {
   members: BoardMember[];
 }
-
-export const DEFAULT_BOARD_HEADING = 'Board of Directors';
 
 export type BoardBlockViewProps = BlockViewProps<BoardBlockContent, BoardData>;
 

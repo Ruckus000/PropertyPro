@@ -102,9 +102,9 @@ export const blocksUpsertContract = defineRoute({
       // faq + amenities + gallery are the Pro+ polish blocks (faq/amenities
       // in PR #10c, gallery in #10d); the handler additionally gates all
       // three on hasSitePolishBlocks (POLISH_BLOCK_TYPES).
-      // quicklinks + board are on every plan: they store nothing but a heading
-      // and `hidden`, and draw on records the community already has. They joined
-      // in the release that shipped their writers, after their readers.
+      // quicklinks + board are on every plan (the handler's POLISH_BLOCK_TYPES
+      // leaves them out): they store nothing but a heading and `hidden`, and draw
+      // on records the community already has.
       blockType: z.enum([
         'text',
         'image',

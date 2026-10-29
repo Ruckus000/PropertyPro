@@ -18,6 +18,7 @@ import { AmenitiesForm } from '@/components/pm/site-editor-v3/inspector/forms/Am
 import { SorEmptyTextForm } from '@/components/pm/site-editor-v3/inspector/forms/SorEmptyTextForm';
 import { QuickLinksForm } from '@/components/pm/site-editor-v3/inspector/forms/QuickLinksForm';
 import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardForm';
+import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
 import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
 import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 
@@ -496,6 +497,24 @@ describe('BoardForm', () => {
       /if no one holds a board seat yet, your website leaves this section out/i,
     );
   });
+
+  it('tells the manager how to keep the board from appearing twice', () => {
+    // The Contact section lists the board too, unless its own switch is off.
+    renderBoard({});
+    expect(
+      screen.getByText(
+        'If your Contact section also lists the board, untick “Show board members” there so the board appears only once.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('names a switch the Contact form really has', () => {
+    const { unmount } = render(
+      <ContactForm communityId={1} blockType="contact" blockOrder={3} content={{}} />,
+    );
+    expect(screen.getByLabelText('Show board members')).toBeInTheDocument();
+    unmount();
+  });
 });
 
 describe('HeroForm — "Shows as" for linked fields', () => {
@@ -578,7 +597,7 @@ describe('HeroForm — "Shows as" for linked fields', () => {
   });
 
   it('shows the community name when the whole headline drops, as the page does', () => {
-    // Task 6: the page keeps its <h1> by falling back to the display name.
+    // The page keeps its <h1> by falling back to the display name.
     renderHero({ headline: '{{city}}' }, { ...HARBOR, city: null });
     expect(screen.getByText('Shows as: Harbor Pointe')).toBeInTheDocument();
 

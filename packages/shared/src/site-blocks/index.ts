@@ -73,7 +73,7 @@ export {
 } from './gallery';
 export { paymentsBlockSchema, type PaymentsBlockContent } from './payments';
 export { quicklinksBlockSchema, type QuicklinksBlockContent } from './quicklinks';
-export { boardBlockSchema, type BoardBlockContent } from './board';
+export { boardBlockSchema, DEFAULT_BOARD_HEADING, type BoardBlockContent } from './board';
 export {
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
@@ -98,6 +98,7 @@ export {
 export {
   LINKED_FIELDS,
   resolveLinkedText,
+  resolveHeroHeadline,
   parseLinkedText,
   type LinkedField,
   type LinkedFacts,

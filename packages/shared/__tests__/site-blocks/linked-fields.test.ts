@@ -15,6 +15,7 @@ import { describe, it, expect } from 'vitest';
 import {
   LINKED_FIELDS,
   parseLinkedText,
+  resolveHeroHeadline,
   resolveLinkedText,
   type LinkedFacts,
   type LinkedField,
@@ -406,5 +407,45 @@ describe('linked fields', () => {
     expect(shared.LINKED_FIELDS).toBe(LINKED_FIELDS);
     expect(shared.resolveLinkedText).toBe(resolveLinkedText);
     expect(shared.parseLinkedText).toBe(parseLinkedText);
+    expect(shared.resolveHeroHeadline).toBe(resolveHeroHeadline);
+    expect(typeof shared.resolveHeroHeadline).toBe('function');
+  });
+});
+
+describe('resolveHeroHeadline', () => {
+  // The hero's headline as the page shows it, and as the editor's "Shows as" line
+  // says it: one rule, so the two cannot disagree.
+
+  it('is the resolved headline when anything is left of it', () => {
+    expect(
+      resolveHeroHeadline('Welcome to {{name}}', facts({ shortName: 'Harbor Pointe' })),
+    ).toBe('Welcome to Harbor Pointe');
+    expect(resolveHeroHeadline('Welcome home', facts())).toBe('Welcome home');
+  });
+
+  it('keeps the sentences that stay and does not reach for the name', () => {
+    // One sentence drops for the missing city; the other is still a headline.
+    expect(
+      resolveHeroHeadline('Homes in {{city}}. Welcome to {{name}}', facts({ shortName: 'Harbor Pointe' })),
+    ).toBe('Welcome to Harbor Pointe');
+  });
+
+  it('is the short name when the whole headline drops', () => {
+    expect(resolveHeroHeadline('{{city}}', facts({ shortName: 'Harbor Pointe' }))).toBe('Harbor Pointe');
+  });
+
+  it('is the full name when the whole headline drops and there is no short name', () => {
+    expect(resolveHeroHeadline('{{city}}', facts())).toBe(FULL_NAME);
+    // A short name that is only spaces is not one.
+    expect(resolveHeroHeadline('{{units}} homes', facts({ shortName: '   ' }))).toBe(FULL_NAME);
+  });
+
+  it('shows the name that stands in exactly as typed, never as a token or markup', () => {
+    const odd = facts({ name: '<b>Rose</b> {{city}} Court', city: null });
+    expect(resolveHeroHeadline('{{city}}', odd)).toBe('<b>Rose</b> {{city}} Court');
+  });
+
+  it('is empty only when the name itself is blank', () => {
+    expect(resolveHeroHeadline('{{city}}', facts({ name: '   ' }))).toBe('');
   });
 });

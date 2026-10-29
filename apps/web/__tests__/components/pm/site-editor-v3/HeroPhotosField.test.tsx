@@ -357,6 +357,16 @@ describe('HeroPhotosField — stock photos', () => {
       expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
     });
 
+    it('is a touch target: 44px tall below 768px, 36px from there up', () => {
+      // jsdom has no layout, so the rule (.claude/rules/design.md) is asserted on
+      // the classes that carry it. The label wraps in the narrow column, so the
+      // height is a floor (`min-h`), not a fixed height.
+      renderField([SUNSET]);
+      expect(
+        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      ).toHaveClass('min-h-11', 'md:min-h-9');
+    });
+
     it('is not offered for an uploaded photo', () => {
       renderField([POOL]);
       expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
@@ -404,10 +414,15 @@ describe('HeroPhotosField — stock photos', () => {
       await userEvent.type(await screen.findByLabelText(`Alt text for ${name}`), alt);
       await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
     }
-    const finish = (id = 'staged-1', name = 'beach.jpg', alt = 'The beach') =>
+    const finish = (
+      id = 'staged-1',
+      name = 'beach.jpg',
+      alt = 'The beach',
+      storagePath = '7/hero/beach.jpg',
+    ) =>
       act(() => {
         heroPhotosHook.onUploaded!(
-          { storagePath: '7/hero/beach.jpg', altText: 'SERVER ECHO' },
+          { storagePath, altText: 'SERVER ECHO' },
           { id, file: imageFile(name), alt, decorative: false },
         );
       });
@@ -493,6 +508,230 @@ describe('HeroPhotosField — stock photos', () => {
       finish();
 
       expect(lists.at(-1)).toEqual([POOL, { path: '7/hero/beach.jpg', alt: 'The beach' }]);
+    });
+
+    it('a file released by a removal does not take that photo\'s place if it comes back', async () => {
+      // The file was released when its photo went. A swap can put the same stock
+      // photo back in the list, and the file must not latch onto it: the manager
+      // chose to replace a photo that is no longer there.
+      const FIVE = Array.from({ length: 5 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
+      render(<Harness initial={[SUNSET, PALMS, ...FIVE]} />);
+      await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+      await screen.findByLabelText('Alt text for beach.jpg');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
+
+      expect(thumbSrcs(document.body)[0]).toBe('/site-looks/sunset.webp');
+      expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+    });
+
+    describe('on a full hero (8 photos), where a ninth would be refused', () => {
+      // heroBlockSchema holds at most 8 photos, and a hero that has 9 saves nothing.
+      // A waiting replacement must therefore stay a replacement of the photo it was
+      // chosen for, or become an ordinary add that the counter knows about: never a
+      // surprise ninth photo.
+      const SEVEN = Array.from({ length: 7 }, (_, i) => ({
+        path: `7/hero/p${i}.jpg`,
+        alt: `Photo ${i}`,
+      }));
+
+      /** The parent, plus a way for the list to change from outside the field (a refetch, another tab). */
+      function ForeignHarness({
+        initial,
+        foreign,
+        onList,
+      }: {
+        initial: HeroPhoto[];
+        foreign: HeroPhoto[];
+        onList: (list: HeroPhoto[]) => void;
+      }) {
+        const [photos, setPhotos] = useState(initial);
+        return (
+          <>
+            <HeroPhotosField
+              communityId={7}
+              blockOrder={1}
+              photos={photos}
+              onChange={(next) => {
+                setPhotos(next);
+                onList(next);
+              }}
+              readDimensions={okDimensions}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setPhotos(foreign);
+                onList(foreign);
+              }}
+            >
+              Another edit arrives
+            </button>
+          </>
+        );
+      }
+
+      /** A full hero with beach.jpg chosen, and described, to replace its sunset photo. */
+      async function fullHeroWithAWaitingFile(lists: HeroPhoto[][]) {
+        render(<Harness initial={[SUNSET, ...SEVEN]} onList={(l) => lists.push(l)} />);
+        await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+        await userEvent.type(await screen.findByLabelText('Alt text for beach.jpg'), 'The beach');
+        expect(screen.getByText('Replaces the sunset photo.')).toBeInTheDocument();
+      }
+
+      describe('when its stock photo is swapped for the other one', () => {
+        it('the waiting file follows it, and its note names the new photo', async () => {
+          await fullHeroWithAWaitingFile([]);
+
+          await userEvent.click(
+            screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+          );
+
+          expect(screen.getByText('Replaces the palm-lined street photo.')).toBeInTheDocument();
+          expect(screen.queryByText('Replaces the sunset photo.')).not.toBeInTheDocument();
+        });
+
+        it('the upload still lands in that slot, for 8 photos and not 9', async () => {
+          const lists: HeroPhoto[][] = [];
+          await fullHeroWithAWaitingFile(lists);
+          await userEvent.click(
+            screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+          );
+
+          await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
+          finish();
+
+          const final = lists.at(-1)!;
+          expect(final).toHaveLength(8);
+          expect(final[0]).toEqual({ path: '7/hero/beach.jpg', alt: 'The beach' });
+          expect(final.some((photo) => 'stock' in photo)).toBe(false);
+        });
+      });
+
+      describe('when its stock photo is removed', () => {
+        it('the waiting file stops claiming to replace anything', async () => {
+          await fullHeroWithAWaitingFile([]);
+
+          await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+
+          expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+        });
+
+        it('the hero counts the file as an addition: no ninth photo can be staged', async () => {
+          await fullHeroWithAWaitingFile([]);
+
+          await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+
+          // 7 photos and 1 waiting is 8.
+          expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+          expect(screen.getByLabelText('Add photos')).toBeDisabled();
+        });
+
+        it('turns a further file away, and the upload lands at the end: 8 photos, not 9', async () => {
+          const lists: HeroPhoto[][] = [];
+          await fullHeroWithAWaitingFile(lists);
+          await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
+
+          // The place the removal freed belongs to the waiting file already.
+          await userEvent.upload(screen.getByLabelText('Add photos'), imageFile('extra.jpg'));
+          await act(async () => {}); // time to be staged, were it going to be
+          expect(screen.queryByLabelText('Alt text for extra.jpg')).not.toBeInTheDocument();
+
+          await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
+          finish();
+
+          const final = lists.at(-1)!;
+          expect(final).toHaveLength(8);
+          expect(final.at(-1)).toEqual({ path: '7/hero/beach.jpg', alt: 'The beach' });
+        });
+      });
+
+      describe('when its stock photo vanishes without a Remove or a Swap', () => {
+        // A refetch, or another tab, can take the stock photo out of the list.
+        function renderWithAnOutsideEdit(lists: HeroPhoto[][]) {
+          render(
+            <ForeignHarness
+              initial={[SUNSET, ...SEVEN]}
+              foreign={SEVEN}
+              onList={(l) => lists.push(l)}
+            />,
+          );
+        }
+
+        it('the file stops claiming to replace anything', async () => {
+          renderWithAnOutsideEdit([]);
+          await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+          await screen.findByLabelText('Alt text for beach.jpg');
+          expect(screen.getByText('Replaces the sunset photo.')).toBeInTheDocument();
+
+          await userEvent.click(screen.getByRole('button', { name: 'Another edit arrives' }));
+
+          expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+        });
+
+        it('the hero counts the file as an addition', async () => {
+          renderWithAnOutsideEdit([]);
+          await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+          await screen.findByLabelText('Alt text for beach.jpg');
+          // While it replaces a photo it needs no place: 8 photos, none to add.
+          expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+
+          await userEvent.click(screen.getByRole('button', { name: 'Another edit arrives' }));
+
+          // Now 7 photos and 1 waiting is still 8, not "1 remaining".
+          expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+          expect(screen.getByLabelText('Add photos')).toBeDisabled();
+        });
+      });
+
+      it('lets only one waiting file take a stock photo\'s place', async () => {
+        // Two waiting files can end up aimed at the same stock photo: one was chosen
+        // for it, the other was retargeted onto it by a swap after an outside edit
+        // had orphaned the first. Only one can take the place; the other lands at
+        // the end, so the hero has to count it.
+        const SIX = SEVEN.slice(0, 6);
+        const lists: HeroPhoto[][] = [];
+        render(
+          <ForeignHarness
+            initial={[SUNSET, ...SIX]}
+            foreign={[PALMS, ...SIX]}
+            onList={(l) => lists.push(l)}
+          />,
+        );
+
+        await userEvent.upload(screen.getByLabelText(PICK), imageFile('a.jpg'));
+        await userEvent.type(await screen.findByLabelText('Alt text for a.jpg'), 'A photo');
+        await userEvent.click(screen.getByRole('button', { name: 'Another edit arrives' }));
+        // The first file is aimed at a photo that is gone: it needs a place (7 + 1 = 8).
+        expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+
+        await userEvent.upload(
+          screen.getByLabelText('Replace the palm-lined street photo with your own'),
+          imageFile('b.jpg'),
+        );
+        await userEvent.type(await screen.findByLabelText('Alt text for b.jpg'), 'B photo');
+        // The second takes the palm street photo's place and needs none.
+        expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
+
+        // Both are now aimed at the sunset photo. One takes its place; the other
+        // needs a place of its own, and the hero must not offer a ninth.
+        expect(screen.getAllByText('Replaces the sunset photo.')).toHaveLength(1);
+        expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Add photos')).toBeDisabled();
+
+        await userEvent.click(screen.getByRole('button', { name: /add 2 photos to hero/i }));
+        finish('staged-1', 'a.jpg', 'A photo', '7/hero/a.jpg');
+        finish('staged-2', 'b.jpg', 'B photo', '7/hero/b.jpg');
+
+        const final = lists.at(-1)!;
+        expect(final).toHaveLength(8);
+        expect(final[0]).toEqual({ path: '7/hero/a.jpg', alt: 'A photo' });
+        expect(final.at(-1)).toEqual({ path: '7/hero/b.jpg', alt: 'B photo' });
+        expect(final.some((photo) => 'stock' in photo)).toBe(false);
+      });
     });
 
     it('turns down a file the way "Add photos" does, and keeps the stock photo', async () => {

@@ -26,6 +26,7 @@
  */
 import {
   heroBlockSchema,
+  resolveHeroHeadline,
   resolveHeroPhotos,
   resolveLinkedText,
   type HeroBlockContent,
@@ -65,10 +66,8 @@ export function HeroBlock(props: BlockRendererProps) {
     unitCount: community.unitCount,
   };
   // A headline that drops whole (only `{{city}}`, and no city) falls back to the
-  // display name, resolved by the same rule as the `{{name}}` token itself: the
-  // short name when it is not blank, else the full name.
-  const headline =
-    resolveLinkedText(content.headline, facts) || resolveLinkedText('{{name}}', facts);
+  // display name; the editor's "Shows as" line reads the same function.
+  const headline = resolveHeroHeadline(content.headline, facts);
   const subtitle = content.subtitle ? resolveLinkedText(content.subtitle, facts) : '';
 
   const look = lookStyleFor(props.layout);
