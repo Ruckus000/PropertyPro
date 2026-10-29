@@ -448,35 +448,40 @@ function planAgainst(
  * other live row comes back as it is, wherever the switch had replaced, moved
  * or removed it, and so does one removed since.
  *
- * The page now is matched to the live rows by row, and by block type only last
- * and only where it cannot be a guess:
+ * The page now is matched to the live rows by row, and by block type only where
+ * that cannot put an edit over a row the manager did not edit:
  * - a published row on the page is the live row with its id (no draft covers
  *   its slot);
- * - a draft with a live row's exact content is that row. The switch moved it,
- *   and staging wrote it as a new row in another slot, so its content is what
- *   is left to know it by. The live row in the draft's own slot is tried first,
- *   so identical rows pair in place, as the editor's change list pairs them;
- * - any other draft that is not an untouched default is an edit of the live row
- *   in its slot (a draft overlays its slot), when it is that row's type. The
- *   editor never changes a section's type, so a draft of another type is a
- *   different section that the switch put in that slot, and the live row comes
- *   back;
- * - an edited section still left is an edit of the one live row of its type
- *   still left, when there is exactly one of each: the switch staged it in
- *   another row's slot (it moves every section after Quick links up one when the
- *   new look has none), and the edit goes back to its own row. This is the
- *   editor's change list's rule. With two or more of the type on either side
- *   the pairing would be a guess, so the section stays a section the live page
- *   lacks.
+ * - a section with the exact content of the live row in its own slot is that
+ *   row;
+ * - an edited section with a live row's exact content is that row: the switch
+ *   moved it, and staging wrote it as a new row in another slot, so its content
+ *   is what is left to know it by. An untouched default never is, outside its
+ *   own slot, since the drafted look's default can equal a live row it does
+ *   not stand for;
+ * - an edited draft over a live row of its own type is an edit of that row,
+ *   when the live page has no other row of the type and the page now no other
+ *   section of it. With two rows of a type, the switch can stage one row's copy
+ *   in the other's slot;
+ * - an edited section that is the only one of its type left is an edit of the
+ *   one live row of its type left, as the editor's change list pairs them,
+ *   when the matches above are surely right for the type: it has one live row,
+ *   or its live rows all differ and none has the drafted look's default. The switch
+ *   stages sections in other rows' slots whenever it drops one (every section
+ *   after Quick links moves up when the new look has none), and this takes an
+ *   edit back to its own row.
+ * An edit matched to no row is a section the live page lacks: every live row
+ * comes back, so the worst case is a section shown twice, never a live row
+ * dropped.
  * A section given no slot is taken to be where `assignSlots` stages it over the
  * live rows (a plan handed back as it was returned), and a live row given none
  * where a look publishes it. `loadLookSwitchInput` gives every slot.
  *
  * Counted the way a switch is: `kept` are the sections of the page now that stay
- * (live rows, edits and added sections), `replaced` the dropped defaults whose
- * slot's live row comes back in their place, `removed` the other dropped
- * defaults, and `added` the live rows that come back with nothing on the page
- * standing in for them.
+ * (live rows, edits and added sections), `replaced` the dropped defaults a live
+ * row comes back in place of (the row with their content, else the one in their
+ * slot), `removed` the other dropped defaults, and `added` the live rows that
+ * come back with nothing on the page standing in for them.
  */
 function planBackToLive(
   current: readonly SiteSection[],
@@ -509,40 +514,80 @@ function planBackToLive(
     standIn[j] = i;
   };
 
+  // How many live rows each type has. A section is matched to a row by type
+  // only where that cannot put it over another row of the same type.
+  const liveRowsOf = new Map<string, number>();
+  for (const { blockType } of live) liveRowsOf.set(blockType, (liveRowsOf.get(blockType) ?? 0) + 1);
+  /** Whether section `i` is the only section of its type that the matches so far left over. */
+  const lastOfItsType = (i: number): boolean =>
+    current.every((s, k) => k === i || standsFor[k] !== -1 || s.blockType !== current[i]!.blockType);
+  /**
+   * Whether the matches so far are surely right for a type's live rows: it has
+   * one, or they all differ and none has the drafted look's own default. Else a
+   * row can have been matched by content to a section that only looks like it
+   * (another row's copy, or a default the switch put in its slot).
+   */
+  const surelyMatched = (type: string): boolean => {
+    const rows = live.filter((row) => row.blockType === type);
+    return (
+      rows.length === 1 ||
+      (new Set(rows.map(contentIdentity)).size === rows.length && !rows.some((row) => isUntouched(row, defaults)))
+    );
+  };
+
   // A published row is the live row with its id.
   current.forEach(({ id }, i) => pair(i, id === undefined ? -1 : (liveById.get(id) ?? -1)));
-  // A draft with a live row's exact content is that row: the one in its own
-  // slot first, then the first one left, in live order.
+  // A section with the exact content of the live row in its own slot is that row.
   current.forEach((_, i) => {
     const j = inSlot(i);
     if (j !== -1 && identity[i] === liveIdentity[j]) pair(i, j);
   });
+  // An edited section with a live row's exact content is that row, moved: the
+  // first one left, in live order. An untouched default is not: the drafted
+  // look's default can equal a live row it does not stand for.
   current.forEach((_, i) => {
-    if (standsFor[i] === -1) pair(i, liveIdentity.findIndex((id, j) => standIn[j] === -1 && id === identity[i]));
+    if (standsFor[i] !== -1 || untouched[i]) return;
+    pair(i, liveIdentity.findIndex((id, j) => standIn[j] === -1 && id === identity[i]));
   });
-  // A draft the manager made over a live row of its own type: an edit of that row.
+  // A draft the manager made over the live row of its own type: an edit of that
+  // row, when the live page has no other row of the type (the switch can stage
+  // one same-type section in another's slot) and the page now no other section
+  // of the type left.
   current.forEach((s, i) => {
     const j = inSlot(i);
-    if (!untouched[i] && j !== -1 && live[j]?.blockType === s.blockType) pair(i, j);
+    if (untouched[i] || j === -1 || live[j]?.blockType !== s.blockType) return;
+    if (liveRowsOf.get(s.blockType) === 1 && lastOfItsType(i)) pair(i, j);
   });
-  // An edited section still left, of a type with exactly one such section and
-  // exactly one live row left: an edit of that row, the way the editor's change
-  // list pairs them. With two or more of the type on either side the pairing
-  // would be a guess, so none is made.
+  // An edited section that is the only one of its type left is an edit of the
+  // one live row of its type left, as the editor's change list pairs them,
+  // when that cannot be a guess (`surelyMatched`). Otherwise it is a section the
+  // live page lacks: every live row stays, and the edit goes after the nearest.
   for (const type of new Set(current.map((s) => s.blockType))) {
-    const edits = current.flatMap((s, i) => (s.blockType === type && standsFor[i] === -1 && !untouched[i] ? [i] : []));
+    const left = current.flatMap((s, i) => (s.blockType === type && standsFor[i] === -1 ? [i] : []));
     const rows = live.flatMap((row, j) => (row.blockType === type && standIn[j] === -1 ? [j] : []));
-    if (edits.length === 1 && rows.length === 1) pair(edits[0]!, rows[0]!);
+    if (left.length === 1 && rows.length === 1 && !untouched[left[0]!] && surelyMatched(type)) {
+      pair(left[0]!, rows[0]!);
+    }
   }
 
   // Where each live row is on the page now, to place the added sections by: the
-  // section standing for it, else an untouched default in its slot.
-  const placeOf = current.map((_, i) => {
-    if (standsFor[i] !== -1) return standsFor[i]!;
-    const j = inSlot(i);
-    return untouched[i] && j !== -1 && standIn[j] === -1 ? j : -1;
+  // section standing for it; else an untouched default with its exact content
+  // (the switch's stand-in for it) or, failing that, one in its slot. Placing is
+  // not matching: it never changes what a row shows, only where an added
+  // section goes.
+  const placeOf = [...standsFor];
+  const placed = new Set(standIn.flatMap((i, j) => (i === -1 ? [] : [j])));
+  const place = (i: number, j: number): void => {
+    if (j === -1 || placed.has(j)) return;
+    placeOf[i] = j;
+    placed.add(j);
+  };
+  current.forEach((_, i) => {
+    if (placeOf[i] === -1 && untouched[i]) place(i, liveIdentity.findIndex((id, j) => !placed.has(j) && id === identity[i]));
   });
-  const placed = new Set(placeOf);
+  current.forEach((_, i) => {
+    if (placeOf[i] === -1 && untouched[i]) place(i, inSlot(i));
+  });
 
   /** The added sections to go after each live row (-1: before every live row), in page order. */
   const addedAfter = new Map<number, SiteSection[]>();

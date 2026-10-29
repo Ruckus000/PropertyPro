@@ -499,6 +499,64 @@ describeDb('site looks (db-backed integration)', () => {
     );
   });
 
+  it("publishing after a card and back never drops a live section with a type twice on the page (the re-reviewer's routes A and B)", async () => {
+    /** The live home page after Publish keeps every section it had, in order, plus the edit once. */
+    const expectKeptWithTheEdit = (after: Section[], before: Section[], edit: Section) => {
+      const isEdit = (section: Section) => JSON.stringify(section) === JSON.stringify(edit);
+      expect(after.filter(isEdit)).toHaveLength(1);
+      expect(after.filter((section) => !isEdit(section))).toEqual(before);
+    };
+
+    // A: live Bayfront with the manager's own Announcements (10, over a year)
+    // after Bayfront's. The Heritage card stages it in the other one's slot,
+    // where it is edited to 8; then the Bayfront card again, and Publish.
+    const a = await createCommunity('route-a', 'condo_718');
+    await applyLookAtCreation(a, 'condo_718');
+    const annual: Section = { blockType: 'announcements', content: { limit: 10, timeWindowDays: 365 } };
+    const pageA: Section[] = [...lookSections('bayfront')];
+    pageA.splice(3, 0, annual);
+    for (const [i, section] of pageA.entries()) {
+      await upsertPublishedBlock({ communityId: a, actorUserId, ...section, blockOrder: i + 1 });
+    }
+    const liveA = await liveSections(a);
+    expect(liveA).toEqual(pageA);
+    await draftLookSwitch(a, 'heritage', { actorUserId });
+    const copy = (await draftRows(a)).find((row) => JSON.stringify(row.content) === JSON.stringify(annual.content));
+    expect(copy?.blockOrder).toBe(await liveSlotOf(a, 'quicklinks') + 1); // the Bayfront Announcements' slot
+    const editA: Section = { blockType: 'announcements', content: { limit: 8, timeWindowDays: 365 } };
+    await upsertPublishedBlock({ communityId: a, actorUserId, ...editA, blockOrder: copy!.blockOrder, isDraft: true });
+    await draftLookSwitch(a, 'bayfront', { actorUserId });
+    await publish(a);
+    expectKeptWithTheEdit(await liveSections(a), liveA, editA);
+
+    // B: live Heritage with the manager's Contact (board shown) in slot 6 and
+    // Heritage's own in slot 7. The Bayfront card keeps the manager's in place,
+    // where it is edited; then the Heritage card again, and Publish.
+    const b = await createCommunity('route-b', 'condo_718');
+    await applyLookAtCreation(b, 'condo_718');
+    await draftLookSwitch(b, 'heritage', { actorUserId });
+    await publish(b);
+    const heritage = lookSections('heritage');
+    const pageB: Section[] = [
+      ...heritage.filter((section) => section.blockType !== 'contact'),
+      { blockType: 'contact', content: { showBoard: true, showManagement: true } },
+      heritage.find((section) => section.blockType === 'contact')!,
+    ];
+    for (const [i, section] of pageB.entries()) {
+      await upsertPublishedBlock({ communityId: b, actorUserId, ...section, blockOrder: i + 1 });
+    }
+    const liveB = await liveSections(b);
+    expect(liveB).toEqual(pageB);
+    await draftLookSwitch(b, 'bayfront', { actorUserId });
+    // The manager's Contact is still the published row in slot 6 (no draft over it).
+    expect((await draftRows(b)).some((row) => row.blockOrder === 6)).toBe(false);
+    const editB: Section = { blockType: 'contact', content: { showBoard: true, showManagement: false } };
+    await upsertPublishedBlock({ communityId: b, actorUserId, ...editB, blockOrder: 6, isDraft: true });
+    await draftLookSwitch(b, 'heritage', { actorUserId });
+    await publish(b);
+    expectKeptWithTheEdit(await liveSections(b), liveB, editB);
+  });
+
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {
     // Bayfront has six sections and Palm Grove five: the sixth slot is staged
     // for removal (a tombstone), which the editor's Publish applies.
