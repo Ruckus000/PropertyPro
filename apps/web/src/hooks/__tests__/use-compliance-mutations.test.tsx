@@ -413,6 +413,27 @@ describe('useComplianceMutations', () => {
     });
   });
 
+  it('sends replace only when the caller asks to replace the record\'s file', async () => {
+    const { wrapper } = createWrapper();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: makeChecklistItem({ id: 10 }) }),
+    });
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.linkDocument.mutateAsync({ itemId: 10, documentId: 55, replace: true });
+    });
+
+    expect(JSON.parse(mockFetch.mock.calls[0]![1].body as string)).toEqual({
+      id: 10,
+      communityId: COMMUNITY_ID,
+      action: 'link_document',
+      documentId: 55,
+      replace: true,
+    });
+  });
+
   // =========================================================================
   // Multiple items in cache — only target item changes
   // =========================================================================

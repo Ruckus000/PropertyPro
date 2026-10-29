@@ -18,6 +18,8 @@ interface PatchPayload {
   documentId?: number;
   /** Required by the route for `mark_not_applicable`. */
   reason?: string;
+  /** `link_document` only: replace the record's current file on purpose. */
+  replace?: boolean;
 }
 
 async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
@@ -72,13 +74,16 @@ export function useComplianceMutations(communityId: number) {
     qc.invalidateQueries({ queryKey });
   }
 
+  // `replace`: only the Compliance page's re-link flow sends it. Without it the
+  // route refuses (409) to swap a record's file, or to give one file to two records.
   const linkDocument = useMutation({
-    mutationFn: (vars: { itemId: number; documentId: number }) =>
+    mutationFn: (vars: { itemId: number; documentId: number; replace?: boolean }) =>
       patchChecklistItem({
         id: vars.itemId,
         communityId,
         action: "link_document",
         documentId: vars.documentId,
+        ...(vars.replace ? { replace: true } : {}),
       }),
     onMutate: (vars) =>
       optimisticUpdate(vars.itemId, () => ({

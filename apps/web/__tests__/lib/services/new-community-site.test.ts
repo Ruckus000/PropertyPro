@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { applyLookMock, applyStarterPackMock, captureExceptionMock } = vi.hoisted(() => ({
+const { applyLookMock, applyStarterPackMock, captureExceptionMock, ensureChecklistMock } = vi.hoisted(() => ({
+  ensureChecklistMock: vi.fn(),
   applyLookMock: vi.fn(),
   applyStarterPackMock: vi.fn(),
   captureExceptionMock: vi.fn(),
@@ -17,11 +18,17 @@ vi.mock('@/lib/services/site-look-service', () => ({
 vi.mock('@/lib/services/starter-pack-service', () => ({
   applyStarterPackToCommunity: applyStarterPackMock,
 }));
+vi.mock('@/lib/services/transparency-service', () => ({
+  ensureTransparencyChecklistInitialized: ensureChecklistMock,
+}));
 vi.mock('@sentry/nextjs', () => ({
   captureException: captureExceptionMock,
 }));
 
-import { seedNewCommunitySite } from '../../../src/lib/services/new-community-site';
+import {
+  initializeNewCommunityRecords,
+  seedNewCommunitySite,
+} from '../../../src/lib/services/new-community-site';
 
 describe('seedNewCommunitySite', () => {
   beforeEach(() => {
@@ -87,5 +94,41 @@ describe('seedNewCommunitySite', () => {
     await expect(seedNewCommunitySite(42, 'condo_718')).resolves.toBeUndefined();
 
     expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('initializeNewCommunityRecords', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    ensureChecklistMock.mockResolvedValue([]);
+  });
+
+  it('creates the records list for a condominium and an HOA', async () => {
+    await initializeNewCommunityRecords(42, 'condo_718');
+    await initializeNewCommunityRecords(9, 'hoa_720');
+
+    expect(ensureChecklistMock.mock.calls).toEqual([
+      [42, 'condo_718'],
+      [9, 'hoa_720'],
+    ]);
+  });
+
+  it('leaves an apartment alone: it keeps no such records', async () => {
+    await initializeNewCommunityRecords(7, 'apartment');
+
+    expect(ensureChecklistMock).not.toHaveBeenCalled();
+  });
+
+  it('a failure is reported under its own tag, never thrown', async () => {
+    const err = new Error('insert failed');
+    ensureChecklistMock.mockRejectedValue(err);
+
+    await expect(initializeNewCommunityRecords(42, 'condo_718')).resolves.toBeUndefined();
+
+    expect(captureExceptionMock).toHaveBeenCalledWith(
+      err,
+      expect.objectContaining({ tags: { records_seed: 'checklist' }, extra: { communityId: 42 } }),
+    );
   });
 });

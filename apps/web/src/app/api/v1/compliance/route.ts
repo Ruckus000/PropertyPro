@@ -17,6 +17,10 @@
  *   - POST  → `{ data: inserted }` (success) OR
  *             `{ data: { data, meta } }` (already-generated / race / empty)
  *   - PATCH → `{ data: result }`
+ *
+ * PATCH `link_document` answers 409 when the document already fills another
+ * record, or when the record already has a different file and the body does not
+ * say `replace: true` (only the Compliance page's re-link flow does).
  */
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
 import {
@@ -26,7 +30,7 @@ import {
 } from '@propertypro/shared';
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
-import { ForbiddenError, ValidationError } from '@/lib/api/errors';
+import { ConflictError, ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
@@ -39,6 +43,7 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
 import {
+  findChecklistLinkConflict,
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
   updateComplianceChecklistItem,
@@ -165,7 +170,7 @@ export const PATCH = withErrorHandler(
   runRoute(compliancePatchContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    const { id, action: patchAction, documentId, reason } = body;
+    const { id, action: patchAction, documentId, reason, replace } = body;
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
@@ -175,6 +180,15 @@ export const PATCH = withErrorHandler(
     // Reject a foreign-tenant document reference before any write happens.
     if (patchAction === 'link_document') {
       await assertDocumentInCommunity(createScopedClient(communityId), documentId);
+      // One file fills one record, and a record's file is replaced only on
+      // purpose (`replace`, sent by the Compliance page's re-link flow).
+      const conflict = await findChecklistLinkConflict(communityId, id, documentId!, { replace: replace === true });
+      if (conflict === 'document_fills_another_record') {
+        throw new ConflictError('This file is already posted as another record.');
+      }
+      if (conflict === 'record_has_another_document') {
+        throw new ConflictError('This record already has a file. Remove it first to replace it.');
+      }
     }
 
     // Build the update payload based on the action

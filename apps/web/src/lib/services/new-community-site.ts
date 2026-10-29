@@ -29,6 +29,7 @@
 import { captureException } from '@sentry/nextjs';
 import type { CommunityType } from '@propertypro/shared';
 import { applyLookAtCreation } from '@/lib/services/site-look-service';
+import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
 
 export async function seedNewCommunitySite(
   communityId: number,
@@ -39,5 +40,30 @@ export async function seedNewCommunitySite(
   } catch (err) {
     console.error('applyLookAtCreation failed', { communityId, err });
     captureException(err, { tags: { site_seed: 'look' }, extra: { communityId } });
+  }
+}
+
+/**
+ * Give a new condominium or HOA its Florida records list from the day it is
+ * created: one checklist row per record its statute names. Until it has rows,
+ * every surface that counts records (the requirements pill, the missing-records
+ * badge and link, automatic linking of uploads, the backfill) sees nothing to
+ * count and would read as if nothing were missing. An apartment keeps no such
+ * records.
+ *
+ * Best-effort, like the site seed: a failure is logged and reported, never
+ * thrown. The website home creates any missing rows again on its first visit.
+ * Safe to call again: it only inserts the records that have no row.
+ */
+export async function initializeNewCommunityRecords(
+  communityId: number,
+  communityType: CommunityType,
+): Promise<void> {
+  if (communityType !== 'condo_718' && communityType !== 'hoa_720') return;
+  try {
+    await ensureTransparencyChecklistInitialized(communityId, communityType);
+  } catch (err) {
+    console.error('ensureTransparencyChecklistInitialized failed', { communityId, err });
+    captureException(err, { tags: { records_seed: 'checklist' }, extra: { communityId } });
   }
 }

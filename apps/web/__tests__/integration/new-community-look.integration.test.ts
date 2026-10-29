@@ -2,6 +2,9 @@
  * A new community's website, against real Postgres: its suggested look, live
  * from the moment the community exists.
  *
+ * Creating a community also gives a condominium or HOA its records list
+ * (`initializeNewCommunityRecords`), checked here too.
+ *
  * Two entry points give a community its site:
  *   - `seedNewCommunitySite`, which both creation paths call (`createCommunityForPm`
  *     and signup provisioning's `community_created` step);
@@ -25,7 +28,7 @@ import { createElement } from 'react';
 import { renderToPipeableStream } from 'react-dom/server';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { effectiveLook, type CommunityType } from '@propertypro/shared';
+import { effectiveLook, getComplianceTemplate, type CommunityType } from '@propertypro/shared';
 import { resolveTheme } from '@propertypro/theme';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { getLayout } from '@/components/public-site/layouts/registry';
@@ -335,6 +338,25 @@ describeDb('new communities and prospect demos start with their suggested look (
       expect(html, `${type}: subtitle`).toContain(subtitle);
       expectNoPlaceholders(html);
     }
+  });
+
+  it("a condo's and an HOA's records list exists from creation; an apartment has none", async () => {
+    const { complianceChecklistItems } = state.dbModule;
+    for (const [label, type] of [['records-condo', 'condo_718'], ['records-hoa', 'hoa_720'], ['records-apartment', 'apartment']] as const) {
+      const { communityId } = await provisionCommunity(label, type);
+      const rows = await state.db
+        .select({ templateKey: complianceChecklistItems.templateKey, documentId: complianceChecklistItems.documentId })
+        .from(complianceChecklistItems)
+        .where(and(eq(complianceChecklistItems.communityId, communityId), isNull(complianceChecklistItems.deletedAt)));
+
+      const template = getComplianceTemplate(type);
+      expect(rows.map((row) => row.templateKey).sort(), `${type}: one row per record the statute names`).toEqual(
+        template.map((item) => item.templateKey).sort(),
+      );
+      // Nothing is posted yet, so every record is missing rather than "all set".
+      expect(rows.every((row) => row.documentId === null)).toBe(true);
+    }
+    expect(getComplianceTemplate('apartment')).toHaveLength(0);
   });
 
   it('each community type goes live with its suggested look: layout, colours, fonts and published sections', async () => {

@@ -8,7 +8,7 @@ import {
 // AUTHZ: P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
-import { seedNewCommunitySite } from '@/lib/services/new-community-site';
+import { initializeNewCommunityRecords, seedNewCommunitySite } from '@/lib/services/new-community-site';
 import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 
 interface CreateCommunityInput {
@@ -112,6 +112,10 @@ export async function createCommunityForPm(
   // must not roll back the community, its memberships, categories and audit log.
   // Never throws.
   await seedNewCommunitySite(communityId, input.communityType);
+
+  // 5c. A condominium's or HOA's records list, so its missing records count from
+  // the day it exists. Best-effort and never throws, like the site seed.
+  await initializeNewCommunityRecords(communityId, input.communityType);
 
   // 6. Audit log (outside transaction — best-effort, should not fail a
   // committed community creation). The append-only audit table remains intact;

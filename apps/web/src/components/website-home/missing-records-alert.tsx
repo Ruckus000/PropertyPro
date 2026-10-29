@@ -19,7 +19,10 @@
  * rules prefer, and one file would fill two.
  *
  * After any change the page is refreshed (`router.refresh`), so the list is
- * read again by the page's loader rather than patched here.
+ * read again by the page's loader rather than patched here. One thing is
+ * patched until that refresh arrives: a file just linked to one record is no
+ * longer offered for any other, because one file fills one record (the server
+ * refuses the second link with a 409 anyway).
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
@@ -72,6 +75,13 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
   const [snoozedUntil, setSnoozedUntil] = useState(records.snoozedUntil);
   const [linkingId, setLinkingId] = useState<number | null>(null);
   const [rowError, setRowError] = useState<{ itemId: number; text: string } | null>(null);
+  // Files linked since `records` was read, keyed to that read: a refresh brings
+  // a new `records`, whose candidates no longer offer them, and this empties.
+  const [linkedSinceRead, setLinkedSinceRead] = useState<{ from: typeof records; ids: number[] }>({
+    from: records,
+    ids: [],
+  });
+  const justLinked = linkedSinceRead.from === records ? linkedSinceRead.ids : [];
   // "Show them now" while snoozed: this visit only, the stored snooze is unchanged.
   const [showWhileSnoozed, setShowWhileSnoozed] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -117,6 +127,10 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
     setRowError(null);
     try {
       await linkDocument.mutateAsync({ itemId: item.itemId, documentId });
+      setLinkedSinceRead((prev) => ({
+        from: records,
+        ids: [...(prev.from === records ? prev.ids : []), documentId],
+      }));
       done();
     } catch {
       setRowError({ itemId: item.itemId, text: failure });
@@ -136,7 +150,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
   }
 
   function renderRow(item: MissingRecord, kind: 'missing' | 'conditional') {
-    const matches = candidates[item.itemId] ?? [];
+    const matches = (candidates[item.itemId] ?? []).filter((match) => !justLinked.includes(match.documentId));
     const busy = linkingId === item.itemId;
     // While any link is in flight, no other match can be chosen: one file must not fill two records.
     const linking = linkingId !== null;

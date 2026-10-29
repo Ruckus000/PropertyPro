@@ -7,6 +7,7 @@
  *   3. GET returns items with calculated status (unsatisfied initially)
  *   4. Feature gate: apartment community → 403
  *   5. Role gate: tenant cannot generate checklist
+ *   6. One file fills one record; a record's file is replaced only on purpose
  */
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -223,5 +224,75 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
     );
 
     expect(response.status).toBe(403);
+  });
+  // =========================================================================
+  // 6. One file fills one record (manual links)
+  // =========================================================================
+
+  it('PATCH link_document refuses a file already posted as another record, and a record that already has a file unless replace', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+    const { documents, complianceChecklistItems } = kit.dbModule;
+
+    async function postDocument(title: string): Promise<number> {
+      const [row] = await kit.db
+        .insert(documents)
+        .values({
+          communityId: communityA.id,
+          title: `${title} ${kit.runSuffix}`,
+          filePath: `communities/${communityA.id}/documents/${title.toLowerCase().replace(/\s+/g, '-')}-${kit.runSuffix}.pdf`,
+          fileName: `${title.toLowerCase().replace(/\s+/g, '-')}.pdf`,
+          fileSize: 1024,
+          mimeType: 'application/pdf',
+          postedAt: new Date(),
+        })
+        .returning({ id: documents.id });
+      if (!row) throw new Error(`Failed to post "${title}"`);
+      return row.id;
+    }
+    function link(itemId: number, documentId: number, extra: Record<string, unknown> = {}) {
+      return route.PATCH(
+        jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
+          id: itemId,
+          communityId: communityA.id,
+          action: 'link_document',
+          documentId,
+          ...extra,
+        }),
+      );
+    }
+    async function documentOf(itemId: number): Promise<number | null> {
+      const rows = await kit.db.select({ id: complianceChecklistItems.id, documentId: complianceChecklistItems.documentId })
+        .from(complianceChecklistItems);
+      return rows.find((row) => row.id === itemId)?.documentId ?? null;
+    }
+
+    const list = await route.GET(new NextRequest(apiUrl(`/api/v1/compliance?communityId=${communityA.id}`)));
+    const items = (await parseJson<{ data: Array<{ id: number; documentId: number | null }> }>(list)).data
+      .filter((item) => item.documentId === null);
+    const [first, second] = items;
+    if (!first || !second) throw new Error('Expected two unlinked checklist items');
+    const budget = await postDocument('Budget');
+    const replacement = await postDocument('Budget revised');
+
+    expect((await link(first.id, budget)).status).toBe(200);
+
+    // The same file for a second record.
+    const twice = await link(second.id, budget);
+    expect(twice.status).toBe(409);
+    expect(JSON.stringify(await twice.json())).toContain('This file is already posted as another record.');
+    expect(await documentOf(second.id)).toBeNull();
+
+    // A different file for a record that already has one.
+    const swap = await link(first.id, replacement);
+    expect(swap.status).toBe(409);
+    expect(JSON.stringify(await swap.json())).toContain('This record already has a file. Remove it first to replace it.');
+    expect(await documentOf(first.id)).toBe(budget);
+
+    // Linking the same file again is not a conflict, and replacing on purpose works.
+    expect((await link(first.id, budget)).status).toBe(200);
+    expect((await link(first.id, replacement, { replace: true })).status).toBe(200);
+    expect(await documentOf(first.id)).toBe(replacement);
   });
 });

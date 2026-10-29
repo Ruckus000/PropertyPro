@@ -24,7 +24,7 @@ export interface RequirementsPillProps {
    * any page.
    */
   onGoToSection: (target: SlotTarget) => void;
-  /** Opens the Add tool, for a required section no page has. */
+  /** Opens the Add a part dialog, for a required section no page has. */
   onAddSection: () => void;
 }
 
@@ -49,9 +49,12 @@ export interface RequirementsPillProps {
  * say. The checklist is only requested for the `required` shape.
  *
  * Silent while the site is loading — "missing" about a site that has not loaded
- * yet would be false — and while the records are loading or could not be read,
- * for the same reason in the other direction: "all set" would be a guess. Below 1280px the label collapses to its icon; the trigger
- * keeps an accessible name either way.
+ * yet would be false — and while the records are loading, could not be read,
+ * or come back as an empty list, for the same reason in the other direction:
+ * "all set" would be a guess. A required association always has records, so an
+ * empty list means its checklist has not been created yet, not that nothing is
+ * missing. Below 1280px the label collapses to its icon; the trigger keeps an
+ * accessible name either way.
  */
 export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPillProps) {
   const { level, statuses, threshold, subject, communityId } = useRequiredSections();
@@ -90,18 +93,18 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
 
   if (statuses.length === 0) return null;
   const sectionsSet = statuses.every((s) => s.state === 'visible');
-  const records = checklist.data;
+  // An empty list is as unknown as no list: the checklist was never created.
+  const records = checklist.data !== undefined && checklist.data.length > 0 ? checklist.data : undefined;
   // A hidden section is true whatever the records say; "all set" is not.
   if (sectionsSet && records === undefined) return null;
   const missingRecordCount = records === undefined ? 0 : missingRecordItems(records, subject).length;
-  const recordsMissing = missingRecordCount > 0;
-  const allSet = sectionsSet && !recordsMissing;
+  const postedTotals = records !== undefined && missingRecordCount > 0 ? recordsPostedTotals(records) : null;
+  const allSet = sectionsSet && postedTotals === null;
   let label = 'Required items: all set';
   if (!sectionsSet) {
     label = 'Required item missing';
-  } else if (records !== undefined && recordsMissing) {
-    const { posted, total } = recordsPostedTotals(records);
-    label = `Records: ${posted} of ${total} posted`;
+  } else if (postedTotals !== null) {
+    label = `Records: ${postedTotals.posted} of ${postedTotals.total} posted`;
   }
   const Icon = allSet ? ShieldCheck : ShieldAlert;
 

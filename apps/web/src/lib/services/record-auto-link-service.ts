@@ -106,6 +106,11 @@ interface OpenItems {
   items: OpenItem[];
   /** documents already linked to some item, so neither a candidate nor linkable */
   linkedDocumentIds: Set<number>;
+  /**
+   * Template records the community has no checklist row for yet. Counted only
+   * when a dry run asked to plan them in memory (`includeMissingTemplateItems`).
+   */
+  notCreated: number;
 }
 
 /**
@@ -171,7 +176,17 @@ async function readCommunityType(communityId: number): Promise<CommunityType | n
   return rows[0]?.communityType ?? null;
 }
 
-async function readOpenItems(communityId: number): Promise<OpenItems> {
+/**
+ * `includeMissingTemplateItems`: also plan the template records the community
+ * has no row for yet, in memory, with negative ids that are never written. Only
+ * the backfill's dry run asks for this, so a community whose checklist has not
+ * been created yet still shows the links an --apply run (which creates it
+ * first) would write.
+ */
+async function readOpenItems(
+  communityId: number,
+  options: { includeMissingTemplateItems?: boolean } = {},
+): Promise<OpenItems> {
   const communityType = await readCommunityType(communityId);
   // Only condominiums and HOAs keep these records: an item counts only when its key
   // is in its community's statute template, and an apartment's template is empty.
@@ -198,7 +213,18 @@ async function readOpenItems(communityId: number): Promise<OpenItems> {
     if (!templateKeys.has(templateKey) || !hasRule(templateKey)) continue;
     items.push({ id: Number(row['id']), templateKey });
   }
-  return { keepsRecords: template.length > 0, items, linkedDocumentIds };
+
+  let notCreated = 0;
+  if (options.includeMissingTemplateItems) {
+    const existingKeys = new Set(itemRows.map((row) => String(row['templateKey'] ?? '')));
+    template.forEach((t, index) => {
+      if (existingKeys.has(t.templateKey)) return;
+      notCreated++;
+      // A new row is applicable and unlinked (the column defaults).
+      if (hasRule(t.templateKey)) items.push({ id: -(index + 1), templateKey: t.templateKey });
+    });
+  }
+  return { keepsRecords: template.length > 0, items, linkedDocumentIds, notCreated };
 }
 
 /** The documents as the rules read them, their category names resolved in one read. */
@@ -218,11 +244,12 @@ async function toCandidates(communityId: number, rows: DocumentRow[]): Promise<C
 }
 
 async function readLinkingState(communityId: number, open?: OpenItems): Promise<LinkingState> {
-  const { keepsRecords, items, linkedDocumentIds } = open ?? (await readOpenItems(communityId));
+  const { keepsRecords, items, linkedDocumentIds, notCreated } = open ?? (await readOpenItems(communityId));
   const state: LinkingState = {
     keepsRecords,
     items,
     linkedDocumentIds,
+    notCreated,
     keysByDocument: new Map(),
     candidatesByItem: new Map(),
   };
@@ -267,6 +294,11 @@ async function readLinkingState(communityId: number, open?: OpenItems): Promise<
 interface Plan {
   links: PlannedRecordLink[];
   ambiguous: AmbiguousRecordItem[];
+}
+
+interface CommunityPlan extends Plan {
+  /** Template records with no checklist row yet, planned in memory (dry run only). */
+  notCreated: number;
 }
 
 /** Rules 1 and 2: the item's only candidate matches only this item. */
@@ -390,9 +422,17 @@ export async function autoLinkDocument(
  * The links `autoLinkCommunityRecords` would write, and the items it would
  * leave to a person, without writing anything. A dry run reads this, and
  * `applyRecordLinks` writes what it approves.
+ *
+ * With `includeMissingTemplateItems`, records the community has no checklist
+ * row for yet are planned too, in memory: their links carry negative item ids
+ * and must never be applied. `notCreated` says how many there were.
  */
-export async function planCommunityRecordLinks(communityId: number): Promise<Plan> {
-  return planFromState(await readLinkingState(communityId));
+export async function planCommunityRecordLinks(
+  communityId: number,
+  options: { includeMissingTemplateItems?: boolean } = {},
+): Promise<CommunityPlan> {
+  const open = await readOpenItems(communityId, options);
+  return { ...planFromState(await readLinkingState(communityId, open)), notCreated: open.notCreated };
 }
 
 /**

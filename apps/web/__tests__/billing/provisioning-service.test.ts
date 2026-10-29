@@ -34,6 +34,7 @@ const {
   recalculateVolumeTierMock,
   createCommunityForPmMock,
   seedNewCommunitySiteMock,
+  initializeNewCommunityRecordsMock,
   andMock,
   ascMock,
   eqMock,
@@ -66,6 +67,7 @@ const {
     recalculateVolumeTierMock: vi.fn().mockResolvedValue(undefined),
     createCommunityForPmMock: vi.fn().mockResolvedValue({ communityId: 99, slug: 'oceanview' }),
     seedNewCommunitySiteMock: vi.fn().mockResolvedValue(undefined),
+    initializeNewCommunityRecordsMock: vi.fn().mockResolvedValue(undefined),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
@@ -201,6 +203,7 @@ vi.mock('@/lib/pm/create-community', () => ({
 // `@propertypro/db` factory above cannot satisfy.
 vi.mock('@/lib/services/new-community-site', () => ({
   seedNewCommunitySite: seedNewCommunitySiteMock,
+  initializeNewCommunityRecords: initializeNewCommunityRecordsMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -515,6 +518,16 @@ describe('runProvisioning', () => {
     await runProvisioning(1);
     expect(seedNewCommunitySiteMock).toHaveBeenCalledOnce();
     expect(seedNewCommunitySiteMock).toHaveBeenCalledWith(10, 'condo_718');
+  });
+
+  // Without checklist rows every records surface reads as if nothing were missing.
+  it('creates the records list for the community it creates', async () => {
+    buildDb({
+      selectSequence: [[makeJob({})], [CONDO_SIGNUP], [{ userId: 'auth-uuid-001' }], [{ userId: 'auth-uuid-001' }]],
+    });
+    await runProvisioning(1);
+    expect(initializeNewCommunityRecordsMock).toHaveBeenCalledOnce();
+    expect(initializeNewCommunityRecordsMock).toHaveBeenCalledWith(10, 'condo_718');
   });
 
   it('seeds again on a re-run that adopts its own community, so an earlier failure is filled in', async () => {

@@ -284,6 +284,47 @@ describe('records', () => {
     ]);
   });
 
+  it('a file just used for one record is no longer offered for another, before the refresh arrives', async () => {
+    // The same budget matches two rows; the server would refuse the second link.
+    const user = renderHome(
+      data({}, {
+        candidates: {
+          [BUDGET.itemId]: [{ documentId: 31, title: '2026 Budget' }],
+          [MINUTES.itemId]: [
+            { documentId: 31, title: '2026 Budget' },
+            { documentId: 40, title: 'March minutes' },
+          ],
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Use 2026 Budget for Annual budget' }));
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    // The refresh (mocked) has not brought a new list: the row still shows, minus that file.
+    const minutesRow = screen.getByText('Meeting minutes').closest('li') as HTMLElement;
+    expect(within(minutesRow).queryByRole('button', { name: 'Use 2026 Budget for Meeting minutes' })).toBeNull();
+    expect(within(minutesRow).getByRole('button', { name: 'Use March minutes for Meeting minutes' })).toBeInTheDocument();
+  });
+
+  it('a failed link is said once, in its row, with no toast as well', async () => {
+    const { toast } = await import('sonner');
+    const user = renderHome(
+      data({}, { candidates: { [BUDGET.itemId]: [{ documentId: 31, title: '2026 Budget' }] } }),
+    );
+    vi.mocked(global.fetch).mockImplementationOnce(async () => respond(409, {
+      error: { code: 'CONFLICT', message: 'This file is already posted as another record.' },
+    }) as unknown as Response);
+
+    await user.click(screen.getByRole('button', { name: 'Use 2026 Budget for Annual budget' }));
+
+    expect(
+      await screen.findByText("We couldn't link 2026 Budget to Annual budget. Please try again."),
+    ).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
   it('a failed link says the file is safe in Documents', async () => {
     const user = renderHome();
     vi.mocked(global.fetch).mockImplementationOnce(async () => respond(500, {}) as unknown as Response);

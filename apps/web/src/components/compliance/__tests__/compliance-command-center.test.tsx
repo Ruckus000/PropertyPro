@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BOARD_DESIGNATIONS } from '@propertypro/shared';
@@ -34,11 +34,36 @@ vi.mock('@/hooks/use-compliance-checklist', () => ({
   COMPLIANCE_QUERY_KEY: 'compliance-checklist',
 }));
 
+const { linkMutate, uploadProps } = vi.hoisted(() => ({
+  linkMutate: vi.fn(),
+  uploadProps: { current: null as null | { skipAutoLink?: boolean; onUploaded: (id: number) => void } },
+}));
+
+// The real modal, with its props recorded.
+vi.mock('../upload-document-modal', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../upload-document-modal')>();
+  return {
+    UploadDocumentModal: (props: Parameters<typeof actual.UploadDocumentModal>[0]) => {
+      uploadProps.current = props;
+      return <actual.UploadDocumentModal {...props} />;
+    },
+  };
+});
+
 vi.mock('@/hooks/use-compliance-mutations', () => ({
   useComplianceMutations: () => ({
-    linkDocument: { mutate: vi.fn() },
+    linkDocument: { mutate: linkMutate },
     markApplicable: { mutate: vi.fn() },
   }),
+}));
+
+// The picker reads the document library; here it only hands back a choice.
+vi.mock('../link-document-modal', () => ({
+  LinkDocumentModal: ({ onSelect }: { onSelect: (documentId: number) => void }) => (
+    <button type="button" onClick={() => onSelect(55)}>
+      Pick document 55
+    </button>
+  ),
 }));
 
 vi.mock('@/hooks/use-document-categories', () => ({
@@ -73,6 +98,7 @@ function renderWithProviders(ui: React.ReactNode) {
 }
 
 beforeEach(() => {
+  linkMutate.mockClear();
   mockChecklistReturn = {
     data: [
       {
@@ -287,6 +313,68 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByRole('heading', { name: 'Upload Document' })).toBeInTheDocument();
     // Modal title input defaults to the selected item's title.
     expect(screen.getByLabelText('Title')).toHaveValue('Insurance');
+  });
+
+  it('"Re-link or replace" replaces the record\'s file on purpose', async () => {
+    const user = userEvent.setup();
+    mockChecklistReturn = {
+      ...mockChecklistReturn,
+      data: [
+        {
+          id: 3, templateKey: '718_budget', title: 'Budget',
+          category: 'financial_records', status: 'overdue',
+          documentId: 40, documentPostedAt: '2025-05-01T00:00:00.000Z',
+          deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isApplicable: true,
+        },
+      ],
+    };
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
+    );
+
+    await user.click(screen.getAllByRole('button', { name: 'Re-link or replace' })[0]!);
+    await user.click(screen.getByRole('button', { name: 'Pick document 55' }));
+
+    expect(linkMutate).toHaveBeenCalledWith(
+      { itemId: 3, documentId: 55, replace: true },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+
+  it('linking a record with no file is not a replacement', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ComplianceCommandCenter
+        communityId={1}
+        isAdmin={true}
+        designation={BOARD_DESIGNATIONS[0]}
+        canWrite={true}
+      />,
+    );
+
+    await user.click(screen.getAllByRole('button', { name: 'Link existing document' })[0]!);
+    await user.click(screen.getByRole('button', { name: 'Pick document 55' }));
+
+    expect(linkMutate).toHaveBeenCalledWith(
+      { itemId: 2, documentId: 55, replace: false },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+  });
+
+  it('an upload is linked only to the record chosen: the server is told not to link it itself', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Upload record' }));
+    expect(uploadProps.current?.skipAutoLink).toBe(true);
+    act(() => uploadProps.current!.onUploaded(77));
+
+    expect(linkMutate).toHaveBeenCalledWith(
+      { itemId: 2, documentId: 77, replace: false },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
   });
 
   it('hides the "Upload record" button when canWrite is false', () => {

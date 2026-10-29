@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -85,6 +86,16 @@ export function ComplianceCommandCenter({
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
   const { data: items = [], isLoading, error, refetch } = useComplianceChecklist(communityId);
   const mutations = useComplianceMutations(communityId);
+
+  // "Re-link or replace" and "Upload current document" put a new file on a
+  // record that may already have one: that is a replacement on purpose. The
+  // route refuses a file another record already has, and says so.
+  function linkChosen(item: ChecklistItemData, documentId: number) {
+    mutations.linkDocument.mutate(
+      { itemId: item.id, documentId, replace: item.documentId != null },
+      { onError: (err) => toast.error(err.message) },
+    );
+  }
 
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
 
@@ -298,8 +309,11 @@ export function ComplianceCommandCenter({
           communityId={communityId}
           defaultTitle={uploadItem.title}
           categoryName={getTemplateDocumentCategory(uploadItem.templateKey, uploadItem.category)}
+          // This page links the upload to the record the person chose, so the
+          // server must not link it to another record first.
+          skipAutoLink
           onUploaded={(documentId) => {
-            mutations.linkDocument.mutate({ itemId: uploadItem.id, documentId });
+            linkChosen(uploadItem, documentId);
             setUploadItem(null);
           }}
           onClose={() => setUploadItem(null)}
@@ -309,7 +323,7 @@ export function ComplianceCommandCenter({
         <LinkDocumentModal
           communityId={communityId}
           onSelect={(documentId) => {
-            mutations.linkDocument.mutate({ itemId: linkItem.id, documentId });
+            linkChosen(linkItem, documentId);
             setLinkItem(null);
           }}
           onClose={() => setLinkItem(null)}

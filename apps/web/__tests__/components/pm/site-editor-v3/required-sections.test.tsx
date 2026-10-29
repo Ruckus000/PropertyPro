@@ -328,6 +328,14 @@ describe('RequirementsPill', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  it('says nothing, never "all set", when the checklist has not been created yet', () => {
+    // A required association always has records: an empty list is unknown.
+    checklist.data = [];
+    const { container } = renderWith(pill());
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/all set/i)).toBeNull();
+  });
+
   it('shows a hidden section on this page in one click, writing to this page', async () => {
     const user = userEvent.setup();
     editor.blocks = [block(3, 'meetings', { content: { hidden: true, heading: 'Board' } }), block(4, 'documents')];
