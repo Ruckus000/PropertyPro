@@ -21,6 +21,7 @@ import type { z } from 'zod';
 import {
   BLOCK_TYPES,
   blockSchemaRegistry,
+  fingerprint,
   stableStringify,
   type BlockType,
   type CommunityType,
@@ -195,6 +196,41 @@ export function lookIdForLayout(layoutId: string | null | undefined): LookId | n
 }
 
 // ---------------------------------------------------------------------------
+// Slots
+// ---------------------------------------------------------------------------
+
+/** The hero is in slot 1; every other section takes 2, 3, … The publish check refuses a slot past 99. */
+const HERO_SLOT = 1;
+const FIRST_CONTENT_SLOT = 2;
+const LAST_SLOT = 99;
+
+/**
+ * Each section with the slot it is staged in (`site_blocks.block_order`): how a
+ * switch's draft is written and a new site's look published. The first hero
+ * takes slot 1. The other sections take the page's published content slots in
+ * order, so a section that is the same as the live one in that place needs no
+ * draft, even where a removed section left a gap in the numbering; any left over
+ * go after the last of them. When that would pass slot 99 they are numbered 2,
+ * 3, … instead.
+ */
+export function assignSlots<T extends { blockType: string }>(
+  sections: readonly T[],
+  publishedSlots: Iterable<number>,
+): Array<[number, T]> {
+  const heroAt = sections.findIndex((s) => s.blockType === 'hero');
+  const contentCount = sections.length - (heroAt === -1 ? 0 : 1);
+  const live = [...publishedSlots].filter((slot) => slot >= FIRST_CONTENT_SLOT).sort((a, b) => a - b);
+  const last = live[live.length - 1] ?? HERO_SLOT;
+  const extra = Math.max(0, contentCount - live.length);
+  const slots =
+    last + extra <= LAST_SLOT
+      ? [...live.slice(0, contentCount), ...Array.from({ length: extra }, (_, i) => last + 1 + i)]
+      : Array.from({ length: contentCount }, (_, i) => FIRST_CONTENT_SLOT + i);
+  let next = 0;
+  return sections.map((s, i): [number, T] => (i === heroAt ? [HERO_SLOT, s] : [slots[next++]!, s]));
+}
+
+// ---------------------------------------------------------------------------
 // Switching looks (D5)
 // ---------------------------------------------------------------------------
 
@@ -202,6 +238,13 @@ export function lookIdForLayout(layoutId: string | null | undefined): LookId | n
 export interface SiteSection {
   /** The row it came from. A section the plan keeps as it is keeps its id; one a look supplied has none. */
   id?: number;
+  /**
+   * Where a section read from the page sits on it (`site_blocks.block_order`).
+   * A draft has the slot of the published row it covers. Only returning to the
+   * live look reads it (`planBackToLive` says what it assumes when there is
+   * none). The planner hands back no slots.
+   */
+  slot?: number;
   blockType: BlockType;
   content: unknown;
 }
@@ -226,11 +269,19 @@ export interface PlanLookSwitchInput {
   incoming: LookDefinition;
 }
 
+/**
+ * A published row of the live home page. Its id and its slot are what the
+ * page's sections are matched to it by, so `loadLookSwitchInput` gives both.
+ */
+export interface LiveSection extends SiteSection {
+  id: number;
+}
+
 /** The live look and what the live home page shows. */
 export interface LiveHomePage {
   lookId: LookId;
-  /** The published home-page sections, in their live order. */
-  sections: readonly SiteSection[];
+  /** The published home-page rows, in their live (slot) order. */
+  sections: readonly LiveSection[];
   /** Whether a different layout is drafted over the live one: another look, or a layout that is not a look. */
   otherLayoutDrafted: boolean;
 }
@@ -241,10 +292,11 @@ export interface LiveHomePage {
  * - `already-drafted`: to the look already drafted; nothing changes;
  * - `live-look`: to the live look, with no other layout drafted; nothing changes;
  * - `back-to-live`: to the live look from another drafted layout; the page
- *   returns to what is live.
+ *   returns to the live page, row for row, keeping the manager's edits.
  */
 export type LookSwitchKind = 'switch' | 'already-drafted' | 'live-look' | 'back-to-live';
 
+/** What a switch did to each section. Returning to the live look counts against the live rows (`planBackToLive`). */
 export interface LookSwitchCounts {
   /** Untouched sections replaced, in their slot, by the incoming look's section of the same type. */
   replaced: number;
@@ -279,11 +331,13 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  *   card's draft (D9), so this keeps the second run from changing the first.
  * - `incoming` is the live look and no other layout is drafted: the page
  *   exactly as it is. Nothing is being switched.
- * - `incoming` is the live look and another layout is drafted: the switch back
- *   is planned as below, with the live home page's sections, in their live
- *   order, in place of the look's own. Untouched sections return to what is
- *   live, edits made under the other look stay, and a section removed from the
- *   live site does not come back.
+ * - `incoming` is the live look and another layout is drafted: the live home
+ *   page, row for row, in its live order, matched to the page now by row id and
+ *   slot rather than block type (`planBackToLive`). A live row the manager
+ *   edited since keeps the edit in its place; a section with no live row that
+ *   they added or edited goes after the nearest live row before it; the drafted
+ *   look's untouched defaults go. So a section removed from the live page
+ *   before the switch stays removed.
  * - Every section untouched: the page becomes exactly the incoming sections,
  *   in their order.
  * - Otherwise each untouched section is replaced in its slot by the incoming
@@ -309,7 +363,7 @@ export function planLookSwitchWithCounts({
   if (draftedLookId === incoming.id) return asItIs(current, 'already-drafted');
   if (live !== null && live.lookId === incoming.id) {
     if (!live.otherLayoutDrafted) return asItIs(current, 'live-look');
-    return { ...planAgainst(current, outgoingDefaults, live.sections), kind: 'back-to-live' };
+    return { ...planBackToLive(current, outgoingDefaults, live.sections), kind: 'back-to-live' };
   }
   return { ...planAgainst(current, outgoingDefaults, incoming.sections), kind: 'switch' };
 }
@@ -380,6 +434,136 @@ function planAgainst(
   });
 
   return { sections, replaced, kept, added, removed };
+}
+
+/**
+ * Back to the live look from another drafted layout: the live home page, row
+ * for row and in its live order, except that
+ *   1. a live row the manager edited while the other layout was drafted keeps
+ *      the edit, in that row's place;
+ *   2. a section with no live row that the manager added or edited keeps its
+ *      content, right after the nearest live row before it on the page now
+ *      (first, when no live row is before it).
+ * The drafted look's untouched defaults with no live row are dropped. Every
+ * other live row comes back as it is, wherever the switch had replaced, moved
+ * or removed it, and so does one removed since.
+ *
+ * The page now is matched to the live rows by row, not by block type:
+ * - a published row on the page is the live row with its id (no draft covers
+ *   its slot);
+ * - a draft with a live row's exact content is that row. The switch moved it,
+ *   and staging wrote it as a new row in another slot, so its content is what
+ *   is left to know it by. The live row in the draft's own slot is tried first,
+ *   so identical rows pair in place, as the editor's change list pairs them;
+ * - any other draft that is not an untouched default is an edit of the live row
+ *   in its slot (a draft overlays its slot), when it is that row's type. The
+ *   editor never changes a section's type, so a draft of another type is a
+ *   different section that the switch put in that slot, and the live row comes
+ *   back.
+ * A section given no slot is taken to be where `assignSlots` stages it over the
+ * live rows (a plan handed back as it was returned), and a live row given none
+ * where a look publishes it. `loadLookSwitchInput` gives every slot.
+ *
+ * Counted the way a switch is: `kept` are the sections of the page now that stay
+ * (live rows, edits and added sections), `replaced` the dropped defaults whose
+ * slot's live row comes back in their place, `removed` the other dropped
+ * defaults, and `added` the live rows that come back with nothing on the page
+ * standing in for them.
+ */
+function planBackToLive(
+  current: readonly SiteSection[],
+  outgoingDefaults: readonly (readonly LookSection[])[],
+  live: readonly LiveSection[],
+): Omit<LookSwitchPlan, 'kind'> {
+  const defaults = defaultsByType(outgoingDefaults);
+  const untouched = current.map((s) => isUntouched(s, defaults));
+  const identity = current.map(contentIdentity);
+  const liveIdentity = live.map(contentIdentity);
+  const liveById = new Map(live.map((row, j) => [row.id, j]));
+  // Without a slot, a live row is where a look publishes it, and a section of
+  // the page now (a plan handed back as it was returned) is where staging puts
+  // it over those rows. `loadLookSwitchInput` gives every slot.
+  const publishedIn = assignSlots(live, []);
+  const liveSlots = live.map((row, j) => row.slot ?? publishedIn[j]![0]);
+  const stagedIn = assignSlots(current, liveSlots);
+  const slots = current.map((s, i) => s.slot ?? stagedIn[i]![0]);
+  const liveBySlot = new Map(liveSlots.map((slot, j) => [slot, j]));
+  /** The live row in the slot of the page's section `i`, or -1. */
+  const inSlot = (i: number): number => liveBySlot.get(slots[i]!) ?? -1;
+
+  /** For each section of the page now, the live row it stands for, or -1. */
+  const standsFor = current.map(() => -1);
+  /** For each live row, the section of the page now that stands for it, or -1. */
+  const standIn = live.map(() => -1);
+  const pair = (i: number, j: number): void => {
+    if (j === -1 || standsFor[i] !== -1 || standIn[j] !== -1) return;
+    standsFor[i] = j;
+    standIn[j] = i;
+  };
+
+  // A published row is the live row with its id.
+  current.forEach(({ id }, i) => pair(i, id === undefined ? -1 : (liveById.get(id) ?? -1)));
+  // A draft with a live row's exact content is that row: the one in its own
+  // slot first, then the first one left, in live order.
+  current.forEach((_, i) => {
+    const j = inSlot(i);
+    if (j !== -1 && identity[i] === liveIdentity[j]) pair(i, j);
+  });
+  current.forEach((_, i) => {
+    if (standsFor[i] === -1) pair(i, liveIdentity.findIndex((id, j) => standIn[j] === -1 && id === identity[i]));
+  });
+  // A draft the manager made over a live row of its own type: an edit of that row.
+  current.forEach((s, i) => {
+    const j = inSlot(i);
+    if (!untouched[i] && j !== -1 && live[j]?.blockType === s.blockType) pair(i, j);
+  });
+
+  // Where each live row is on the page now, to place the added sections by: the
+  // section standing for it, else an untouched default in its slot.
+  const placeOf = current.map((_, i) => {
+    if (standsFor[i] !== -1) return standsFor[i]!;
+    const j = inSlot(i);
+    return untouched[i] && j !== -1 && standIn[j] === -1 ? j : -1;
+  });
+  const placed = new Set(placeOf);
+
+  /** The added sections to go after each live row (-1: before every live row), in page order. */
+  const addedAfter = new Map<number, SiteSection[]>();
+  let lastLiveRow = -1;
+  let kept = 0;
+  let replaced = 0;
+  let removed = 0;
+  current.forEach((s, i) => {
+    if (placeOf[i] !== -1) lastLiveRow = placeOf[i]!;
+    if (standsFor[i] !== -1) {
+      kept += 1;
+    } else if (!untouched[i]) {
+      addedAfter.set(lastLiveRow, [...(addedAfter.get(lastLiveRow) ?? []), keep(s)]);
+      kept += 1;
+    } else if (placeOf[i] !== -1) {
+      replaced += 1;
+    } else {
+      removed += 1;
+    }
+  });
+
+  const sections: SiteSection[] = [...(addedAfter.get(-1) ?? [])];
+  let added = 0;
+  live.forEach((row, j) => {
+    const i = standIn[j]!;
+    // A section standing for the row with other content is the manager's edit.
+    sections.push(i !== -1 && identity[i] !== liveIdentity[j] ? keep(current[i]!) : keep(row));
+    if (i === -1 && !placed.has(j)) added += 1;
+    sections.push(...(addedAfter.get(j) ?? []));
+  });
+
+  return { sections, replaced, kept, added, removed };
+}
+
+/** A section's type and canonical content, as the editor's change list compares sections. */
+function contentIdentity({ blockType, content }: SiteSection): string {
+  // `fingerprint` reads no slot; its snapshot type only asks for one.
+  return fingerprint({ slot: 0, blockType, content });
 }
 
 function isBlockType(value: string): value is BlockType {

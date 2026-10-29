@@ -382,6 +382,84 @@ describeDb('site looks (db-backed integration)', () => {
     expect(await liveSections(communityId)).toEqual(live);
   });
 
+  it("a card and back leaves nothing pending with a section type twice on the live page (the re-reviewer's cases A and C)", async () => {
+    const bayfront = lookSections('bayfront');
+    const of = (blockType: string) => bayfront.find((section) => section.blockType === blockType)!;
+    const pages: Record<string, Section[]> = {
+      // A: two text sections, Quick links after the first.
+      'two-texts': [
+        of('hero'),
+        { blockType: 'text', content: { body: 'About us' } },
+        of('quicklinks'),
+        of('announcements'),
+        of('meetings'),
+        of('documents'),
+        { blockType: 'text', content: { body: 'Pool hours' } },
+        of('contact'),
+      ],
+      // C: an edited hero and two default Quick links.
+      'two-quick-links': [
+        { blockType: 'hero', content: EDITED_HERO },
+        of('quicklinks'),
+        of('quicklinks'),
+        of('announcements'),
+        of('meetings'),
+        of('documents'),
+        of('contact'),
+      ],
+    };
+
+    for (const [label, page] of Object.entries(pages)) {
+      // A live Bayfront site with that home page, in slots 1, 2, 3 …
+      const communityId = await createCommunity(label, 'condo_718');
+      await applyLookAtCreation(communityId, 'condo_718');
+      for (const [i, section] of page.entries()) {
+        await upsertPublishedBlock({ communityId, actorUserId, ...section, blockOrder: i + 1 });
+      }
+      const live = await liveSections(communityId);
+      expect(live).toEqual(page);
+
+      await draftLookSwitch(communityId, 'heritage', { actorUserId });
+      expect(await draftRowCount(communityId)).toBeGreaterThan(0);
+      await draftLookSwitch(communityId, 'bayfront', { actorUserId });
+
+      // No draft at all, no design change pending, and Publish has nothing to do.
+      expect({ label, drafts: await draftRows(communityId) }).toEqual({ label, drafts: [] });
+      expect(pendingLook((await readCommunity(communityId)).branding as CommunityBranding)).toEqual({});
+      expect(await publishCommunitySite({ communityId, actorUserId, expectedPublishedAt: null })).toEqual({
+        published: false,
+        reason: 'nothing-to-publish',
+      });
+      expect(await liveSections(communityId)).toEqual(live);
+    }
+  });
+
+  it('one edit between the clicks is the only change pending, in its place (Plain & Simple, Heritage, hero edited, back)', async () => {
+    const communityId = await createCommunity('one-edit', 'apartment');
+    await applyLookAtCreation(communityId, 'apartment');
+    const live = await liveSections(communityId);
+    expect(live).toEqual(lookSections('plain-simple'));
+
+    await draftLookSwitch(communityId, 'heritage', { actorUserId });
+    // The manager edits the drafted hero, the way the editor saves an edit: a
+    // draft in its slot.
+    const editedHero = { headline: 'Harbor Pointe' };
+    await upsertPublishedBlock({ communityId, actorUserId, blockType: 'hero', blockOrder: 1, content: editedHero, isDraft: true });
+    await draftLookSwitch(communityId, 'plain-simple', { actorUserId });
+
+    // Exactly that edit, in slot 1: no reorder, no other draft, no design change.
+    const drafts = await draftRows(communityId);
+    expect(drafts.map(({ blockOrder, blockType, content }) => ({ blockOrder, blockType, content }))).toEqual([
+      { blockOrder: 1, blockType: 'hero', content: editedHero },
+    ]);
+    expect(pendingLook((await readCommunity(communityId)).branding as CommunityBranding)).toEqual({});
+
+    await publish(communityId);
+    expect(await liveSections(communityId)).toEqual(
+      live.map((section) => (section.blockType === 'hero' ? { blockType: 'hero', content: editedHero } : section)),
+    );
+  });
+
   it('publishing a switch to a look with fewer sections leaves none behind', async () => {
     // Bayfront has six sections and Palm Grove five: the sixth slot is staged
     // for removal (a tombstone), which the editor's Publish applies.

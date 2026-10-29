@@ -364,9 +364,12 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // community_id). Tenant rows are written through createScopedClient(communityId,
   // tx) or logAuditEvent(..., tx). The community's own row (communities, the root
   // tenant table) is written on the transaction by primary key only:
-  // site_published_at at creation, branding.draftLook on a switch (through
-  // site-settings-service's mergeBranding). Callers are community creation, or a
-  // route that verified a manager role + hasSiteEditor.
+  // site_published_at at creation, and branding.draftLook on a switch, by two
+  // writers in site-design-service: writeDraftDesign (through site-settings-service's
+  // mergeBranding) saves a look, and withdrawDraftDesign's own
+  // `UPDATE communities ... WHERE id = ${communityId}` withdraws one on the way
+  // back to the live look. Callers are community creation, or a route that
+  // verified a manager role + hasSiteEditor.
   resolve(repoRoot, 'apps/web/src/lib/services/site-look-service.ts'),
   // PR #5b: Theme preset catalog reader — reads platform-level site_theme_presets
   // (no community_id). Powers the onboarding wizard Step 2 preset chooser.

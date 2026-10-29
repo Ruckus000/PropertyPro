@@ -50,6 +50,7 @@ import { NotFoundError, ValidationError } from '@/lib/api/errors';
 import { resolveDesign, withdrawDraftDesign, writeDraftDesign } from '@/lib/services/site-design-service';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import {
+  assignSlots,
   getLook,
   lookIdForLayout,
   planLookSwitchWithCounts,
@@ -68,11 +69,6 @@ type Tx = Parameters<Parameters<UnscopedDb['transaction']>[0]>[0];
 /** A handle `createScopedClient` and `logAuditEvent` both accept: the pool's, or a transaction's. */
 type Executor = NonNullable<Parameters<typeof createScopedClient>[1]>;
 type ScopedClient = ReturnType<typeof createScopedClient>;
-
-/** The hero is in slot 1; every other section takes 2, 3, … The publish check refuses a slot past 99. */
-const HERO_SLOT = 1;
-const FIRST_CONTENT_SLOT = 2;
-const LAST_SLOT = 99;
 
 /** The look fields a switch drafts: all of them but custom colours, which only the manager sets. */
 const SWITCHED_LOOK_FIELDS = SITE_LOOK_FIELDS.filter((field) => field !== 'customCssOverrides');
@@ -192,8 +188,9 @@ export async function applyLookAtCreation(
  *   fonts, stays as they left it.
  * - `live-look` (the live look, nothing else drafted): nothing at all.
  * - `back-to-live` (the live look, another layout drafted): the sections
- *   return to what is live, and the drafted look is withdrawn, so no design
- *   change is pending.
+ *   return to the live page row for row, keeping the manager's edits, and the
+ *   drafted look is withdrawn, so no design change is pending. With nothing
+ *   edited in between, no draft is left at all.
  *
  * The look is resolved before the transaction (`resolveDesign`: the design
  * save's own validation, and the colour set's colours and fonts), so a missing
@@ -251,14 +248,16 @@ export async function draftLookSwitch(
  * draft and the preview of a look cannot be planned from different inputs:
  *
  * - `current`: the home page as the editor shows it (each slot's draft over its
- *   published row, tombstoned slots left out), in slot order;
+ *   published row, tombstoned slots left out), in slot order, each section with
+ *   its row id and slot;
  * - `outgoingDefaults`: the defaults those sections could have come from. That
  *   is the look being left (the drafted look when there is one, else the live
  *   one) or, on a legacy layout, every version of the community type's starter
  *   pack, archived ones included, read only then;
  * - `draftedLookId`: the look already drafted, so that switching to it again
  *   changes nothing;
- * - `live`: the live look, the published home page in its live order, and
+ * - `live`: the live look, the published home page in its live order (each row
+ *   with its id and slot, which the way back matches the page's drafts to), and
  *   whether another layout is drafted over it, so that picking the live look
  *   again restores what is live (null on a legacy live layout).
  *
@@ -301,7 +300,7 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
           lookId: liveLookId,
           sections: [...published.entries()]
             .sort(([a], [b]) => a - b)
-            .map(([, row]) => ({ id: row.id, blockType: row.blockType as BlockType, content: row.content })),
+            .map(([slot, row]) => ({ id: row.id, slot, blockType: row.blockType as BlockType, content: row.content })),
           otherLayoutDrafted: outgoingLayoutId !== liveLayoutId,
         }
       : null,
@@ -353,33 +352,9 @@ async function hasPublishedSections(scoped: ScopedClient): Promise<boolean> {
 }
 
 /**
- * Each section with its slot. The first hero takes slot 1. The other sections
- * take the page's published content slots in order, so a section that is the
- * same as the live one in that place needs no draft, even where a removed
- * section left a gap in the numbering; any left over go after the last of them.
- * When that would pass slot 99 they are numbered 2, 3, … instead.
- */
-function assignSlots<T extends { blockType: string }>(
-  sections: readonly T[],
-  publishedSlots: Iterable<number>,
-): Array<[number, T]> {
-  const heroAt = sections.findIndex((s) => s.blockType === 'hero');
-  const contentCount = sections.length - (heroAt === -1 ? 0 : 1);
-  const live = [...publishedSlots].filter((slot) => slot >= FIRST_CONTENT_SLOT).sort((a, b) => a - b);
-  const last = live[live.length - 1] ?? HERO_SLOT;
-  const extra = Math.max(0, contentCount - live.length);
-  const slots =
-    last + extra <= LAST_SLOT
-      ? [...live.slice(0, contentCount), ...Array.from({ length: extra }, (_, i) => last + 1 + i)]
-      : Array.from({ length: contentCount }, (_, i) => FIRST_CONTENT_SLOT + i);
-  let next = 0;
-  return sections.map((s, i): [number, T] => (i === heroAt ? [HERO_SLOT, s] : [slots[next++]!, s]));
-}
-
-/**
  * The home page as the editor shows it (each slot's draft over its published
- * row, tombstoned slots left out, in slot order), and its published rows by
- * slot.
+ * row, tombstoned slots left out, in slot order, with ids and slots), and its
+ * published rows by slot.
  */
 function readHomePage(rows: readonly Record<string, unknown>[]): {
   current: SiteSection[];
@@ -395,7 +370,7 @@ function readHomePage(rows: readonly Record<string, unknown>[]): {
     const row = drafts.get(slot) ?? published.get(slot);
     if (!row || row.blockType === TOMBSTONE_BLOCK_TYPE) continue;
     // The CHECK constraint on block_type admits only known types (and the tombstone).
-    current.push({ id: row.id, blockType: row.blockType as BlockType, content: row.content });
+    current.push({ id: row.id, slot, blockType: row.blockType as BlockType, content: row.content });
   }
   return { current, published };
 }

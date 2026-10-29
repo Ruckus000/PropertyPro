@@ -70,7 +70,7 @@ import {
   siteStarterPacks as siteStarterPacksTable,
 } from '@propertypro/db';
 import { applyLookAtCreation, draftLookSwitch, loadLookSwitchInput } from '@/lib/services/site-look-service';
-import { getLook, type LookId, type LookSection } from '@/lib/site-looks/looks';
+import { LOOK_IDS, getLook, type LookId, type LookSection } from '@/lib/site-looks/looks';
 import { SITE_LOOK_PRESETS } from '../../fixtures/site-look-presets';
 
 const COMMUNITY_ID = 10;
@@ -102,13 +102,13 @@ function look(id: string) {
   return found;
 }
 
-/** A look's sections as published rows at slots 1, 2, 3 … */
-function publishedRows(sections: readonly LookSection[], firstId = 500): BlockRow[] {
+/** A look's sections as published rows at slots 1, 2, 3 … (or the slots given). */
+function publishedRows(sections: readonly LookSection[], firstId = 500, slots?: readonly number[]): BlockRow[] {
   return sections.map((section, i) => ({
     id: firstId + i,
     pageId: HOME_PAGE_ID,
     blockType: section.blockType,
-    blockOrder: i + 1,
+    blockOrder: slots?.[i] ?? i + 1,
     content: structuredClone(section.content),
     isDraft: false,
   }));
@@ -639,6 +639,121 @@ describe('draftLookSwitch', () => {
         ),
       );
     });
+
+    /**
+     * A look's card, then the live look's card again, through the real staging:
+     * what the way back stages, and what it does to the design. `between` is
+     * what the manager does to the drafted page's rows in between.
+     *
+     * Each step has its own scoped client and transaction, so nothing is
+     * cleared in between: `vi.clearAllMocks` walks every mock ever made, and
+     * the loops below would make it the slowest part of the suite.
+     */
+    async function cardThenLiveCard(
+      liveId: LookId,
+      toId: LookId,
+      published: BlockRow[],
+      between: (drafts: BlockRow[]) => BlockRow[] = (drafts) => drafts,
+    ) {
+      const forward = setUp({ community: { communityType: 'condo_718', branding: lookBranding(liveId) }, homeRows: published });
+      await draftLookSwitch(COMMUNITY_ID, toId, { actorUserId: ACTOR });
+      const drafts = insertedBlocks(forward.scoped).map((draft, i) => ({ id: 800 + i, ...draft }));
+      const back = setUp({
+        community: { communityType: 'condo_718', branding: { ...lookBranding(liveId), draftLook: lookBranding(toId) } },
+        homeRows: [...published, ...between(drafts)],
+      });
+      const savesBefore = mocks.mergeBranding.mock.calls.length;
+      await draftLookSwitch(COMMUNITY_ID, liveId, { actorUserId: ACTOR });
+      return {
+        draftedRows: drafts.length,
+        staged: insertedBlocks(back.scoped),
+        designSaved: mocks.mergeBranding.mock.calls.length > savesBefore,
+        designWithdrawn: back.tx.execute.mock.calls.some(([query]) => JSON.stringify(query).includes('draftLook')),
+      };
+    }
+
+    /** The drafted hero, edited by the manager: a new draft in slot 1. */
+    const heroEdited = (drafts: BlockRow[]): BlockRow[] => [
+      ...drafts.filter((draft) => draft.blockOrder !== 1),
+      { id: 990, pageId: HOME_PAGE_ID, blockType: 'hero', blockOrder: 1, content: { headline: 'Harbor Pointe' }, isDraft: true },
+    ];
+
+    it('one edit between the clicks is the one change staged, in place (Plain & Simple, Heritage, hero edited, back)', async () => {
+      const result = await cardThenLiveCard('plain-simple', 'heritage', publishedRows(look('plain-simple').sections), heroEdited);
+
+      expect(result.draftedRows).toBeGreaterThan(0);
+      // Exactly that edit, in slot 1: no reorder, no tombstone, no design pending.
+      expect(result.staged).toEqual([
+        expect.objectContaining({ blockType: 'hero', blockOrder: 1, content: { headline: 'Harbor Pointe' }, isDraft: true }),
+      ]);
+      expect(result.designSaved).toBe(false);
+      expect(result.designWithdrawn).toBe(true);
+    });
+
+    describe('for any live page with sections of one type twice', () => {
+      const QUICK_LINKS: LookSection = { blockType: 'quicklinks', content: {} };
+      const text = (body: string): LookSection => ({ blockType: 'text', content: { body } });
+      /** `content` with `a` inserted before index `p` and `b` before index `q` (p ≤ q), so `a` comes first. */
+      const insertTwo = (content: readonly LookSection[], p: number, q: number, a: LookSection, b: LookSection) => {
+        const out = [...content];
+        out.splice(q, 0, b);
+        out.splice(p, 0, a);
+        return out;
+      };
+
+      /**
+       * Live pages of a look: two text sections (different, then the same) at
+       * every pair of places, Quick links twice, both at once, and the first
+       * with a gap in the slots (a section removed and published).
+       */
+      function livePages(liveId: LookId): Array<{ name: string; rows: BlockRow[] }> {
+        const [hero, ...content] = look(liveId).sections;
+        const hasQuickLinks = content.some((s) => s.blockType === 'quicklinks');
+        const pages: Array<{ name: string; rows: BlockRow[] }> = [];
+        const add = (name: string, sections: LookSection[], slots?: number[]) =>
+          pages.push({ name, rows: publishedRows([hero!, ...sections], 500, slots) });
+        for (let p = 0; p <= content.length; p += 1) {
+          if (hasQuickLinks) add(`Quick links again at ${p}`, [...content.slice(0, p), QUICK_LINKS, ...content.slice(p)]);
+          for (let q = p; q <= content.length; q += 1) {
+            const texts = insertTwo(content, p, q, text('About us'), text('Pool hours'));
+            add(`texts at ${p},${q}`, texts);
+            add(`identical texts at ${p},${q}`, insertTwo(content, p, q, text('Same'), text('Same')));
+            add(
+              `texts at ${p},${q} and Quick links twice`,
+              hasQuickLinks ? [...texts, QUICK_LINKS] : [QUICK_LINKS, QUICK_LINKS, ...texts],
+            );
+            add(`texts at ${p},${q}, slot 2 empty`, texts, [1, ...texts.map((_, i) => i + 3)]);
+            if (!hasQuickLinks) add(`Quick links twice at ${p},${q}`, insertTwo(content, p, q, QUICK_LINKS, QUICK_LINKS));
+          }
+        }
+        return pages;
+      }
+
+      it.each([...LOOK_IDS])('live %s: nothing pending after any card and back, and only an edit made in between', async (liveId) => {
+        const failures: string[] = [];
+        let roundTrips = 0;
+        for (const { name, rows } of livePages(liveId)) {
+          for (const toId of LOOK_IDS.filter((id) => id !== liveId)) {
+            const label = `${liveId} → ${toId} → ${liveId}, ${name}`;
+            const plain = await cardThenLiveCard(liveId, toId, rows);
+            const edit = await cardThenLiveCard(liveId, toId, rows, heroEdited);
+            roundTrips += 2;
+            if (plain.draftedRows === 0) failures.push(`${label}: the card staged nothing`);
+            if (plain.staged.length > 0) failures.push(`${label}: ${plain.staged.length} rows staged on the way back`);
+            if (plain.designSaved || !plain.designWithdrawn) failures.push(`${label}: design still pending`);
+            const onlyTheEdit =
+              edit.staged.length === 1 &&
+              edit.staged[0]!.blockType === 'hero' &&
+              edit.staged[0]!.blockOrder === 1 &&
+              JSON.stringify(edit.staged[0]!.content) === JSON.stringify({ headline: 'Harbor Pointe' });
+            if (!onlyTheEdit) failures.push(`${label}, hero edited: staged ${JSON.stringify(edit.staged.map((s) => [s.blockOrder, s.blockType]))}`);
+          }
+        }
+        expect(failures).toEqual([]);
+        // Not vacuous: dozens of pages, each with every other look.
+        expect(roundTrips).toBeGreaterThan(300);
+      });
+    });
   });
 
   it('stages the removal of a published slot the new look leaves empty', async () => {
@@ -728,10 +843,10 @@ describe('loadLookSwitchInput', () => {
 
     expect(input).toMatchObject({
       homePageId: HOME_PAGE_ID,
-      // What the editor shows: the draft over slot 2, slot 3 gone.
+      // What the editor shows: the draft over slot 2 (in that slot), slot 3 gone.
       current: [
-        { id: 500, blockType: 'hero', content: { headline: 'Welcome' } },
-        { id: 900, blockType: 'announcements', content: { limit: 4 } },
+        { id: 500, slot: 1, blockType: 'hero', content: { headline: 'Welcome' } },
+        { id: 900, slot: 2, blockType: 'announcements', content: { limit: 4 } },
       ],
       outgoingDefaults: [condoV1],
       outgoingLayoutId: 'tidewater',
@@ -780,8 +895,9 @@ describe('loadLookSwitchInput', () => {
     withBranding(lookBranding('bayfront'));
     expect((await loadLookSwitchInput(COMMUNITY_ID)).live).toEqual({
       lookId: 'bayfront',
-      // Published rows only, in slot order: a pending edit is not live.
-      sections: published.map(({ id, blockType, content }) => ({ id, blockType, content })),
+      // Published rows only, in slot order: a pending edit is not live. Each
+      // with its id and slot, which the way back matches the drafts to.
+      sections: published.map(({ id, blockOrder, blockType, content }) => ({ id, slot: blockOrder, blockType, content })),
       otherLayoutDrafted: false,
     });
 

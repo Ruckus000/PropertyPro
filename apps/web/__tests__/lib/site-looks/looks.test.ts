@@ -25,17 +25,19 @@ vi.mock('@propertypro/db/unsafe', () => {
   throw new Error('looks.ts must not import @propertypro/db/unsafe');
 });
 
-import { blockSchemaRegistry, resolveLinkedText, type LinkedFacts } from '@propertypro/shared';
+import { blockSchemaRegistry, fingerprint, resolveLinkedText, type LinkedFacts } from '@propertypro/shared';
 import { LAYOUT_IDS } from '@/components/public-site/blocks/types';
 import { LOOK_STYLES } from '@/components/public-site/layouts/look-styles';
 import {
   LOOKS,
   LOOK_IDS,
+  assignSlots,
   getLook,
   lookIdForLayout,
   planLookSwitch,
   planLookSwitchWithCounts,
   suggestedLookFor,
+  type LiveSection,
   type LookDefinition,
   type LookSection,
   type SiteSection,
@@ -76,6 +78,94 @@ const EDITED_HERO = {
   headline: 'Harbor Pointe',
   subtitle: 'Notices and records for Harbor Pointe owners.',
 };
+
+function text(body: string): LookSection {
+  return { blockType: 'text', content: { body } };
+}
+
+/** A live home page's published rows, as the loader reads them: ids from 1, slots 1, 2, 3 … unless given. */
+function livePage(sections: readonly LookSection[], slots?: readonly number[]): LiveSection[] {
+  return sections.map((section, i) => ({
+    id: i + 1,
+    slot: slots?.[i] ?? i + 1,
+    blockType: section.blockType,
+    content: structuredClone(section.content),
+  }));
+}
+
+/** Live rows as the planner hands them back: no slot. */
+function rowsOf(live: readonly LiveSection[]): SiteSection[] {
+  return live.map(({ id, blockType, content }) => ({ id, blockType, content }));
+}
+
+let nextDraftId = 900;
+
+/**
+ * A plan staged over the live rows, and the page then read back as
+ * `loadLookSwitchInput` reads it. site-look-service's `writeHomeDrafts` stages
+ * with `assignSlots`; a section the same as the live row in its slot needs no
+ * draft, so the page still shows that row, and every other section is a new
+ * draft row. A live slot left empty gets a tombstone, so it drops off the page.
+ * The service and integration tests run the real staging.
+ */
+function staged(live: readonly LiveSection[], planned: readonly SiteSection[]) {
+  const bySlot = new Map(live.map((row) => [row.slot!, row]));
+  const target = assignSlots(planned, bySlot.keys()).sort(([a], [b]) => a - b);
+  const page: SiteSection[] = [];
+  const drafts: SiteSection[] = [];
+  for (const [slot, section] of target) {
+    const row = bySlot.get(slot);
+    if (row && sameContent(row, section)) {
+      page.push(row);
+    } else {
+      const draft = { id: nextDraftId++, slot, blockType: section.blockType, content: section.content };
+      page.push(draft);
+      drafts.push(draft);
+    }
+  }
+  const tombstones = [...bySlot.keys()].filter((slot) => !target.some(([taken]) => taken === slot));
+  return { page, drafts, tombstones };
+}
+
+/** Compared as staging compares a section with the live row in its slot. */
+function sameContent(a: SiteSection, b: SiteSection): boolean {
+  const identity = ({ blockType, content }: SiteSection) => fingerprint({ slot: 0, blockType, content });
+  return identity(a) === identity(b);
+}
+
+/** The page with the manager's edit to its one `blockType` section: a new draft row in that section's slot. */
+function edited(page: readonly SiteSection[], blockType: string, content: unknown): SiteSection[] {
+  return page.map((s) => (s.blockType === blockType ? { id: nextDraftId++, slot: s.slot, blockType: s.blockType, content } : s));
+}
+
+/**
+ * A look's card, then the live look's card again: the switch to `to` is planned
+ * from the live page and staged; `between` is what the manager does to the
+ * drafted page; the way back is planned from what that leaves.
+ */
+function roundTrip(
+  live: readonly LiveSection[],
+  from: LookDefinition,
+  to: LookDefinition,
+  between: (page: SiteSection[]) => SiteSection[] = (page) => page,
+) {
+  const forward = planLookSwitch({
+    current: live,
+    outgoingDefaults: [from.sections],
+    draftedLookId: null,
+    live: { lookId: from.id, sections: live, otherLayoutDrafted: false },
+    incoming: to,
+  });
+  const drafted = between(staged(live, forward).page);
+  const back = planLookSwitchWithCounts({
+    current: drafted,
+    outgoingDefaults: [to.sections],
+    draftedLookId: to.id,
+    live: { lookId: from.id, sections: live, otherLayoutDrafted: true },
+    incoming: from,
+  });
+  return { drafted, back };
+}
 
 const WEB_SRC = path.resolve(__dirname, '../../../src');
 const PACKAGES = path.resolve(__dirname, '../../../../../packages');
@@ -426,19 +516,12 @@ describe('planLookSwitch', () => {
   });
 
   describe('back to the live look', () => {
-    // A live Bayfront home page whose manager removed Quick links.
-    const live = siteFrom(bayfront.sections).filter((s) => s.blockType !== 'quicklinks');
-    const liveAsPlanned = live.map(({ blockType, content }) => ({ blockType, content }));
-    // Heritage drafted over it: a plain switch, every section untouched.
-    const heritageDrafted = planLookSwitch({
-      current: live,
-      outgoingDefaults: [bayfront.sections],
-      draftedLookId: null,
-      live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: false },
-      incoming: heritage,
-    }).map((section, i) => ({ id: 700 + i, ...section }));
+    // These pages are what the loader reads: live rows with their ids and slots,
+    // and the drafted page as staging leaves it (`staged`).
+    const bayfrontRows = (...types: string[]) => types.map((type) => sectionOf(bayfront.sections, type));
 
     it('choosing the live look with no other layout drafted changes nothing', () => {
+      const live = livePage(bayfront.sections);
       expect(
         planLookSwitchWithCounts({
           current: live,
@@ -447,46 +530,201 @@ describe('planLookSwitch', () => {
           live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: false },
           incoming: bayfront,
         }),
-      ).toEqual({ sections: live, replaced: 0, kept: 5, added: 0, removed: 0, kind: 'live-look' });
+      ).toEqual({ sections: rowsOf(live), replaced: 0, kept: 6, added: 0, removed: 0, kind: 'live-look' });
     });
 
     it('returning to it restores what is live, and a section removed from it stays removed', () => {
-      expect(types(heritageDrafted)).toEqual(types(heritage.sections));
+      // A live Bayfront page whose manager removed Quick links: slot 2 is empty.
+      const live = livePage(bayfrontRows('hero', 'announcements', 'meetings', 'documents', 'contact'), [1, 3, 4, 5, 6]);
 
-      const back = planLookSwitchWithCounts({
-        current: heritageDrafted,
-        outgoingDefaults: [heritage.sections],
-        draftedLookId: 'heritage',
-        live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: true },
-        incoming: bayfront,
-      });
+      const { drafted, back } = roundTrip(live, bayfront, heritage);
 
+      expect(types(drafted)).toEqual(types(heritage.sections));
       expect(back.kind).toBe('back-to-live');
       // What is live, in its live order: not Bayfront's own sections, so no Quick links.
-      expect(back.sections).toEqual(liveAsPlanned);
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
     });
 
-    it('an edit made while another look was drafted survives returning to it', () => {
-      const edited = heritageDrafted.map((s) =>
-        s.blockType === 'meetings' ? { ...s, content: { limit: 9 } } : s,
+    it("two sections of one type come back row for row, with nothing staged (the re-reviewer's case A)", () => {
+      // Two text sections, Quick links after the first. The type-by-type plan
+      // put Quick links back after the second text, and staged five drafts.
+      const live = livePage([
+        sectionOf(bayfront.sections, 'hero'),
+        text('About us'),
+        ...bayfrontRows('quicklinks', 'announcements', 'meetings', 'documents'),
+        text('Pool hours'),
+        sectionOf(bayfront.sections, 'contact'),
+      ]);
+
+      const { back } = roundTrip(live, bayfront, heritage);
+
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
+      // Heritage's Board members, untouched and with no live row, is gone.
+      expect(back).toMatchObject({ kept: 4, replaced: 3, removed: 1, added: 1 });
+    });
+
+    it("an edited hero and two default Quick links come back with nothing staged (the re-reviewer's case C)", () => {
+      // The type-by-type plan brought one Quick links back, and staged the loss of the other.
+      const live = livePage([
+        { blockType: 'hero', content: EDITED_HERO },
+        ...bayfrontRows('quicklinks', 'quicklinks', 'announcements', 'meetings', 'documents', 'contact'),
+      ]);
+
+      const { back } = roundTrip(live, bayfront, heritage);
+
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
+    });
+
+    it('a section the switch moved comes back to its live place', () => {
+      // Heritage has no Quick links, so the switch stages the text after it one
+      // slot up, as a new draft row: its content is what it is known by.
+      const live = livePage([
+        ...bayfrontRows('hero', 'quicklinks'),
+        text('About us'),
+        ...bayfrontRows('announcements', 'meetings', 'documents', 'contact'),
+      ]);
+
+      const { drafted, back } = roundTrip(live, bayfront, heritage);
+
+      const moved = drafted.find((s) => s.blockType === 'text')!;
+      expect(moved.slot).toBe(2);
+      expect(live.map((row) => row.id)).not.toContain(moved.id);
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
+    });
+
+    it('one edit between the clicks is the only change left, in its place (Plain & Simple, Heritage, hero edited, back)', () => {
+      const live = livePage(plainSimple.sections);
+
+      const { back } = roundTrip(live, plainSimple, heritage, (page) =>
+        edited(page, 'hero', { headline: 'Harbor Pointe' }),
       );
-      const editedMeetings = edited.find((s) => s.blockType === 'meetings')!;
+
+      // The live page in its live order, the hero edited. Heritage's order is not kept.
+      expect(back.sections.map(({ blockType, content }) => ({ blockType, content }))).toEqual(
+        live.map(({ blockType, content }) =>
+          blockType === 'hero' ? { blockType, content: { headline: 'Harbor Pointe' } } : { blockType, content },
+        ),
+      );
+      // Exactly that edit is staged: the hero's draft in slot 1, and no reorder.
+      const { drafts, tombstones } = staged(live, back.sections);
+      expect(drafts).toEqual([expect.objectContaining({ slot: 1, blockType: 'hero', content: { headline: 'Harbor Pointe' } })]);
+      expect(tombstones).toEqual([]);
+    });
+
+    it('an edit made to a live row while another look was drafted survives returning to it', () => {
+      // Bayfront without Quick links: Heritage's Meetings equals the live one,
+      // so the live row stays in its slot, and the manager's edit is a draft over it.
+      const live = livePage(bayfrontRows('hero', 'announcements', 'meetings', 'documents', 'contact'), [1, 3, 4, 5, 6]);
+
+      const { back } = roundTrip(live, bayfront, heritage, (page) => edited(page, 'meetings', { limit: 9 }));
+
+      expect(back.sections).toEqual(
+        rowsOf(live).map((row) => (row.blockType === 'meetings' ? expect.objectContaining({ content: { limit: 9 } }) : row)),
+      );
+      expect(staged(live, back.sections).drafts).toEqual([
+        expect.objectContaining({ slot: 4, blockType: 'meetings', content: { limit: 9 } }),
+      ]);
+    });
+
+    it('a section with no live row goes after the nearest live row before it on the page now', () => {
+      // Under Heritage the manager edits Board members, which Bayfront lacks,
+      // and adds a text section at the end.
+      const live = livePage(bayfront.sections);
+
+      const { back } = roundTrip(live, bayfront, heritage, (page) => [
+        ...edited(page, 'board', { heading: 'Our volunteers' }),
+        { id: nextDraftId++, slot: 7, blockType: 'text', content: { body: 'Parking' } },
+      ]);
+
+      // Board members after Documents, where it was; the text after Contact.
+      expect(types(back.sections)).toEqual([...types(bayfront.sections).slice(0, 5), 'board', 'contact', 'text']);
+      expect(back.sections[5]).toMatchObject({ blockType: 'board', content: { heading: 'Our volunteers' } });
+      expect(back.sections.filter((s) => s.blockType !== 'board' && s.blockType !== 'text')).toEqual(rowsOf(live));
+    });
+
+    it('never loses a live row to an edit of a different section staged in its slot', () => {
+      // Heritage has no Quick links, so its Announcements is staged in the live
+      // Quick links' slot. Edited there, it is not an edit of Quick links (the
+      // editor never changes a section's type), so it comes back as a section
+      // the live page lacks, after the hero, and Quick links and the live
+      // Announcements both come back.
+      const live = livePage(bayfront.sections);
+
+      const { drafted, back } = roundTrip(live, bayfront, heritage, (page) => edited(page, 'announcements', { limit: 4 }));
+
+      expect(drafted.find((s) => s.blockType === 'announcements')!.slot).toBe(2);
+      const [hero, ...rest] = rowsOf(live);
+      expect(back.sections).toEqual([
+        hero,
+        expect.objectContaining({ blockType: 'announcements', content: { limit: 4 } }),
+        ...rest,
+      ]);
+    });
+
+    it('identical live rows pair with the draft in their own slot, so an edit of one stays an edit', () => {
+      // Two identical text rows. Slot 3 holds a draft with the same content (a
+      // move put it back, say); slot 2 holds the manager's edit.
+      const live = livePage([sectionOf(bayfront.sections, 'hero'), text('Same'), text('Same')]);
+      const current: SiteSection[] = [
+        live[0]!,
+        { id: 901, slot: 2, blockType: 'text', content: { body: 'Edited' } },
+        { id: 902, slot: 3, blockType: 'text', content: { body: 'Same' } },
+      ];
 
       const back = planLookSwitch({
-        current: edited,
+        current,
         outgoingDefaults: [heritage.sections],
         draftedLookId: 'heritage',
         live: { lookId: 'bayfront', sections: live, otherLayoutDrafted: true },
         incoming: bayfront,
       });
 
-      expect(back).toEqual(
-        liveAsPlanned.map((section) => (section.blockType === 'meetings' ? editedMeetings : section)),
-      );
+      // Paired with the first identical row instead, the edit would have no row
+      // left, and come back as a third text section.
+      expect(back).toEqual([rowsOf(live)[0], { id: 901, blockType: 'text', content: { body: 'Edited' } }, rowsOf(live)[2]]);
+    });
+
+    it('a live row removed while another look was drafted comes back', () => {
+      // The ruling keeps edits and added sections; a removal is neither.
+      const live = livePage([sectionOf(bayfront.sections, 'hero'), text('About us'), ...bayfrontRows('announcements', 'contact')]);
+
+      const { drafted, back } = roundTrip(live, bayfront, heritage, (page) => page.filter((s) => s.blockType !== 'text'));
+
+      expect(types(drafted)).not.toContain('text');
+      expect(back.sections).toEqual(rowsOf(live));
+    });
+
+    it('reads a plan handed back without slots as staged, and live rows without slots as a look publishes them', () => {
+      // The re-reviewer's case D, passed the way their script passed it.
+      const live = plainSimple.sections.map((s, i) => ({ id: i + 1, blockType: s.blockType, content: structuredClone(s.content) }));
+      const forward = planLookSwitch({
+        current: live,
+        outgoingDefaults: [plainSimple.sections],
+        draftedLookId: null,
+        live: { lookId: 'plain-simple', sections: live, otherLayoutDrafted: false },
+        incoming: heritage,
+      });
+      const drafted = forward.map((s, i) => ({ ...s, id: s.id ?? 900 + i }));
+      drafted[0] = { ...drafted[0]!, content: { headline: 'Harbor Pointe' } };
+
+      const back = planLookSwitch({
+        current: drafted,
+        outgoingDefaults: [heritage.sections],
+        draftedLookId: 'heritage',
+        live: { lookId: 'plain-simple', sections: live, otherLayoutDrafted: true },
+        incoming: plainSimple,
+      });
+
+      expect(back).toEqual(live.map((row) => (row.blockType === 'hero' ? drafted[0] : row)));
     });
 
     it('a drafted layout that is not a look is undone the same way', () => {
       // Only the raw design route can draft one: no card is a legacy layout.
+      const live = livePage(bayfrontRows('hero', 'announcements', 'meetings', 'documents', 'contact'), [1, 3, 4, 5, 6]);
       const back = planLookSwitchWithCounts({
         current: live,
         outgoingDefaults: [bayfront.sections],
@@ -495,7 +733,7 @@ describe('planLookSwitch', () => {
         incoming: bayfront,
       });
       expect(back.kind).toBe('back-to-live');
-      expect(back.sections).toEqual(liveAsPlanned);
+      expect(back.sections).toEqual(rowsOf(live));
     });
   });
 
