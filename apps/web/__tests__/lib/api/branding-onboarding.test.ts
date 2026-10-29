@@ -15,8 +15,9 @@ const mockUpdate = vi.fn();
 const mockSet = vi.fn();
 const mockUpdateWhere = vi.fn();
 
-// The live write: one atomic UPDATE in packages/db. Hoisted because vi.mock
-// factories run before module-level consts.
+// The live write: one atomic UPDATE in packages/db. branding.ts imports it, so
+// the mock has to export it; nothing in this file calls it. Hoisted because
+// vi.mock factories run before module-level consts.
 const { mockApplyLive } = vi.hoisted(() => ({ mockApplyLive: vi.fn() }));
 
 vi.mock('@propertypro/db/unsafe', () => ({
@@ -32,10 +33,6 @@ vi.mock('@propertypro/db', () => ({
     id: 'communities.id',
     siteOnboardingCompletedAt: 'communities.siteOnboardingCompletedAt',
   },
-  siteLayoutMetadata: {
-    slug: 'siteLayoutMetadata.slug',
-    defaultPresetSlug: 'siteLayoutMetadata.defaultPresetSlug',
-  },
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -44,11 +41,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: (a: unknown) => ({ type: 'isNull', a }),
 }));
 
-import {
-  getSiteOnboardingCompletedAt,
-  markSiteOnboardingComplete,
-  seedDefaultSiteBranding,
-} from '@/lib/api/branding';
+import { getSiteOnboardingCompletedAt, markSiteOnboardingComplete } from '@/lib/api/branding';
 
 function setupSelect(result: unknown[]) {
   mockLimit.mockResolvedValue(result);
@@ -113,96 +106,5 @@ describe('markSiteOnboardingComplete', () => {
       a: 'communities.id',
       b: 42,
     });
-  });
-});
-
-describe('seedDefaultSiteBranding', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Wire both the select and update chains; tests vary mockLimit per call.
-    mockWhere.mockReturnValue({ limit: mockLimit });
-    mockFrom.mockReturnValue({ where: mockWhere });
-    mockSelect.mockReturnValue({ from: mockFrom });
-    mockUpdateWhere.mockResolvedValue(undefined);
-    mockSet.mockReturnValue({ where: mockUpdateWhere });
-    mockUpdate.mockReturnValue({ set: mockSet });
-    mockApplyLive.mockResolvedValue({ before: null, after: {} });
-  });
-
-  it('seeds layoutId (from community type) + themePresetSlug (layout default) for a fresh community', async () => {
-    mockLimit
-      // 1) getBrandingForCommunity → no existing branding
-      .mockResolvedValueOnce([{ branding: null }])
-      // 2) site_layout_metadata read → tidewater's default preset
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'bay-light' }]);
-
-    await seedDefaultSiteBranding(7, 'condo_718');
-
-    // Written through the atomic op, never as a whole-object update().set()
-    // from a read — the shape that erased concurrent writes.
-    expect(mockApplyLive).toHaveBeenCalledTimes(1);
-    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: 'bay-light' }, {});
-    expect(mockUpdate).not.toHaveBeenCalled();
-  });
-
-  it('maps hoa_720 → boulevard and apartment → sable', async () => {
-    // hoa_720
-    mockLimit
-      .mockResolvedValueOnce([{ branding: null }])
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'palm-shadow' }]);
-    await seedDefaultSiteBranding(8, 'hoa_720');
-    expect(mockApplyLive).toHaveBeenCalledWith(8, {
-      layoutId: 'boulevard',
-      themePresetSlug: 'palm-shadow',
-    }, {});
-
-    vi.clearAllMocks();
-    mockWhere.mockReturnValue({ limit: mockLimit });
-    mockFrom.mockReturnValue({ where: mockWhere });
-    mockSelect.mockReturnValue({ from: mockFrom });
-    mockSet.mockReturnValue({ where: mockUpdateWhere });
-    mockUpdate.mockReturnValue({ set: mockSet });
-    mockUpdateWhere.mockResolvedValue(undefined);
-    mockApplyLive.mockResolvedValue({ before: null, after: {} });
-
-    // apartment
-    mockLimit
-      .mockResolvedValueOnce([{ branding: null }])
-      .mockResolvedValueOnce([{ defaultPresetSlug: 'linen-bronze' }]);
-    await seedDefaultSiteBranding(9, 'apartment');
-    expect(mockApplyLive).toHaveBeenCalledWith(9, {
-      layoutId: 'sable',
-      themePresetSlug: 'linen-bronze',
-    }, {});
-  });
-
-  it('no-ops when the community already has a layoutId (never clobbers a PM choice)', async () => {
-    mockLimit.mockResolvedValueOnce([{ branding: { layoutId: 'sable', themePresetSlug: 'x' } }]);
-
-    await seedDefaultSiteBranding(7, 'condo_718');
-
-    // Returned before the layout read or any write.
-    expect(mockApplyLive).not.toHaveBeenCalled();
-    expect(mockUpdate).not.toHaveBeenCalled();
-  });
-
-  it('no-ops for an unknown community type', async () => {
-    mockLimit.mockResolvedValueOnce([{ branding: null }]);
-
-    await seedDefaultSiteBranding(7, 'unknown_type');
-
-    expect(mockApplyLive).not.toHaveBeenCalled();
-    expect(mockUpdate).not.toHaveBeenCalled();
-  });
-
-  it('writes themePresetSlug=null when the layout has no default preset row', async () => {
-    mockLimit
-      .mockResolvedValueOnce([{ branding: null }])
-      // layout row missing → no defaultPresetSlug
-      .mockResolvedValueOnce([]);
-
-    await seedDefaultSiteBranding(7, 'condo_718');
-
-    expect(mockApplyLive).toHaveBeenCalledWith(7, { layoutId: 'tidewater', themePresetSlug: null }, {});
   });
 });

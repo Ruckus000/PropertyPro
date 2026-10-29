@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getBrandingForCommunity: vi.fn(),
   listThemePresetsForWizard: vi.fn(),
   mergeBranding: vi.fn(),
+  captureException: vi.fn(),
 }));
 
 // vi.importActual cannot be used: the real @propertypro/db needs DATABASE_URL at
@@ -45,6 +46,7 @@ vi.mock('@propertypro/db', () => ({
 }));
 
 vi.mock('@propertypro/db/unsafe', () => ({ createUnscopedClient: mocks.createUnscopedClient }));
+vi.mock('@sentry/nextjs', () => ({ captureException: mocks.captureException }));
 
 vi.mock('@propertypro/db/filters', () => ({
   eq: (col: unknown, val: unknown) => ({ __eq: [col, val] }),
@@ -409,6 +411,7 @@ describe('fillDemoCommunitySite', () => {
     );
     expect(mocks.ensureHomePage).toHaveBeenCalledWith(COMMUNITY_ID, tx, { publishedAt: expect.any(Date) });
     expect(updates.find((u) => u.table === communitiesTable)?.values).toEqual({ sitePublishedAt: expect.any(Date) });
+    expect(mocks.captureException).not.toHaveBeenCalled();
   });
 
   it("a prospect demo keeps the prospect's own colours and fonts", async () => {
@@ -444,6 +447,8 @@ describe('fillDemoCommunitySite', () => {
     // not even the look service's own published-sections check.
     expect(scoped.queryIncludingDeleted).toHaveBeenCalledTimes(1);
     expect(scoped.queryWhere).not.toHaveBeenCalled();
+    // Leaving a site alone is not a failure.
+    expect(mocks.captureException).not.toHaveBeenCalled();
   });
 
   it("a community that isn't a demo is left alone", async () => {
@@ -455,6 +460,7 @@ describe('fillDemoCommunitySite', () => {
     expect(mocks.updateBrandingForCommunity).not.toHaveBeenCalled();
     expect(client.transaction).not.toHaveBeenCalled();
     expect(scoped.insert).not.toHaveBeenCalled();
+    expect(mocks.captureException).not.toHaveBeenCalled();
   });
 
   it('a community that does not exist is left alone', async () => {
@@ -466,21 +472,35 @@ describe('fillDemoCommunitySite', () => {
     expect(client.transaction).not.toHaveBeenCalled();
   });
 
-  it('never throws: a failure is logged, and the demo entry goes on', async () => {
+  it('never throws: a failure is logged and reported, and the demo entry goes on', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
+      const dbDown = new Error('db down');
       mocks.createScopedClient.mockImplementation(() => {
-        throw new Error('db down');
+        throw dbDown;
       });
       await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
       expect(log).toHaveBeenCalledWith('fillDemoCommunitySite failed', expect.objectContaining({ communityId: COMMUNITY_ID }));
+      // Reported with its own tag, so a demo that stays empty is visible in Sentry
+      // apart from a signup's (`site_seed: look`).
+      expect(mocks.captureException).toHaveBeenCalledTimes(1);
+      expect(mocks.captureException).toHaveBeenCalledWith(dbDown, {
+        tags: { site_seed: 'demo_look' },
+        extra: { communityId: COMMUNITY_ID },
+      });
 
       // The same when the look itself cannot be published (a colour set missing).
       log.mockClear();
+      mocks.captureException.mockClear();
       mocks.listThemePresetsForWizard.mockResolvedValue([]);
       setUp({ demo: { communityType: 'condo_718', isDemo: true }, publishedChecks: [[]] });
       await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
       expect(log).toHaveBeenCalledWith('fillDemoCommunitySite failed', expect.objectContaining({ communityId: COMMUNITY_ID }));
+      expect(mocks.captureException).toHaveBeenCalledTimes(1);
+      expect(mocks.captureException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'That colour set does not exist' }),
+        { tags: { site_seed: 'demo_look' }, extra: { communityId: COMMUNITY_ID } },
+      );
     } finally {
       log.mockRestore();
     }

@@ -6,13 +6,17 @@
  *     deliberately UNGATED. They serve the public site, public transparency,
  *     the sitemap, the auth-page branding resolver and the demo route, none of
  *     which has a session.
- *   - Writes (`updateBrandingForCommunity`, `markSiteOnboardingComplete`,
- *     `seedDefaultSiteBranding`) require the caller to have already verified a
- *     management role (property_manager / root_manager) in the target
- *     community. See the per-function notes below.
+ *   - Writes (`updateBrandingForCommunity`, `markSiteOnboardingComplete`)
+ *     require the caller to have already verified a management role
+ *     (property_manager / root_manager) in the target community. See the
+ *     per-function notes below.
+ *
+ * A new community's layout, colour set and colours are not written here: they
+ * are its suggested look, published by `applyLookAtCreation`
+ * (`@/lib/services/site-look-service`).
  */
 import { cache } from 'react';
-import { communities, siteLayoutMetadata } from '@propertypro/db';
+import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
 // AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly, and updateBrandingForCommunity's callers have already verified a management role (or template ownership) in the target community.
@@ -220,53 +224,4 @@ export async function updateBrandingForCommunity(
 ): Promise<CommunityBranding> {
   const { after } = await applyLiveBrandingPatchUnscoped(communityId, patch, options);
   return after ?? {};
-}
-
-/**
- * Maps a community type to its default public-site layout (spec §4.0).
- * condo_718 → tidewater · hoa_720 → boulevard · apartment → sable.
- */
-const SITE_LAYOUT_BY_COMMUNITY_TYPE: Record<string, string> = {
-  condo_718: 'tidewater',
-  hoa_720: 'boulevard',
-  apartment: 'sable',
-};
-
-/**
- * Seed the default site branding (layout + theme preset) for a freshly-created
- * community (spec §4.0 — "the site is always live").
- *
- * Derives `layoutId` from the community type, then reads that layout's
- * `default_preset_slug` from the platform-level `site_layout_metadata` catalog
- * for `themePresetSlug`. Merges into the community's branding jsonb.
- *
- * Idempotent: if branding already carries a `layoutId` (community already
- * customized, or this ran before), it no-ops so a re-run never clobbers a PM's
- * choice. Best-effort by contract — the caller (`createCommunityForPm`)
- * wraps it in try/catch so a catalog read failure never rolls back creation.
- *
- * NOTE: this only seeds branding; the starter-pack *blocks* are applied
- * separately by `applyStarterPackToCommunity`. Completion tracking
- * (`site_onboarding_completed_at`) is intentionally left null so the dashboard
- * prompts still surface — see [[getSiteOnboardingCompletedAt]].
- */
-export async function seedDefaultSiteBranding(
-  communityId: number,
-  communityType: string,
-): Promise<void> {
-  const existing = await getBrandingForCommunity(communityId);
-  if (existing?.layoutId) return; // already customized/seeded — never clobber
-
-  const layoutId = SITE_LAYOUT_BY_COMMUNITY_TYPE[communityType];
-  if (!layoutId) return; // unknown type → leave branding to the renderer default
-
-  const db = createUnscopedClient();
-  const rows = await db
-    .select({ defaultPresetSlug: siteLayoutMetadata.defaultPresetSlug })
-    .from(siteLayoutMetadata)
-    .where(eq(siteLayoutMetadata.slug, layoutId))
-    .limit(1);
-  const themePresetSlug = rows[0]?.defaultPresetSlug ?? null;
-
-  await updateBrandingForCommunity(communityId, { layoutId, themePresetSlug });
 }

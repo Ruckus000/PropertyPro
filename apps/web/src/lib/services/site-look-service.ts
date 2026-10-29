@@ -28,6 +28,7 @@
  * `loadLookSwitchInput` reads one community's site and the platform's starter
  * packs, and writes nothing.
  */
+import { captureException } from '@sentry/nextjs';
 import {
   communities,
   createScopedClient,
@@ -214,8 +215,10 @@ export async function applyLookAtCreation(
  * `ensureHomePage` in packages/db) ends both. Trigger: a demo lives past the
  * 30-day purge, so the look would re-apply to an emptied site.
  *
- * Best-effort, like `seedNewCommunitySite`: a failure is logged and never
- * blocks the entry.
+ * Best-effort, like `seedNewCommunitySite`: a failure is logged and reported
+ * (Sentry tag `site_seed: demo_look`) and never blocks the entry. It is
+ * reported because a systematic cause, such as the colour sets not being
+ * applied yet (migration 0097), would otherwise leave every demo silently empty.
  */
 export async function fillDemoCommunitySite(communityId: number): Promise<void> {
   try {
@@ -231,6 +234,7 @@ export async function fillDemoCommunitySite(communityId: number): Promise<void> 
     await applyLookAtCreation(communityId, community.communityType, { keepBrand: true });
   } catch (err) {
     console.error('fillDemoCommunitySite failed', { communityId, err });
+    captureException(err, { tags: { site_seed: 'demo_look' }, extra: { communityId } });
   }
 }
 

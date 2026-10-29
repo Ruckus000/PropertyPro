@@ -147,10 +147,11 @@ async function main(): Promise<void> {
     done.push(`${created ? '+' : '='} ${label}`);
   };
 
-  // Website editor shots (manager/website/*): the state a real new condo is in.
-  // createCommunityForPm gives every new community its starter sections; the
-  // demo seed does not, so its editor opens on an empty page. Same call, same
-  // idempotency (it skips a community that already has published sections).
+  // Website editor shots (manager/website/*). The demo seed builds no website,
+  // so its editor opens on an empty page; this gives Sunset Condos the starter
+  // pack, idempotently (it skips a community that already has published
+  // sections). A real new community now starts with its suggested look instead
+  // (Bayfront for a condo), so these shots show a starter-pack site.
   await step('website starter sections (Sunset Condos)', async () =>
     (await applyStarterPackToCommunity(condoId, 'condo_718')).applied,
   );

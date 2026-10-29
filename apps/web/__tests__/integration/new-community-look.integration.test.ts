@@ -98,6 +98,8 @@ function renderToHtml(element: Parameters<typeof renderToPipeableStream>[0]): Pr
 
 describeDb('new communities and prospect demos start with their suggested look (db-backed integration)', () => {
   let state: TestKitState;
+  /** The founding manager of every community made through `createCommunityForPm`. */
+  let creatorId: string;
   const inAWeek = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   function lookSections(id: LookId): Section[] {
@@ -182,6 +184,45 @@ describeDb('new communities and prospect demos start with their suggested look (
   }
 
   /**
+   * A community made the way a manager makes one: the real `createCommunityForPm`
+   * (the community, its founding membership and checklist), then its website.
+   */
+  async function provisionCommunity(
+    label: string,
+    communityType: CommunityType,
+  ): Promise<{ communityId: number; name: string }> {
+    const name = `New look ${label} ${state.runSuffix}`;
+    const { communityId } = await createCommunityForPm({
+      userId: creatorId,
+      name,
+      communityType,
+      addressLine1: '100 Palm Way',
+      city: 'Miami',
+      state: 'FL',
+      zipCode: '33101',
+      subdomain: `new-look-${label}-${state.runSuffix}`,
+      timezone: 'America/New_York',
+      unitCount: 120,
+    });
+    trackCommunityForCleanup(state, communityId);
+    return { communityId, name };
+  }
+
+  /**
+   * What a visitor must not see on a fresh site. Nothing has been posted yet, so
+   * the Documents section has nothing to list and no record to summarise, and is
+   * left out rather than shown with an empty-list message; the empty meetings and
+   * news sections are left out too. And no linked-field token reaches a visitor,
+   * resolved or not.
+   */
+  function expectNoPlaceholders(html: string): void {
+    expect(html).not.toContain('No documents available.');
+    expect(html).not.toContain('No upcoming meetings.');
+    expect(html).not.toContain('No announcements yet.');
+    expect(html).not.toContain('{{');
+  }
+
+  /**
    * The public home page as a visitor gets it, from the parts the page hands its
    * layout (`app/public-site/[[...slug]]/page.tsx`): the community's public facts,
    * its published look, and the home page's visible published sections.
@@ -237,16 +278,7 @@ describeDb('new communities and prospect demos start with their suggested look (
 
   beforeAll(async () => {
     state = await initTestKit();
-  });
-
-  afterAll(async () => {
-    if (state) await teardownTestKit(state);
-  });
-
-  it('a freshly provisioned condo\'s public page shows no "No documents available." and no "{{"', async () => {
-    // The manager-created path, end to end: the community, its founding
-    // membership and checklist, then its website.
-    const creatorId = randomUUID();
+    creatorId = randomUUID();
     await state.db.insert(state.dbModule.users).values({
       id: creatorId,
       email: `new-look-creator-${state.runSuffix}@example.com`,
@@ -254,20 +286,14 @@ describeDb('new communities and prospect demos start with their suggested look (
       phone: null,
     });
     trackUserForCleanup(state, creatorId);
-    const name = `New look condo ${state.runSuffix}`;
-    const { communityId } = await createCommunityForPm({
-      userId: creatorId,
-      name,
-      communityType: 'condo_718',
-      addressLine1: '100 Palm Way',
-      city: 'Miami',
-      state: 'FL',
-      zipCode: '33101',
-      subdomain: `new-look-condo-${state.runSuffix}`,
-      timezone: 'America/New_York',
-      unitCount: 120,
-    });
-    trackCommunityForCleanup(state, communityId);
+  });
+
+  afterAll(async () => {
+    if (state) await teardownTestKit(state);
+  });
+
+  it('a freshly provisioned condo\'s public page shows no "No documents available." and no "{{"', async () => {
+    const { communityId, name } = await provisionCommunity('condo', 'condo_718');
 
     const html = await renderPublicHome(communityId);
 
@@ -276,16 +302,39 @@ describeDb('new communities and prospect demos start with their suggested look (
     expect(html).toContain('data-layout="bayfront"');
     expect(html).toContain(`Welcome to ${name}`);
     expect(html).toContain('120 homes in Miami.');
-    // Nothing has been posted yet, so the Documents section has nothing to list
-    // and no record to summarise, and is left out rather than shown with an
-    // empty-list message. The empty meetings and news sections are left out too.
-    expect(html).not.toContain('No documents available.');
-    expect(html).not.toContain('No upcoming meetings.');
-    expect(html).not.toContain('No announcements yet.');
-    // No linked-field token reaches a visitor, resolved or not.
-    expect(html).not.toContain('{{');
+    expectNoPlaceholders(html);
     // A real page, not an empty shell: the address given at creation is on it.
     expect(html).toContain('100 Palm Way, Miami, FL 33101');
+  });
+
+  it('each community type\'s freshly provisioned public page shows its own look, with no empty-list text and no "{{"', async () => {
+    const plainSimpleSubtitle = (getLook('plain-simple')?.sections[0]?.content as { subtitle: string }).subtitle;
+    const cases: Array<{
+      type: CommunityType;
+      label: string;
+      layout: LookId;
+      headline: (name: string) => string;
+      /** What only this look's hero says; for a look with linked fields, the facts they resolved to. */
+      subtitle: string;
+    }> = [
+      { type: 'condo_718', label: 'page-condo', layout: 'bayfront', headline: (n) => `Welcome to ${n}`, subtitle: '120 homes in Miami.' },
+      { type: 'hoa_720', label: 'page-hoa', layout: 'palm-grove', headline: (n) => `Welcome home to ${n}`, subtitle: '120 homes in Miami.' },
+      // Plain & Simple's welcome has no linked fields, so it reads the same with or without facts.
+      { type: 'apartment', label: 'page-apartment', layout: 'plain-simple', headline: (n) => `Welcome to ${n}`, subtitle: plainSimpleSubtitle },
+    ];
+    expect(plainSimpleSubtitle).not.toContain('{{');
+
+    for (const { type, label, layout, headline, subtitle } of cases) {
+      const { communityId, name } = await provisionCommunity(label, type);
+
+      const html = await renderPublicHome(communityId);
+
+      expect(suggestedLookFor(type)).toBe(layout);
+      expect(html, `${type}: layout`).toContain(`data-layout="${layout}"`);
+      expect(html, `${type}: headline`).toContain(headline(name));
+      expect(html, `${type}: subtitle`).toContain(subtitle);
+      expectNoPlaceholders(html);
+    }
   });
 
   it('each community type goes live with its suggested look: layout, colours, fonts and published sections', async () => {

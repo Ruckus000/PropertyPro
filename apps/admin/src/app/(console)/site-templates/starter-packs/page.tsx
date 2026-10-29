@@ -38,7 +38,7 @@ export default async function StarterPacksPage() {
     <PageBody>
       <AdminPageHeader
         title="Starter Packs"
-        description={'Platform-level block bundles applied to new community sites. Edit in place, or "Save as new version" to publish a new lineage version. Archived packs are retired from new-community seeding.'}
+        description={'Platform-level block bundles. New community sites start with a look, not a pack: packs are now used by "Reset to starter" and by the seeded demo communities. Edit in place, or "Save as new version" to publish a new lineage version. Archived packs cannot be used for either.'}
       />
       <StarterPacksTable packs={packs} />
     </PageBody>

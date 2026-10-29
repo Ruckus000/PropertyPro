@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { applyLookMock, applyStarterPackMock, seedBrandingMock, captureExceptionMock } = vi.hoisted(() => ({
+const { applyLookMock, applyStarterPackMock, captureExceptionMock } = vi.hoisted(() => ({
   applyLookMock: vi.fn(),
   applyStarterPackMock: vi.fn(),
-  seedBrandingMock: vi.fn(),
   captureExceptionMock: vi.fn(),
 }));
 
@@ -13,13 +12,10 @@ const { applyLookMock, applyStarterPackMock, seedBrandingMock, captureExceptionM
 vi.mock('@/lib/services/site-look-service', () => ({
   applyLookAtCreation: applyLookMock,
 }));
-// The two halves a new community used to get. They are mocked so a test can
-// show they no longer run, not so the wrapper can call them.
+// What a new community used to get. It is mocked so a test can show it no
+// longer runs, not so the wrapper can call it.
 vi.mock('@/lib/services/starter-pack-service', () => ({
   applyStarterPackToCommunity: applyStarterPackMock,
-}));
-vi.mock('@/lib/api/branding', () => ({
-  seedDefaultSiteBranding: seedBrandingMock,
 }));
 vi.mock('@sentry/nextjs', () => ({
   captureException: captureExceptionMock,
@@ -42,10 +38,9 @@ describe('seedNewCommunitySite', () => {
     expect(applyLookMock).toHaveBeenCalledTimes(1);
     expect(applyLookMock).toHaveBeenCalledWith(42, 'condo_718');
     expect(captureExceptionMock).not.toHaveBeenCalled();
-    // Neither of the two pre-look halves runs any more: a starter pack on the
-    // type's legacy layout is exactly what the look replaces.
+    // The starter pack no longer runs: a pack on the type's legacy layout is
+    // exactly what the look replaces.
     expect(applyStarterPackMock).not.toHaveBeenCalled();
-    expect(seedBrandingMock).not.toHaveBeenCalled();
   });
 
   it('an apartment gets plain & simple', async () => {
@@ -56,7 +51,6 @@ describe('seedNewCommunitySite', () => {
     expect(applyLookMock).toHaveBeenCalledTimes(1);
     expect(applyLookMock).toHaveBeenCalledWith(7, 'apartment');
     expect(applyStarterPackMock).not.toHaveBeenCalled();
-    expect(seedBrandingMock).not.toHaveBeenCalled();
   });
 
   it('an HOA gets palm grove', async () => {
@@ -83,7 +77,6 @@ describe('seedNewCommunitySite', () => {
     // just got created keeps whatever site a retry (or the editor) can finish.
     expect(console.error).toHaveBeenCalledWith('applyLookAtCreation failed', expect.objectContaining({ communityId: 42 }));
     expect(applyStarterPackMock).not.toHaveBeenCalled();
-    expect(seedBrandingMock).not.toHaveBeenCalled();
   });
 
   it('a community that already has a site is left as it is', async () => {

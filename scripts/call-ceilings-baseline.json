@@ -39,7 +39,7 @@
     "fullTableRead": 1
   },
   "apps/web/src/lib/api/branding.ts": {
-    "unscoped": 5
+    "unscoped": 4
   },
   "apps/web/src/lib/auth/community-address-conflict.ts": {
     "unscoped": 1
