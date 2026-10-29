@@ -80,8 +80,8 @@ export interface PublishSiteVariables {
   expectedPublishedAt: string | null;
   /**
    * When true, the server stamps `site_onboarding_completed_at = now()` after
-   * the publish. Set by the onboarding wizard's final step; omitted by the
-   * ongoing editor's PublishBar.
+   * the publish, unless it is already set. Set by the onboarding wizard's final
+   * step; omitted by the ongoing editor's PublishBar.
    */
   markOnboardingComplete?: boolean;
   /**

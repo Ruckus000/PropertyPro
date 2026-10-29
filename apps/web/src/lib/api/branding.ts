@@ -149,18 +149,27 @@ export async function getSiteOnboardingCompletedAt(
 }
 
 /**
- * Stamp `site_onboarding_completed_at = now()` for a community.
+ * Stamp `site_onboarding_completed_at = now()` for a community, ONCE.
+ *
+ * The UPDATE is conditional on the column still being NULL, in the same
+ * statement, so a community that already has a completion moment keeps it: a
+ * repeat call is a no-op, and two calls racing stamp once (a read-then-write
+ * would let both through). Nothing is returned or thrown to say which happened;
+ * no caller needs to know.
+ *
+ * Once, because the column is WHEN a manager first finished choosing a look:
+ * "time to choose a look" is `site_onboarding_completed_at - communities.created_at`,
+ * and every later call (a second wizard publish, "Keep this look" again) would
+ * move it. Every other reader only asks whether it is set.
  *
  * Called from the publish route when the wizard's final-step "Publish my
- * site" action carries `markOnboardingComplete: true`. Writing it on every
- * wizard publish (rather than only the first) is intentional: re-running the
- * wizard to completion is a fresh completion event, and only null-vs-set
- * matters to the consumers. Idempotent in effect.
+ * site" action carries `markOnboardingComplete: true`, and from the look
+ * route's `keepCurrent`.
  *
  * Callers must have already verified a management role (property_manager /
- * root_manager) in the target community. The publish route does this via
- * `ensurePmAccess` → `requireRole(membership, PM_MANAGER_ROLES)` plus
- * `requirePlanFeature('hasSiteEditor')` before invoking.
+ * root_manager) in the target community. Both routes do this through their
+ * `ensurePmAccess` (`requireRole(membership, PM_MANAGER_ROLES)` plus
+ * `requirePlanFeature('hasSiteEditor')`) before invoking.
  */
 export async function markSiteOnboardingComplete(
   communityId: number,
@@ -169,7 +178,7 @@ export async function markSiteOnboardingComplete(
   await db
     .update(communities)
     .set({ siteOnboardingCompletedAt: new Date() })
-    .where(eq(communities.id, communityId));
+    .where(and(eq(communities.id, communityId), isNull(communities.siteOnboardingCompletedAt)));
 }
 
 export interface BrandingPatch {

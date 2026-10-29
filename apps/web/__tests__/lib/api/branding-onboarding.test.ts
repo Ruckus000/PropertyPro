@@ -99,12 +99,22 @@ describe('markSiteOnboardingComplete', () => {
     const stampedMs = setArg.siteOnboardingCompletedAt.getTime();
     expect(stampedMs).toBeGreaterThanOrEqual(before);
     expect(stampedMs).toBeLessThanOrEqual(after);
+  });
 
-    // Scopes the write to the target community by primary key.
+  it('writes to the target community by primary key, and only while it has no completion moment', async () => {
+    await markSiteOnboardingComplete(42);
+
+    // The IS NULL is part of the UPDATE's own WHERE, so a repeat call changes
+    // nothing and two calls racing stamp once. "Time to choose a look" is
+    // `site_onboarding_completed_at - created_at`: every later stamp would move it.
+    // (The real-database check is integration/site-onboarding-complete.)
+    expect(mockUpdateWhere).toHaveBeenCalledTimes(1);
     expect(mockUpdateWhere).toHaveBeenCalledWith({
-      type: 'eq',
-      a: 'communities.id',
-      b: 42,
+      type: 'and',
+      args: [
+        { type: 'eq', a: 'communities.id', b: 42 },
+        { type: 'isNull', a: 'communities.siteOnboardingCompletedAt' },
+      ],
     });
   });
 });

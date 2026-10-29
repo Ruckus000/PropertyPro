@@ -9,7 +9,8 @@
  *     what the switch did to each section.
  *   - `{ communityId, keepCurrent: true }` keeps the look the site has (D18). It
  *     marks the website setup complete, which retires the dashboard card, and
- *     the "Customize your portal" checklist item. It answers `{ ok: true }`.
+ *     the "Customize your portal" checklist item. The completion moment is
+ *     stamped once, so keeping again changes nothing. It answers `{ ok: true }`.
  *
  * The body is a strict union, so a request is exactly one of the two: both
  * keys, neither, `keepCurrent: false` and any other key are 400s. `lookId` is
