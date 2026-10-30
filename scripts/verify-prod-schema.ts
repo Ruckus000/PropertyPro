@@ -368,6 +368,14 @@ async function run(): Promise<number> {
         "(see docs/DEPLOYMENT.md). Refusing to pass a comparison that was never made.",
     );
   }
+  // A secret pasted short (seen 2026-10-30: 33 characters) otherwise surfaces
+  // as a bare "Invalid URL". Report its shape, never its value.
+  if (!/^postgres(ql)?:\/\/[^\s@]+@[^\s/]+\/\S+$/.test(databaseUrl.trim())) {
+    couldNotCheck(
+      `DATABASE_URL is not a postgresql://user:password@host:port/db string ` +
+        `(${databaseUrl.length} characters). Re-paste the whole connection string.`,
+    );
+  }
 
   const declared = readDeclaredSchema();
   if (declared.tables.size === 0) {
