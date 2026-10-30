@@ -117,20 +117,10 @@ jobs:
           LATEST: ${{ steps.resolve.outputs.latest }}
         run: |
           set -euo pipefail
-          dest_repo="ghcr.io/${OWNER,,}/postgres"
-          hex="${LATEST#sha256:}"
           printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
-          # --preserve-digests: the GHCR index must be byte-identical to
-          # upstream's, or the pin we are about to write would not resolve.
-          skopeo copy --all --preserve-digests --retry-times 3 \
-            "docker://${REGISTRY}/${IMAGE_REPO}@${LATEST}" \
-            "docker://${dest_repo}:${IMAGE_TAG}-${hex:0:12}"
-          got="sha256:$(skopeo inspect --raw "docker://${dest_repo}@${LATEST}" | sha256sum | cut -d' ' -f1)"
-          if [ "$got" != "$LATEST" ]; then
-            echo "::error::GHCR returned ${got} for ${LATEST} — not opening a PR"
-            exit 1
-          fi
-          echo "Verified: ${dest_repo}@${LATEST}"
+          # Skips a digest an earlier run already mirrored, falls back across
+          # upstreams, and refuses unless GHCR serves the exact bytes.
+          scripts/ci/mirror-postgres-digest.sh "$LATEST" "ghcr.io/${OWNER,,}/postgres"
 
       - name: Push the bump branch and open an issue
         if: steps.resolve.outputs.changed == 'true'
