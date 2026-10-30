@@ -17,33 +17,32 @@
  * against one after it, catches a fixture that was planted and removed again
  * within the run, even though no file is left behind.
  *
- * Out of scope: rewriting an EXISTING file in place leaves its directory's
- * mtime alone, so this does not see it. That cannot cause the ENOENT race
- * above, and tracking file mtimes would flag every editor save made during a
- * local run.
+ * Which directories: those git would show you (tracked or untracked, not
+ * ignored), minus any path with a dot-prefixed segment. Gitignored trees are
+ * build output and tool state (`dist/`, `.next/`, `.claude/worktrees/`) that
+ * tools rewrite mid-run; dot directories are agent and tool config, and the
+ * harness writes lock files into the tracked `.claude/`. The repo root itself
+ * is watched (a fixture directory planted there moves its mtime).
+ *
+ * ponytail: in-place rewrites of existing files are not seen (dir mtime
+ * unchanged). Trigger: a guard test fails on a file another test rewrote in place.
+ * ponytail: a tool run alongside the tests can still trip it: a concurrent
+ * `pnpm build` (tsup writes and deletes `tsup.config.bundled_*.mjs` in each
+ * package root; that file also races the guards that walk `packages/`) or the
+ * first `*.tsbuildinfo` from a concurrent typecheck. Trigger: a sentinel
+ * failure that no test caused.
+ * ponytail: writes inside an existing ignored or dot dir are not seen; no guard
+ * scans those. Trigger: a guard starts scanning one.
  */
+import { spawnSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
-
-/**
- * Directory names never descended into: dependencies, VCS metadata, and the
- * caches that tooling legitimately writes while tests run (a concurrent
- * `next dev`, turbo, coverage output). Measured 2026-10-29: the full scripts
- * project writes nothing else in the tree.
- */
-export const SKIP_DIR_NAMES: ReadonlySet<string> = new Set([
-  'node_modules',
-  '.git',
-  '.next',
-  '.turbo',
-  'coverage',
-]);
+import { join } from 'node:path';
 
 /** Top-level directories whose absence means we are not looking at the repo. */
 export const REQUIRED_ROOTS = ['apps', 'packages', 'scripts'] as const;
 
-/** Below this many directories the walk examined too little to be trusted. */
-export const MIN_DIRECTORIES = 50;
+/** Below this many directories the listing examined too little to be trusted. */
+export const MIN_DIRECTORIES = 500;
 
 export interface DirState {
   /** `mtimeNs` as a string, so the snapshot stays JSON-friendly. */
@@ -56,67 +55,61 @@ export type TreeSnapshot = Map<string, DirState>;
 
 export class SentinelCouldNotCheckError extends Error {}
 
-const toKey = (root: string, abs: string): string => {
-  const rel = relative(root, abs);
-  return rel === '' ? '.' : rel.split(sep).join('/');
+const refuse = (message: string): never => {
+  throw new SentinelCouldNotCheckError(`tree-write sentinel: ${message}; refusing to report a clean tree`);
 };
 
 /**
- * Walk `root` and record every directory's mtime and entry names. Refuses
- * (throws `SentinelCouldNotCheckError`) when the root does not look like the
- * repo or the walk found too few directories to mean anything.
+ * Every directory holding a file git would show (tracked or untracked, not
+ * ignored), every ancestor of one, and `.`, excluding dot-prefixed segments.
+ * Same enumeration as `verify-service-dead-exports.ts`.
  */
-export function snapshotTree(
+export function listWatchedDirectories(
   root: string,
   options: { requiredRoots?: readonly string[]; minDirectories?: number } = {},
-): TreeSnapshot {
+): string[] {
   const requiredRoots = options.requiredRoots ?? REQUIRED_ROOTS;
   const minDirectories = options.minDirectories ?? MIN_DIRECTORIES;
 
+  const res = spawnSync(
+    'git',
+    ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+    { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (res.error) refuse(`could not run git ls-files in ${root}: ${String(res.error)}`);
+  if (res.status !== 0) refuse(`git ls-files exited ${res.status} in ${root}: ${res.stderr.trim()}`);
+
+  const dirs = new Set<string>(['.']);
+  for (const file of res.stdout.split('\0')) {
+    const segments = file.split('/');
+    for (let i = 1; i < segments.length; i += 1) {
+      if (segments[i - 1]!.startsWith('.')) break;
+      dirs.add(segments.slice(0, i).join('/'));
+    }
+  }
+
   for (const name of requiredRoots) {
-    let isDir = false;
-    try {
-      isDir = statSync(join(root, name)).isDirectory();
-    } catch {
-      isDir = false;
-    }
-    if (!isDir) {
-      throw new SentinelCouldNotCheckError(
-        `tree-write sentinel: expected directory "${name}" under ${root}; refusing to report a clean tree`,
-      );
-    }
+    if (!dirs.has(name)) refuse(`git lists no files under "${name}" in ${root}`);
   }
+  if (dirs.size < minDirectories) {
+    refuse(`found only ${dirs.size} directories under ${root} (minimum ${minDirectories})`);
+  }
+  return [...dirs].sort();
+}
 
+/** Record each directory's mtime and entry names. A missing directory is skipped. */
+export function snapshotDirectories(root: string, dirs: readonly string[]): TreeSnapshot {
   const snapshot: TreeSnapshot = new Map();
-  const stack = [root];
-  while (stack.length > 0) {
-    const dir = stack.pop()!;
-    let entries;
-    let mtimeNs: bigint;
+  for (const dir of dirs) {
+    const abs = join(root, dir);
     try {
-      mtimeNs = statSync(dir, { bigint: true }).mtimeNs;
-      entries = readdirSync(dir, { withFileTypes: true });
+      const { mtimeNs } = statSync(abs, { bigint: true });
+      snapshot.set(dir, { mtimeNs: mtimeNs.toString(), entries: readdirSync(abs).sort() });
     } catch (err) {
-      // A directory that vanished between being listed and being read is
-      // itself a change; the parent's mtime records it, so skip it here.
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
-      throw err;
+      // Gone (a tracked file deleted in the worktree, or removed mid-run): the
+      // parent's mtime records the change, so there is nothing to read here.
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     }
-    const names: string[] = [];
-    for (const entry of entries) {
-      names.push(entry.name);
-      if (entry.isDirectory() && !SKIP_DIR_NAMES.has(entry.name)) {
-        stack.push(join(dir, entry.name));
-      }
-    }
-    names.sort();
-    snapshot.set(toKey(root, dir), { mtimeNs: mtimeNs.toString(), entries: names });
-  }
-
-  if (snapshot.size < minDirectories) {
-    throw new SentinelCouldNotCheckError(
-      `tree-write sentinel: walked only ${snapshot.size} directories under ${root} (minimum ${minDirectories}); refusing to report a clean tree`,
-    );
   }
   return snapshot;
 }
@@ -130,8 +123,7 @@ export interface TreeChange {
 /**
  * Directories present in both snapshots whose mtime moved. `added`/`removed`
  * name the entries still visible; both empty means something was created
- * and deleted again during the run. Directories that only appear in `after`
- * or only in `before` are reported through their parent's entry lists.
+ * and deleted again during the run.
  */
 export function diffSnapshots(before: TreeSnapshot, after: TreeSnapshot): TreeChange[] {
   const changes: TreeChange[] = [];
@@ -158,7 +150,7 @@ export function formatChanges(changes: TreeChange[]): string {
     return `  - ${change.dir}/: ${parts.join('; ')}`;
   });
   return [
-    `Tests changed ${changes.length} director${changes.length === 1 ? 'y' : 'ies'} inside the repo while they ran:`,
+    `tree-write sentinel: tests changed ${changes.length} director${changes.length === 1 ? 'y' : 'ies'} inside the repo while they ran:`,
     ...lines,
     '',
     'Other guard tests scan these trees in parallel workers, and a file that is listed and then',

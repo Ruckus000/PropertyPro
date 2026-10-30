@@ -1,48 +1,40 @@
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
 import {
   diffSnapshots,
   formatChanges,
+  listWatchedDirectories,
   SentinelCouldNotCheckError,
-  snapshotTree,
+  snapshotDirectories,
 } from '../lib/tree-write-sentinel';
 
 // Fixtures live under os.tmpdir(), never in the repo: this file tests the
 // sentinel that forbids the latter.
 let root: string;
 
+const DIRS = ['.', 'apps', 'apps/web', 'apps/web/src', 'apps/web/src/lib', 'packages', 'packages/shared', 'packages/shared/src'];
+
 // Linux stamps mtimes from a coarse clock (a few ms). A directory created a
 // moment before the first snapshot could get the same stamp again from the
 // write under test, and the change would be missed. Backdating every fixture
 // directory makes any later create/delete a visible change.
-const backdate = (...dirs: string[]): void => {
-  const past = new Date('2020-01-01T00:00:00Z');
-  for (const dir of dirs) utimesSync(dir, past, past);
-};
-
-const smallTree = (): { root: string; dirs: string[] } => {
-  const dirs = ['apps/web/src/lib', 'packages/shared/src', 'scripts/__tests__'];
-  for (const dir of dirs) mkdirSync(join(root, dir), { recursive: true });
+const smallTree = (): void => {
+  mkdirSync(join(root, 'apps/web/src/lib'), { recursive: true });
+  mkdirSync(join(root, 'packages/shared/src'), { recursive: true });
   writeFileSync(join(root, 'apps/web/src/lib/existing.ts'), 'export {};\n');
-  const all = [
-    root,
-    join(root, 'apps'),
-    join(root, 'apps/web'),
-    join(root, 'apps/web/src'),
-    join(root, 'apps/web/src/lib'),
-    join(root, 'packages'),
-    join(root, 'packages/shared'),
-    join(root, 'packages/shared/src'),
-    join(root, 'scripts'),
-    join(root, 'scripts/__tests__'),
-  ];
-  backdate(...all);
-  return { root, dirs: all };
+  const past = new Date('2020-01-01T00:00:00Z');
+  for (const dir of DIRS) utimesSync(join(root, dir), past, past);
 };
 
-const snap = () => snapshotTree(root, { minDirectories: 1 });
+const snap = () => snapshotDirectories(root, DIRS);
+
+const write = (rel: string, content = 'x\n'): void => {
+  mkdirSync(dirname(join(root, rel)), { recursive: true });
+  writeFileSync(join(root, rel), content);
+};
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'tree-write-sentinel-'));
@@ -102,41 +94,54 @@ describe('diffSnapshots', () => {
       { dir: 'apps/web/src/lib', added: ['moved.ts'], removed: ['existing.ts'] },
     ]);
   });
-
-  it('ignores writes inside skipped cache directories', () => {
-    smallTree();
-    for (const name of ['node_modules', '.next', '.turbo', 'coverage', '.git']) {
-      mkdirSync(join(root, 'apps/web', name));
-    }
-    backdate(join(root, 'apps/web'));
-    const before = snap();
-    for (const name of ['node_modules', '.next', '.turbo', 'coverage', '.git']) {
-      writeFileSync(join(root, 'apps/web', name, 'cache.json'), '{}');
-    }
-    expect(diffSnapshots(before, snap())).toEqual([]);
-  });
 });
 
-describe('snapshotTree refuses to report on a tree it could not check', () => {
-  it('refuses when a required top-level directory is missing', () => {
+describe('listWatchedDirectories', () => {
+  it('lists what git would show, minus ignored and dot-prefixed directories', () => {
+    const init = spawnSync('git', ['init', '-q', root], { encoding: 'utf-8' });
+    expect(init.status, init.stderr).toBe(0);
+    write('.gitignore', 'dist/\n');
+    write('apps/web/src/a.ts');
+    write('packages/ui/src/index.ts');
+    write('packages/ui/dist/bundle.js');
+    write('.claude/x/lock');
+    write('apps/web/.cache/y');
+    write('scripts/new/untracked.ts');
+
+    expect(listWatchedDirectories(root, { minDirectories: 1 })).toEqual([
+      '.',
+      'apps',
+      'apps/web',
+      'apps/web/src',
+      'packages',
+      'packages/ui',
+      'packages/ui/src',
+      'scripts',
+      'scripts/new',
+    ]);
+  });
+
+  it('refuses outside a git work tree', () => {
     mkdirSync(join(root, 'apps'));
-    mkdirSync(join(root, 'packages'));
-    expect(() => snapshotTree(root, { minDirectories: 1 })).toThrow(SentinelCouldNotCheckError);
-    expect(() => snapshotTree(root, { minDirectories: 1 })).toThrow(/expected directory "scripts"/);
+    expect(() => listWatchedDirectories(root, { minDirectories: 1 })).toThrow(SentinelCouldNotCheckError);
+    expect(() => listWatchedDirectories(root, { minDirectories: 1 })).toThrow(/git ls-files exited/);
   });
 
-  it('refuses when the root does not exist', () => {
-    expect(() => snapshotTree(join(root, 'nope'))).toThrow(SentinelCouldNotCheckError);
+  it('refuses when git lists nothing under a required root', () => {
+    spawnSync('git', ['init', '-q', root]);
+    write('apps/a.ts');
+    write('packages/b.ts');
+    expect(() => listWatchedDirectories(root, { minDirectories: 1 })).toThrow(/no files under "scripts"/);
   });
 
-  it('refuses when the walk examined too few directories', () => {
-    smallTree();
-    expect(() => snapshotTree(root, { minDirectories: 50 })).toThrow(/walked only 10 directories/);
+  it('refuses when it found too few directories', () => {
+    spawnSync('git', ['init', '-q', root]);
+    for (const dir of ['apps', 'packages', 'scripts']) write(`${dir}/a.ts`);
+    expect(() => listWatchedDirectories(root, { minDirectories: 50 })).toThrow(/found only 4 directories/);
   });
 
-  it('walks the real repo with a non-trivial population', () => {
-    const repo = join(import.meta.dirname, '..', '..');
-    expect(snapshotTree(repo).size).toBeGreaterThan(500);
+  it('finds a non-trivial population in the real repo', () => {
+    expect(listWatchedDirectories(join(import.meta.dirname, '..', '..')).length).toBeGreaterThan(500);
   });
 });
 
@@ -154,12 +159,12 @@ describe('formatChanges', () => {
 });
 
 describe('wiring', () => {
-  // If `globalSetup` is dropped from scripts/vitest.config.ts, nothing would
-  // notice: every other test here passes either way. This one would not.
-  it('the scripts project global setup armed the sentinel for this run', () => {
+  // If `globalSetup` is dropped from scripts/vitest.config.ts, or reads the
+  // wrong config's `watch`, nothing else here would notice.
+  it('the scripts project global setup armed the sentinel to match the run mode', () => {
     const state = inject('treeWriteSentinel');
     expect(state).toBeDefined();
+    expect(state.mode).toBe(process.env.VITEST_MODE === 'WATCH' ? 'watch' : 'armed');
     if (state.mode === 'armed') expect(state.directories).toBeGreaterThan(500);
-    else expect(state.mode).toBe('watch');
   });
 });
