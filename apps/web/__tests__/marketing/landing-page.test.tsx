@@ -16,6 +16,8 @@ import { MarketingFooter } from '../../src/components/marketing/footer';
 import { MarketingNav } from '../../src/components/marketing/marketing-nav';
 import { LogoProofSection } from '../../src/components/marketing/logo-proof-section';
 import { TestimonialSection } from '../../src/components/marketing/testimonial-section';
+import { INCLUDED_IN_ALL, PLANS, ROWS } from '../../src/components/marketing/pricing-plans';
+import { yearsSinceLargeCondoRequirement } from '../../src/components/marketing/days-in-force';
 
 /** Everything that ships inside <main>, in document order. */
 const SECTIONS = [
@@ -158,6 +160,39 @@ describe('claim truth', () => {
     const html = renderToStaticMarkup(<PricingSection />);
     expect(html).toContain('Where most boards start');
     expect(html).not.toContain('Recommended for portfolios');
+  });
+
+  it('puts the trial terms in #pricing exactly once, for the table and the phone switcher alike', () => {
+    // activation-smoke runs getByText(/card required/i) and /30-day/i inside
+    // #pricing in strict mode: a second copy (say, inside a phone plan card)
+    // turns that required check red.
+    const pricing = renderToStaticMarkup(<PricingSection />);
+    expect(pricing.match(/card required/gi)).toHaveLength(1);
+    expect(pricing.match(/30-day/gi)).toHaveLength(1);
+  });
+
+  it('compares only what differs between plans', () => {
+    // A row that read "Included" under every plan compared nothing. Those
+    // features belong in the "included in every plan" list instead.
+    for (const row of ROWS) {
+      const values = new Set(PLANS.map((plan) => row[plan.key]));
+      expect(values.size, row.label).toBeGreaterThan(1);
+    }
+    expect(INCLUDED_IN_ALL).toContain('Compliance list & deadlines');
+    expect(INCLUDED_IN_ALL).toContain('Meeting notices & minutes');
+  });
+
+  it('does not repeat the hero figure in the reckoning band', () => {
+    const reckoning = renderToStaticMarkup(<ReckoningSection />);
+    expect(reckoning).not.toMatch(/Days the 25-unit requirement/);
+    expect(reckoning).toMatch(/150\+ units have already owed a website — since 2019/);
+  });
+
+  it('counts whole calendar years since the 150-unit requirement', () => {
+    // Took effect January 1, 2019 — the same date the FAQ and checker cite.
+    expect(yearsSinceLargeCondoRequirement(new Date(2026, 0, 1))).toBe(7);
+    expect(yearsSinceLargeCondoRequirement(new Date(2025, 11, 31))).toBe(6);
+    expect(yearsSinceLargeCondoRequirement(new Date(2018, 5, 1))).toBe(0);
   });
 
   it('labels itself general information rather than legal advice', () => {
