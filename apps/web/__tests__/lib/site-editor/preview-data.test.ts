@@ -9,9 +9,11 @@
 import { describe, it, expect } from 'vitest';
 import {
   selectAnnouncements,
+  selectBoard,
   selectContact,
   selectDocuments,
   selectMeetings,
+  selectQuickLinks,
   EMPTY_PREVIEW_DATA,
   PREVIEW_LIMIT,
   PREVIEW_WINDOW_DAYS,
@@ -192,6 +194,85 @@ describe('selectContact', () => {
     );
     expect(out.address).toBeNull();
     expect(out.officeHours).toBeNull();
+  });
+});
+
+describe('selectQuickLinks', () => {
+  // The canvas renders one section at a time and cannot see the rest of the
+  // page, so it previews the links the community's data supports, as they would
+  // look beside Meetings, News and Contact sections with their default settings.
+  const CONTACT = {
+    management: null,
+    board: [],
+    address: '100 Palm Way, Miami, FL 33101',
+    officeHours: null,
+  };
+  const preview = {
+    ...EMPTY_PREVIEW_DATA,
+    meetings: [meeting(1, 3), meeting(2, 10)],
+    announcements: [announcement(1, 2)],
+    contact: CONTACT,
+  };
+
+  it('shows a link for each kind of data the community has, dated by the next meeting', () => {
+    expect(selectQuickLinks(preview, NOW)).toEqual({
+      nextMeeting: { startsAt: new Date(NOW + 3 * DAY).toISOString() },
+      showMeetings: true,
+      showNews: true,
+      showContact: true,
+    });
+  });
+
+  it('judges meetings and news on the sections\' default 30-day windows', () => {
+    const later = {
+      ...preview,
+      meetings: [meeting(1, 45)],
+      announcements: [announcement(1, 45)],
+    };
+    expect(selectQuickLinks(later, NOW)).toMatchObject({
+      nextMeeting: null,
+      showMeetings: false,
+      showNews: false,
+    });
+  });
+
+  it('leaves out Contact when the community has given nothing to contact it by', () => {
+    expect(selectQuickLinks({ ...preview, contact: EMPTY_PREVIEW_DATA.contact }, NOW).showContact).toBe(
+      false,
+    );
+  });
+
+  it('shows only Owner documents for a community with no data yet', () => {
+    expect(selectQuickLinks(EMPTY_PREVIEW_DATA, NOW)).toEqual({
+      nextMeeting: null,
+      showMeetings: false,
+      showNews: false,
+      showContact: false,
+    });
+  });
+});
+
+describe('selectBoard', () => {
+  it('lists the board from the contact superset, by name and title only', () => {
+    const contact = {
+      management: { name: 'Coastal', email: 'a@b.com', phone: '305' },
+      board: [
+        { name: 'Sam', title: 'Board President', email: 'sam@b.com' } as never,
+        { name: 'Ana', title: 'Board Member' },
+      ],
+      address: null,
+      officeHours: null,
+    };
+    expect(selectBoard(contact)).toEqual({
+      members: [
+        { name: 'Sam', title: 'Board President' },
+        { name: 'Ana', title: 'Board Member' },
+      ],
+    });
+  });
+
+  it('is empty when no one holds a seat', () => {
+    expect(selectBoard(EMPTY_PREVIEW_DATA.contact)).toEqual({ members: [] });
   });
 });
 

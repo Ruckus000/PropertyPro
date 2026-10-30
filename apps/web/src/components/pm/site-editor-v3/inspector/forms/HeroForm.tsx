@@ -30,6 +30,9 @@ interface HeroDraft {
  * here with its image already in the list: the legacy `heroImagePath` pair
  * becomes a one-element array, and the first save writes the new shape. That
  * is the whole migration — there is no backfill.
+ *
+ * A stock photo (D3) has no path and is carried exactly as stored: rebuilding
+ * it as an upload would write `{ path: undefined }`, which the schema refuses.
  */
 function toDraft(content: unknown): HeroDraft {
   const parsed = heroBlockSchema.safeParse(content);
@@ -39,11 +42,12 @@ function toDraft(content: unknown): HeroDraft {
       subtitle: parsed.data.subtitle ?? '',
       ctaText: parsed.data.ctaText ?? '',
       ctaTarget: parsed.data.ctaTarget ?? '',
-      photos: resolveHeroPhotos(parsed.data).map((photo) =>
-        photo.decorative === true
+      photos: resolveHeroPhotos(parsed.data).map((photo): HeroPhoto => {
+        if ('stock' in photo) return { stock: photo.stock, alt: photo.alt };
+        return photo.decorative === true
           ? { path: photo.path, decorative: true }
-          : { path: photo.path, alt: photo.alt ?? '' },
-      ),
+          : { path: photo.path, alt: photo.alt ?? '' };
+      }),
     };
   }
   const loose = (content ?? {}) as Record<string, unknown>;
@@ -54,6 +58,12 @@ function toDraft(content: unknown): HeroDraft {
     ctaTarget: typeof loose.ctaTarget === 'string' ? loose.ctaTarget : '',
     photos: [],
   };
+}
+
+/** Whether a photo meets the schema's rule: a description, or an upload marked decorative. */
+function isDescribed(photo: HeroPhoto): boolean {
+  if ('stock' in photo) return photo.alt.length > 0;
+  return photo.decorative === true || (photo.alt ?? '').length > 0;
 }
 
 /**
@@ -77,12 +87,14 @@ function toCanonical(draft: HeroDraft): unknown | null {
   const ctaTarget = draft.ctaTarget.trim();
   if ((ctaText.length === 0) !== (ctaTarget.length === 0)) return null;
 
-  const photos = draft.photos.map((photo) =>
-    photo.decorative === true
+  const photos = draft.photos.map((photo): HeroPhoto => {
+    // Unchanged: the form shows a stock photo's description read-only.
+    if ('stock' in photo) return { stock: photo.stock, alt: photo.alt };
+    return photo.decorative === true
       ? { path: photo.path, decorative: true as const }
-      : { path: photo.path, alt: (photo.alt ?? '').trim() },
-  );
-  if (photos.some((photo) => photo.decorative !== true && photo.alt.length === 0)) {
+      : { path: photo.path, alt: (photo.alt ?? '').trim() };
+  });
+  if (photos.some((photo) => !isDescribed(photo))) {
     return null;
   }
 

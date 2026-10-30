@@ -219,6 +219,59 @@ describe('HeroPhotosField — focus after mutation', () => {
   });
 });
 
+describe('HeroPhotosField — stock photos (read-only until the look writers ship)', () => {
+  // D3. A stock photo is one of ours, with no path. Until the writer release
+  // adds its own controls, the field must show it and must never lose it.
+  const SUNSET: HeroPhoto = { stock: 'sunset', alt: 'Sunset over the water' };
+  const POOL: HeroPhoto = { path: '7/hero/pool.jpg', alt: 'The pool' };
+
+  it('shows a stock photo with its thumbnail and its description, read-only', () => {
+    const { view } = renderField([SUNSET, POOL]);
+
+    const thumbs = Array.from(view.container.querySelectorAll('img'));
+    expect(thumbs[0]).toHaveAttribute('src', '/site-looks/sunset.webp');
+    // The description is in the field beside it; the thumbnail is not announced.
+    expect(thumbs[0]).toHaveAttribute('alt', '');
+    const [stockAlt] = screen.getAllByLabelText('Alt text');
+    expect(stockAlt).toHaveValue('Sunset over the water');
+    expect(stockAlt).toHaveAttribute('readonly');
+    // A stock photo cannot be decorative, so only the upload has the checkbox.
+    expect(screen.getAllByLabelText('Decorative')).toHaveLength(1);
+  });
+
+  it('does not change a stock photo when its description is typed into', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField([SUNSET, POOL]);
+
+    await user.type(screen.getAllByLabelText('Alt text')[0]!, 'X');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps a stock photo, unchanged, when another photo is removed', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField([SUNSET, POOL]);
+
+    await user.click(screen.getByRole('button', { name: 'Remove photo 2' }));
+    expect(onChange).toHaveBeenCalledWith([SUNSET]);
+  });
+
+  it('moves a stock photo like any other, carrying it unchanged', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField([SUNSET, POOL]);
+
+    await user.click(screen.getByRole('button', { name: 'Move photo 2 up' }));
+    expect(onChange).toHaveBeenCalledWith([POOL, SUNSET]);
+  });
+
+  it('keeps an uploaded photo editable beside a stock one', async () => {
+    const user = userEvent.setup();
+    const { onChange } = renderField([SUNSET, POOL]);
+
+    await user.type(screen.getAllByLabelText('Alt text')[1]!, '!');
+    expect(onChange).toHaveBeenLastCalledWith([SUNSET, { path: '7/hero/pool.jpg', alt: 'The pool!' }]);
+  });
+});
+
 describe('HeroPhotosField — the cap', () => {
   it('stops accepting photos at the maximum', () => {
     const full = Array.from({ length: 8 }, (_, i) => ({

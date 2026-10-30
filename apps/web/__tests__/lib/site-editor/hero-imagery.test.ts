@@ -39,6 +39,12 @@ describe('carryHeroImagery', () => {
     expect(carryHeroImagery(withPhotos)).toEqual({ photos: PHOTOS });
   });
 
+  it('carries stock photos through untouched, beside uploads', () => {
+    const mixed = [{ stock: 'sunset' as const, alt: 'Sunset over the water' }, ...PHOTOS];
+    const withStock = { headline: 'Welcome', photos: mixed } as HeroBlockContent;
+    expect(carryHeroImagery(withStock)).toEqual({ photos: mixed });
+  });
+
   it('carries the legacy pair when that is the shape in use', () => {
     expect(carryHeroImagery(withLegacy)).toEqual({
       heroImagePath: '7/hero/pool.jpg.1600w.webp',
@@ -107,6 +113,21 @@ describe('replacePrimaryHeroImage', () => {
     const result = replacePrimaryHeroImage(withPhotos, image);
     expect(result).toHaveProperty('photos');
     expect(result).not.toHaveProperty('heroImagePath');
+  });
+
+  it('replaces a stock photo in slot 0 whole, keeping nothing of it', () => {
+    // D3. The upload takes the slot with its OWN description: a stock photo's
+    // "Sunset over the water" carried onto a photo of the pool would describe
+    // a picture that is no longer there.
+    const SUNSET = { stock: 'sunset' as const, alt: 'Sunset over the water' };
+    const PALMS = { stock: 'palms' as const, alt: 'A palm-lined street' };
+    const withStock = { headline: 'Welcome', photos: [SUNSET, PALMS] } as HeroBlockContent;
+
+    const result = replacePrimaryHeroImage(withStock, image) as { photos: unknown[] };
+    expect(result).toEqual({
+      photos: [{ path: '7/hero/new.jpg', alt: 'A new photo' }, PALMS],
+    });
+    expect(result.photos[0]).not.toHaveProperty('stock');
   });
 
   it('keeps writing the legacy pair for a hero that has no photos', () => {

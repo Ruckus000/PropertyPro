@@ -7,6 +7,7 @@
  *   - PR #3: announcements
  *   - PR #4: documents, meetings, contact
  *   - PR #10b: faq, gallery, amenities (Pro+ polish blocks)
+ *   - website builder Phase 2A: quicklinks, board (read release: no writer yet)
  *
  * Once a block type has both a schema entry AND a renderer entry, it is
  * "live" — the page renderer in PR #1b+ uses the registry to dispatch.
@@ -38,6 +39,8 @@ import { FaqBlock } from './FaqBlock';
 import { GalleryBlock } from './GalleryBlock';
 import { AmenitiesBlock } from './AmenitiesBlock';
 import { PaymentsBlock } from './PaymentsBlock';
+import { QuickLinksBlock } from './QuickLinksBlock';
+import { BoardBlock } from './BoardBlock';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>>> = {
@@ -52,6 +55,8 @@ export const blockRendererRegistry: Partial<Record<BlockType, BlockRenderer<any>
   gallery: GalleryBlock,
   amenities: AmenitiesBlock,
   payments: PaymentsBlock,
+  quicklinks: QuickLinksBlock,
+  board: BoardBlock,
 };
 
 /**

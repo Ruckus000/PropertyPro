@@ -18,6 +18,8 @@ const SECTION_LABELS: Record<string, string> = {
   gallery: 'Gallery',
   amenities: 'Amenities',
   payments: 'Payments',
+  quicklinks: 'Quick links',
+  board: 'Board members',
 };
 
 /**

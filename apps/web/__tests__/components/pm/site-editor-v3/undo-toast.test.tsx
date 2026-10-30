@@ -16,6 +16,8 @@ import userEvent from '@testing-library/user-event';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
 import { UNDO_WINDOW_MS } from '@/components/pm/site-editor-v3/use-undoable-remove';
+import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
+import { blocksUpsertContract } from '@/app/api/v1/pm/site/blocks/contract';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
 
@@ -453,6 +455,35 @@ describe('undo', () => {
 
     expect(upsertMutate).toHaveBeenCalledTimes(1);
   });
+
+  /**
+   * Undo replays the removed section through the upsert, so every type the
+   * upsert can write must be restorable — and only those (the case below).
+   * Read from the contract itself, so a type added there without being made
+   * restorable fails here, by name. `payments` was missing until 2026-10-28:
+   * a removed Payments section offered no Undo.
+   */
+  it.each(blocksUpsertContract.request.body!.shape.blockType.options)(
+    'offers undo for a removed %s section, since the upsert can write it back',
+    async (blockType) => {
+      const user = userEvent.setup();
+      deleteMutate.mockImplementation((_input, opts) => opts.onSuccess({ staged: true }));
+      renderControls(block({ blockType, content: {} }));
+
+      await user.click(
+        screen.getByRole('button', { name: `Remove ${sectionLabel(blockType)} section` }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Remove section' }));
+
+      const options = lastToastOptions();
+      expect(options.action?.label).toBe('Undo');
+      options.action!.onClick();
+      expect(upsertMutate).toHaveBeenCalledWith(
+        expect.objectContaining({ blockType, blockOrder: 4, content: {} }),
+        expect.anything(),
+      );
+    },
+  );
 
   it('offers no undo for a block type the upsert contract cannot express', async () => {
     const user = userEvent.setup();

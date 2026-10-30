@@ -55,7 +55,7 @@ export function contactHasContent(data: PublicContactInfo): boolean {
 
 export type ContactBlockViewProps = BlockViewProps<ContactBlockContent, PublicContactInfo>;
 
-export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
+export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewProps) {
   const management = managementWithDetails(data.management);
   const hasAddress = hasContact(data.address);
   const hasOfficeHours = hasContact(data.officeHours);
@@ -65,7 +65,11 @@ export function ContactBlockView({ blockId, data }: ContactBlockViewProps) {
   const officeTitle = hasOfficeHours ? 'Office' : 'Address';
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={`contact-${blockId}`}>
+    <section
+      id={anchorId}
+      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
+      aria-labelledby={`contact-${blockId}`}
+    >
       <div className="mx-auto max-w-3xl">
         <h2
           id={`contact-${blockId}`}

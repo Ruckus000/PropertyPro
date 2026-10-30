@@ -13,9 +13,11 @@ import type {
 } from '@/components/public-site/blocks/types';
 import {
   selectAnnouncements,
+  selectBoard,
   selectContact,
   selectDocuments,
   selectMeetings,
+  selectQuickLinks,
   type CanvasPreviewData,
 } from '@/lib/site-editor/preview-data';
 
@@ -32,9 +34,10 @@ export interface CanvasBlockProps {
 /**
  * Renders one block through the view registry.
  *
- * Two shapes, branched on `isDataDrivenBlock`: the six authored types take the
- * public site's own `BlockRendererProps`, and the four system-of-record types
- * take `BlockViewProps` with rows narrowed from the preview superset.
+ * Two shapes, branched on `isDataDrivenBlock`: the authored types take the
+ * public site's own `BlockRendererProps`, and the data-driven types take
+ * `BlockViewProps` with rows narrowed from the preview superset. Neither gets an
+ * anchor id: the canvas sits inside the editor's own page.
  *
  * Memoised on identity: editing one block must not re-render the whole canvas.
  * The narrowing is cheap, but re-rendering ten blocks (some with dozens of
@@ -74,7 +77,7 @@ function CanvasBlockImpl({ block, community, theme, layout, preview, now }: Canv
 }
 
 /**
- * Narrow the preview superset for one SoR block.
+ * Narrow the preview superset for one data-driven block.
  *
  * Content is `unknown` here because it has not been through its Zod schema —
  * the views themselves are tolerant, and the shells validate on the publish
@@ -122,6 +125,11 @@ function selectPreviewRows(
         },
         preview.contact,
       );
+    // Quick links cannot see the rest of the page from here; see selectQuickLinks.
+    case 'quicklinks':
+      return selectQuickLinks(preview, now);
+    case 'board':
+      return selectBoard(preview.contact);
     default:
       return undefined;
   }

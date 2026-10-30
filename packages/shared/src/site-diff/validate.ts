@@ -142,6 +142,9 @@ export function heroIssues(content: unknown, prefix = 'hero'): Issue[] {
   }
 
   // An alt text equal to the filename tells a screen-reader user nothing.
+  // Only the legacy single-image pair has a filename to compare: `photos` are
+  // checked by the schema alone, and a stock photo has no path at all, so any
+  // check extended to `photos` must skip an entry that has `stock` instead.
   const alt = record['heroImageAlt'];
   const path = record['heroImagePath'];
   if (typeof alt === 'string' && typeof path === 'string') {

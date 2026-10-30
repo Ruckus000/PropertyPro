@@ -11,6 +11,8 @@
  * Migration 0044 added 'payments' (website editor v3, Phase 9).
  * Migration 0046 (Phase 11a) added the nullable `page_id` and the per-page
  * ordering index — see `page_id` and the index comments below.
+ * Migration 0096 added 'quicklinks' and 'board' (website builder, read release:
+ * the database and the renderers accept them before any code writes one).
  *
  * The `check()` below must list EVERY type production's constraint carries. It
  * is not decorative: drizzle-kit diffs this literal against the TIP snapshot,
@@ -102,7 +104,7 @@ export const siteBlocks = pgTable(
     }).onDelete('cascade'),
     check(
       'site_blocks_block_type_check',
-      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','payments','tombstone')`,
+      sql`${table.blockType} IN ('hero','text','image','documents','meetings','announcements','contact','faq','gallery','amenities','payments','quicklinks','board','tombstone')`,
     ),
   ],
 );

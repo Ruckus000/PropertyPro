@@ -25,6 +25,13 @@ Documentation index for the block types that compose a community's public site. 
 | `gallery`   | content  | Professional | #10         | [gallery.md](./gallery.md)                 |
 | `amenities` | content  | Professional | #10         | [amenities.md](./amenities.md)             |
 
+## Website builder looks (read release, Phase 2A)
+
+| Type         | Category | Tier       | Doc                              |
+|--------------|----------|------------|----------------------------------|
+| `quicklinks` | SoR      | Essentials | [quicklinks.md](./quicklinks.md) |
+| `board`      | SoR      | Essentials | [board.md](./board.md)           |
+
 ## Categories
 
 - **Content blocks** — PM-authored. The block content is stored in `site_blocks.content` jsonb and validated against its Zod content schema on read and write.

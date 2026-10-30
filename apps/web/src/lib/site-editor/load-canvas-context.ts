@@ -60,6 +60,9 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
     // category selection is applied later by `selectDocuments`.
     reader.listDocuments({ limit: PREVIEW_LIMIT, includeCategories: [...DOCUMENT_CATEGORIES] }),
     reader.listMeetings({ limit: PREVIEW_LIMIT, timeWindowDays: PREVIEW_WINDOW_DAYS }),
+    // Both sides on: `selectContact` masks per section, and the Board members
+    // and Quick links previews read the same superset (`selectBoard`,
+    // `selectQuickLinks`), so neither needs a query of its own.
     reader.getContactInfo({ showBoard: true, showManagement: true }),
   ]);
 

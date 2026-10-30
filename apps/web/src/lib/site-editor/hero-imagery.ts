@@ -52,7 +52,10 @@ export function carryHeroImagery(existing: HeroBlockContent | null | undefined):
  *
  * When the hero already uses `photos`, the upload replaces slot 0 and leaves
  * the rest of the gallery alone — the wizard's step is "set the hero image",
- * singular, and slot 0 is what that means. Writing `heroImagePath` instead
+ * singular, and slot 0 is what that means. Slot 0 is replaced whole, with the
+ * upload's own description: when it held one of our stock photos (D3), nothing
+ * of it carries over, since its "Sunset over the water" would describe a
+ * picture that is no longer there. Writing `heroImagePath` instead
  * would produce content carrying both shapes, which the schema refuses, and
  * the PM would hit a validation error in a wizard that has no photo UI to
  * resolve it with — after the upload had already been finalized and charged

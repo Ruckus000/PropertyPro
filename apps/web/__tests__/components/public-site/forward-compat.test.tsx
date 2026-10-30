@@ -196,6 +196,52 @@ describe('forward-compat — the publish gate accepts every new shape', () => {
   });
 });
 
+describe('forward-compat — the looks (website builder Phase 2A read release)', () => {
+  // Phase 2B's looks write three new shapes: a hero whose photo is one of our
+  // stock photos, and the Quick links and Board members sections. This release
+  // teaches every reader those shapes and ships nothing that writes them, so
+  // Phase 2B can be rolled back past without a section vanishing or the
+  // publish gate freezing a community. Written as literals, like NEW_SHAPE_ROWS.
+  const LOOK_ROWS = {
+    hero: {
+      headline: 'Welcome to {{name}}',
+      photos: [{ stock: 'sunset' as const, alt: 'Sunset over the water, with palm trees in silhouette' }],
+    },
+    quicklinks: {},
+    board: {},
+  };
+
+  it('renders a hero carrying a stock photo', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<HeroBlock {...props('hero', LOOK_ROWS.hero)} />);
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Welcome to Sunset Condos');
+    expect(
+      screen.getByAltText('Sunset over the water, with palm trees in silhouette'),
+    ).toHaveAttribute('src', '/site-looks/sunset.webp');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('has a renderer AND a canvas view registered for quicklinks and board', () => {
+    for (const type of ['quicklinks', 'board'] as const) {
+      expect(hasRenderer(type), `${type} has no renderer`).toBe(true);
+      expect(hasView(type), `${type} has no canvas view`).toBe(true);
+    }
+  });
+
+  it("accepts a site built from the looks' new rows", () => {
+    const errors = siteIssues({
+      hero: { slot: 1, blockType: 'hero', content: LOOK_ROWS.hero },
+      sections: [
+        { slot: 2, blockType: 'quicklinks', content: LOOK_ROWS.quicklinks },
+        { slot: 3, blockType: 'board', content: LOOK_ROWS.board },
+      ],
+    } as never).filter((issue) => issue.severity === 'error');
+    expect(errors).toEqual([]);
+  });
+});
+
 describe('forward-compat — the legacy shapes still work', () => {
   // The other direction: this release must not break rows written BEFORE it.
   it('still renders a legacy single-image hero', () => {

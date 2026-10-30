@@ -45,10 +45,16 @@ describe('form registry — dispatch', () => {
   });
 
   it('covers every block type the Add panel can create', () => {
-    // The Add panel offers all ten creatable types, so a gap here would mean
-    // a PM could add a section they then could not configure anywhere in v3.
-    // This is the assertion that keeps those two lists honest.
+    // The Add panel offers every creatable type, so a gap here would mean a PM
+    // could add a section they then could not configure anywhere in v3. This is
+    // the assertion that keeps those two lists honest.
+    //
+    // Quick links and Board members are not addable until Phase 2B ships their
+    // writers (`add-catalog.test.ts` holds the same exclusion); their forms
+    // arrive with those writers, which remove both exclusions.
+    const notAddableUntilPhase2B: readonly string[] = ['quicklinks', 'board'];
     for (const blockType of BLOCK_TYPES) {
+      if (notAddableUntilPhase2B.includes(blockType)) continue;
       expect(hasForm(blockType), `${blockType} has no inspector form`).toBe(true);
     }
   });

@@ -27,10 +27,8 @@ import {
   type HeroBlockContent,
   type LinkedFacts,
 } from '@propertypro/shared';
-// Import from ./public-url, NOT ./storage-paths — the latter pulls in
-// `node:crypto` for write-side path generation and cannot be bundled client-side.
-import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 import type { BlockRendererProps } from './types';
+import { heroPhotoImgAttributes } from './hero-photo-img';
 import { HeroPhotoStrip } from './HeroPhotoStrip';
 
 export function HeroBlock(props: BlockRendererProps) {
@@ -51,6 +49,7 @@ export function HeroBlock(props: BlockRendererProps) {
   // the public site, the editor canvas and the publish validator cannot
   // disagree about what a hero's photos are.
   const photos = resolveHeroPhotos(content);
+  const singlePhoto = photos.length === 1 ? heroPhotoImgAttributes(photos[0]!) : null;
   const { community } = props;
   const facts: LinkedFacts = {
     name: community.name,
@@ -88,18 +87,19 @@ export function HeroBlock(props: BlockRendererProps) {
         )}
         {/* One photo keeps the original single-image presentation — which is
             every community today, so this change is a no-op for them. Two or
-            more get the scroll-snap strip. */}
-        {photos.length === 1 && (
+            more get the scroll-snap strip. An upload or a stock photo alike:
+            `heroPhotoImgAttributes` knows where each is served from. */}
+        {singlePhoto && (
           <div className="mt-10 flex justify-center">
             {/* Plain <img> used instead of next/image — see file-level comment. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={buildPublicAssetUrl(`${photos[0]!.path}.1600w.webp`)}
-              srcSet={`${buildPublicAssetUrl(`${photos[0]!.path}.800w.webp`)} 800w, ${buildPublicAssetUrl(`${photos[0]!.path}.1600w.webp`)} 1600w`}
-              sizes="(min-width: 1024px) 768px, 100vw"
-              alt={photos[0]!.decorative === true ? '' : (photos[0]!.alt ?? '')}
-              width={1600}
-              height={900}
+              src={singlePhoto.src}
+              srcSet={singlePhoto.srcSet}
+              sizes={singlePhoto.sizes}
+              alt={singlePhoto.alt}
+              width={singlePhoto.width}
+              height={singlePhoto.height}
               className="rounded-md shadow-e1"
               loading="eager"
             />

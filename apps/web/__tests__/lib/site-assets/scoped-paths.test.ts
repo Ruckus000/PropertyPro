@@ -71,6 +71,35 @@ describe('collectBlockAssetPaths', () => {
     expect(collectBlockAssetPaths('payments', { ctaTarget: 'https://x.test' })).toEqual([]);
   });
 
+  it('a stock photo passes the scoped-path check', () => {
+    // D3: a stock photo is served from the web app's own public/site-looks/,
+    // never from storage, so it has no path to bind to a community. The
+    // uploads beside it are still collected, at their own index, and checked.
+    const content = {
+      headline: 'Welcome',
+      photos: [
+        { stock: 'sunset', alt: 'Sunset over the water' },
+        { path: '42/hero/pool.jpg', alt: 'The pool' },
+        { stock: 'palms', alt: 'A palm-lined street' },
+      ],
+    };
+
+    const paths = collectBlockAssetPaths('hero', content);
+    expect(paths).toEqual([{ field: 'photos.1.path', value: '42/hero/pool.jpg' }]);
+    expect(() => assertPathsScopedToCommunity(42, paths)).not.toThrow();
+    // ...and a foreign upload beside a stock photo is still refused.
+    expect(() => assertPathsScopedToCommunity(7, paths)).toThrow(ValidationError);
+  });
+
+  it('collects nothing from a hero whose only photos are stock', () => {
+    expect(
+      collectBlockAssetPaths('hero', {
+        headline: 'Welcome',
+        photos: [{ stock: 'sunset', alt: 'Sunset over the water' }],
+      }),
+    ).toEqual([]);
+  });
+
   it('tolerates malformed content rather than throwing', () => {
     expect(collectBlockAssetPaths('image', null)).toEqual([]);
     expect(collectBlockAssetPaths('gallery', { images: 'nope' })).toEqual([]);
@@ -101,6 +130,10 @@ describe('block-type coverage', () => {
     faq: false,
     amenities: false,
     payments: false,
+    // Both are filled from community records at render; their content is
+    // `{ hidden? }` and `{ heading?, hidden? }`, with nowhere to put a path.
+    quicklinks: false,
+    board: false,
   };
 
   it('classifies every block type in blockSchemaRegistry', () => {

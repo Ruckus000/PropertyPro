@@ -65,4 +65,29 @@ describe('getBlockRegistry', () => {
       expect(existsSync(target), `${entry.type}: ${entry.docHref} does not exist`).toBe(true);
     }
   });
+
+  it('every rendererPath points at a file that exists on disk', () => {
+    const repoRoot = resolve(__dirname, '../../../..');
+    for (const entry of entries) {
+      const target = resolve(repoRoot, entry.rendererPath);
+      expect(existsSync(target), `${entry.type}: ${entry.rendererPath} does not exist`).toBe(true);
+    }
+  });
+
+  it('describes Quick links and Board members, both on every plan', () => {
+    const byType = Object.fromEntries(entries.map((entry) => [entry.type, entry]));
+    expect(byType.quicklinks).toMatchObject({
+      label: 'Quick links',
+      tier: 'essentials',
+      rendererPath: 'apps/web/src/components/public-site/blocks/QuickLinksBlock.tsx',
+    });
+    expect(byType.board).toMatchObject({
+      label: 'Board members',
+      tier: 'essentials',
+      rendererPath: 'apps/web/src/components/public-site/blocks/BoardBlock.tsx',
+    });
+    // Their stored content is only what the schemas allow: hidden, and a heading.
+    expect(byType.quicklinks!.fields.map((field) => field.name)).toEqual(['hidden']);
+    expect(byType.board!.fields.map((field) => field.name).sort()).toEqual(['heading', 'hidden']);
+  });
 });

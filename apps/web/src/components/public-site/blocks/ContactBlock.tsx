@@ -44,6 +44,7 @@ export async function ContactBlock(props: BlockRendererProps) {
       content={config}
       data={contact}
       community={props.community}
+      anchorId={props.anchorId}
     />
   );
 }

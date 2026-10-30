@@ -10,6 +10,12 @@
  * So this runs against a real Postgres, and asserts BOTH directions — that
  * migration 0044 admits `payments`, and that widening it did not turn the
  * constraint into a rubber stamp.
+ *
+ * Migration 0096 widens it again, for `quicklinks` and `board`. That one is the
+ * database half of a two-release rollout: the first release lets the database and
+ * the renderers accept the two types, and the second is the first to write one.
+ * They are asserted by name, so a failure points at that migration and not at the
+ * shared `BLOCK_TYPES` union.
  */
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
@@ -79,10 +85,51 @@ async function insertBlockType(communityId: number, blockType: string): Promise<
   `);
 }
 
+/** The slice of a postgres.js `PostgresError` the rejection assertion reads. */
+interface PgError {
+  code?: string;
+  constraint_name?: string;
+  cause?: PgError;
+}
+
+/**
+ * Insert a block of this type and hand back the error the database raised.
+ *
+ * Throws if the insert SUCCEEDED, so "it was accepted" fails loudly instead of
+ * passing as an empty catch. drizzle wraps a driver error in a
+ * `DrizzleQueryError` whose `cause` is the `PostgresError`, so this reads
+ * through the wrapper to the fields the server set.
+ */
+async function refusedBlockType(communityId: number, blockType: string): Promise<PgError> {
+  try {
+    await insertBlockType(communityId, blockType);
+  } catch (error) {
+    const raised = error as PgError;
+    return raised.cause ?? raised;
+  }
+  throw new Error(`expected "${blockType}" to be refused by the CHECK constraint, but it was accepted`);
+}
+
 describeDb('site_blocks_block_type_check', () => {
   it('accepts the payments block type (migration 0044)', async () => {
     const community = requireCommunity(state, 'communityA');
     await expect(insertBlockType(community.id, 'payments')).resolves.toBeUndefined();
+  });
+
+  it('accepts quicklinks and board block types', async () => {
+    // Migration 0096, the read release: the database admits both before any
+    // code writes one. Named here, not taken from BLOCK_TYPES, so a failure
+    // points at the migration.
+    const community = requireCommunity(state, 'communityA');
+    for (const blockType of ['quicklinks', 'board']) {
+      // Not `.resolves`: its failure text drops the assertion message, so it
+      // would not say WHICH of the two types the constraint refused.
+      await insertBlockType(community.id, blockType).catch((error: unknown) => {
+        throw new Error(`"${blockType}" is not in the CHECK constraint (migration 0096)`, {
+          cause: error,
+        });
+      });
+    }
   });
 
   it('accepts every type in the shared BLOCK_TYPES union', async () => {
@@ -102,6 +149,28 @@ describeDb('site_blocks_block_type_check', () => {
     await expect(
       insertBlockType(community.id, TOMBSTONE_BLOCK_TYPE),
     ).resolves.toBeUndefined();
+  });
+
+  it('still rejects an unknown type', async () => {
+    // Widening a CHECK by two names must not admit their neighbours. These are
+    // the near-misses a hurried writer is likeliest to produce for the NEW
+    // types, and each must be refused for the claimed reason: SQLSTATE 23514
+    // naming this constraint, not a failed page insert or a dropped connection.
+    const community = requireCommunity(state, 'communityA');
+    for (const blockType of [
+      'quicklink',
+      'quick_links',
+      'QUICKLINKS',
+      'boards',
+      'Board',
+      'board_members',
+    ]) {
+      const refusal = await refusedBlockType(community.id, blockType);
+      expect(
+        { code: refusal.code, constraint: refusal.constraint_name },
+        `"${blockType}" must be refused by site_blocks_block_type_check`,
+      ).toEqual({ code: '23514', constraint: 'site_blocks_block_type_check' });
+    }
   });
 
   it.each([

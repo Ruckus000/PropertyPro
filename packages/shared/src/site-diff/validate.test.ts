@@ -35,6 +35,28 @@ describe('blockIssues — errors come from zod', () => {
   it('says nothing about a tombstone', () => {
     expect(blockIssues(TOMBSTONE_BLOCK_TYPE, {})).toEqual([]);
   });
+
+  it('validate treats quicklinks and board as known types', () => {
+    // Without this the publish gate would block any site carrying either section
+    // with "is not a section type this site can show".
+    expect(blockIssues('quicklinks', {})).toEqual([]);
+    expect(blockIssues('board', {})).toEqual([]);
+    expect(blockIssues('board', { heading: 'Your board' })).toEqual([]);
+    expect(blockIssues('quicklinks', { hidden: true })).toEqual([]);
+  });
+
+  it('holds quicklinks and board content to their schemas', () => {
+    // Known is not the same as unchecked: the content still goes through zod.
+    const strict = blockIssues('quicklinks', { links: [] });
+    expect(errors(strict)).toHaveLength(1);
+    expect(strict[0]!.message).not.toMatch(/not a section type/);
+
+    expect(errors(blockIssues('board', { heading: '' }))).toHaveLength(1);
+    // Spaces alone are an empty heading, so this is an error, not an "only spaces" warning.
+    expect(errors(blockIssues('board', { heading: '   ' }))).toHaveLength(1);
+    expect(errors(blockIssues('board', { heading: 'a'.repeat(81) }))).toHaveLength(1);
+    expect(errors(blockIssues('board', { members: [] }))).toHaveLength(1);
+  });
 });
 
 describe('blockIssues — advisories never block', () => {
@@ -118,6 +140,19 @@ describe('siteIssues — the cross-section rules', () => {
         base({
           sections: [
             { slot: 2, blockType: 'text', content: { body: 'A genuinely useful paragraph here.' } },
+          ],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('is silent for a site with Quick links and Board members sections', () => {
+    expect(
+      siteIssues(
+        base({
+          sections: [
+            { slot: 2, blockType: 'quicklinks', content: {} },
+            { slot: 3, blockType: 'board', content: { heading: 'Your board' } },
           ],
         }),
       ),

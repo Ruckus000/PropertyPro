@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { TOMBSTONE_BLOCK_TYPE } from '../site-blocks/index';
-import { diffSite } from './diff';
+import { BLOCK_TYPES, TOMBSTONE_BLOCK_TYPE } from '../site-blocks/index';
+import { diffSite, sectionTitle } from './diff';
 import type { SiteSectionSnapshot, SiteSnapshot } from './types';
 
 function text(slot: number, body: string): SiteSectionSnapshot {
@@ -81,6 +81,24 @@ describe('diffSite — single operations', () => {
 
     expect(result.changes).toHaveLength(1);
     expect(result.changes[0]).toMatchObject({ key: 'block:d3', kind: 'added', fromSlot: null, toSlot: 3 });
+  });
+
+  it('names an added Quick links or Board members section, and does not call it degraded', () => {
+    // A section type this build knows parses cleanly, so the review sheet shows
+    // its plain title instead of the raw type and a "could not be read" flag.
+    const published = snap([text(2, 'A')]);
+    const next = snap([
+      text(2, 'A'),
+      { slot: 3, blockType: 'quicklinks', content: {} },
+      { slot: 4, blockType: 'board', content: { heading: 'Your board' } },
+    ]);
+    const result = diffSite(published, next);
+
+    expect(result.changes.map((c) => [c.kind, c.title])).toEqual([
+      ['added', 'Quick links section'],
+      ['added', 'Board members section'],
+    ]);
+    expect(result.changes.some((c) => c.degraded)).toBe(false);
   });
 
   it('reports a tombstoned section as removed, with no reorder', () => {
@@ -257,5 +275,25 @@ describe('diffSite — result invariants', () => {
     const published = snap([text(2, 'A')], { branding: { primaryColor: '#C2533A' } });
     const next = snap([text(2, 'A')], { branding: { primaryColor: '#000000' } });
     expect(diffSite(published, next).changes).toEqual([]);
+  });
+});
+
+describe('sectionTitle', () => {
+  it('labels the Quick links and Board members sections', () => {
+    expect(sectionTitle('quicklinks')).toBe('Quick links');
+    expect(sectionTitle('board')).toBe('Board members');
+  });
+
+  it('has a label of its own for every block type', () => {
+    // An unlabelled type falls back to its raw name, which would show a manager
+    // "quicklinks section" in the review sheet. Every type this build can store
+    // needs a real title, so a new type cannot be added without one.
+    for (const blockType of BLOCK_TYPES) {
+      expect(sectionTitle(blockType), blockType).not.toBe(blockType);
+    }
+  });
+
+  it('falls back to the raw type for one this build does not know', () => {
+    expect(sectionTitle('jsx_template')).toBe('jsx_template');
   });
 });

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { BLOCK_TYPES } from '@propertypro/shared';
 import { StarterPackBlocksEditor, type EditorBlock } from '@/components/site-templates/StarterPackBlocksEditor';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -52,6 +53,25 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+});
+
+describe('StarterPackBlocksEditor — block types', () => {
+  it('offers every block type there is, from the shared list', () => {
+    // A hand-kept list here had already lost `payments`, so a pack holding a
+    // Payments section showed the wrong type in its row.
+    render([{ blockType: 'text', blockOrder: 2, content: { body: 'Hello' } }]);
+    const options = Array.from(q<HTMLSelectElement>('block-type-0').options).map((o) => o.value);
+    expect(options).toEqual([...BLOCK_TYPES]);
+  });
+
+  it('shows a Quick links or Board members row as that type', () => {
+    render([
+      { blockType: 'quicklinks', blockOrder: 2, content: {} },
+      { blockType: 'board', blockOrder: 3, content: { heading: 'Our board' } },
+    ]);
+    expect(q<HTMLSelectElement>('block-type-0').value).toBe('quicklinks');
+    expect(q<HTMLSelectElement>('block-type-1').value).toBe('board');
+  });
 });
 
 describe('StarterPackBlocksEditor — cleared optional text fields drop the key', () => {

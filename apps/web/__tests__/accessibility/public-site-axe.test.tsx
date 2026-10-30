@@ -155,10 +155,12 @@ const CONTENT: Record<string, unknown> = {
   documents: { limit: 5 },
   meetings: { limit: 10, timeWindowDays: 30 },
   contact: { showBoard: true, showManagement: true },
+  quicklinks: {},
+  board: { heading: 'Board of Directors' },
 };
 
 /**
- * Rows for the four system-of-record views, which take data as a prop.
+ * Rows for the data-driven views, which take data as a prop.
  *
  * Dates are real `Date` objects, not ISO strings: these views call
  * `.toISOString()` to build `<time datetime>`, so a string fixture throws
@@ -200,6 +202,19 @@ const DATA: Record<string, unknown> = {
     // below would audit a Contact section that never renders it.
     address: '100 Palm Way, Miami, FL 33101',
     officeHours: 'Mon-Fri, 9-5',
+  },
+  // Every link on, with a next meeting, so the audit sees the fullest markup.
+  quicklinks: {
+    nextMeeting: { startsAt: '2026-11-17T23:30:00.000Z' },
+    showMeetings: true,
+    showNews: true,
+    showContact: true,
+  },
+  board: {
+    members: [
+      { name: 'Dana Reyes', title: 'Board President' },
+      { name: 'Sam Ortiz', title: 'Board Member' },
+    ],
   },
 };
 

@@ -466,3 +466,89 @@ describe('<HeroBlock> — linked fields (D4)', () => {
     expect(screen.queryByText(/community of/)).not.toBeInTheDocument();
   });
 });
+
+describe('<HeroBlock> — stock photos (D3)', () => {
+  // A stock photo is one of ours: a file in the web app's public/site-looks/,
+  // never a storage path. It has one size, so no srcset.
+  const SUNSET = { stock: 'sunset' as const, alt: 'Sunset over the water, with palm trees in silhouette' };
+  const PALMS = { stock: 'palms' as const, alt: 'A quiet street lined with tall palm trees' };
+
+  // A stock photo has no path, so a strip keyed by path hands React `undefined`
+  // keys. React reports that once per component per run, so whichever of these
+  // cases renders a strip first would be the only one to see it: every case
+  // watches console.error rather than one dedicated case.
+  let consoleError: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    const calls = [...consoleError.mock.calls];
+    consoleError.mockRestore();
+    expect(calls).toEqual([]);
+  });
+
+  it('hero renders /site-looks/sunset.webp for a stock photo without srcSet', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<HeroBlock {...makeProps({ headline: 'X', photos: [SUNSET] })} />);
+
+    const img = screen.getByRole('img', { name: SUNSET.alt });
+    expect(img).toHaveAttribute('src', '/site-looks/sunset.webp');
+    expect(img).not.toHaveAttribute('srcset');
+    expect(img).not.toHaveAttribute('sizes');
+    // A parse failure would have logged and rendered nothing.
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("gives a stock photo its file's own width and height, so the box is right before it loads", () => {
+    render(<HeroBlock {...makeProps({ headline: 'X', photos: [PALMS] })} />);
+    const img = screen.getByRole('img', { name: PALMS.alt });
+    expect(img).toHaveAttribute('src', '/site-looks/palms.webp');
+    expect(img).toHaveAttribute('width', '1100');
+    expect(img).toHaveAttribute('height', '1100');
+  });
+
+  it('serves a stock photo from the site, never from storage, even with a CDN configured', () => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co';
+    render(<HeroBlock {...makeProps({ headline: 'X', photos: [SUNSET] })} />);
+    expect(screen.getByRole('img', { name: SUNSET.alt })).toHaveAttribute(
+      'src',
+      '/site-looks/sunset.webp',
+    );
+  });
+
+  it('mixes stock photos and uploads in one strip, each served its own way', () => {
+    render(
+      <HeroBlock
+        {...makeProps({
+          headline: 'X',
+          photos: [SUNSET, { path: '1/hero/pool.jpg', alt: 'The pool' }, PALMS],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('group', { name: 'Community photos, 3 total' })).toBeInTheDocument();
+    const sunset = screen.getByRole('img', { name: SUNSET.alt });
+    expect(sunset).toHaveAttribute('src', '/site-looks/sunset.webp');
+    expect(sunset).not.toHaveAttribute('srcset');
+    expect(screen.getByRole('img', { name: 'The pool' })).toHaveAttribute(
+      'srcset',
+      expect.stringContaining('1/hero/pool.jpg.800w.webp 800w'),
+    );
+    expect(screen.getByRole('img', { name: PALMS.alt })).toHaveAttribute(
+      'src',
+      '/site-looks/palms.webp',
+    );
+    // Every slide and dot still has its own target.
+    expect(screen.getByRole('link', { name: 'Go to photo 3 of 3' })).toHaveAttribute(
+      'href',
+      '#hero-10-photo-2',
+    );
+  });
+
+  it('renders the same stock photo twice, each a slide of its own', () => {
+    render(<HeroBlock {...makeProps({ headline: 'X', photos: [SUNSET, SUNSET] })} />);
+    expect(screen.getAllByRole('img', { name: SUNSET.alt })).toHaveLength(2);
+    expect(screen.getByRole('group', { name: 'Photo 2 of 2' })).toBeInTheDocument();
+  });
+});

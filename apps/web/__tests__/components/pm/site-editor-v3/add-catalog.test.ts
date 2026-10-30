@@ -22,13 +22,30 @@ import {
   LAST_CONTENT_SLOT,
 } from '@/components/pm/site-editor-v3/panels/add-catalog';
 
+/**
+ * Types the site can show but no one can add yet. Quick links and Board members
+ * ship in two releases: readers first (Phase 2A), so every live reader handles
+ * them before anything writes one; writers second (Phase 2B), which adds their
+ * catalog entries and forms and takes them out of this list.
+ */
+const NOT_ADDABLE_UNTIL_PHASE_2B: readonly string[] = ['quicklinks', 'board'];
+
 describe('ADD_CATALOG', () => {
   it('offers every block type except the hero', () => {
     const offered = ADD_CATALOG.map((e) => e.blockType).sort();
-    const expected = BLOCK_TYPES.filter((t) => t !== 'hero')
+    const expected = BLOCK_TYPES.filter(
+      (t) => t !== 'hero' && !NOT_ADDABLE_UNTIL_PHASE_2B.includes(t),
+    )
       .slice()
       .sort();
     expect(offered).toEqual(expected);
+  });
+
+  it('does not offer Quick links or Board members until Phase 2B ships their writers', () => {
+    const offered = ADD_CATALOG.map((e) => e.blockType as string);
+    for (const type of NOT_ADDABLE_UNTIL_PHASE_2B) {
+      expect(offered, `${type} is not addable until Phase 2B`).not.toContain(type);
+    }
   });
 
   it('never offers the hero or the tombstone sentinel', () => {
