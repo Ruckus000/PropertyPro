@@ -18,6 +18,13 @@ on:
   # weeks; not being able to deploy without inventing a commit is what made that
   # slow to recover from.
   workflow_dispatch:
+    inputs:
+      skip_schema_check:
+        # Keeps dispatch an escape hatch: if the schema check itself is what is
+        # broken (secret rotated, pooler down), an operator can still deploy.
+        description: Skip the production schema check (only if the check itself is broken)
+        type: boolean
+        default: false
   # PR previews are handled by the native Vercel GitHub integration.
 
 concurrency:
@@ -97,9 +104,63 @@ jobs:
             sleep 20
           done
 
+  # Refuse to deploy code whose Drizzle schema declares a table, column or enum
+  # value that production lacks. On 2026-10-29 #1416 deployed before its expand
+  # migration 0095 was applied, and every association site returned 500 until
+  # the next day; the smoke test below passed, because /auth/login on the apex
+  # host never reads a community. Migrations stay MANUAL (see the note in
+  # deploy-production): this only reads pg_catalog, and fails with the name of
+  # the migration to apply. Runs beside `gate`, not after it, so it adds no time.
+  schema:
+    name: Require production schema to cover the code
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SKIP: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_schema_check }}
+
+    steps:
+      - name: Skipped by the operator
+        if: env.SKIP == 'true'
+        run: echo "::warning::Production schema check skipped by workflow_dispatch input. Nothing confirmed that production has this commit's columns."
+
+      - name: Checkout
+        if: env.SKIP != 'true'
+        uses: actions/checkout@v4
+        with:
+          # The same commit the deploy jobs build.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup pnpm
+        if: env.SKIP != 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Setup Node.js
+        if: env.SKIP != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install dependencies
+        if: env.SKIP != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Compare the schema with production
+        if: env.SKIP != 'true'
+        env:
+          # A login role with no table grants (docs/DEPLOYMENT.md §3). Unset, the
+          # script exits 2 and the deploy is refused: an unmade check is not a pass.
+          DATABASE_URL: ${{ secrets.SCHEMA_CHECK_DATABASE_URL }}
+        run: pnpm db:schema:verify
+
   deploy-production:
     name: Deploy to Production
-    needs: gate
+    needs: [gate, schema]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -141,8 +202,9 @@ jobs:
       # for contract migrations (it ran migrate-FIRST, which would drop columns
       # the still-live old code reads). Drift protection now comes from the
       # expand/contract discipline (apply expand migrations BEFORE the dependent
-      # code ships; apply contract migrations AFTER the new code is live), not
-      # from a CI gate.
+      # code ships; apply contract migrations AFTER the new code is live). The
+      # `schema` job above checks the expand half read-only: it never migrates,
+      # it refuses to deploy until a person has.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -229,7 +291,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-admin:
     name: Deploy Admin to Production
-    needs: gate
+    needs: [gate, schema]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
