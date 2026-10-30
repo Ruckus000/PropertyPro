@@ -30,3 +30,22 @@ export function DaysInForce() {
   useEffect(() => setDays(daysInForce()), []);
   return <>{days === null ? '—' : days.toLocaleString('en-US')}</>;
 }
+
+/**
+ * Condominiums of 150 or more units have had to keep a website since 2019.
+ * The FAQ and the eligibility checker make the same claim
+ * ("Required — and has been since 2019"); keep the three in step.
+ */
+export const LARGE_CONDO_REQUIREMENT_YEAR = 2019;
+
+/** Whole calendar years since the 150-unit requirement took effect on Jan 1. */
+export function yearsSinceLargeCondoRequirement(now: Date = new Date()): number {
+  return Math.max(0, now.getFullYear() - LARGE_CONDO_REQUIREMENT_YEAR);
+}
+
+/** Client-only for the same reason as `DaysInForce`: a static build must not bake it in. */
+export function YearsSinceLargeCondoRequirement() {
+  const [years, setYears] = useState<number | null>(null);
+  useEffect(() => setYears(yearsSinceLargeCondoRequirement()), []);
+  return <>{years === null ? '—' : years}</>;
+}
