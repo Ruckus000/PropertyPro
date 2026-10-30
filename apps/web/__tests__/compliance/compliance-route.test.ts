@@ -42,6 +42,7 @@ const {
   listComplianceChecklistItemsMock,
   insertComplianceChecklistItemsMock,
   updateComplianceChecklistItemMock,
+  findChecklistLinkConflictMock,
   createScopedClientMock,
   scopedQueryByIdMock,
   getCommunityUnitCountMock,
@@ -61,6 +62,7 @@ const {
   listComplianceChecklistItemsMock: vi.fn(),
   insertComplianceChecklistItemsMock: vi.fn(),
   updateComplianceChecklistItemMock: vi.fn(),
+  findChecklistLinkConflictMock: vi.fn(),
   createScopedClientMock: vi.fn(),
   scopedQueryByIdMock: vi.fn(),
   getCommunityUnitCountMock: vi.fn(),
@@ -123,6 +125,7 @@ vi.mock('@/lib/services/compliance-service', () => ({
   listComplianceChecklistItems: listComplianceChecklistItemsMock,
   insertComplianceChecklistItems: insertComplianceChecklistItemsMock,
   updateComplianceChecklistItem: updateComplianceChecklistItemMock,
+  findChecklistLinkConflict: findChecklistLinkConflictMock,
 }));
 
 import { GET, POST, PATCH } from '../../src/app/api/v1/compliance/route';
@@ -167,6 +170,7 @@ beforeEach(() => {
   // queryById. Default to "found in this community" so happy paths pass.
   scopedQueryByIdMock.mockResolvedValue({ id: 1 });
   createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock });
+  findChecklistLinkConflictMock.mockResolvedValue(null);
   getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true });
   calculateComplianceStatusMock.mockReturnValue('overdue');
   getCommunityUnitCountMock.mockResolvedValue(null);
@@ -628,6 +632,50 @@ describe('PATCH /api/v1/compliance', () => {
         newValues: { documentId: 77 },
       }),
     );
+  });
+
+  it('refuses with 409 a file already posted as another record, writing nothing', async () => {
+    findChecklistLinkConflictMock.mockResolvedValueOnce('document_fills_another_record');
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }),
+      undefined,
+    );
+
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toContain('This file is already posted as another record.');
+    expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses with 409 a record that already has a different file, writing nothing', async () => {
+    findChecklistLinkConflictMock.mockResolvedValueOnce('record_has_another_document');
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }),
+      undefined,
+    );
+
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).toContain(
+      'This record already has a file. Remove it first to replace it.',
+    );
+    expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+  });
+
+  it('asks about conflicts with replace only when the body says so', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValue({ id: 5, title: 'Budget', documentId: 77 });
+
+    await PATCH(bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }), undefined);
+    await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, replace: true }),
+      undefined,
+    );
+
+    expect(findChecklistLinkConflictMock.mock.calls).toEqual([
+      [42, 5, 77, { replace: false }],
+      [42, 5, 77, { replace: true }],
+    ]);
   });
 
   it('coerces a missing documentId to null in the audit newValues (unlink action)', async () => {

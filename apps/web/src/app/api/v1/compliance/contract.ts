@@ -51,7 +51,7 @@
  *       → wire `{ data: inserted }`
  *
  * PATCH — apply a single per-item action.
- *   Body: `{ id, communityId, action, documentId?, reason? }` (strict), with
+ *   Body: `{ id, communityId, action, documentId?, reason?, replace? }` (strict), with
  *   two refinements, each naming the field it wants:
  *     - `link_document` requires `documentId`.
  *     - `mark_not_applicable` requires `reason` — why the item doesn't apply,
@@ -66,6 +66,13 @@
  *       → requireCommunityMembership
  *       → requireCondoCommunity(membership.communityType)  (sync feature gate)
  *       → requirePermission('compliance', 'write')         (sync)
+ *       → link_document only: the document is in this community, then one
+ *         read for a conflict (`findChecklistLinkConflict`), 409 when:
+ *           - another record already has this document ("This file is
+ *             already posted as another record."), or
+ *           - this record has a different file and `replace` is not true
+ *             ("This record already has a file. Remove it first to replace
+ *             it."). Only the Compliance page's re-link flow sends `replace`.
  *       → updateComplianceChecklistItem → derive status → audit-log
  *   Handler returns the decorated row; runner wraps `{ data: result }`.
  *
@@ -132,6 +139,11 @@ export const compliancePatchContract = defineRoute({
         ]),
         documentId: z.number().int().positive().optional(),
         reason: z.string().trim().min(1).max(200).optional(),
+        /**
+         * `link_document` only: replace the record's current file on purpose.
+         * Without it, linking a record that already has a different file is a 409.
+         */
+        replace: z.boolean().optional(),
       })
       .strict()
       .refine(

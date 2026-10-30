@@ -32,11 +32,10 @@ const publishBodySchema = z.object({
   /**
    * When true, stamp `communities.site_onboarding_completed_at = now()` after
    * a successful publish, unless it is already set: the first completion is the
-   * one that counts. No caller in the app sends it today: the setup wizard
-   * that did is retired, and the look picker marks setup complete through
-   * `/api/v1/pm/site/look`. The editor's PublishBar and the website home's
-   * restore omit it (setup completion is not an every-publish side effect).
-   * Optional + defaults to undefined so existing callers are unchanged.
+   * one that counts. No caller in the app sends it: the look picker marks
+   * setup complete through `/api/v1/pm/site/look`, and the editor's Publish
+   * and the website home's restore omit it (setup completion is not an
+   * every-publish side effect). Optional; absent means "leave it as it is".
    */
   markOnboardingComplete: z.boolean().optional(),
   /**

@@ -16,7 +16,8 @@
  *   `linkDocument`. Two files go at a time; one that fails doesn't stop the
  *   others, and the result says in plain sentences which posted and which
  *   didn't. A file that uploaded but couldn't be linked is not uploaded again
- *   on the next Post.
+ *   on the next Post, and removing its row keeps that outcome on screen: the
+ *   file is still in Documents.
  * - The upload asks the server NOT to link the document itself (`skipAutoLink`).
  *   Posting a document otherwise links it to the one record it fits, which can
  *   be a different record from the one the person chose with Change; the link
@@ -202,8 +203,11 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
   }
 
   function removeRow(key: string) {
+    const uploaded = rowsRef.current.find((row) => row.key === key)?.documentId != null;
     setRows((current) => current.filter((row) => row.key !== key));
-    setOutcomes((current) => current.filter((outcome) => outcome.key !== key));
+    // A file that posted but couldn't be linked is in Documents whatever happens
+    // to its row here: its outcome stays, so the person still knows where it is.
+    if (!uploaded) setOutcomes((current) => current.filter((outcome) => outcome.key !== key));
     setAttested(false);
   }
 
@@ -237,7 +241,9 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
           documentId = Number(uploaded.document['id']);
           patchRow(row.key, { documentId });
         }
-        await linkDocument.mutateAsync({ itemId: item.itemId, documentId });
+        // Every record here is listed as missing, and may still hold a stale,
+        // draft or deleted file: the person's new file replaces it on purpose.
+        await linkDocument.mutateAsync({ itemId: item.itemId, documentId, replace: true });
         setRows((current) => current.filter((r) => r.key !== row.key));
         record({ key: row.key, ok: true, text: `Posted ${name} as ${item.title}.` });
       } catch (error) {

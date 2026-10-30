@@ -186,4 +186,32 @@ describe('ComplianceActivityFeed', () => {
     expect(await screen.findByText('Budget')).toBeTruthy();
     expect(screen.getByText(/linked a document/i)).toBeTruthy();
   });
+  it('an automatic link says it was automatic, after whom posted the document', async () => {
+    mockFetch.mockReturnValue(
+      jsonResponse({
+        data: {
+          data: [
+            {
+              id: 3,
+              userId: 'u-1',
+              action: 'link_document',
+              resourceType: 'compliance_checklist_item',
+              resourceId: '3',
+              metadata: { itemTitle: 'Budget', linkedBy: 'auto_match', templateKey: '718_budget' },
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          pagination: { nextCursor: null, hasMore: false },
+          users: { 'u-1': 'Maria Lopez' },
+        },
+      }),
+    );
+
+    render(<ComplianceActivityFeed communityId={42} />, { wrapper });
+
+    const line = (await screen.findByText('Maria Lopez')).closest('p') as HTMLElement;
+    expect(line).toHaveTextContent('linked automatically after Maria Lopez posted a document');
+    // Not "Maria Lopez linked a document": she posted it; the link was automatic.
+    expect(line).not.toHaveTextContent(/Maria Lopez linked a document/);
+  });
 });

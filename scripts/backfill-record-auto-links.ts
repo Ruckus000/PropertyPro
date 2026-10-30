@@ -40,8 +40,15 @@
  *                        system actor). See "Prod Data Repairs" in
  *                        .claude/rules/migration-safety.md.
  *
+ * A community whose checklist was never created (it is created the first time
+ * someone opens the website home) has no records to link yet. --apply creates
+ * its checklist first, then plans and links. A dry run writes nothing, so it
+ * plans those records in memory instead and says so ("checklist not created
+ * yet: N records would be checked").
+ *
  * Exit codes: 0 done · 1 a community failed (the others still ran) ·
- * 2 bad usage, or there was nothing to check (no community left to examine).
+ * 2 bad usage, the communities could not be listed, or there was nothing to
+ * check (no community left to examine).
  *
  * Every write goes through applyRecordLinks, whose guarded UPDATE links only an
  * item still unlinked and a document still posted and eligible, in the same
@@ -62,6 +69,7 @@ import {
   applyRecordLinks,
   planCommunityRecordLinks,
 } from '../apps/web/src/lib/services/record-auto-link-service';
+import { ensureTransparencyChecklistInitialized } from '../apps/web/src/lib/services/transparency-service';
 
 /** The only community types that keep these records. An apartment never does. */
 const BACKFILL_COMMUNITY_TYPES = ['condo_718', 'hoa_720'] as const satisfies readonly CommunityType[];
@@ -136,13 +144,16 @@ function isBackfillType(type: string): boolean {
   return (BACKFILL_COMMUNITY_TYPES as readonly string[]).includes(type);
 }
 
-/** Host and database of DATABASE_URL, never its credentials. */
-function describeTarget(): string {
-  const raw = process.env.DATABASE_URL;
+/**
+ * Host, port and database name of DATABASE_URL, each named, and nothing else
+ * from the URL: never its user, password or query string.
+ */
+export function describeTarget(raw: string | undefined): string {
   if (!raw) return '(DATABASE_URL is not set)';
   try {
     const url = new URL(raw);
-    return `${url.host}${url.pathname}`;
+    const database = decodeURIComponent(url.pathname.replace(/^\//, ''));
+    return `host ${url.hostname} · port ${url.port || '(default)'} · database ${database || '(default)'}`;
   } catch {
     return '(DATABASE_URL could not be parsed)';
   }
@@ -208,7 +219,12 @@ async function backfillCommunity(
   community: CommunityRow,
   options: { apply: boolean; operator: string | null },
 ): Promise<CommunityResult> {
-  const plan = await planCommunityRecordLinks(community.id);
+  // --apply creates any checklist rows the community is missing, then plans
+  // against them. A dry run writes nothing, so it plans those records in memory.
+  if (options.apply) {
+    await ensureTransparencyChecklistInitialized(community.id, community.communityType);
+  }
+  const plan = await planCommunityRecordLinks(community.id, { includeMissingTemplateItems: !options.apply });
   const itemTitles = new Map(getComplianceTemplate(community.communityType).map((t) => [t.templateKey, t.title]));
   const itemLabel = (templateKey: string): string => `${itemTitles.get(templateKey) ?? templateKey} [${templateKey}]`;
   const documentTitles = await readDocumentTitles(
@@ -218,6 +234,11 @@ async function backfillCommunity(
   const documentLabel = (id: number): string => `#${id} "${documentTitles.get(id) ?? '(title not found)'}"`;
 
   console.log(`\n== Community ${community.id} · ${community.slug} · ${community.name} (${community.communityType})`);
+  if (plan.notCreated > 0) {
+    console.log(
+      `   Note: checklist not created yet: ${plan.notCreated} records would be checked; --apply creates them before linking.`,
+    );
+  }
   console.log(`   Links planned: ${plan.links.length}`);
   for (const link of plan.links) {
     console.log(`     - ${itemLabel(link.templateKey)}  <-  document ${documentLabel(link.documentId)}`);
@@ -251,10 +272,19 @@ export async function runBackfill(argv: readonly string[]): Promise<number> {
   }
 
   console.log(args.apply ? 'MODE: APPLY (writes links)' : 'MODE: DRY RUN (writes nothing)');
-  console.log(`Database: ${describeTarget()}`);
+  console.log(`Database: ${describeTarget(process.env.DATABASE_URL)}`);
   if (args.apply) console.log(`Operator: ${args.operator}`);
 
-  const { selected, skipped } = await selectCommunities(args.communityIds);
+  let listing: Awaited<ReturnType<typeof selectCommunities>>;
+  try {
+    listing = await selectCommunities(args.communityIds);
+  } catch (error) {
+    console.error(
+      `Could not list the communities: ${error instanceof Error ? error.message : String(error)}. Nothing was checked.`,
+    );
+    return 2;
+  }
+  const { selected, skipped } = listing;
   for (const note of skipped) console.log(note);
   if (selected.length === 0) {
     console.error('No condominium or HOA to examine; nothing was checked.');
@@ -276,6 +306,11 @@ export async function runBackfill(argv: readonly string[]): Promise<number> {
       console.error(
         `\n!! Community ${community.id} (${community.slug}) failed: ${error instanceof Error ? error.message : String(error)}`,
       );
+      if (args.apply) {
+        console.error(
+          '   Some of its links may already have been written. Re-run the dry run to see what is left before applying again.',
+        );
+      }
     }
   }
 

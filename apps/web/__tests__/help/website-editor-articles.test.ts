@@ -82,6 +82,20 @@ describe('website editor articles', () => {
     }
   });
 
+  it('florida-website-rules sends a manager to the Records list and the editor\'s missing-records link', () => {
+    const text = article('florida-website-rules');
+    // The Documents tool was deleted with the rail.
+    expect(text).not.toMatch(/\*\*Documents\*\* tool/);
+    expect(text).toContain('**Records** list on your website home');
+    expect(text).toMatch(/top bar shows a link with how many records are missing/);
+    expect(text).not.toMatch(/\bcompliant\b|\$\d/i);
+  });
+
+  it('website-design names the picker\'s Keep my current look', () => {
+    expect(article('website-design')).toContain('**Keep my current look**');
+    expect(article('website-design')).not.toContain('Keep this look');
+  });
+
   it('the pages, notice, address and search articles open Site settings from the top bar', () => {
     expect(article('website-pages')).toContain('**Site settings** in the top bar');
     expect(article('urgent-notice')).toContain('**Site settings** in the top bar');

@@ -84,6 +84,8 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
       <YourSiteCard
         communityId={communityId}
         liveLookId={facts.liveLookId}
+        draftLookId={facts.draftLookId}
+        pendingDraftCount={facts.pendingDraftCount}
         lastPublish={data.lastPublish}
         history={data.history}
         previousSnapshotId={data.previousSnapshotId}

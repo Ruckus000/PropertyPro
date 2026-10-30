@@ -104,6 +104,8 @@ describe('POST /api/v1/pm/site/live-notice', () => {
       audience: 'owners_only',
       intro: 'Your community now has a website.',
       linkLabel: 'Visit the website',
+      // The audit trail says this was the live notice, not a publish.
+      source: 'site_live_notice',
     });
     expect(releaseMock).not.toHaveBeenCalled();
   });

@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
 import {
+  addSectionMutationKey,
+  useAddSectionInFlight,
   useContentBlocks,
   useDeleteContentBlock,
   useUpsertContentBlock,
@@ -259,6 +261,44 @@ describe('useUpsertContentBlock', () => {
  * editing page B and carrying no page id does not fail — it rewrites the live
  * home page. These cases pin the three ways a page is resolved.
  */
+describe('useAddSectionInFlight', () => {
+  it('sees an add still in flight after the component that started it has gone', async () => {
+    let finish: (value: unknown) => void = () => {};
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const wrapper = makeWrapper();
+    // The Add a part dialog, which the PM closes (Escape) mid-write.
+    const dialog = renderHook(() => useUpsertContentBlock(7, { mutationKey: addSectionMutationKey(7) }), { wrapper });
+    act(() => {
+      dialog.result.current.mutate({ blockType: 'text', blockOrder: 2, content: { body: 'x' } });
+    });
+    dialog.unmount();
+
+    // The dialog reopened: a fresh component, sharing the cache.
+    const reopened = renderHook(() => useAddSectionInFlight(7), { wrapper });
+    await waitFor(() => expect(reopened.result.current).toBe(true));
+
+    finish({ ok: true, json: async () => ({ data: { ok: true } }) });
+    await waitFor(() => expect(reopened.result.current).toBe(false));
+  });
+
+  it('ignores an upsert that is not an add', async () => {
+    (global.fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(() => {}));
+    const wrapper = makeWrapper();
+    const edit = renderHook(() => useUpsertContentBlock(7), { wrapper });
+    act(() => {
+      edit.result.current.mutate({ blockType: 'text', blockOrder: 2, content: { body: 'x' } });
+    });
+
+    const reopened = renderHook(() => useAddSectionInFlight(7), { wrapper });
+    expect(reopened.result.current).toBe(false);
+  });
+});
+
 describe('page targeting', () => {
   it('omits pageId entirely when there is no selected-page provider', async () => {
     okOnce();

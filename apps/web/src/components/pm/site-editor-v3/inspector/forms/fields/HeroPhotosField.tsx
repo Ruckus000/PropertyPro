@@ -295,8 +295,7 @@ export function HeroPhotosField({
    * Validate each picked file, then stage it for description.
    *
    * Validating here rather than letting the server decide saves a presign +
-   * PUT round trip on a file finalize would reject or upscale, and reuses the
-   * wording the onboarding wizard already shows for the same two failures.
+   * PUT round trip on a file finalize would reject or upscale.
    */
   const onPick = async (picked: File[], replaces?: StockPhotoId) => {
     const accepted: StagedPhoto[] = [];

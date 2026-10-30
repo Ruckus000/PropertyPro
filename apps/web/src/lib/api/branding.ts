@@ -127,10 +127,10 @@ export const getBrandingForCommunity = cache(async (
 
 /**
  * Read the site-onboarding completion timestamp for a community.
- * Returns `null` when the wizard has never been completed (the prod default
- * for every existing row). Callers use null-vs-set to decide whether to
- * surface the "customize your site" prompts (dashboard banner,
- * communities-table "Site" pill).
+ * Returns `null` until a manager first chooses or keeps a look (a community
+ * starts with its suggested look and this null). Callers use null-vs-set to
+ * decide whether to surface the "pick a look" prompts (the PM portfolio
+ * banner, the dashboard's live card, the communities-table "Site" pill).
  *
  * communities is the root tenant table (no communityId column), so this
  * queries by primary key via the unscoped client — same contract as
@@ -159,12 +159,11 @@ export async function getSiteOnboardingCompletedAt(
  *
  * Once, because the column is WHEN a manager first finished choosing a look:
  * "time to choose a look" is `site_onboarding_completed_at - communities.created_at`,
- * and every later call (a second wizard publish, "Keep this look" again) would
- * move it. Every other reader only asks whether it is set.
+ * and every later call (a second look published, "Keep my current look" again)
+ * would move it. Every other reader only asks whether it is set.
  *
- * Called from the publish route when the wizard's final-step "Publish my
- * site" action carries `markOnboardingComplete: true`, and from the look
- * route's `keepCurrent`.
+ * Called from the look route (publishing a look, and `keepCurrent`), and from
+ * the publish route when a request carries `markOnboardingComplete: true`.
  *
  * Callers must have already verified a management role (property_manager /
  * root_manager) in the target community. Both routes do this through their
@@ -195,11 +194,11 @@ export interface BrandingPatch {
   customEmailFooter?: string;
   /** Running total of site-asset bytes consumed by this community (managed by quota helpers) */
   assetsBytesUsed?: number;
-  /** PR #5b Step 1 — wizard layout choice. Slug from site_layout_metadata. */
+  /** The live look's layout. Slug from site_layout_metadata. */
   layoutId?: string | null;
-  /** PR #5b Step 2 — wizard preset choice. Slug from site_theme_presets. */
+  /** The live colour set. Slug from site_theme_presets. */
   themePresetSlug?: string | null;
-  /** PR #5b Step 3 — community tagline. */
+  /** The community tagline. */
   tagline?: string | null;
   /** PR #11 — Pro+ custom CSS token overrides; null clears them. */
   customCssOverrides?: CustomCssOverrides | null;

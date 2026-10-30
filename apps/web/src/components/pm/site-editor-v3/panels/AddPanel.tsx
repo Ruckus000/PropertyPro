@@ -6,7 +6,12 @@ import { PanelTop } from 'lucide-react';
 import { PlanBadge } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import {
+  addSectionMutationKey,
+  useAddSectionInFlight,
+  useContentBlocks,
+  useUpsertContentBlock,
+} from '@/hooks/use-content-blocks';
 import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
 import { blocksForPage } from '@/lib/site-editor/blocks-for-page';
@@ -124,7 +129,10 @@ export function AddPanel({
 }: AddPanelProps) {
   const { data: blocks, isPending, isError } = useContentBlocks(communityId);
   const targetPageId = useSelectedSitePage();
-  const upsert = useUpsertContentBlock(communityId);
+  const upsert = useUpsertContentBlock(communityId, { mutationKey: addSectionMutationKey(communityId) });
+  // An add still in flight from this dialog's previous opening (Escape closes
+  // it mid-write): this instance's own `upsert.isPending` cannot see it.
+  const addInFlight = useAddSectionInFlight(communityId);
   const { selectSlot, placeAdded, movableSections } = useSiteEditor();
   const insertTarget =
     insertBefore === null ? undefined : movableSections.find((b) => b.id === insertBefore);
@@ -202,9 +210,10 @@ export function AddPanel({
   }
 
   // Disabled while the list is in flight (the slot would be a guess), while a
-  // write is in flight (two clicks would compute the same slot and the second
-  // would replace the first), and when every slot is taken.
-  const blocked = isPending || isError || isFull || upsert.isPending;
+  // write is in flight, here or from before the dialog was closed and reopened
+  // (two adds would compute the same slot and the second would replace the
+  // first), and when every slot is taken.
+  const blocked = isPending || isError || isFull || upsert.isPending || addInFlight;
 
   return (
     <div className="space-y-5" data-testid="tool-panel-add">

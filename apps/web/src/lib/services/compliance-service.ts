@@ -14,7 +14,7 @@ import {
   createScopedClient,
   logAuditEvent,
 } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { eq, or } from '@propertypro/db/filters';
 
 /**
  * List every checklist item in the community. Compliance lists are small
@@ -26,6 +26,45 @@ export async function listComplianceChecklistItems(
 ): Promise<Record<string, unknown>[]> {
   const scoped = createScopedClient(communityId);
   return (await scoped.query(complianceChecklistItems)) as Array<Record<string, unknown>>;
+}
+
+/** Why a manual link would be refused (409). */
+export type ChecklistLinkConflict = 'document_fills_another_record' | 'record_has_another_document';
+
+/**
+ * Whether linking `documentId` to checklist item `itemId` would make one file
+ * fill two records, or quietly swap a record's file. One scoped read of the two
+ * rows that matter: the target item, and any item already holding the document
+ * (the scoped client leaves out deleted rows).
+ *
+ * - `document_fills_another_record`: another item already has this document.
+ *   Always refused.
+ * - `record_has_another_document`: the item already has a different file.
+ *   Refused unless `replace` is set, which only the Compliance page's "Re-link
+ *   or replace" and "Upload current document" send. Linking the same file again
+ *   is not a conflict.
+ */
+export async function findChecklistLinkConflict(
+  communityId: number,
+  itemId: number,
+  documentId: number,
+  options: { replace?: boolean } = {},
+): Promise<ChecklistLinkConflict | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    complianceChecklistItems,
+    { id: complianceChecklistItems.id, documentId: complianceChecklistItems.documentId },
+    or(eq(complianceChecklistItems.id, itemId), eq(complianceChecklistItems.documentId, documentId)),
+  )) as unknown as Array<{ id: number; documentId: number | null }>;
+
+  if (rows.some((row) => Number(row.id) !== itemId && Number(row.documentId) === documentId)) {
+    return 'document_fills_another_record';
+  }
+  const target = rows.find((row) => Number(row.id) === itemId);
+  if (!options.replace && target && target.documentId != null && Number(target.documentId) !== documentId) {
+    return 'record_has_another_document';
+  }
+  return null;
 }
 
 /**

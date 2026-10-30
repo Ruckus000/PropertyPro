@@ -8,5 +8,8 @@
   "apps/web/src/components/pm/site-editor-v3/panels/UrgentNoticePanel.tsx": 1,
   "apps/web/src/components/pm/site-editor-v3/PhoneGate.tsx": 2,
   "apps/web/src/components/pm/site-editor-v3/PreviewDialog.tsx": 1,
-  "apps/web/src/components/pm/site-editor-v3/publish/PublishSheet.tsx": 4
+  "apps/web/src/components/pm/site-editor-v3/publish/PublishSheet.tsx": 4,
+  "apps/web/src/components/website-home/look-picker.tsx": 2,
+  "apps/web/src/components/website-home/site-details-card.tsx": 1,
+  "apps/web/src/components/website-home/your-site-card.tsx": 2
 }

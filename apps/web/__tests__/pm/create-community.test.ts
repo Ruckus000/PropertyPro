@@ -21,6 +21,7 @@ const {
   notificationPreferencesTable,
   createChecklistItemsMock,
   seedNewCommunitySiteMock,
+  initializeNewCommunityRecordsMock,
   getDefaultDocumentCategoriesMock,
 } = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
@@ -35,6 +36,7 @@ const {
   notificationPreferencesTable: { id: 'notification_preferences.id' },
   createChecklistItemsMock: vi.fn().mockResolvedValue(undefined),
   seedNewCommunitySiteMock: vi.fn().mockResolvedValue(undefined),
+  initializeNewCommunityRecordsMock: vi.fn().mockResolvedValue(undefined),
   getDefaultDocumentCategoriesMock: vi.fn(() => [
     { name: 'Governing Documents', description: 'desc' },
   ]),
@@ -70,6 +72,7 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
 // new-community-site.test.ts and new-community-look.integration.test.ts.
 vi.mock('@/lib/services/new-community-site', () => ({
   seedNewCommunitySite: seedNewCommunitySiteMock,
+  initializeNewCommunityRecords: initializeNewCommunityRecordsMock,
 }));
 
 // Service import must come after all vi.mock calls
@@ -192,6 +195,17 @@ describe('createCommunityForPm', () => {
     // The community id comes from the committed insert, and its type picks the look.
     expect(seedNewCommunitySiteMock).toHaveBeenCalledTimes(1);
     expect(seedNewCommunitySiteMock).toHaveBeenCalledWith(42, 'condo_718');
+  });
+
+  it('gives the new community its records list, after the community exists', async () => {
+    buildDb();
+
+    await createCommunityForPm(VALID_INPUT);
+
+    // The wrapper decides by type (condo and HOA only) and never throws:
+    // new-community-site.test.ts and new-community-look.integration.test.ts.
+    expect(initializeNewCommunityRecordsMock).toHaveBeenCalledTimes(1);
+    expect(initializeNewCommunityRecordsMock).toHaveBeenCalledWith(42, 'condo_718');
   });
 
   it('does not report failure after the core community transaction has committed', async () => {

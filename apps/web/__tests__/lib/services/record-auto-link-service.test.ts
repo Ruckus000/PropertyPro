@@ -328,6 +328,7 @@ describe('autoLinkDocument', () => {
     await expect(planCommunityRecordLinks(42)).resolves.toEqual({
       links: [],
       ambiguous: [{ itemId: 10, templateKey: '718_budget', documentIds: [100, 101] }],
+      notCreated: 0,
     });
   });
 
@@ -374,6 +375,26 @@ describe('autoLinkDocument', () => {
   });
 });
 
+describe('planCommunityRecordLinks for a checklist never created', () => {
+  it('plans the template records in memory, never written, only when asked', async () => {
+    db.items = [];
+    db.docs = [doc(100, '2026 Annual Budget')];
+
+    // Without the option there is nothing to plan: no rows, no records.
+    await expect(planCommunityRecordLinks(42)).resolves.toEqual({ links: [], ambiguous: [], notCreated: 0 });
+
+    const plan = await planCommunityRecordLinks(42, { includeMissingTemplateItems: true });
+
+    expect(plan.notCreated).toBeGreaterThan(10);
+    expect(plan.links).toEqual([
+      { itemId: expect.any(Number), templateKey: '718_budget', documentId: 100 },
+    ]);
+    // An in-memory record has no row, so its id can never be one.
+    expect(plan.links[0]!.itemId).toBeLessThan(0);
+    expect(db.items).toEqual([]);
+  });
+});
+
 describe('autoLinkCommunityRecords', () => {
   it('a bulk upload links only the documents it created', async () => {
     // An older budget, posted before automatic linking existed, and an upload of an unrelated paper.
@@ -382,6 +403,7 @@ describe('autoLinkCommunityRecords', () => {
     await expect(planCommunityRecordLinks(42)).resolves.toEqual({
       links: [{ itemId: 10, templateKey: '718_budget', documentId: 101 }],
       ambiguous: [],
+      notCreated: 0,
     });
 
     const result = await autoLinkCommunityRecords(42, 'pm-1', { documentIds: [200] });
@@ -436,6 +458,7 @@ describe('autoLinkCommunityRecords', () => {
     await expect(planCommunityRecordLinks(42)).resolves.toEqual({
       links: [{ itemId: 11, templateKey: '718_bylaws', documentId: 100 }],
       ambiguous: [{ itemId: 10, templateKey: '718_budget', documentIds: [101, 102] }],
+      notCreated: 0,
     });
     // The plan writes nothing.
     expect(db.items.every((row) => row.documentId === null)).toBe(true);

@@ -37,10 +37,16 @@ export interface PortfolioCommunity {
   outstandingBalance: number;
   expiringLeases: number;
   /**
-   * Public-site onboarding completion timestamp (ISO string over the wire),
-   * or null if the wizard was never completed. Drives the "Site" column pill.
+   * When the community first chose or kept a look (ISO string over the wire),
+   * or null while it still wears the suggested look it was created with.
+   * Drives the "Site" column pill and the "Pick a look" banner.
    */
   siteOnboardingCompletedAt: string | null;
+  /**
+   * When the public site was first published (ISO string over the wire), or
+   * null when it has no public site yet. The "already live" banner needs it.
+   */
+  sitePublishedAt: string | null;
   /** True when the community has unpublished draft site blocks. */
   hasUnpublishedSiteDrafts: boolean;
 }

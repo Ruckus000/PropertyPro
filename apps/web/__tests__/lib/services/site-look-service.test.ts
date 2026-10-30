@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   ensureHomePage: vi.fn(),
   updateBrandingForCommunity: vi.fn(),
   getBrandingForCommunity: vi.fn(),
-  listThemePresetsForWizard: vi.fn(),
+  listThemePresets: vi.fn(),
   mergeBranding: vi.fn(),
   captureException: vi.fn(),
 }));
@@ -62,7 +62,7 @@ vi.mock('@/lib/api/branding', () => ({
   getBrandingForCommunity: mocks.getBrandingForCommunity,
 }));
 vi.mock('@/lib/db/theme-preset-catalog', () => ({
-  listThemePresetsForWizard: mocks.listThemePresetsForWizard,
+  listThemePresets: mocks.listThemePresets,
 }));
 vi.mock('@/lib/services/site-settings-service', () => ({ mergeBranding: mocks.mergeBranding }));
 
@@ -252,7 +252,7 @@ function auditActions(): unknown[] {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.ensureHomePage.mockResolvedValue(HOME_PAGE_ID);
-  mocks.listThemePresetsForWizard.mockResolvedValue(ALL_PRESETS);
+  mocks.listThemePresets.mockResolvedValue(ALL_PRESETS);
   mocks.mergeBranding.mockResolvedValue(undefined);
   mocks.updateBrandingForCommunity.mockResolvedValue({});
   mocks.logAuditEvent.mockResolvedValue(undefined);
@@ -345,7 +345,7 @@ describe('applyLookAtCreation', () => {
   });
 
   it("refuses before writing anything when the look's colour set is missing", async () => {
-    mocks.listThemePresetsForWizard.mockResolvedValue([]);
+    mocks.listThemePresets.mockResolvedValue([]);
     const { client } = setUp({ publishedChecks: [[]] });
 
     await expect(applyLookAtCreation(COMMUNITY_ID, 'condo_718')).rejects.toThrow('That colour set does not exist');
@@ -492,7 +492,7 @@ describe('fillDemoCommunitySite', () => {
       // The same when the look itself cannot be published (a colour set missing).
       log.mockClear();
       mocks.captureException.mockClear();
-      mocks.listThemePresetsForWizard.mockResolvedValue([]);
+      mocks.listThemePresets.mockResolvedValue([]);
       setUp({ demo: { communityType: 'condo_718', isDemo: true }, publishedChecks: [[]] });
       await expect(fillDemoCommunitySite(COMMUNITY_ID)).resolves.toBeUndefined();
       expect(log).toHaveBeenCalledWith('fillDemoCommunitySite failed', expect.objectContaining({ communityId: COMMUNITY_ID }));
@@ -645,7 +645,7 @@ describe('draftLookSwitch', () => {
     // but nothing moves: no draft is cleared, written or tombstoned.
     vi.clearAllMocks();
     mocks.ensureHomePage.mockResolvedValue(HOME_PAGE_ID);
-    mocks.listThemePresetsForWizard.mockResolvedValue(ALL_PRESETS);
+    mocks.listThemePresets.mockResolvedValue(ALL_PRESETS);
     const firstDraftRows: BlockRow[] = firstDrafts.map((draft, i) => ({
       id: 800 + i,
       pageId: draft.pageId,
@@ -1018,7 +1018,7 @@ describe('draftLookSwitch', () => {
   });
 
   it("refuses before writing anything when the look's colour set is missing", async () => {
-    mocks.listThemePresetsForWizard.mockResolvedValue(ALL_PRESETS.filter((p) => p.slug !== 'heritage'));
+    mocks.listThemePresets.mockResolvedValue(ALL_PRESETS.filter((p) => p.slug !== 'heritage'));
     const { client } = setUp({ community: { communityType: 'condo_718', branding: {} } });
 
     await expect(draftLookSwitch(COMMUNITY_ID, 'heritage', { actorUserId: ACTOR })).rejects.toThrow(

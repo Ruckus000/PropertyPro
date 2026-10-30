@@ -65,6 +65,14 @@ describe('checkPageStateCopy', () => {
     expect(errors()).toContain(`${rel}:2`);
   });
 
+  it('scans the website home too: a new claim there FAILS (1)', () => {
+    scaffold();
+    const rel = 'apps/web/src/components/website-home/records-card.tsx';
+    write(rel, 'export const hint = "Visitors can see your records now.";\n');
+    expect(checkPageStateCopy(base, {})).toBe(1);
+    expect(errors()).toContain(`${rel}: 1 page-visibility claim, ceiling 0`);
+  });
+
   it('skips comment lines, exempt lines, and the describer modules', () => {
     scaffold();
     write(

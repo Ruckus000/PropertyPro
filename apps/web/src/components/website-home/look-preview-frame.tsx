@@ -5,7 +5,7 @@
  * would be after choosing a look (D8). It is an iframe of the signed-in
  * `/pm/site-preview` route with `look=<id>`, which plans the switch without
  * writing anything. `preview=true` is what lets middleware relax the frame
- * headers for same-origin framing (the wizard's live preview set this up first).
+ * headers for same-origin framing.
  *
  * The frame is a picture, not a page to use: it is `inert`, hidden from
  * assistive tech and out of the tab order, so a keyboard or screen-reader user

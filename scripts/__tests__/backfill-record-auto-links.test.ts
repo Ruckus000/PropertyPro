@@ -30,6 +30,8 @@ const m = vi.hoisted(() => {
     logAuditEvent: vi.fn(),
     planCommunityRecordLinks: vi.fn(),
     applyRecordLinks: vi.fn(),
+    ensureChecklist: vi.fn(),
+    communityListError: { current: null as Error | null },
   };
 });
 
@@ -56,7 +58,12 @@ vi.mock('@propertypro/db/unsafe', () => ({
       from: () => ({
         where: (clause: unknown) => {
           m.communityWhere(clause);
-          return { orderBy: async () => m.communityRows.current };
+          return {
+            orderBy: async () => {
+              if (m.communityListError.current) throw m.communityListError.current;
+              return m.communityRows.current;
+            },
+          };
         },
       }),
     }),
@@ -69,8 +76,12 @@ vi.mock('../../apps/web/src/lib/services/record-auto-link-service', () => ({
   planCommunityRecordLinks: m.planCommunityRecordLinks,
   applyRecordLinks: m.applyRecordLinks,
 }));
+// Creating a missing checklist is a write: only --apply may call it.
+vi.mock('../../apps/web/src/lib/services/transparency-service', () => ({
+  ensureTransparencyChecklistInitialized: m.ensureChecklist,
+}));
 
-import { parseArgs, runBackfill } from '../backfill-record-auto-links';
+import { describeTarget, parseArgs, runBackfill } from '../backfill-record-auto-links';
 
 const condo = { id: 1, slug: 'sunset-condos', name: 'Sunset Condos', communityType: 'condo_718' };
 const hoa = { id: 2, slug: 'palm-shores-hoa', name: 'Palm Shores HOA', communityType: 'hoa_720' };
@@ -86,6 +97,7 @@ function printed(): string {
 function expectNoWrites(): void {
   for (const write of Object.values(m.writes)) expect(write).not.toHaveBeenCalled();
   expect(m.applyRecordLinks).not.toHaveBeenCalled();
+  expect(m.ensureChecklist).not.toHaveBeenCalled();
   expect(m.logAuditEvent).not.toHaveBeenCalled();
 }
 
@@ -100,7 +112,9 @@ beforeEach(() => {
     err += `${a.join(' ')}\n`;
   });
   m.communityRows.current = [condo, hoa];
-  m.planCommunityRecordLinks.mockResolvedValue({ links: [], ambiguous: [] });
+  m.communityListError.current = null;
+  m.planCommunityRecordLinks.mockResolvedValue({ links: [], ambiguous: [], notCreated: 0 });
+  m.ensureChecklist.mockResolvedValue([]);
   m.applyRecordLinks.mockImplementation(async (_id: number, links: unknown[]) => links.length);
   m.selectFrom.mockResolvedValue([]);
 });
@@ -228,6 +242,122 @@ describe('backfill-record-auto-links', () => {
     expect(code).toBe(1);
     expect(err).toContain('Community 1 (sunset-condos) failed: boom');
     expect(m.planCommunityRecordLinks.mock.calls.map((c) => c[0])).toEqual([1, 2]);
+  });
+});
+
+describe('backfill-record-auto-links: communities whose checklist was never created', () => {
+  it('a dry run plans the missing records in memory, says so, and writes nothing', async () => {
+    m.communityRows.current = [condo];
+    m.planCommunityRecordLinks.mockResolvedValue({
+      // In-memory items carry negative ids; the dry run only prints them.
+      links: [{ itemId: -1, templateKey: '718_budget', documentId: 100 }],
+      ambiguous: [],
+      notCreated: 16,
+    });
+    m.selectFrom.mockResolvedValue([{ id: 100, title: '2026 Annual Budget' }]);
+
+    const code = await runBackfill([]);
+
+    expect(code).toBe(0);
+    expect(m.planCommunityRecordLinks).toHaveBeenCalledWith(1, { includeMissingTemplateItems: true });
+    expect(printed()).toContain('checklist not created yet: 16 records would be checked');
+    expect(printed()).toContain('Annual Budget [718_budget]  <-  document #100 "2026 Annual Budget"');
+    expectNoWrites();
+  });
+
+  it('--apply creates the checklist first, then plans against the rows it wrote', async () => {
+    m.communityRows.current = [condo];
+    m.planCommunityRecordLinks.mockResolvedValue({
+      links: [{ itemId: 10, templateKey: '718_budget', documentId: 100 }],
+      ambiguous: [],
+      notCreated: 0,
+    });
+
+    const code = await runBackfill(['--apply', '--operator', 'Jane Doe']);
+
+    expect(code).toBe(0);
+    expect(m.ensureChecklist).toHaveBeenCalledWith(1, 'condo_718');
+    expect(m.planCommunityRecordLinks).toHaveBeenCalledWith(1, { includeMissingTemplateItems: false });
+    const [initOrder] = m.ensureChecklist.mock.invocationCallOrder;
+    const [planOrder] = m.planCommunityRecordLinks.mock.invocationCallOrder;
+    expect(initOrder).toBeLessThan(planOrder as number);
+    expect(m.applyRecordLinks).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('backfill-record-auto-links: what an operator reads', () => {
+  it('names the host, port and database, and nothing else from the URL', async () => {
+    const target = describeTarget('postgresql://admin:s3cret-pw@db.example.com:6543/postgres?sslmode=require&password=leak');
+
+    expect(target).toBe('host db.example.com · port 6543 · database postgres');
+    expect(target).not.toContain('admin');
+    expect(target).not.toContain('s3cret');
+    expect(target).not.toContain('sslmode');
+    expect(target).not.toContain('leak');
+  });
+
+  it('reports how many of the planned links were written', async () => {
+    m.communityRows.current = [condo];
+    m.planCommunityRecordLinks.mockResolvedValue({
+      links: [
+        { itemId: 10, templateKey: '718_budget', documentId: 100 },
+        { itemId: 11, templateKey: '718_bylaws', documentId: 101 },
+      ],
+      ambiguous: [],
+      notCreated: 0,
+    });
+    // One item was linked by someone else between the plan and the write.
+    m.applyRecordLinks.mockResolvedValue(1);
+
+    const code = await runBackfill(['--apply', '--operator', 'Jane Doe']);
+
+    expect(code).toBe(0);
+    expect(printed()).toContain('Applied: 1 of 2 planned link(s) written');
+    expect(printed()).toContain('Links written: 1');
+  });
+
+  it('a failure mid-apply says links may already be written and to re-run the dry run, and exits 1', async () => {
+    m.planCommunityRecordLinks.mockResolvedValue({
+      links: [{ itemId: 10, templateKey: '718_budget', documentId: 100 }],
+      ambiguous: [],
+      notCreated: 0,
+    });
+    m.applyRecordLinks.mockImplementation(async (communityId: number) => {
+      if (communityId === 1) throw new Error('connection reset');
+      return 1;
+    });
+
+    const code = await runBackfill(['--apply', '--operator', 'Jane Doe']);
+
+    expect(code).toBe(1);
+    expect(err).toContain('Community 1 (sunset-condos) failed: connection reset');
+    expect(err).toContain('may already have been written');
+    expect(err).toContain('Re-run the dry run');
+    // The other community still ran.
+    expect(m.applyRecordLinks.mock.calls.map((c) => c[0])).toEqual([1, 2]);
+  });
+
+  it('an exception during a dry run exits 1 and writes nothing', async () => {
+    m.planCommunityRecordLinks.mockRejectedValue(new Error('statement timeout'));
+
+    const code = await runBackfill([]);
+
+    expect(code).toBe(1);
+    expect(err).toContain('failed: statement timeout');
+    // A dry run has written nothing, so it does not warn that links may exist.
+    expect(err).not.toContain('may already have been written');
+    expectNoWrites();
+  });
+
+  it('exits 2 when the communities cannot be listed', async () => {
+    m.communityListError.current = new Error('could not connect');
+
+    const code = await runBackfill([]);
+
+    expect(code).toBe(2);
+    expect(err).toContain('Could not list the communities: could not connect');
+    expect(m.planCommunityRecordLinks).not.toHaveBeenCalled();
+    expectNoWrites();
   });
 });
 

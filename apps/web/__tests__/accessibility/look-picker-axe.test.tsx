@@ -77,7 +77,7 @@ async function expectPickerRendered() {
     expect(screen.getByRole('button', { name })).toBeInTheDocument();
   }
   expect(screen.getByRole('group', { name: 'Preview size' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Keep this look' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Keep my current look' })).toBeInTheDocument();
   // Settled: the publish token has loaded, so the bar is in its usable state.
   await waitFor(() => expect(screen.getByRole('button', { name: 'Publish this look' })).toBeEnabled());
 }

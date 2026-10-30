@@ -563,9 +563,9 @@ describeDb('site looks (db-backed integration)', () => {
     expectKeptWithTheEdit(await liveSections(b), liveB, editB);
   });
 
-  it('Keep this look over an older layout takes a drafted look back off, keeping an edit made since', async () => {
+  it('Keep my current look over an older layout takes a drafted look back off, keeping an edit made since', async () => {
     // A site still on a legacy layout with its starter pack: no look card can
-    // return to it, so the look picker's Keep this look withdraws by the live rows.
+    // return to it, so the look picker's Keep my current look withdraws by the live rows.
     const communityId = await createCommunity('legacy-keep', 'condo_718');
     expect((await applyStarterPackToCommunity(communityId, 'condo_718')).applied).toBe(true);
     await updateBrandingForCommunity(communityId, { layoutId: 'tidewater' });
@@ -601,7 +601,7 @@ describeDb('site looks (db-backed integration)', () => {
     expect((await readCommunity(communityId)).branding.layoutId).toBe('tidewater');
   });
 
-  it('Keep this look with nothing drafted writes nothing', async () => {
+  it('Keep my current look with nothing drafted writes nothing', async () => {
     const communityId = await createCommunity('keep-nothing', 'condo_718');
     await applyLookAtCreation(communityId, 'condo_718');
     const audits = await auditRowCount(communityId);

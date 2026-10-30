@@ -31,7 +31,7 @@ import { EditorFrame } from '@/components/pm/site-editor-v3/EditorFrame';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { parseEditorLocation } from '@/components/pm/site-editor-v3/settings/settings-tabs';
 import { loadCanvasContext } from '@/lib/site-editor/load-canvas-context';
-import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
+import { listThemePresets } from '@/lib/db/theme-preset-catalog';
 import { listSitePages, toSitePageSummary } from '@/lib/services/site-pages-service';
 import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
 import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
@@ -142,7 +142,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // `null` = unknown (pre-0081 rows the backfill could not recover).
     getCommunityUnitCount(communityId),
     // v4 Phase 4: the Design panel's colour sets.
-    listThemePresetsForWizard(),
+    listThemePresets(),
   ]);
 
   if (!features.hasSiteEditor) {

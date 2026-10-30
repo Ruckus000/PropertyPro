@@ -13,7 +13,7 @@
  * - A large preview of the chosen look, at computer or phone width.
  * - **Publish this look** publishes at once, with no review screen
  *   (`publishLook`). It is disabled while the live look is chosen, since there
- *   is nothing to publish. **Keep this look** keeps the live look.
+ *   is nothing to publish. **Keep my current look** keeps the live look.
  *
  * Look names come from `LOOK_SUMMARIES`, not the registry, so this chunk does
  * not carry every look's default sections.
@@ -21,6 +21,7 @@
 import { useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Check, ExternalLink, Info, Monitor, Radio, Smartphone } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
@@ -107,10 +108,11 @@ function filledInChips(facts: SiteFacts): string[] {
 
 export function LookPicker({ communityId, facts }: LookPickerProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { selectLook, publishLook, keepCurrent, tokenReady } = useSiteLook(communityId);
   const [selected, setSelected] = useState<LookId | null>(facts.draftLookId ?? facts.liveLookId);
   const [device, setDevice] = useState<Device>('computer');
-  // From the click on Keep this look until the page has moved on, so no card
+  // From the click on Keep my current look until the page has moved on, so no card
   // or Publish can be used in between (and none is while a draft it waits on lands).
   const [keeping, setKeeping] = useState(false);
   const headingId = useId();
@@ -145,9 +147,13 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
       },
       onError: (err) => {
         toast.error(err.message);
-        // Published elsewhere since this page loaded: reload its facts and the
-        // publish token, so the next click is checked against the site as it is.
-        if (err instanceof ApiRequestError && err.status === 409) router.refresh();
+        // Published elsewhere since this page loaded: reload its facts (the
+        // page) and the publish token (React Query, which a page refresh does
+        // not touch), so the next click is checked against the site as it is.
+        if (err instanceof ApiRequestError && err.status === 409) {
+          void queryClient.invalidateQueries({ queryKey: ['pm', 'site'] });
+          router.refresh();
+        }
       },
     });
   }
@@ -366,7 +372,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
             </a>
           </Button>
           <Button variant="outline" className={TOUCH} onClick={() => void keep()} disabled={busy} loading={keeping}>
-            Keep this look
+            Keep my current look
           </Button>
           <Button className={TOUCH} onClick={publish} disabled={!canPublish} loading={publishLook.isPending}>
             Publish this look

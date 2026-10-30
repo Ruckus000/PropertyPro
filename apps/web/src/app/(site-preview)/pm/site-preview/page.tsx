@@ -32,9 +32,9 @@
  * server-only block renderers (SoR blocks) work with the community's real data.
  *
  * Deliberately OUTSIDE `(authenticated)`, in its own route group, because that
- * layout renders `AppShell` unconditionally — so a narrow preview iframe (the
- * retired setup wizard's, 490px wide) used to contain the whole app: top bar,
- * search, breadcrumb trail and the billing banners, in mobile-drawer mode. Route groups do not appear in URLs, so
+ * layout renders `AppShell` unconditionally — so a narrow preview iframe would
+ * contain the whole app: top bar, search, breadcrumb trail and the billing
+ * banners, in mobile-drawer mode. Route groups do not appear in URLs, so
  * `/pm/site-preview` is unchanged and middleware still protects it (`/pm` is in
  * `PROTECTED_PATH_PREFIXES`). The group has no `layout.tsx` and inherits the root
  * one, like `(public)/`: the four group layouts that do exist all exist to mount
@@ -56,7 +56,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
-import { listThemePresetsForWizard } from '@/lib/db/theme-preset-catalog';
+import { listThemePresets } from '@/lib/db/theme-preset-catalog';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { visibleBlocks } from '@/lib/site/visible-blocks';
 import { resolveFooterSettings } from '@/lib/site-editor/site-settings';
@@ -144,7 +144,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   const presetSlug = look ? (lookPlan?.kind === 'switch' ? look.presetSlug : null) : asString(params['preset']);
   let presetTokens = null;
   if (presetSlug) {
-    const presets = await listThemePresetsForWizard();
+    const presets = await listThemePresets();
     presetTokens = presets.find((p) => p.slug === presetSlug)?.tokens ?? null;
   }
   const lookBranding =

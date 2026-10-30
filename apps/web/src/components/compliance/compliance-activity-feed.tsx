@@ -140,6 +140,10 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
               (entry.metadata?.documentTitle as string) ??
               entry.resourceId;
             const actorName = entry.userId ? users[entry.userId] : null;
+            // Automatic linking (record-auto-link-service) records the person who
+            // posted the document as the actor: the link itself was not theirs.
+            const autoLinked =
+              entry.action === "link_document" && entry.metadata?.linkedBy === "auto_match";
 
             return (
               <div
@@ -155,12 +159,25 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
                     <span className="inline-flex items-center gap-1 text-content-tertiary">
                       {actionIcon(entry.action)}
                     </span>{" "}
-                    {actorName && (
+                    {autoLinked ? (
+                      actorName ? (
+                        <>
+                          linked automatically after{" "}
+                          <span className="font-medium text-content">{actorName}</span> posted a document
+                        </>
+                      ) : (
+                        "linked automatically"
+                      )
+                    ) : (
                       <>
-                        <span className="font-medium text-content">{actorName}</span>{" "}
+                        {actorName && (
+                          <>
+                            <span className="font-medium text-content">{actorName}</span>{" "}
+                          </>
+                        )}
+                        {actionLabel(entry.action)}
                       </>
                     )}
-                    {actionLabel(entry.action)}
                     {itemTitle && (
                       <>
                         {" \u2014 "}

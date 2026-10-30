@@ -86,6 +86,8 @@ let liveToken: string;
 let publishStatus: number;
 /** While set, the compliance PATCH waits for it: a link in flight. */
 let holdLink: Promise<void> | null;
+/** Records that already hold a file: the server refuses to link over one without `replace`. */
+let recordsWithFile: Set<number>;
 
 function respond(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -172,6 +174,7 @@ beforeEach(() => {
   liveToken = '2026-10-26T16:00:00.000Z';
   publishStatus = 200;
   holdLink = null;
+  recordsWithFile = new Set();
   global.fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'https://app.example.com');
     const method = init?.method ?? 'GET';
@@ -181,9 +184,16 @@ beforeEach(() => {
       body: typeof init?.body === 'string' ? (JSON.parse(init.body) as Record<string, unknown>) : null,
     });
     switch (url.pathname) {
-      case '/api/v1/compliance':
+      case '/api/v1/compliance': {
         if (holdLink) await holdLink;
+        const sent = calls[calls.length - 1]?.body ?? {};
+        if (recordsWithFile.has(Number(sent['id'])) && sent['replace'] !== true) {
+          return respond(409, {
+            error: { code: 'CONFLICT', message: 'This record already has a file. Remove it first to replace it.' },
+          });
+        }
         return respond(200, { data: {} });
+      }
       case '/api/v1/pm/site/drafts':
         return respond(200, { data: { ok: true, discardedCount: 1 } });
       case '/api/v1/pm/site/live-notice':
@@ -280,8 +290,62 @@ describe('records', () => {
 
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
     expect(posts('/api/v1/compliance').map((call) => call.body)).toEqual([
-      { id: MINUTES.itemId, communityId: COMMUNITY_ID, action: 'link_document', documentId: 55 },
+      { id: MINUTES.itemId, communityId: COMMUNITY_ID, action: 'link_document', documentId: 55, replace: true },
     ]);
+  });
+
+  it('an upload over a record that still holds a draft replaces it, so the link lands', async () => {
+    // Meeting minutes is "Saved as a draft, not posted": the record holds the draft.
+    recordsWithFile.add(MINUTES.itemId);
+    const user = renderHome();
+
+    await user.click(screen.getByRole('button', { name: 'Upload: Meeting minutes' }));
+    (lazyProps.upload!['onUploaded'] as (id: number) => void)(57);
+
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(screen.queryByText(/couldn't link it to Meeting minutes/)).not.toBeInTheDocument();
+    expect(posts('/api/v1/compliance').at(-1)?.body).toMatchObject({ id: MINUTES.itemId, documentId: 57, replace: true });
+  });
+
+  it('a file just used for one record is no longer offered for another, before the refresh arrives', async () => {
+    // The same budget matches two rows; the server would refuse the second link.
+    const user = renderHome(
+      data({}, {
+        candidates: {
+          [BUDGET.itemId]: [{ documentId: 31, title: '2026 Budget' }],
+          [MINUTES.itemId]: [
+            { documentId: 31, title: '2026 Budget' },
+            { documentId: 40, title: 'March minutes' },
+          ],
+        },
+      }),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Use 2026 Budget for Annual budget' }));
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    // The refresh (mocked) has not brought a new list: the row still shows, minus that file.
+    const minutesRow = screen.getByText('Meeting minutes').closest('li') as HTMLElement;
+    expect(within(minutesRow).queryByRole('button', { name: 'Use 2026 Budget for Meeting minutes' })).toBeNull();
+    expect(within(minutesRow).getByRole('button', { name: 'Use March minutes for Meeting minutes' })).toBeInTheDocument();
+  });
+
+  it('a failed link is said once, in its row, with no toast as well', async () => {
+    const { toast } = await import('sonner');
+    const user = renderHome(
+      data({}, { candidates: { [BUDGET.itemId]: [{ documentId: 31, title: '2026 Budget' }] } }),
+    );
+    vi.mocked(global.fetch).mockImplementationOnce(async () => respond(409, {
+      error: { code: 'CONFLICT', message: 'This file is already posted as another record.' },
+    }) as unknown as Response);
+
+    await user.click(screen.getByRole('button', { name: 'Use 2026 Budget for Annual budget' }));
+
+    expect(
+      await screen.findByText("We couldn't link 2026 Budget to Annual budget. Please try again."),
+    ).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it('a failed link says the file is safe in Documents', async () => {
@@ -463,7 +527,7 @@ describe('other sections', () => {
     expect(screen.queryByText(offer)).not.toBeInTheDocument();
     cleanup();
 
-    // A site live from creation with no publish in the log yet (Keep this look):
+    // A site live from creation with no publish in the log yet (Keep my current look):
     // the offer shows, because the site IS public.
     renderHome(data({ liveNotice: live, sitePublished: true, lastPublish: null }));
     expect(screen.getByText(offer)).toBeInTheDocument();
@@ -551,6 +615,27 @@ describe('other sections', () => {
 
     expect(screen.getByText('An older look')).toBeInTheDocument();
   });
+
+  it('a look chosen but not published says so, and links to the picker to publish it or keep the live one', () => {
+    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'palm-grove' } }));
+
+    expect(screen.getByText('Palm Grove is chosen but not published yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Publish it or keep Bayfront' })).toHaveAttribute(
+      'href',
+      `/pm/website/looks?communityId=${COMMUNITY_ID}`,
+    );
+    cleanup();
+
+    // Over a legacy layout there is no look name to keep.
+    renderHome(data({ facts: { ...data().facts, liveLookId: null, draftLookId: 'heritage' } }));
+    expect(screen.getByText('Heritage is chosen but not published yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Publish it or keep your current look' })).toBeInTheDocument();
+    cleanup();
+
+    // No draft, or a draft of the look already live: nothing to say.
+    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'bayfront' } }));
+    expect(screen.queryByText(/is chosen but not published yet/)).not.toBeInTheDocument();
+  });
 });
 
 describe('restore', () => {
@@ -608,6 +693,38 @@ describe('restore', () => {
       ['POST', '/api/v1/pm/site/publish/revert', { communityId: COMMUNITY_ID, snapshotId: 29 }],
       ['POST', '/api/v1/pm/site/publish', { communityId: COMMUNITY_ID, expectedPublishedAt: '2026-10-26T16:00:00.000Z' }],
     ]);
+  });
+
+  it('the confirm counts the unpublished edits a restore discards', async () => {
+    let user = renderHome(data({ facts: { ...data().facts, pendingDraftCount: 3 } }));
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'Your site goes back to how it was before the last publish. 3 unpublished edits are discarded.',
+    );
+    cleanup();
+
+    user = renderHome(data({ facts: { ...data().facts, pendingDraftCount: 1 } }));
+    await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+    expect(screen.getByRole('alertdialog')).toHaveTextContent(
+      'Your site goes back to how it was before the last publish. 1 unpublished edit is discarded.',
+    );
+  });
+
+  it('the confirm names a drafted look, since a restore discards it too', async () => {
+    const drafted = { ...data().facts, liveLookId: 'bayfront' as const, draftLookId: 'palm-grove' as const };
+    const confirmText = async (pendingDraftCount: number) => {
+      const user = renderHome(data({ facts: { ...drafted, pendingDraftCount } }));
+      await user.click(screen.getByRole('button', { name: 'Restore previous version' }));
+      const text = screen.getByRole('alertdialog').textContent;
+      cleanup();
+      return text;
+    };
+
+    expect(await confirmText(3)).toContain(
+      'Your site goes back to how it was before the last publish. Palm Grove and 3 unpublished edits are discarded.',
+    );
+    expect(await confirmText(1)).toContain('Palm Grove and 1 unpublished edit are discarded.');
+    expect(await confirmText(0)).toContain('Palm Grove is discarded.');
   });
 
   it('refuses, writing nothing, when someone published since the page opened', async () => {

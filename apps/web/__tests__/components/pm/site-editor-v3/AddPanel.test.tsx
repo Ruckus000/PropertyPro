@@ -47,6 +47,8 @@ const state = vi.hoisted(() => ({
   isPending: false,
   isError: false,
   upsertPending: false,
+  /** An add still in flight from before the dialog was closed (`useAddSectionInFlight`). */
+  addInFlight: false,
 }));
 
 // Mocked COMPLETELY, per this directory's convention: a partial factory fails
@@ -62,6 +64,8 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   }),
   usePublishedBlocks: () => ({ ...base(), data: [] }),
   useSitePublishToken: () => ({ ...base(), data: null }),
+  addSectionMutationKey: (communityId: number) => ['site-editor', 'add-section', communityId],
+  useAddSectionInFlight: () => state.addInFlight,
   useUpsertContentBlock: () => ({
     mutate: vi.fn(),
     mutateAsync: upsertMutateAsync,
@@ -131,6 +135,7 @@ beforeEach(() => {
   state.isPending = false;
   state.isError = false;
   state.upsertPending = false;
+  state.addInFlight = false;
   upsertMutateAsync.mockResolvedValue(undefined);
 });
 
@@ -234,6 +239,15 @@ describe('AddPanel', () => {
     // Two clicks before the refetch lands compute the same slot, and the
     // second write replaces the first section.
     state.upsertPending = true;
+    renderPanel();
+    expect(screen.getByTestId('add-section-text')).toBeDisabled();
+    expect(screen.getByTestId('add-section-payments')).toBeDisabled();
+  });
+
+  it('disables every type while an add from before the dialog was closed is still in flight', () => {
+    // Escape mid-write unmounts the panel; the reopened one has a fresh
+    // mutation that is not pending, and would add a second section at the same slot.
+    state.addInFlight = true;
     renderPanel();
     expect(screen.getByTestId('add-section-text')).toBeDisabled();
     expect(screen.getByTestId('add-section-payments')).toBeDisabled();

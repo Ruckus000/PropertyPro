@@ -562,6 +562,22 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     expect(rowB!.siteOnboardingCompletedAt).toBeNull();
   });
 
+  it('surfaces sitePublishedAt, so the portfolio banner says "already live" only of a published site', async () => {
+    await db
+      .update(communities)
+      .set({ sitePublishedAt: new Date('2026-06-01T12:00:00.000Z') })
+      .where(eq(communities.id, communityAId));
+    await db.update(communities).set({ sitePublishedAt: null }).where(eq(communities.id, communityBId));
+
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    const rows = await findManagedCommunitiesPortfolioUnscoped(pmUserId);
+    const rowA = rows.find((row) => row.communityId === communityAId);
+    const rowB = rows.find((row) => row.communityId === communityBId);
+
+    expect(rowA!.sitePublishedAt!.toISOString()).toBe('2026-06-01T12:00:00.000Z');
+    expect(rowB!.sitePublishedAt).toBeNull();
+  });
+
   it('sets hasUnpublishedSiteDrafts=true only when a non-deleted draft block exists', async () => {
     await db.insert(siteBlocks).values([
       // A: a draft block → counts

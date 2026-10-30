@@ -87,7 +87,7 @@ vi.mock('@/lib/services/community-profile-service', () => ({
 }));
 // v4 Phase 4: the Design panel's colour sets — a platform catalog read.
 vi.mock('@/lib/db/theme-preset-catalog', () => ({
-  listThemePresetsForWizard: vi.fn().mockResolvedValue([]),
+  listThemePresets: vi.fn().mockResolvedValue([]),
 }));
 // site-settings-service and the real quota module import @propertypro/db and
 // @propertypro/db/unsafe, both of which load drizzle.ts and throw without

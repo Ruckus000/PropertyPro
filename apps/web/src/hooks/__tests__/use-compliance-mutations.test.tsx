@@ -413,6 +413,27 @@ describe('useComplianceMutations', () => {
     });
   });
 
+  it('sends replace only when the caller asks to replace the record\'s file', async () => {
+    const { wrapper } = createWrapper();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: makeChecklistItem({ id: 10 }) }),
+    });
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), { wrapper });
+
+    await act(async () => {
+      await result.current.linkDocument.mutateAsync({ itemId: 10, documentId: 55, replace: true });
+    });
+
+    expect(JSON.parse(mockFetch.mock.calls[0]![1].body as string)).toEqual({
+      id: 10,
+      communityId: COMMUNITY_ID,
+      action: 'link_document',
+      documentId: 55,
+      replace: true,
+    });
+  });
+
   // =========================================================================
   // Multiple items in cache — only target item changes
   // =========================================================================
@@ -490,6 +511,27 @@ describe('useComplianceMutations', () => {
     expect(result.current.linkDocument.error?.message).toBe(
       'Insufficient permissions for this action',
     );
+  });
+
+  it('reads the message from the error envelope, so a conflict reads as the server wrote it', async () => {
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData([COMPLIANCE_QUERY_KEY, COMMUNITY_ID], [makeChecklistItem({ id: 10 })]);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: () =>
+        Promise.resolve({
+          error: { code: 'CONFLICT', message: 'This file is already posted as another record.' },
+        }),
+    });
+    const { result } = renderHook(() => useComplianceMutations(COMMUNITY_ID), { wrapper });
+
+    act(() => {
+      result.current.linkDocument.mutate({ itemId: 10, documentId: 1 });
+    });
+
+    await waitFor(() => expect(result.current.linkDocument.isError).toBe(true));
+    expect(result.current.linkDocument.error?.message).toBe('This file is already posted as another record.');
   });
 
   it('falls back to status code when no message in error response', async () => {

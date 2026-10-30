@@ -232,6 +232,17 @@ describe('notifyResidentsOfSitePublish', () => {
     );
   });
 
+  it('records the source it is given, for the live notice', async () => {
+    await notifyResidentsOfSitePublish({ ...INPUT, source: 'site_live_notice' });
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'announcement_email_sent',
+        metadata: expect.objectContaining({ source: 'site_live_notice' }),
+      }),
+    );
+  });
+
   it('never throws, even when every downstream call fails', async () => {
     /*
      * The load-bearing guarantee. The caller invokes this AFTER

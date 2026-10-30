@@ -43,7 +43,7 @@ import {
   recalculateVolumeTier,
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
-import { seedNewCommunitySite } from '@/lib/services/new-community-site';
+import { initializeNewCommunityRecords, seedNewCommunitySite } from '@/lib/services/new-community-site';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import {
   getComplianceTemplate,
@@ -317,6 +317,9 @@ async function stepCommunityCreated(ctx: JobContext): Promise<void> {
   // CHECK constraint. Never throws, so a paid signup is never failed over its
   // website.
   await seedNewCommunitySite(communityId, ctx.signup.communityType);
+  // Its records list too (condominium and HOA only), so a paid signup's missing
+  // records count from day one. Safe on a retry; never throws.
+  await initializeNewCommunityRecords(communityId, ctx.signup.communityType);
 }
 
 async function stepUserLinked(ctx: JobContext): Promise<void> {

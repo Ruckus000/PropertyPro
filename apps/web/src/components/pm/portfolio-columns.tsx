@@ -51,7 +51,7 @@ function complianceStatus(score: number): string {
  * Derives the "Site" pill from the two raw onboarding signals.
  *   - customized: website setup is done (site_onboarding_completed_at set)
  *   - draft:      not completed, but unpublished draft blocks exist (started)
- *   - default:    neither — site is still using the auto-applied starter pack
+ *   - default:    neither — site is still using the suggested look
  * Reuses existing StatusBadge keys: compliant (green), submitted (info), neutral.
  */
 function siteStatus(

@@ -29,7 +29,7 @@ vi.mock('@propertypro/db/filters', () => ({
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: [...strings], values }),
 }));
 vi.mock('@/lib/api/branding', () => ({ getBrandingForCommunity: getBrandingMock }));
-vi.mock('@/lib/db/theme-preset-catalog', () => ({ listThemePresetsForWizard: listPresetsMock }));
+vi.mock('@/lib/db/theme-preset-catalog', () => ({ listThemePresets: listPresetsMock }));
 vi.mock('@/lib/services/site-settings-service', () => ({ mergeBranding: mergeBrandingMock }));
 
 import {

@@ -7,7 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useImageUpload } from '@/hooks/use-image-upload';
-import { useContentBlocks, useUpsertContentBlock } from '@/hooks/use-content-blocks';
+import {
+  addSectionMutationKey,
+  useContentBlocks,
+  useUpsertContentBlock,
+} from '@/hooks/use-content-blocks';
 import {
   CONTENT_MAX_BYTES,
   DECORATIVE_PLACEHOLDER_ALT,
@@ -99,7 +103,8 @@ export function AddImageFlow({
   onAdded,
 }: AddImageFlowProps) {
   const upload = useImageUpload({ communityId });
-  const upsert = useUpsertContentBlock(communityId);
+  // Keyed like the catalog's adds, so a reopened Add a part dialog waits for it.
+  const upsert = useUpsertContentBlock(communityId, { mutationKey: addSectionMutationKey(communityId) });
   const { data: siteBlocks } = useContentBlocks(communityId);
   const photos = useMemo(() => placedPhotos(siteBlocks ?? []), [siteBlocks]);
 
