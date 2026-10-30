@@ -177,8 +177,8 @@ describe('saving', () => {
 });
 
 describe('surviving a remount', () => {
-  // Switching tool tabs unmounts this panel — `renderToolPanel` only renders
-  // the active tool. Seeding state from the live value instead of the drafted
+  // Leaving Site settings unmounts this panel, and it remounts on the way
+  // back. Seeding state from the live value instead of the drafted
   // one made a saved colour look lost, and made the next Save post `null` over
   // it.
   it('seeds from the last save (the draft), not the live value, after remounting', () => {

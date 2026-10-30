@@ -8,7 +8,7 @@ import type { BlockType } from '@propertypro/shared';
  * and a section with no form must still say so rather than render an empty box.
  */
 export const NO_FORM_BODY =
-  'Settings for this section arrive in a later update. For now you can reorder sections from the canvas or the Sections panel.';
+  'Settings for this section arrive in a later update. For now you can move, hide or remove it with its toolbar on the page.';
 
 export interface InspectorBodyProps {
   communityId: number;

@@ -11,10 +11,12 @@ const {
   getCommunityPublicInfoMock,
   getBrandingForCommunityMock,
   getContactInfoMock,
+  listOwnerRecordGroupsMock,
 } = vi.hoisted(() => ({
   getCommunityPublicInfoMock: vi.fn(),
   getBrandingForCommunityMock: vi.fn(),
   getContactInfoMock: vi.fn(),
+  listOwnerRecordGroupsMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/branding', () => ({
@@ -33,6 +35,7 @@ vi.mock('@/lib/db/public-community-reader', () => ({
     listDocuments: vi.fn().mockResolvedValue([]),
     listMeetings: vi.fn().mockResolvedValue([]),
     getContactInfo: getContactInfoMock,
+    listOwnerRecordGroups: listOwnerRecordGroupsMock,
   }),
 }));
 
@@ -68,6 +71,9 @@ describe('loadCanvasContext', () => {
       address: '100 Palm Way, Miami, FL 33101',
       officeHours: 'Mon-Fri, 9-5',
     });
+    listOwnerRecordGroupsMock.mockResolvedValue([
+      { category: 'budget', label: 'Budgets', postedCount: 2 },
+    ]);
   });
 
   it("gives the canvas the community's real city, state, short name and unit count", async () => {
@@ -111,6 +117,14 @@ describe('loadCanvasContext', () => {
       address: '100 Palm Way, Miami, FL 33101',
       officeHours: 'Mon-Fri, 9-5',
     });
+  });
+
+  it("carries the owners' record counts to the Documents panel", async () => {
+    const context = await loadCanvasContext(42);
+
+    expect(context?.ownerRecordGroups).toEqual([
+      { category: 'budget', label: 'Budgets', postedCount: 2 },
+    ]);
   });
 
   it('returns null for a community that is gone', async () => {

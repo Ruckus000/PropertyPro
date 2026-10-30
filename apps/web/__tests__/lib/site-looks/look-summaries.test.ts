@@ -2,7 +2,7 @@
  * The looks' names and descriptions, as a list that costs nothing to import.
  *
  * `LOOK_SUMMARIES` repeats four names and four descriptions that `LOOKS` holds,
- * so the Design panel (an editor chunk with next to no size budget left) can list
+ * so the look picker and the website home can list
  * the looks without importing the registry and, behind it, the block schemas and
  * the switch planner. A copy of data needs a test that ties it to the original.
  */
@@ -59,7 +59,7 @@ describe('LOOK_SUMMARIES', () => {
     expect(LOOK_SUMMARIES.map((summary) => summary.id)).toEqual([...LOOK_IDS]);
   });
 
-  it('keeps a look’s id the same as its layout id, which the Design panel selects by (D2)', () => {
+  it('keeps a look’s id the same as its layout id, which the look picker selects by (D2)', () => {
     for (const { id } of LOOK_SUMMARIES) expect(lookIdForLayout(id)).toBe(id);
     for (const look of LOOKS) expect(look.layoutId).toBe(look.id);
   });

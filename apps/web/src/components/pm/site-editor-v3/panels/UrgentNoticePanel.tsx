@@ -10,13 +10,13 @@ export interface UrgentNoticePanelProps {
 }
 
 /**
- * The "Notice" tool panel.
+ * Site settings' Notice tab.
  *
- * A thin wrapper over `UrgentNoticeForm` — the panel heading is supplied by
- * `EditorShell` from `TOOL_PANEL_TITLES`, and the form is shared verbatim with
- * the phone gate. The wrapper exists so `EditorRoot` has a single lazy import
- * to hang the tool on, and so the desktop surface can carry the one bit of
- * orientation the phone surface has no room for.
+ * A thin wrapper over `UrgentNoticeForm` — the heading is the tab's card title
+ * (`SettingsView`), and the form is shared verbatim with the phone gate. The
+ * wrapper exists so the tab has a single lazy import to hang on, and so the
+ * desktop surface can carry the one bit of orientation the phone surface has
+ * no room for.
  */
 export function UrgentNoticePanel({
   communityId,

@@ -10,17 +10,13 @@
     {
       "name": "wb-colors",
       "kind": "still",
-      "route": "/pm/website-editor?communityId={cid}",
+      "route": "/pm/website-editor?communityId={cid}&view=settings&tab=design",
       "role": "cam",
       "community": "condo",
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"site-editor-tool-design\"]"
-        },
-        {
-          "type": "click",
-          "selector": "[data-testid=\"site-editor-tool-design\"]"
+          "selector": "role=tabpanel[name=\"Design\"]"
         },
         {
           "type": "waitFor",

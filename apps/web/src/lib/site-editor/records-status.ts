@@ -1,6 +1,6 @@
 /**
- * The website editor's Documents tool (website builder v4, Phase 6): one status
- * per group of official records, read off the compliance checklist.
+ * The website's official-records status (website builder v4, Phase 6): one
+ * status per group of official records, read off the compliance checklist.
  *
  * Deliberately NOT a second computation of what is "required". The checklist
  * already knows which items apply, which are conditional, and — since #1268 —
@@ -40,8 +40,8 @@ type RecordGroupCategory = (typeof GROUPS)[number]['category'];
 /**
  * The name of each group of official records, keyed by the checklist category
  * that feeds it, in the order the groups are listed. Built from `GROUPS`, which
- * stays the single source: the editor's Documents tool and the public Documents
- * section name the same groups the same way (`Object.keys` follows `GROUPS`).
+ * stays the single source: the editor and the public Documents section name
+ * the same groups the same way (`Object.keys` follows `GROUPS`).
  */
 export const RECORD_GROUP_LABELS: Readonly<Record<RecordGroupCategory, string>> = Object.freeze(
   Object.fromEntries(GROUPS.map(({ category, label }) => [category, label])) as Record<
@@ -110,11 +110,6 @@ export function summarizeRecords(items: readonly ChecklistItemData[]): RecordsGr
       },
     ];
   });
-}
-
-/** How many groups are not up to date — the Documents tool's badge. */
-export function recordsNeedingAttention(groups: readonly RecordsGroup[]): number {
-  return groups.filter((g) => g.status !== 'up_to_date').length;
 }
 
 export interface MissingRecord {

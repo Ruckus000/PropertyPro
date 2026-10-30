@@ -536,6 +536,16 @@ describe('other sections', () => {
     expect(section).toHaveTextContent('Last published 3 days ago by Maria Lopez');
   });
 
+  it('your site links to Site settings on its General tab', () => {
+    renderHome();
+
+    const section = screen.getByRole('heading', { name: 'Your site' }).closest('section') as HTMLElement;
+    expect(within(section).getByRole('link', { name: 'Site settings' })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&view=settings&tab=general`,
+    );
+  });
+
   it('a site on a legacy layout reads "An older look"', () => {
     renderHome(data({ facts: { ...data().facts, liveLookId: null } }));
 

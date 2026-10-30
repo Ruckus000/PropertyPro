@@ -97,15 +97,23 @@ describe('Inspector — presentation', () => {
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
-  it('names the selected section in both modes', async () => {
+  it("titles the panel with the section's plain name in both modes", async () => {
     editorMock.selection = { ...TEXT_SELECTION, blockType: 'documents' };
     const docked = render(<Inspector communityId={42} />);
-    expect(screen.getByText('Documents settings')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Documents' })).toBeInTheDocument();
+    expect(screen.queryByText('Documents settings')).not.toBeInTheDocument();
     docked.unmount();
 
     isNarrowMock.value = true;
     render(<Inspector communityId={42} />);
-    expect(await screen.findByText('Documents settings')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Documents' })).toBeInTheDocument();
+    expect(screen.queryByText('Documents settings')).not.toBeInTheDocument();
+  });
+
+  it('calls the hero "Welcome", the name the canvas gives it', () => {
+    editorMock.selection = { ...TEXT_SELECTION, blockType: 'hero', blockOrder: 1 };
+    render(<Inspector communityId={42} />);
+    expect(screen.getByRole('heading', { name: 'Welcome' })).toBeInTheDocument();
   });
 
   it('renders the edit form for a section type that has one', async () => {

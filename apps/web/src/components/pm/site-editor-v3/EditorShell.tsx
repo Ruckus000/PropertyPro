@@ -1,12 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { EditorTopBar, type EditorTopBarPageProps, type EditorView } from './EditorTopBar';
-import { PanelResizer } from './PanelResizer';
-import { ToolRail } from './ToolRail';
-import { X } from 'lucide-react';
-import { usePanelWidth } from './use-panel-width';
 import dynamic from 'next/dynamic';
 
 // Below 768px only — a desktop PM never renders it (v4 Phase 3: the editor's
@@ -15,18 +10,13 @@ const PhoneGate = dynamic(() => import('./PhoneGate').then((m) => m.PhoneGate), 
   loading: () => null,
 });
 
-import { HELP_DRAWER_ID, TOOL_PANEL_TITLES, type EditorToolId } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
-
-const PANEL_ID = 'site-editor-tool-panel';
 
 export interface EditorShellProps extends EditorTopBarPageProps {
   communityName: string;
   /** Forwarded to the top bar; see `EditorTopBarProps.pageName` (Phase 11b-3). */
   pageName?: string;
   publicSiteUrl: string | null;
-  /** Counts shown on rail tools; see `ToolRailProps.badges`. */
-  toolBadges?: Partial<Record<EditorToolId, number>>;
   /**
    * Phone-gate urgent-notice fast path. Threaded through the shell rather than
    * rendered by the caller because the shell owns the decision to show the gate
@@ -35,8 +25,6 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   communityId: number;
   hasPublishedSite: boolean;
   initialNotice: UrgentNotice | null;
-  /** Panel body per tool. Phase 1 passes placeholders; later phases pass real panels. */
-  renderToolPanel: (tool: EditorToolId) => React.ReactNode;
   /** The canvas column. Phase 2b fills this in. */
   children?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
@@ -50,6 +38,8 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   status?: React.ReactNode;
   /** Forwarded to the top bar; see `EditorTopBarProps.requirements`. */
   requirements?: React.ReactNode;
+  /** Forwarded to the top bar; see `EditorTopBarProps.records`. */
+  records?: React.ReactNode;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
   onPreview: () => void;
   /** Forwarded to the top bar; required for the reason stated on `EditorTopBarProps`. */
@@ -59,9 +49,8 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   /**
    * Full-width strip between the top bar and the columns.
    *
-   * Deliberately above the columns rather than inside a tool panel: what it
-   * carries is about the whole site and would be missable behind a tab the PM
-   * has no reason to open. Not rendered under the phone gate — the gate is a
+   * Deliberately above the columns: what it carries is about the whole site
+   * and must be seen whichever area is showing. Not rendered under the phone gate — the gate is a
    * deliberately minimal surface for posting an urgent notice.
    */
   banner?: React.ReactNode;
@@ -69,8 +58,8 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   view: EditorView;
   onViewChange: (view: EditorView) => void;
   /**
-   * The Settings area's content, shown full width in place of the rail,
-   * panel, canvas and inspector while `view` is `'settings'`.
+   * The Settings area's content, shown full width in place of the canvas and
+   * inspector while `view` is `'settings'`.
    */
   settings: React.ReactNode;
   /**
@@ -80,39 +69,16 @@ export interface EditorShellProps extends EditorTopBarPageProps {
    */
   help: React.ReactNode;
   helpOpen: boolean;
-  /** Opens or closes the drawer — the rail's Help tile and the top bar's button. */
+  /** Opens or closes the drawer — the top bar's Help button. */
   onHelpToggle: () => void;
 }
 
 /**
- * The controlled active tool — an all-or-nothing PAIR, enforced by the type.
+ * The editor: the top bar, then the canvas with the inspector beside it, or
+ * Site settings in their place.
  *
- * Supply both to let something outside the shell drive the panel (selecting a
- * section on the canvas switches to Sections); omit both and the shell keeps
- * its own state. What the type now forbids is the HALF-controlled shape:
- * `activeTool` without `onActiveToolChange` fell back to `setUncontrolledTool`,
- * whose value `controlledTool ?? uncontrolledTool` immediately discards — a
- * fully enabled, fully inert tab strip.
- *
- * That is the same "a missing handler yields a control that invites the click
- * and swallows it" shape that made `onPreview`/`onPublish`, `onGoToPages`,
- * `onPageRemoved` and `restoreFocusToSelectedRow` required in earlier rounds.
- * It cannot be fixed the same way, because omitting BOTH is a legitimate mode —
- * hence a union rather than two required props. `never` on the absent arm is
- * what makes the half-supplied shape fail to typecheck rather than merely be
- * discouraged by a comment.
- */
-type ControlledToolProps =
-  | {
-      activeTool: EditorToolId | null;
-      onActiveToolChange: (tool: EditorToolId | null) => void;
-    }
-  | { activeTool?: never; onActiveToolChange?: never };
-
-export type EditorShellPropsWithTool = EditorShellProps & ControlledToolProps;
-
-/**
- * Three-column editor: tool panel · canvas · (inspector, from Phase 2b).
+ * There is no tool rail (combined plan Task 28). Sections are added and edited
+ * on the page itself; pages, design and the notice are Site settings tabs.
  *
  * The whole editor is unmounted below 768px rather than hidden — see PhoneGate.
  * Column heights come from the route-group layout's `h-[100dvh]`, so every
@@ -122,11 +88,9 @@ export function EditorShell({
   communityName,
   pageName,
   publicSiteUrl,
-  toolBadges,
   communityId,
   hasPublishedSite,
   initialNotice,
-  renderToolPanel,
   children,
   canOpenPublish,
   canPreview,
@@ -134,10 +98,9 @@ export function EditorShell({
   previewButtonRef,
   status,
   requirements,
+  records,
   onPreview,
   onPublish,
-  activeTool: controlledTool,
-  onActiveToolChange,
   inspector,
   banner,
   pages,
@@ -153,18 +116,7 @@ export function EditorShell({
   help,
   helpOpen,
   onHelpToggle,
-}: EditorShellPropsWithTool) {
-  // Closed by default: the v4 builder opens on the page itself, with the rail
-  // offering the tools rather than one already covering a third of the screen.
-  const [uncontrolledTool, setUncontrolledTool] = useState<EditorToolId | null>(null);
-  // Both are decided by the SAME arm of `ControlledToolProps`, so they cannot
-  // disagree — which is the half-controlled inert rail the union exists to make
-  // unrepresentable. `controlledTool` is checked for `undefined`, not with `??`,
-  // because `null` (panel closed) is a legitimate controlled value.
-  const isControlled = onActiveToolChange !== undefined;
-  const activeTool = isControlled ? (controlledTool ?? null) : uncontrolledTool;
-  const setActiveTool = onActiveToolChange ?? setUncontrolledTool;
-  const [panelWidth, setPanelWidth] = usePanelWidth();
+}: EditorShellProps) {
   // Deliberately phrased as max-width, not min-width.
   //
   // `useMediaQuery` returns false on the server and on the first client render
@@ -194,6 +146,7 @@ export function EditorShell({
         pageName={pageName}
         status={status}
         requirements={requirements}
+        records={records}
         canOpenPublish={canOpenPublish}
         canPreview={canPreview}
         previewDisabledReason={previewDisabledReason}
@@ -225,7 +178,7 @@ export function EditorShell({
        */}
       <div className="group/editor relative flex min-h-0 flex-1 flex-col">
       {view === 'settings' ? (
-        // `relative` for the same reason as the tool panel's scroller below.
+        // `relative` for the same reason as the canvas scroller below.
         <div
           data-testid="settings-scroller"
           className="relative min-h-0 flex-1 overflow-y-auto bg-surface-page"
@@ -234,59 +187,14 @@ export function EditorShell({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          <ToolRail
-            active={activeTool}
-            onSelect={setActiveTool}
-            panelId={PANEL_ID}
-            badges={toolBadges}
-            helpOpen={helpOpen}
-            onHelpToggle={onHelpToggle}
-            helpId={HELP_DRAWER_ID}
-          />
-
-          {activeTool !== null ? (
-            <>
-              <aside
-                id={PANEL_ID}
-                aria-labelledby={`${PANEL_ID}-title`}
-                className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
-                style={{ width: panelWidth }}
-              >
-                <div className="flex shrink-0 items-center gap-2 px-4 pb-2.5 pt-3.5">
-                  <h2 id={`${PANEL_ID}-title`} className="flex-1 text-base font-semibold text-content">
-                    {TOOL_PANEL_TITLES[activeTool]}
-                  </h2>
-                  <button
-                    type="button"
-                    aria-label="Close panel"
-                    onClick={() => setActiveTool(null)}
-                    className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-md)] text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-                  >
-                    <X className="h-[18px] w-[18px]" aria-hidden="true" />
-                  </button>
-                </div>
-                {/*
-                 * `relative` is load-bearing. Panels announce through `sr-only`
-                 * live regions, which are `position: absolute`; with no positioned
-                 * ancestor they anchor to the PAGE at their static position — the
-                 * bottom of a long panel list — and stretch the document past the
-                 * viewport. The page then scrolls on the next announcement or focus
-                 * move and carries the top bar out of view. Seen in the browser:
-                 * document 1270px in a 768px window after an Add.
-                 */}
-                <div
-                  data-testid="tool-panel-scroller"
-                  className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5"
-                >
-                  {renderToolPanel(activeTool)}
-                </div>
-              </aside>
-
-              <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
-            </>
-          ) : null}
-
-          {/* `relative` for the same reason as the tool panel's scroller. */}
+          {/*
+           * `relative` is load-bearing. The canvas and its dialogs announce
+           * through `sr-only` live regions, which are `position: absolute`;
+           * with no positioned ancestor they anchor to the PAGE at their static
+           * position and stretch the document past the viewport. The page then
+           * scrolls on the next announcement and carries the top bar out of
+           * view (seen in the browser: a 1270px document in a 768px window).
+           */}
           <div
             data-testid="canvas-scroller"
             className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"

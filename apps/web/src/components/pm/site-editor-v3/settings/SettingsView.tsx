@@ -1,16 +1,19 @@
 'use client';
 
 /**
- * The editor's Settings view (website builder v4, Phase 5): everything about
- * the site that is not a page — its name, address, search and sharing, and who
- * can see what.
+ * The editor's Site settings view (website builder v4, Phase 5; the tools,
+ * combined plan Task 27): everything about the site that is not a section on a
+ * page. General (footer and site icon), Pages, Design (colours, fonts and
+ * logos; looks are chosen on the look picker), Notice, Address & domain,
+ * Search & sharing, and Access & visibility.
  *
- * It replaces the rail's old "Site" and "Address" tools, and is code-split by
- * `EditorRoot` like every panel: the web JS aggregate has little headroom, and
- * a manager who never opens Settings should not pay for it.
+ * Code-split by `EditorRoot` like every panel: the web JS aggregate has little
+ * headroom, and a manager who never opens Site settings should not pay for it.
+ * Pages, Design and Notice are themselves loaded on their tab's first visit
+ * (`settings-panels-lazy`).
  *
- * Everything here saves live, not on Publish — the same as the panels it
- * replaced, and every card says so. Deliberately absent (see the v4 plan's
+ * Each tab opens with a line saying whether it saves immediately or waits for
+ * Publish (`SETTINGS_SAVE_NOTES`). Deliberately absent (see the v4 plan's
  * Phase 5 deferrals): changing the PropertyPro address, taking the site
  * offline, and hiding the login button.
  */
@@ -18,14 +21,22 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Copy } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
 import { DomainPanel } from '../panels/DomainPanel';
+import type { DesignPanelProps } from '../panels/DesignPanel';
+import type { PagesPanelProps } from '../panels/PagesPanel';
+import type { UrgentNoticePanelProps } from '../panels/UrgentNoticePanel';
 import { ShareImageField, SiteIconField, SitePanel, StorageMeter } from '../panels/SitePanel';
 import { useSiteSettings } from '@/hooks/use-site-settings';
 import { PageSeoCard } from './PageSeoCard';
 import { DEFAULT_SITE_SETTINGS, resolveSeoDescription } from '@/lib/site-editor/site-settings';
+import { LazyDesignPanel, LazyPagesPanel, LazyUrgentNoticePanel } from './settings-panels-lazy';
+import { SETTINGS_SAVE_NOTES, SETTINGS_TABS as TABS, type SettingsTabId } from './settings-tabs';
+
+export type { SettingsTabId };
 
 export interface SettingsViewProps {
   communityId: number;
@@ -40,24 +51,27 @@ export interface SettingsViewProps {
   /** The site's PropertyPro address, e.g. `https://sunset.getpropertypro.com/`. */
   publicSiteUrl: string | null;
   hasSiteCustomDomain: boolean;
-  /** Back to the Website view with the Documents tool open. */
-  onOpenDocuments: () => void;
   /**
    * A tab to bring forward — a Help guide's "Show me" (v4 Phase 3). A new
    * object per request, so asking for the tab already showing after the PM has
    * moved away still switches back.
    */
   tabRequest?: { tab: SettingsTabId } | null;
+  /**
+   * Told whenever the manager moves to another tab. `EditorRoot` keeps it and
+   * hands it back as `tabRequest`, because choosing a page in the Pages tab
+   * remounts the whole editor shell (the page-keyed provider): without this the
+   * view would drop back to General.
+   */
+  onTabChange?: (tab: SettingsTabId) => void;
+  /** The Pages tab: the editor's page selection, as `EditorRoot` holds it. */
+  pagesPanel: Omit<PagesPanelProps, 'communityId'>;
+  /** The Design tab: colour sets, custom colours and the theme that seeds them. */
+  designPanel: Omit<DesignPanelProps, 'communityId'>;
+  /** The Notice tab. */
+  noticePanel: Omit<UrgentNoticePanelProps, 'communityId'>;
 }
 
-const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'address', label: 'Address & domain' },
-  { id: 'search', label: 'Search & sharing' },
-  { id: 'access', label: 'Access & visibility' },
-] as const;
-
-export type SettingsTabId = (typeof TABS)[number]['id'];
 type TabId = SettingsTabId;
 
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
@@ -76,19 +90,23 @@ export function SettingsView({
   initialSettings,
   publicSiteUrl,
   hasSiteCustomDomain,
-  onOpenDocuments,
   tabRequest,
+  onTabChange,
+  pagesPanel,
+  designPanel,
+  noticePanel,
 }: SettingsViewProps) {
   const initialTab = tabRequest?.tab ?? 'general';
   const [tab, setTabState] = useState<TabId>(initialTab);
   // Tabs opened so far. A panel mounts on its first visit and is then hidden,
   // not unmounted, when another tab is selected — so a half-typed footer note
-  // survives a look at another tab. Mounting on first visit (not all four up
+  // survives a look at another tab. Mounting on first visit (not every tab up
   // front) keeps opening Settings from firing every panel's reads at once.
   const [visited, setVisited] = useState<ReadonlySet<TabId>>(() => new Set<TabId>([initialTab]));
   const setTab = (next: TabId) => {
     setTabState(next);
     setVisited((prev) => (prev.has(next) ? prev : new Set(prev).add(next)));
+    onTabChange?.(next);
   };
   useEffect(() => {
     if (!tabRequest) return;
@@ -150,6 +168,21 @@ export function SettingsView({
           />
         </Card>
       </>
+    ),
+    pages: (
+      <Card title="Pages">
+        <LazyPagesPanel communityId={communityId} {...pagesPanel} />
+      </Card>
+    ),
+    design: (
+      <Card title="Design">
+        <LazyDesignPanel communityId={communityId} {...designPanel} />
+      </Card>
+    ),
+    notice: (
+      <Card title="Urgent notice">
+        <LazyUrgentNoticePanel communityId={communityId} {...noticePanel} />
+      </Card>
     ),
     address: (
       <>
@@ -233,9 +266,13 @@ export function SettingsView({
           Each document stays private until you open it to the public, one at a time, in
           Documents.
         </p>
-        <Button type="button" variant="outline" size="sm" onClick={onOpenDocuments}>
+        {/* The documents library, where each one is opened to the public. */}
+        <Link
+          href={`/communities/${communityId}/documents`}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
+        >
           Open Documents
-        </Button>
+        </Link>
       </Card>
     ),
   };
@@ -281,9 +318,6 @@ export function SettingsView({
             );
           })}
         </div>
-        <p className="text-xs text-content-tertiary">
-          Changes here take effect as soon as you save them. They aren&apos;t part of Publish.
-        </p>
       </div>
 
       <div className="min-w-0 flex-1">
@@ -297,7 +331,17 @@ export function SettingsView({
             hidden={t.id !== tab}
             className="space-y-6 focus-visible:outline-none"
           >
-            {visited.has(t.id) ? panels[t.id] : null}
+            {visited.has(t.id) ? (
+              <>
+                <p
+                  data-testid={`settings-save-note-${t.id}`}
+                  className="text-sm text-content-secondary"
+                >
+                  {SETTINGS_SAVE_NOTES[t.id]}
+                </p>
+                {panels[t.id]}
+              </>
+            ) : null}
           </div>
         ))}
       </div>

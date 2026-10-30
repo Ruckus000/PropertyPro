@@ -1,7 +1,7 @@
 /**
- * The website editor's Documents tool reads its statuses off the compliance
- * checklist. These pin the mapping from a checklist row to what the panel
- * says — above all that a deleted file is never offered as "Review and post".
+ * The website's records statuses are read off the compliance checklist. These
+ * pin the mapping from a checklist row to a status — above all that a deleted
+ * file is never counted as a draft waiting to be posted.
  */
 import { describe, expect, it } from 'vitest';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
@@ -9,7 +9,6 @@ import {
   autoLinkedRecordCount,
   conditionalRecordItems,
   missingRecordItems,
-  recordsNeedingAttention,
   summarizeRecords,
 } from '@/lib/site-editor/records-status';
 
@@ -107,17 +106,6 @@ describe('summarizeRecords', () => {
       posted({ category: 'governing_documents' }),
     ]);
     expect(groups.map((g) => g.label)).toEqual(['Governing documents', 'Insurance']);
-  });
-});
-
-describe('recordsNeedingAttention', () => {
-  it('counts the groups that are not up to date', () => {
-    const groups = summarizeRecords([
-      posted({ category: 'governing_documents' }),
-      item({ category: 'financial_records' }),
-      item({ category: 'insurance', documentId: 2, documentState: 'draft' }),
-    ]);
-    expect(recordsNeedingAttention(groups)).toBe(2);
   });
 });
 

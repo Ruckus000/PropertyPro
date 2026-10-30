@@ -635,7 +635,7 @@ describe('PublishSheet — blocking issues', () => {
   it('names the PAGE an offending section is on, once there is more than one', async () => {
     /*
      * `Section 12 (faq)` is a `block_order`, and a block_order appears on no
-     * other surface in this editor — not on a `SectionList` row, not on the
+     * other surface in this editor — not on a section's toolbar, not on the
      * canvas. On a single-page site that does not matter; the moment there are
      * two, a blocked publish was naming an offender the PM could not locate
      * without pressing "Fix this" and being carried out of the list they were

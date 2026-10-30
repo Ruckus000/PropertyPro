@@ -80,6 +80,7 @@ const CONTEXT: CanvasContext = {
     meetings: [],
     contact: { management: null, board: [], address: null, officeHours: null },
   },
+  ownerRecordGroups: [],
 };
 
 const onOpenChange = vi.fn();

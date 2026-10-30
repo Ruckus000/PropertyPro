@@ -1,13 +1,19 @@
-import type { EditorToolId } from '../tools';
 import type { EditorView } from '../EditorTopBar';
-import type { SettingsTabId } from '../settings/SettingsView';
+import type { SettingsTabId } from '../settings/settings-tabs';
 
 /**
  * What a guide's "Show me" does: open the part of the editor the guide is
  * about, after the drawer closes.
+ *
+ * - `add`: the Add a part dialog, adding to the end of the page being edited;
+ * - `settings`: Site settings, on one tab;
+ * - `publish`: the publish sheet.
+ *
+ * There is no tool rail any more (combined plan Task 28): sections are edited
+ * on the page itself, and pages, design and the notice live in Site settings.
  */
 export type HelpAction =
-  | { kind: 'tool'; tool: EditorToolId }
+  | { kind: 'add' }
   | { kind: 'settings'; tab: SettingsTabId }
   | { kind: 'publish' };
 
@@ -41,52 +47,56 @@ export type GuideGroup = (typeof GUIDE_GROUPS)[number];
  */
 export const EDITOR_GUIDES: Readonly<Record<string, GuideMeta>> = {
   'website-editor-overview': { group: 'Getting started', views: ['website', 'settings'] },
+  // No Show me: a section is edited by selecting it on the page, which is what
+  // the drawer closes onto. There is no list of sections to open any more.
   'edit-words-and-photos': {
     group: 'Editing your site',
     views: ['website'],
-    showMe: { label: 'Open Sections', action: { kind: 'tool', tool: 'sections' } },
   },
   'website-sections': {
     group: 'Editing your site',
     views: ['website'],
-    showMe: { label: 'Open Add', action: { kind: 'tool', tool: 'add' } },
+    showMe: { label: 'Add a part', action: { kind: 'add' } },
   },
+  // Pages, Design and the notice are Site settings tabs, so these guides are
+  // listed first in Site settings too.
   'website-pages': {
     group: 'Editing your site',
-    views: ['website'],
-    showMe: { label: 'Open Pages', action: { kind: 'tool', tool: 'pages' } },
+    views: ['website', 'settings'],
+    showMe: { label: 'Open Pages', action: { kind: 'settings', tab: 'pages' } },
   },
   'website-design': {
     group: 'Editing your site',
-    views: ['website'],
-    showMe: { label: 'Open Design', action: { kind: 'tool', tool: 'design' } },
+    views: ['website', 'settings'],
+    showMe: { label: 'Open Design', action: { kind: 'settings', tab: 'design' } },
   },
   'website-branding': {
     group: 'Editing your site',
-    views: [],
-    showMe: { label: 'Open Design', action: { kind: 'tool', tool: 'design' } },
+    views: ['settings'],
+    showMe: { label: 'Open Design', action: { kind: 'settings', tab: 'design' } },
   },
   'urgent-notice': {
     group: 'Editing your site',
-    views: [],
-    showMe: { label: 'Open Notice', action: { kind: 'tool', tool: 'notice' } },
+    views: ['settings'],
+    showMe: { label: 'Open Notice', action: { kind: 'settings', tab: 'notice' } },
   },
   'publish-website': {
     group: 'Editing your site',
     views: ['website', 'settings'],
     showMe: { label: 'Open Publish', action: { kind: 'publish' } },
   },
-  // No Show me: the guide's steps are on the Documents PAGE, and the editor's
-  // Documents panel has no upload control, so the button would land the PM
-  // where none of them apply.
+  // No Show me: the guide's steps are on the Documents PAGE, which the editor
+  // does not contain.
   'upload-document': {
     group: 'Documents & Florida law',
     views: [],
   },
+  // No Show me: the records list is on the website home, which the top bar's
+  // missing-records link opens. Leaving the editor from inside a guide would
+  // be a surprise.
   'florida-website-rules': {
     group: 'Documents & Florida law',
     views: [],
-    showMe: { label: 'Open Documents', action: { kind: 'tool', tool: 'documents' } },
   },
   'website-domain': {
     group: 'Site settings',

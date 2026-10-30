@@ -13,22 +13,30 @@
  * any single component's markup.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useRef, useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { SiteEditorProvider } from '@/components/pm/site-editor-v3/editor-context';
 import { UndoableRemoveProvider } from '@/components/pm/site-editor-v3/undoable-remove-context';
-import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { Inspector } from '@/components/pm/site-editor-v3/Inspector';
 import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
 import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardForm';
 import { QuickLinksForm } from '@/components/pm/site-editor-v3/inspector/forms/QuickLinksForm';
+import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
+import { SorEmptyTextForm } from '@/components/pm/site-editor-v3/inspector/forms/SorEmptyTextForm';
+import { SectionSourcesProvider } from '@/components/pm/site-editor-v3/inspector/section-sources-context';
 import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 import { SectionShell } from '@/components/pm/site-editor-v3/canvas/SectionShell';
 import { UrgentNoticePanel } from '@/components/pm/site-editor-v3/panels/UrgentNoticePanel';
 import { SitePanel } from '@/components/pm/site-editor-v3/panels/SitePanel';
 import { PagesPanel } from '@/components/pm/site-editor-v3/panels/PagesPanel';
 import { EditorShell } from '@/components/pm/site-editor-v3/EditorShell';
+import { Canvas } from '@/components/pm/site-editor-v3/canvas/Canvas';
+import { AddPartDialog } from '@/components/pm/site-editor-v3/AddPartDialog';
+import { RecordsAttention } from '@/components/pm/site-editor-v3/RecordsAttention';
+import { SelectedSitePageProvider } from '@/hooks/use-selected-site-page';
+import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
@@ -46,14 +54,17 @@ global.ResizeObserver = class ResizeObserver {
 // load, and only for whichever component reaches the missing export — so it
 // reads as an unrelated component breaking rather than a mock being short.
 // Anything FloatControls' undo path reaches has to be listed.
+// The block list the canvas and the Add a part catalog read. Empty unless a
+// case sets it.
+const contentBlocks = vi.hoisted(() => ({ data: [] as unknown[] }));
 vi.mock('@/hooks/use-content-blocks', () => ({
   // FloatControls reads the published side to decide whether a removal is
   // staged or immediate; a factory missing it yields `undefined` at call time.
   usePublishedBlocks: () => ({ data: [] }),
   // Phase 11b-3: the Pages panel reads the block list so the permanent-delete
-  // dialog can say how many sections go with the page (D36′). Empty here — the
+  // dialog can say how many sections go with the page (D36′). Empty there — the
   // audit is of the list's markup, not of a count.
-  useContentBlocks: () => ({ data: [] }),
+  useContentBlocks: () => ({ data: contentBlocks.data, isPending: false, isError: false }),
   useReorderBlocks: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), isPending: false }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
@@ -124,6 +135,15 @@ vi.mock('@/hooks/use-site-pages', () => ({
   sitePagesKey: (communityId: number) => ['pm', 'site', 'pages', communityId] as const,
 }));
 
+// The top bar's missing-records link. Same rule — the module COMPLETELY.
+vi.mock('@/hooks/use-records-alert', () => ({
+  recordsAlertQueryKey: (communityId: number) => ['pm', 'site', 'records-alert', communityId],
+  useRecordsAlert: () => ({
+    data: { missingCount: 3, snoozedUntil: null },
+    snooze: { mutate: vi.fn(), isPending: false },
+  }),
+}));
+
 // The inspector docks at >=1280px; false = wide. Both modes are audited.
 const isNarrowMock = vi.hoisted(() => ({ value: false }));
 vi.mock('@/hooks/use-media-query', () => ({
@@ -164,7 +184,6 @@ function renderEditorSurfaces() {
     <UndoableRemoveProvider communityId={7}>
     <SiteEditorProvider communityId={7} blocks={BLOCKS}>
       <div>
-        <SectionList />
         <div>
           {BLOCKS.map((b) => (
             <SectionShell key={b.id} block={b} communityId={7}>
@@ -227,6 +246,7 @@ beforeEach(() => {
   sitePagesMock.data = SITE_PAGES;
   sitePagesMock.isPending = false;
   sitePagesMock.isError = false;
+  contentBlocks.data = [];
 });
 
 describe('Website editor v3 — axe', () => {
@@ -294,7 +314,7 @@ describe('Website builder v4 chrome — axe', () => {
             communityId={7}
             hasPublishedSite
             initialNotice={null}
-            renderToolPanel={(tool) => <p>{tool} panel body</p>}
+            records={<RecordsAttention communityId={7} enabled />}
             canOpenPublish
             canPreview
             previewDisabledReason=""
@@ -316,19 +336,12 @@ describe('Website builder v4 chrome — axe', () => {
     );
   }
 
-  it('has no violations with the rail closed', async () => {
+  it('has no violations in the top bar and page, with the missing-records link', async () => {
     const { container } = renderChrome();
     // Anti-vacuity: the surfaces under audit actually rendered.
-    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'Website areas' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Publish 2 changes' })).toBeInTheDocument();
-    expect(await axe(container)).toHaveNoViolations();
-  });
-
-  it('has no violations with a tool panel open', async () => {
-    const user = userEvent.setup();
-    const { container } = renderChrome();
-    await user.click(screen.getByRole('button', { name: 'Pages' }));
-    expect(screen.getByRole('complementary', { name: 'Pages' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '3 missing records' })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -366,6 +379,104 @@ describe('Website builder v4 chrome — axe', () => {
     // Anti-vacuity: the inline control cluster is what this case audits.
     expect(within(placeholder).getByRole('button', { name: 'Show Text section' })).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe('Add a part — axe (combined plan Task 28)', () => {
+  const CANVAS: CanvasContext = {
+    community: {
+      id: 7,
+      slug: 'sunset-condos',
+      name: 'Sunset Condos',
+      shortName: null,
+      logoUrl: null,
+      communityType: 'condo_718',
+      city: null,
+      state: null,
+      unitCount: null,
+      timezone: 'America/New_York',
+    },
+    theme: {
+      primaryColor: '#C2533A',
+      secondaryColor: '#6B7280',
+      accentColor: '#FCF1ED',
+      headingFont: 'Fraunces',
+      bodyFont: 'Inter',
+    },
+    layout: 'tidewater',
+    preview: {
+      announcements: [],
+      documents: [],
+      meetings: [],
+      contact: { management: null, board: [], address: null, officeHours: null },
+    },
+    ownerRecordGroups: [],
+  };
+  const PAGE_BLOCKS = [
+    block({ id: 1, blockType: 'hero', blockOrder: 1, content: { headline: 'Welcome home' } }),
+    block({ id: 2, blockOrder: 2, content: { heading: 'Pool rules', body: 'No glass by the pool.' } }),
+    block({ id: 3, blockOrder: 3, content: { heading: 'Lobby hours', body: 'Open 8 to 6.' } }),
+  ];
+
+  /** The canvas and the dialog, wired the way `EditorRoot` wires them. */
+  function AddPartHarness() {
+    const [open, setOpen] = useState(false);
+    const [before, setBefore] = useState<number | null>(null);
+    const opener = useRef<HTMLElement | null>(null);
+    return (
+      <main>
+        <UndoableRemoveProvider communityId={7}>
+          <SelectedSitePageProvider pageId={FIXTURE_PAGE_ID}>
+            <SiteEditorProvider communityId={7} blocks={PAGE_BLOCKS}>
+              <Canvas
+                communityId={7}
+                context={CANVAS}
+                onAddSection={(blockId, el) => {
+                  opener.current = el;
+                  setBefore(blockId);
+                  setOpen(true);
+                }}
+              />
+              {open ? (
+                <AddPartDialog
+                  onOpenChange={setOpen}
+                  restoreFocusTo={opener}
+                  communityId={7}
+                  // Locked rows (and their plan badge) are part of what is audited.
+                  hasPolishBlocks={false}
+                  insertBefore={before}
+                  onInsertConsumed={() => {}}
+                  onGoToPages={() => {}}
+                />
+              ) : null}
+            </SiteEditorProvider>
+          </SelectedSitePageProvider>
+        </UndoableRemoveProvider>
+      </main>
+    );
+  }
+
+  it('has no violations on the page with its "Add a part" buttons', async () => {
+    contentBlocks.data = PAGE_BLOCKS;
+    const { container } = render(<AddPartHarness />);
+    // Anti-vacuity: real sections, and a button between each pair and at the end.
+    expect(screen.getAllByRole('group', { name: 'Text section' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Add a part/ })).toHaveLength(3);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations with the Add a part dialog open', async () => {
+    contentBlocks.data = PAGE_BLOCKS;
+    const user = userEvent.setup();
+    const { baseElement } = render(<AddPartHarness />);
+
+    await user.click(screen.getByRole('button', { name: 'Add a part after Welcome' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add a part' });
+    // Anti-vacuity: the catalog rendered inside it, locked rows included.
+    expect(within(dialog).getByTestId('add-section-text')).toBeInTheDocument();
+    expect(within(dialog).getByTestId('add-section-faq')).toBeDisabled();
+    // Radix portals the dialog out of the container, so audit baseElement.
+    expect(await axe(baseElement)).toHaveNoViolations();
   });
 });
 
@@ -622,27 +733,90 @@ describe('Website builder writers — axe', () => {
           unitCount: 120,
         }}
       >
-        <HeroForm
-          communityId={7}
-          blockType="hero"
-          blockOrder={1}
-          content={{
-            headline: 'Welcome to {{name}}',
-            subtitle: '{{units}} homes in {{city}}. Notices and records.',
-            photos: [
-              { stock: 'sunset', alt: 'Sunset over the water' },
-              { path: '7/hero/pool.jpg', alt: 'The pool' },
-            ],
-          }}
-        />
+        <SectionSourcesProvider
+          layoutId="bayfront"
+          contact={null}
+          ownerRecordGroups={null}
+          recordsApply
+        >
+          <HeroForm
+            communityId={7}
+            blockType="hero"
+            blockOrder={1}
+            content={{
+              headline: 'Welcome to {{name}}',
+              subtitle: '{{units}} homes in {{city}}. Notices and records.',
+              photos: [
+                { stock: 'sunset', alt: 'Sunset over the water' },
+                { path: '7/hero/pool.jpg', alt: 'The pool' },
+              ],
+            }}
+          />
+        </SectionSourcesProvider>
       </LinkedFactsProvider>,
     );
-    // The preview lines, the stock photo's own controls and the upload's.
+    // The preview lines, the chips and insert buttons, "Use the look's wording",
+    // the stock photo's own controls and the upload's.
     expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-linked-field]').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Insert the community name' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Use the look's wording" })).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Documents panel, with its categories and the owners\' records', async () => {
+    const { container } = render(
+      <SectionSourcesProvider
+        layoutId="bayfront"
+        contact={null}
+        ownerRecordGroups={[{ label: 'Budgets', postedCount: 3 }]}
+        recordsApply
+      >
+        <SorEmptyTextForm
+          communityId={7}
+          blockType="documents"
+          blockOrder={6}
+          content={{ limit: 5, includeCategories: ['budget'] }}
+        />
+      </SectionSourcesProvider>,
+    );
+    expect(screen.getByRole('group', { name: 'Which documents to list' })).toBeInTheDocument();
+    expect(screen.getByText('Budgets · 3')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Documents panel with nothing checked', async () => {
+    const { container } = render(
+      <SorEmptyTextForm communityId={7} blockType="documents" blockOrder={6} content={{ limit: 5 }} />,
+    );
+    expect(screen.getByText('Nothing is checked, so this section lists no documents.')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Announcements panel', async () => {
+    const { container } = render(
+      <SorEmptyTextForm communityId={7} blockType="announcements" blockOrder={6} content={{}} />,
+    );
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in the Contact panel listing what the profile lacks', async () => {
+    const { container } = render(
+      <SectionSourcesProvider
+        layoutId={null}
+        contact={{ management: null, address: null, officeHours: null }}
+        ownerRecordGroups={null}
+        recordsApply
+      >
+        <ContactForm communityId={7} blockType="contact" blockOrder={3} content={{}} />
+      </SectionSourcesProvider>,
+    );
+    expect(screen.getByText("Office hours aren't added yet, so they're hidden")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 });

@@ -6,6 +6,16 @@ import { Input } from '@/components/ui/input';
 import { useUpsertContentBlock, type UpsertContentBlockInput } from '@/hooks/use-content-blocks';
 import { useBlockForm } from '../use-block-form';
 import type { BlockFormProps } from '../types';
+import {
+  DocumentCategoriesField,
+  normalizeDocumentCategories,
+  type DocumentCategoryValue,
+} from './fields/DocumentCategoriesField';
+import {
+  OwnerRecordsNote,
+  SectionSourceNote,
+  isListedSection,
+} from './fields/SectionSourceNotes';
 
 const EMPTY_TEXT_MAX = 200;
 
@@ -36,22 +46,34 @@ const HIDDEN_LIVE_SITE_HINT =
 interface SorDraft {
   emptyText: string;
   /**
+   * The Documents section's categories, or null while the block stores none.
+   *
+   * Null is not the same as an empty list: a block with no `includeCategories`
+   * key is written back without one, so opening the panel and fixing the
+   * empty-state copy never adds a key the manager did not touch. Only the
+   * Documents panel ever sets it.
+   */
+  categories: DocumentCategoryValue[] | null;
+  /**
    * Everything else the block stores, carried through untouched.
    *
-   * These blocks also hold `limit`, `timeWindowDays` and `includeCategories`.
-   * Those predate this phase and have never been editable in v3 — exposing
-   * them here would be unrelated scope. But a save writes the WHOLE content
-   * object, so they must survive the round trip or editing the empty-state
-   * copy would silently reset a PM's configured limit to the schema default.
+   * These blocks also hold `limit` and `timeWindowDays`. Those predate this
+   * phase and have never been editable in v3 — exposing them here would be
+   * unrelated scope. But a save writes the WHOLE content object, so they must
+   * survive the round trip or editing the empty-state copy would silently reset
+   * a PM's configured limit to the schema default.
    */
   rest: Record<string, unknown>;
 }
 
 function toDraft(content: unknown): SorDraft {
   const loose = (content ?? {}) as Record<string, unknown>;
-  const { emptyText, ...rest } = loose;
+  const { emptyText, includeCategories, ...rest } = loose;
   return {
     emptyText: typeof emptyText === 'string' ? emptyText : '',
+    categories: Array.isArray(includeCategories)
+      ? normalizeDocumentCategories(includeCategories)
+      : null,
     rest,
   };
 }
@@ -60,15 +82,24 @@ function toCanonical(draft: SorDraft): unknown {
   const emptyText = draft.emptyText.trim();
   // Omitted rather than sent as '' — the schema is `min(1)`, and an absent
   // value is what makes the renderer keep its built-in copy.
-  return { ...draft.rest, ...(emptyText.length > 0 ? { emptyText } : {}) };
+  return {
+    ...draft.rest,
+    ...(draft.categories === null ? {} : { includeCategories: draft.categories }),
+    ...(emptyText.length > 0 ? { emptyText } : {}),
+  };
 }
 
 /**
- * Empty-state copy for the system-of-record blocks.
+ * The panel for the system-of-record blocks that list what the community keeps
+ * elsewhere: announcements, meetings and documents.
  *
- * One component for announcements/documents/meetings rather than three
- * near-identical files: the only difference is the block type it writes and
- * the placeholder it shows. `form-registry` binds the type per entry.
+ * Nothing in these sections is typed here, so the panel first says where the
+ * content comes from and links to it. Documents adds the categories to list and
+ * a summary of the owners' records; every type keeps the empty-state copy.
+ *
+ * One component for the three rather than three near-identical files: the
+ * differences are the block type it writes, the source it names and the
+ * placeholder it shows. `form-registry` binds the type per entry.
  *
  * `contact` is deliberately absent — it renders fields, not a list, so it has
  * no zero-rows branch to override.
@@ -106,6 +137,21 @@ export function SorEmptyTextForm({ communityId, blockType, blockOrder, content }
 
   return (
     <div className="space-y-4">
+      {isListedSection(blockType) && (
+        <SectionSourceNote communityId={communityId} blockType={blockType} />
+      )}
+
+      {blockType === 'documents' && (
+        <>
+          <DocumentCategoriesField
+            idPrefix={fieldId}
+            value={draft.categories ?? []}
+            onChange={(categories) => setDraft((prev) => ({ ...prev, categories }))}
+          />
+          <OwnerRecordsNote communityId={communityId} />
+        </>
+      )}
+
       <div className="space-y-1.5">
         <Label htmlFor={fieldId}>Empty-state message</Label>
         <Input

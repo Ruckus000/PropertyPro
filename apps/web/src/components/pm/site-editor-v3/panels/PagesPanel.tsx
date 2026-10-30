@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The "Pages" tool panel — which page of the site the editor is editing, and
+ * Site settings' Pages tab — which page of the site the editor is editing, and
  * every change a PM can make to the set of pages (website editor v3, Phase
  * 11b-3, slices S4a + S4b).
  *

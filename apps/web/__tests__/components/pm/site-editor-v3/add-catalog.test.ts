@@ -12,8 +12,11 @@ import { describe, it, expect } from 'vitest';
 import {
   BLOCK_TYPES,
   blockSchemaRegistry,
+  documentsBlockSchema,
   TOMBSTONE_BLOCK_TYPE,
 } from '@propertypro/shared';
+import type { PublicDocument } from '@/lib/db/public-community-reader';
+import { selectDocuments } from '@/lib/site-editor/preview-data';
 import { siteIssues, publishBlocked } from '@propertypro/shared';
 import {
   ADD_CATALOG,
@@ -90,6 +93,33 @@ describe('ADD_CATALOG', () => {
     // available type or offers one the server will 403.
     const polish = ADD_CATALOG.filter((e) => e.isPolish).map((e) => e.blockType);
     expect(polish.sort()).toEqual(['amenities', 'faq', 'gallery']);
+  });
+
+  it('seeds a Documents section that lists public documents from the first moment, never an empty one', () => {
+    // `{}` is valid and permanently empty: with no `includeCategories` the live
+    // reader and the canvas list nothing at all (not "everything"), so a section
+    // added from the panel would sit blank until the manager found the setting.
+    const seed = ADD_CATALOG.find((e) => e.blockType === 'documents')!.seed;
+    const content = documentsBlockSchema.parse(seed);
+    expect(content.includeCategories?.length ?? 0).toBeGreaterThan(0);
+
+    // A public document in any of the community's usual categories is listed.
+    const document = (id: number, categoryName: string): PublicDocument => ({
+      id,
+      title: categoryName,
+      description: null,
+      filePath: `/${id}.pdf`,
+      fileName: `${id}.pdf`,
+      categoryName,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    const community = [
+      document(1, 'Financial Records'),
+      document(2, 'Meeting Minutes'),
+      document(3, 'Rules and Regulations'),
+      document(4, 'Insurance'),
+    ];
+    expect(selectDocuments(content, community).map((d) => d.id)).toEqual([1, 2, 3, 4]);
   });
 
   it('seeds nothing that would block the community from publishing', () => {

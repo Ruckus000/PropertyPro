@@ -15,7 +15,10 @@ import { DOCUMENT_CATEGORIES, type CommunityType } from '@propertypro/shared';
 import { resolveTheme } from '@propertypro/theme';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
-import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
+import {
+  getPublicCommunityScopedReader,
+  type PublicOwnerRecordGroup,
+} from '@/lib/db/public-community-reader';
 import { resolveLayoutId } from '@/lib/public-site/layout-resolver';
 import { sanitizeHtml } from '@/lib/utils/html-sanitizer';
 import type { LayoutId, PublicCommunity, ResolvedTheme } from '@/components/public-site/blocks/types';
@@ -30,6 +33,11 @@ export interface CanvasContext {
   theme: ResolvedTheme;
   layout: LayoutId;
   preview: CanvasPreviewData;
+  /**
+   * The owners' records posted, by group: what the Documents panel says the
+   * website summarises. Counts only, the same aggregate the public site reads.
+   */
+  ownerRecordGroups: PublicOwnerRecordGroup[];
 }
 
 export async function loadCanvasContext(communityId: number): Promise<CanvasContext | null> {
@@ -52,7 +60,7 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
   const resolved = resolveTheme(branding, community.name, communityType);
 
   const reader = getPublicCommunityScopedReader(communityId);
-  const [announcements, documents, meetings, contact] = await Promise.all([
+  const [announcements, documents, meetings, contact, ownerRecordGroups] = await Promise.all([
     reader.listAnnouncements({ limit: PREVIEW_LIMIT, timeWindowDays: PREVIEW_WINDOW_DAYS }),
     // ALL categories, explicitly. `listDocuments` returns [] when the category
     // list is empty — omitting it here would make the superset permanently
@@ -64,6 +72,8 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
     // and Quick links previews read the same superset (`selectBoard`,
     // `selectQuickLinks`), so neither needs a query of its own.
     reader.getContactInfo({ showBoard: true, showManagement: true }),
+    // For the Documents panel's summary of the owners' records.
+    reader.listOwnerRecordGroups(),
   ]);
 
   return {
@@ -99,5 +109,6 @@ export async function loadCanvasContext(communityId: number): Promise<CanvasCont
       meetings,
       contact,
     },
+    ownerRecordGroups,
   };
 }

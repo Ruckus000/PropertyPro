@@ -195,7 +195,7 @@ describe('keyboard operation', () => {
     renderPanel(EMPTY_RECORD, 'footer');
 
     const order = [
-      screen.getByLabelText('Association name'),
+      screen.getByLabelText('Community name'),
       screen.getByLabelText('Footer note'),
       screen.getByLabelText('Show the records statement'),
       screen.getByRole('button', { name: 'Save footer' }),
@@ -297,7 +297,7 @@ describe('while a save is in flight', () => {
     renderPanel(EMPTY_RECORD, 'footer');
 
     const note = screen.getByLabelText('Footer note');
-    expect(screen.getByLabelText('Association name')).toHaveAttribute('readonly');
+    expect(screen.getByLabelText('Community name')).toHaveAttribute('readonly');
     expect(note).toHaveAttribute('readonly');
     expect(screen.getByLabelText('Show the records statement')).toBeDisabled();
     await user.type(note, 'lost');

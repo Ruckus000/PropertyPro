@@ -146,7 +146,8 @@ export function Inspector({ communityId, className }: InspectorProps) {
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-4 py-3">
-        <h2 className="text-base font-semibold text-content">{label} settings</h2>
+        {/* The section's plain name, the one the canvas and the Sections list use. */}
+        <h2 className="text-base font-semibold text-content">{label}</h2>
         <Button
           type="button"
           variant="ghost"

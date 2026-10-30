@@ -77,4 +77,16 @@ describe('<PresetCards>', () => {
     expect(screen.getByTestId('preset-card-midnight-coast')).toHaveClass('cursor-not-allowed');
     expect(screen.getByTestId('preset-card-midnight-coast')).not.toHaveClass('cursor-pointer');
   });
+
+  // Combined plan Task 28: the cards moved from the 340px rail panel to the
+  // wide Design tab, so they flow into columns. jsdom has no layout; this pins
+  // the classes that do it. Revert check: back to `grid grid-cols-1 gap-3`.
+  it('lays the cards out in columns on the wide Design tab', () => {
+    render(<PresetCards presets={SAMPLE_PRESETS} selected={null} onChoose={vi.fn()} name="p" />);
+    expect(screen.getByRole('group', { name: 'Theme preset' })).toHaveClass(
+      'grid-cols-1',
+      'sm:grid-cols-2',
+      'xl:grid-cols-3',
+    );
+  });
 });

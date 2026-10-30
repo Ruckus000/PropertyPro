@@ -135,7 +135,11 @@ export const ADD_CATALOG: readonly AddCatalogEntry[] = [
     icon: FileText,
     isPolish: false,
     needsImage: false,
-    seed: {},
+    // All five categories, so a new section lists the community's public
+    // documents the moment there are any. `{}` would be valid and permanently
+    // empty: with no `includeCategories` the site's reader lists nothing, not
+    // everything. The same set, and limit, as every look's Documents section.
+    seed: { limit: 5, includeCategories: ['budget', 'minutes', 'financial', 'rules', 'other'] },
   },
   {
     blockType: 'meetings',

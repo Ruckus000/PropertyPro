@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
-import { HELP_DRAWER_ID } from './tools';
+import { HELP_DRAWER_ID } from './help/drawer-id';
 
 /**
  * The v4 "Editing page" picker's inputs.
@@ -31,7 +31,7 @@ export interface EditorTopBarPageProps {
   pages: readonly SitePageSummary[];
   selectedPageId: number | null;
   onSelectPage: (pageId: number) => void;
-  /** Opens the Pages tool. */
+  /** Opens Site settings on its Pages tab. */
   onManagePages: () => void;
   /**
    * Draft changes waiting to publish, shown as a count on the button. The count
@@ -47,15 +47,15 @@ export interface EditorTopBarPageProps {
 export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
 
 /**
- * The editor's two areas (v4 builder, Phase 5): the page being built, and the
- * site's settings. The design also drew a Documents view; documents stay a rail
- * tool that links into the library, so there is no third area to switch to.
+ * The editor's two areas (v4 builder, Phase 5): the page being built, and Site
+ * settings. The design also drew a Documents view; the records live on the
+ * website home instead (the top bar links there), so there is no third area.
  */
 export type EditorView = 'website' | 'settings';
 
 const VIEWS: readonly { id: EditorView; label: string; icon: LucideIcon }[] = [
   { id: 'website', label: 'Website', icon: LayoutTemplate },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'settings', label: 'Site settings', icon: Settings },
 ];
 
 const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[] = [
@@ -75,15 +75,20 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
    *
    * Load-bearing since the editor became multi-page: every other surface that
    * names what you are editing (the canvas, the preview, the Pages panel) is
-   * either scrolled away or behind a tab, so with the Sections tool open there
-   * was nothing on screen at all distinguishing page B from the home page —
-   * while every write went to page B.
+   * either scrolled away or in Site settings, so without it there was nothing
+   * on screen at all distinguishing page B from the home page — while every
+   * write went to page B.
    */
   pageName?: string;
   /** Rendered on the right, before the actions — the save status line (Phase 3). */
   status?: React.ReactNode;
   /** The Florida requirements pill (v4 Phase 2), rendered before `status`. */
   requirements?: React.ReactNode;
+  /**
+   * The missing-records link to the website home (combined plan Task 28),
+   * rendered first on the right. It renders nothing when no record is missing.
+   */
+  records?: React.ReactNode;
   /**
    * Required, for the same reason `canOpenPublish` and `canPreview` below are.
    *
@@ -181,6 +186,7 @@ export function EditorTopBar({
   pageName,
   status,
   requirements,
+  records,
   onPreview,
   onPublish,
   canOpenPublish,
@@ -263,11 +269,17 @@ export function EditorTopBar({
          * Toggle buttons, not a radiogroup: each is independently operable with
          * Tab and Enter, which a three-item control does not need arrow-key
          * roving for. `aria-pressed` carries which width is showing.
+         *
+         * From 1024px only. With the rail gone, Help and the missing-records
+         * link joined this bar, and below 1024px there is no room for them and
+         * these three without pushing Publish off the screen. A screen that
+         * narrow is already about a tablet's width, so the canvas there shows
+         * roughly what the tablet size would.
          */}
         <div
           role="group"
           aria-label="Preview size"
-          className="flex shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5"
+          className="hidden shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5 lg:flex"
         >
           {DEVICES.map(({ id, label, icon: Icon }) => {
             const active = id === device;
@@ -302,6 +314,7 @@ export function EditorTopBar({
        * gives way now; measured at 768–1440px with a long name and page name.
        */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
+        {records}
         {requirements}
         {status}
         <Button
@@ -310,13 +323,10 @@ export function EditorTopBar({
           aria-expanded={helpOpen}
           aria-controls={helpOpen ? HELP_DRAWER_ID : undefined}
           aria-label="Help"
-          // The bar was already full. Measured in Chromium with a long name,
-          // this button pushed Publish past the edge at 768px and squeezed the
-          // community name to nothing at 1280px. On the Website view the rail's
-          // Help tile is always on screen, so this one waits for 1536px there.
-          // Settings has no rail, but also no page picker or device toggle, so
-          // the room is there at every width.
-          className={cn('px-3', view === 'website' && 'hidden 2xl:inline-flex')}
+          // The editor's only way into Help now that the rail is gone, so it
+          // shows at every width: an icon below 1536px, where the bar is full,
+          // and named from there.
+          className="px-3"
         >
           <CircleHelp className="h-4 w-4" aria-hidden="true" />
           <span className="hidden 2xl:inline">Help</span>
@@ -368,7 +378,7 @@ type PagePickerProps = Pick<
 >;
 
 /**
- * "Editing page ▾" — switch page without opening the Pages tool.
+ * "Editing page ▾" — switch page without opening Site settings.
  *
  * The app's Popover (Radix) supplies Escape, outside-click dismissal, focus
  * return to the trigger and the trigger's `aria-expanded`; this file supplies

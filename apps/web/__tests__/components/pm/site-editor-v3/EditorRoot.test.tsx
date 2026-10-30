@@ -18,26 +18,34 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useEffect } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import {
   RecordsAttention as RealRecordsAttention,
   type RecordsAttentionProps,
 } from '@/components/pm/site-editor-v3/RecordsAttention';
+import {
+  AddPartDialog as RealAddPartDialog,
+  type AddPartDialogProps,
+} from '@/components/pm/site-editor-v3/AddPartDialog';
+import { RequirementsDetails as RealRequirementsDetails } from '@/components/pm/site-editor-v3/RequirementsDetails';
 import userEvent from '@testing-library/user-event';
 import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { useLinkedFacts } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
+import { useSectionSources } from '@/components/pm/site-editor-v3/inspector/section-sources-context';
+import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
+import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
-// Every code-split child (preview, publish sheet, notice/site panels,
-// inspector) renders nothing — this file is about the top bar, and mounting
-// them would drag in their own query surfaces.
+// Every code-split child is replaced by a stand-in or renders nothing — this
+// file is about how `EditorRoot` composes them, and mounting the real ones
+// would drag in their own query surfaces. Selecting on the loader's SOURCE
+// keeps every other module out of this file entirely — and when one is renamed
+// the match fails loudly, which is the right direction for a test to break in.
 //
-// The ONE exception is the Pages panel, replaced here by a stub. It is the only
-// way to drive a page change, and a page change is what the `key` remount in
-// `EditorRoot` exists for (D-SEL). Selecting on the loader's SOURCE rather than
-// mounting everything keeps every other panel's module out of this file
-// entirely — and when the panel is renamed this match fails loudly, which is
-// the right direction for a test to break in.
+// The Pages panel lives in Site settings since the tool rail went (combined
+// plan Task 28), so the Settings stand-in renders the Pages stand-in below. It
+// is the only way to drive a page change, and a page change is what the `key`
+// remount in `EditorRoot` exists for (D-SEL).
 const SECOND_PAGE_ID = 77;
 const HOME_PAGE_ID = 5;
 const CREATED_PAGE_ID = 91;
@@ -62,25 +70,49 @@ vi.mock('next/dynamic', () => ({
     // can assert what the editor does NOT load. A stand-in that renders `null`
     // for an unknown loader would otherwise hide a chooser brought back.
     (dynamicLoaders.push(String(loader)),
-    // The Documents tool's count reporter renders nothing, so the real one is
-    // used: its count is what the rail shows.
+    // The top bar's missing-records link: the real one, over a mocked hook.
     String(loader).includes('RecordsAttention')
       ? (props: RecordsAttentionProps) => <RealRecordsAttention {...props} />
-      : // The Settings view, as a stand-in exposing the one callback EditorRoot
+      : // The Add a part dialog: the real one, and the real catalog inside it,
+        // so "Add a part" can be followed from the canvas to the write.
+        String(loader).includes('AddPartDialog')
+        ? (props: AddPartDialogProps) => <RealAddPartDialog {...props} />
+      : // The requirements pill's popover body: the real one, so its "Add it"
+        // can be followed into the Add a part dialog.
+        String(loader).includes('RequirementsDetails')
+        ? (props: React.ComponentProps<typeof RealRequirementsDetails>) => (
+            <RealRequirementsDetails {...props} />
+          )
+      : // The Settings view, as a stand-in exposing the callbacks EditorRoot
         // gives it. Its content has its own suite (SettingsView.test.tsx).
         String(loader).includes('SettingsView')
         ? ({
-            onOpenDocuments,
             tabRequest,
+            onTabChange,
+            pagesPanel,
+            designPanel,
+            noticePanel,
           }: {
-            onOpenDocuments: () => void;
             tabRequest?: { tab: string } | null;
+            onTabChange?: (tab: string) => void;
+            pagesPanel: PagesStandInProps;
+            designPanel: { presets: unknown[]; hasSiteCustomCss: boolean };
+            noticePanel: { hasPublishedSite: boolean };
           }) => (
             <>
-              <button type="button" onClick={onOpenDocuments}>
-                Settings stand-in: open Documents
+              <p data-testid="settings-stand-in">Requested tab: {tabRequest?.tab ?? 'none'}</p>
+              <button type="button" onClick={() => onTabChange?.('pages')}>
+                Settings stand-in: show Pages
               </button>
-              <p>Requested tab: {tabRequest?.tab ?? 'none'}</p>
+              <button type="button" onClick={() => pagesPanel.onSelectPage(SECOND_PAGE_ID)}>
+                Settings stand-in: edit the second page
+              </button>
+              <p>
+                Settings stand-in props: page {String(pagesPanel.selectedPageId)}, published{' '}
+                {String(noticePanel.hasPublishedSite)}, custom css{' '}
+                {String(designPanel.hasSiteCustomCss)}, {designPanel.presets.length} colour sets
+              </p>
+              <PagesStandIn {...pagesPanel} />
             </>
           )
       : // The Help drawer, as a stand-in exposing its callbacks; its content
@@ -97,93 +129,20 @@ vi.mock('next/dynamic', () => ({
               <button type="button" onClick={onClose}>
                 Help stand-in: close
               </button>
-              {[
-                { kind: 'tool', tool: 'design' },
-                { kind: 'settings', tab: 'search' },
-                { kind: 'publish' },
-              ].map((action) => (
+              {HELP_ACTIONS.map(([label, action]) => (
                 <button
-                  key={action.kind}
+                  key={label}
                   type="button"
                   onClick={() => {
                     onClose();
                     onShowMe(action);
                   }}
                 >
-                  Show me: {action.kind}
+                  Show me: {label}
                 </button>
               ))}
             </aside>
           )
-      : String(loader).includes('PagesPanel')
-      ? ({
-          selectedPageId,
-          restoreFocusToSelectedRow,
-          onFocusRestored,
-          onSelectPage,
-          onPageRemoved,
-        }: {
-          selectedPageId: number | null;
-          restoreFocusToSelectedRow: boolean;
-          onFocusRestored: () => void;
-          onSelectPage: (
-            pageId: number,
-            options?: { pending?: boolean; announce?: string },
-          ) => void;
-          onPageRemoved: (pageId: number) => void;
-        }) => (
-          <div>
-            <p>Editing page {String(selectedPageId)}</p>
-            {/*
-             * The focus contract, echoed rather than performed. The real panel
-             * focuses a row on mount when this flag is set and then calls
-             * `onFocusRestored`; both halves are the PARENT's to get right and
-             * neither is visible from `PagesPanel.test.tsx`, which supplies the
-             * flag from its own JSX.
-             *
-             * `data-testid` on the echo is what lets a case assert the flag's
-             * value at the moment a fresh panel appears — and, since the flag
-             * is now consumed without a remount too, at any render. (This said
-             * "a mount-only echo … the only moment it means anything", which
-             * the round-8 case beside it contradicts: it asserts the flag on a
-             * click that deliberately does NOT remount.)
-             */}
-            <p data-testid="pages-focus-flag">{String(restoreFocusToSelectedRow)}</p>
-            <button type="button" onClick={() => onFocusRestored()}>
-              Panel took the focus
-            </button>
-            {/*
-             * What the real panel does in `confirmRemove`'s `!staged` branch:
-             * tell the parent the disappearance was self-inflicted, so the
-             * repair moves the selection without announcing it.
-             */}
-            <button type="button" onClick={() => onPageRemoved(SECOND_PAGE_ID)}>
-              I deleted the second page
-            </button>
-            <button type="button" onClick={() => onSelectPage(SECOND_PAGE_ID)}>
-              Edit the second page
-            </button>
-            <button type="button" onClick={() => onSelectPage(HOME_PAGE_ID)}>
-              Edit the home page
-            </button>
-            {/*
-             * What the real panel does in `submitCreate.onSuccess`: select the
-             * page it just made and mark it pending, because the cached list
-             * does not contain it yet.
-             */}
-            <button
-              type="button"
-              onClick={() =>
-                onSelectPage(CREATED_PAGE_ID, {
-                  pending: true,
-                  announce: 'Pool Rules added.',
-                })
-              }
-            >
-              Create a page
-            </button>
-          </div>
-        )
       : // The inspector, stubbed to record its own mount/unmount.
         //
         // This is what guards `key={effectivePageId}` for WRITE targeting.
@@ -204,10 +163,16 @@ vi.mock('next/dynamic', () => ({
             // forgot to provide them would switch the hero form's "Shows as"
             // line off silently.
             const facts = useLinkedFacts();
+            // Likewise where each section's content comes from: a parent that
+            // forgot these would leave every panel saying nothing about its
+            // source, with no error.
+            const sources = useSectionSources();
             return (
               <>
                 <p>inspector</p>
                 <p data-testid="inspector-facts">{facts === null ? 'no facts' : JSON.stringify(facts)}</p>
+                <p data-testid="inspector-sources">{JSON.stringify(sources)}</p>
+                <SectionsProbe />
               </>
             );
           }
@@ -283,6 +248,118 @@ vi.mock('next/dynamic', () => ({
           )
         : () => null),
 }));
+
+/**
+ * The Pages panel's stand-in, rendered by the Settings stand-in's Pages tab.
+ * Each button does what the real panel does at that moment.
+ */
+interface PagesStandInProps {
+  selectedPageId: number | null;
+  restoreFocusToSelectedRow: boolean;
+  onFocusRestored: () => void;
+  onSelectPage: (pageId: number, options?: { pending?: boolean; announce?: string }) => void;
+  onPageRemoved: (pageId: number) => void;
+}
+
+function PagesStandIn({
+  selectedPageId,
+  restoreFocusToSelectedRow,
+  onFocusRestored,
+  onSelectPage,
+  onPageRemoved,
+}: PagesStandInProps) {
+  return (
+    <div>
+      <p>Editing page {String(selectedPageId)}</p>
+      {/*
+       * The focus contract, echoed rather than performed. The real panel
+       * focuses a row on mount when this flag is set and then calls
+       * `onFocusRestored`; both halves are the PARENT's to get right and
+       * neither is visible from `PagesPanel.test.tsx`, which supplies the
+       * flag from its own JSX.
+       *
+       * `data-testid` on the echo is what lets a case assert the flag's
+       * value at the moment a fresh panel appears — and, since the flag
+       * is now consumed without a remount too, at any render. (This said
+       * "a mount-only echo … the only moment it means anything", which
+       * the round-8 case beside it contradicts: it asserts the flag on a
+       * click that deliberately does NOT remount.)
+       */}
+      <p data-testid="pages-focus-flag">{String(restoreFocusToSelectedRow)}</p>
+      <button type="button" onClick={() => onFocusRestored()}>
+        Panel took the focus
+      </button>
+      {/*
+       * What the real panel does in `confirmRemove`'s `!staged` branch:
+       * tell the parent the disappearance was self-inflicted, so the
+       * repair moves the selection without announcing it.
+       */}
+      <button type="button" onClick={() => onPageRemoved(SECOND_PAGE_ID)}>
+        I deleted the second page
+      </button>
+      <button type="button" onClick={() => onSelectPage(SECOND_PAGE_ID)}>
+        Edit the second page
+      </button>
+      <button type="button" onClick={() => onSelectPage(HOME_PAGE_ID)}>
+        Edit the home page
+      </button>
+      {/*
+       * What the real panel does in `submitCreate.onSuccess`: select the
+       * page it just made and mark it pending, because the cached list
+       * does not contain it yet.
+       */}
+      <button
+        type="button"
+        onClick={() =>
+          onSelectPage(CREATED_PAGE_ID, {
+            pending: true,
+            announce: 'Pool Rules added.',
+          })
+        }
+      >
+        Create a page
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The page-scoped section list the editor context holds, as buttons named
+ * after each section, with `aria-current` on the selected one.
+ *
+ * It stands where the Sections tool's list stood before the tool rail went
+ * (combined plan Task 28): rendered by the inspector stand-in, inside the
+ * page-keyed provider, so the D-SEL and D-C2 cases below can still see which
+ * sections the provider holds and which one is selected.
+ */
+function SectionsProbe() {
+  const { movableSections, isSelected, select } = useSiteEditor();
+  return (
+    <ul aria-label="Sections probe">
+      {movableSections.map((section) => (
+        <li key={section.id}>
+          <button
+            type="button"
+            aria-current={isSelected(section.id) ? 'true' : undefined}
+            onClick={() => select(section.id)}
+          >
+            {sectionLabel(section.blockType)}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** What the Help stand-in's "Show me" buttons hand `EditorRoot`. */
+const HELP_ACTIONS: ReadonlyArray<readonly [string, unknown]> = [
+  ['add', { kind: 'add' }],
+  ['settings pages', { kind: 'settings', tab: 'pages' }],
+  ['settings design', { kind: 'settings', tab: 'design' }],
+  ['settings notice', { kind: 'settings', tab: 'notice' }],
+  ['settings search', { kind: 'settings', tab: 'search' }],
+  ['publish', { kind: 'publish' }],
+];
 
 /*
  * `toast.info` is what the selection repair speaks through, and it had ZERO
@@ -380,6 +457,9 @@ function base() {
   };
 }
 
+/** The Add a part catalog's write, and the move that puts the new part in its slot. */
+const writes = vi.hoisted(() => ({ upsertAsync: vi.fn(), reorder: vi.fn() }));
+
 vi.mock('@/hooks/use-content-blocks', () => ({
   useContentBlocks: () => ({
     ...base(),
@@ -390,10 +470,10 @@ vi.mock('@/hooks/use-content-blocks', () => ({
     data: queries.isPending || queries.isError ? undefined : queries.published,
   }),
   useSitePublishToken: () => ({ ...base(), data: null }),
-  useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: writes.upsertAsync, isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
-  useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useReorderBlocks: () => ({ mutate: writes.reorder, mutateAsync: vi.fn(), isPending: false }),
 }));
 
 // Phase 11b-3: `useSiteDiff` (which EditorRoot calls for the Publish button)
@@ -429,13 +509,27 @@ vi.mock('@/hooks/use-site-design', () => ({
   useSaveSiteDesign: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
-// The records checklist behind the Documents tool and its rail count. Tests
-// that need records set `records.value`; everyone else sees an empty checklist.
+// The records checklist behind the requirements pill. Tests that need records
+// set `records.value`; everyone else sees an empty checklist.
 const records = vi.hoisted(() => ({ value: [] as unknown[], calls: [] as unknown[][] }));
 vi.mock('@/hooks/use-compliance-checklist', () => ({
   useComplianceChecklist: (...args: unknown[]) => {
     records.calls.push(args);
     return { data: records.value, isError: false, refetch: vi.fn() };
+  },
+}));
+
+// The top bar's missing-records count (`useRecordsAlert`, D11). Tests that need
+// a count set `recordsAlert.missingCount`; every call's arguments are kept.
+const recordsAlert = vi.hoisted(() => ({ missingCount: 0, calls: [] as unknown[][] }));
+vi.mock('@/hooks/use-records-alert', () => ({
+  recordsAlertQueryKey: (communityId: number) => ['pm', 'site', 'records-alert', communityId],
+  useRecordsAlert: (...args: unknown[]) => {
+    recordsAlert.calls.push(args);
+    return {
+      data: { missingCount: recordsAlert.missingCount, snoozedUntil: null },
+      snooze: { mutate: vi.fn(), isPending: false },
+    };
   },
 }));
 
@@ -499,12 +593,17 @@ interface RootOptions {
    */
   canvasContext?: unknown;
   hasPublishedSite?: boolean;
+  /** `?view=settings&tab=<id>`, as the page parses it. */
+  initialView?: 'website' | 'settings';
+  initialSettingsTab?: string;
 }
 
 function rootElement({
   initialPages = [seededHome],
   canvasContext = null,
   hasPublishedSite = true,
+  initialView,
+  initialSettingsTab,
 }: RootOptions = {}) {
   return (
     <EditorRoot
@@ -534,6 +633,8 @@ function rootElement({
       // the Pages panel has ever been opened — that id is what every block
       // write is scoped by.
       initialPages={initialPages}
+      initialView={initialView}
+      initialSettingsTab={initialSettingsTab as never}
     />
   );
 }
@@ -543,16 +644,19 @@ function renderRoot(options: RootOptions = {}) {
 }
 
 /**
- * Open a tool from the v4 rail. The rail's tiles are DISCLOSURES — clicking the
- * open one closes it — so this clicks only when the tool is not already open,
- * which is what every "go to X" step in these tests means.
+ * Open Site settings, where the Pages tab (and the Pages stand-in) now lives.
+ * A no-op when Site settings is already showing, which is what every "go to
+ * the pages" step in these tests means.
  */
-async function openTool(name: string | RegExp) {
-  const tile = screen
-    .getAllByRole('button', { name })
-    .find((el) => el.hasAttribute('data-testid') && el.dataset.testid!.startsWith('site-editor-tool-'));
-  if (!tile) throw new Error(`No rail tool named ${String(name)}`);
-  if (tile.getAttribute('aria-expanded') !== 'true') await userEvent.click(tile);
+async function openPages() {
+  if (screen.queryByTestId('settings-stand-in')) return;
+  await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+}
+
+/** Back to the page being edited, where the canvas and the inspector are. */
+async function backToWebsite() {
+  if (!screen.queryByTestId('settings-stand-in')) return;
+  await userEvent.click(screen.getByRole('button', { name: 'Website' }));
 }
 
 function publishButton() {
@@ -561,6 +665,7 @@ function publishButton() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  designDraft.value = {};
   queries.draft = [];
   queries.published = [];
   queries.pages = [];
@@ -569,6 +674,8 @@ beforeEach(() => {
   queries.isError = false;
   queries.error = null;
   media.narrow = false;
+  recordsAlert.missingCount = 0;
+  recordsAlert.calls = [];
 });
 
 describe('EditorRoot — Publish button wiring', () => {
@@ -630,48 +737,170 @@ describe('EditorRoot — Publish button wiring', () => {
   });
 });
 
-describe('EditorRoot — tool panels', () => {
-  // `next/dynamic` is stubbed to render null in this file, so the panels
-  // themselves cannot be asserted on here (their own test files cover them).
-  // What these pin is which tabs still fall through to `ToolPanelPlaceholder` —
-  // the state that makes a tool unusable.
-  it.each([
-    ['Add', 'Add'],
-    ['Design', /Design/],
-  ])('renders a real panel, not a placeholder, on the %s tab', async (_name, accessibleName) => {
-    renderRoot();
-
-    await openTool(accessibleName);
-
-    expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
-  });
-
+describe('EditorRoot — editing on the page (combined plan Task 28)', () => {
   it('seeds the selected page from the server-rendered list', async () => {
-    // Before the Pages panel has ever been opened — and therefore before any
+    // Before the Pages tab has ever been opened — and therefore before any
     // client request — the editor already knows which page it is editing. This
     // is what stops the first save of a session defaulting to home on a
     // community whose PM was editing something else.
     queries.draft = [hero(), block({ id: 1 })];
     renderRoot();
 
-    await openTool('Pages');
+    await openPages();
 
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 
-  it('has a panel for every tool the rail offers', async () => {
-    // The placeholder is gone and `renderToolPanel` is exhaustive at the type
-    // level, so this walks the real rail rather than a hand-kept list — a new
-    // tool added to EDITOR_TOOLS shows up here automatically.
-    renderRoot();
+  describe('"Add a part"', () => {
+    const lobby = () =>
+      block({ id: 2, blockOrder: 3, content: { heading: 'Lobby hours', body: 'Open 8 to 6.' } });
 
-    const tiles = screen.getAllByTestId(/^site-editor-tool-/);
-    expect(tiles).toHaveLength(7);
-    for (const tile of tiles) {
-      await userEvent.click(tile);
-      expect(tile).toHaveAttribute('aria-expanded', 'true');
-      expect(screen.queryByText('This panel is not built yet.')).not.toBeInTheDocument();
-    }
+    beforeEach(() => {
+      queries.draft = [hero(), block({ id: 1 }), lobby()];
+      queries.published = [hero(), block({ id: 1 }), lobby()];
+      writes.upsertAsync.mockResolvedValue(undefined);
+    });
+
+    /*
+     * The whole path, through the real canvas, dialog and catalog: the button
+     * after the Welcome section targets the section below it, the catalog
+     * writes the new part to the page's next free slot (parts are appended,
+     * then moved), and once it arrives it is moved up into the slot the PM
+     * chose.
+     *
+     * Revert checks (production lines): `insertBefore={insertBefore}` on
+     * `<AddPartDialog>` in `EditorRoot.tsx` (the catalog says "at the bottom":
+     * red at the position assertion); `placeAdded(…)` in `AddPanel.tsx` (no
+     * move: red at the reorder assertion); and `onAdded={handleAdded}` (the
+     * dialog stays open: red at the dialog assertion).
+     */
+    it('"Add a part" between sections opens the add dialog and inserts at that slot', async () => {
+      const { rerender } = renderRoot({ canvasContext: STUB_CANVAS });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add a part after Welcome' }));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Add a part' });
+      expect(within(dialog).getByTestId('add-position')).toHaveTextContent('It goes above “Text”.');
+      await userEvent.click(within(dialog).getByTestId('add-section-text'));
+
+      // Written to the next free slot on THIS page…
+      expect(writes.upsertAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ blockType: 'text', blockOrder: 4, pageId: HOME_PAGE_ID }),
+      );
+      // …the dialog closes onto the new part's settings, and says so from a
+      // region that outlives it.
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(screen.getByTestId('site-page-announcement')).toHaveTextContent(
+        'Text section added. Its settings are open.',
+      );
+
+      // The refetch brings the new part in at slot 4; it is moved up to slot 2,
+      // directly after the Welcome section, where the PM asked for it.
+      queries.draft = [...queries.draft, block({ id: 9, blockOrder: 4 })];
+      await act(async () => {
+        rerender(rootElement({ canvasContext: STUB_CANVAS }));
+      });
+      expect(writes.reorder).toHaveBeenCalledWith({ blockId: 9, toOrder: 2 });
+    });
+
+    // Revert check (production line): the `onCloseAutoFocus` handler's
+    // `target.focus()` in `AddPartDialog.tsx`.
+    it('hands focus back to the "Add a part" that opened the dialog', async () => {
+      renderRoot({ canvasContext: STUB_CANVAS });
+      const opener = screen.getByRole('button', { name: 'Add a part after Text' });
+
+      await userEvent.click(opener);
+      await screen.findByRole('dialog', { name: 'Add a part' });
+      await userEvent.keyboard('{Escape}');
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      await waitFor(() => expect(opener).toHaveFocus());
+    });
+
+    it('adds to the end from the end of the page', async () => {
+      renderRoot({ canvasContext: STUB_CANVAS });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add a part at the end of this page' }));
+
+      expect(
+        within(await screen.findByRole('dialog', { name: 'Add a part' })).getByTestId('add-position'),
+      ).toHaveTextContent('It goes at the bottom of this page.');
+    });
+
+    // The dialog's "Manage pages" (the navigation bar is built from pages).
+    it('"Manage pages" closes the dialog and opens Site settings on Pages', async () => {
+      renderRoot({ canvasContext: STUB_CANVAS });
+      await userEvent.click(screen.getByRole('button', { name: 'Add a part after Welcome' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Add a part' });
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Manage pages' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    });
+  });
+
+  /*
+   * Every other caller that opened a rail tool (combined plan Task 28). The
+   * Help drawer's and the publish sheet's have their own cases below.
+   *
+   * Revert checks (production lines): `onManagePages={handleGoToPages}` and
+   * `onEditNavigation={handleGoToPages}` in `EditorRoot.tsx` (Pages), and
+   * `onAddSection={handleGoToAdd}` on the requirements pill (Add a part).
+   */
+  describe('the callers that opened a rail tool', () => {
+    beforeEach(() => {
+      queries.draft = [hero(), block({ id: 1 })];
+      queries.published = [hero(), block({ id: 1 })];
+      queries.pages = [seededHome];
+    });
+
+    it('"Add or manage pages" opens Site settings on Pages', async () => {
+      renderRoot();
+      await userEvent.click(screen.getByRole('button', { name: /Editing page/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add or manage pages' }));
+      expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    });
+
+    it("the canvas's navigation bar opens Site settings on Pages", async () => {
+      renderRoot({ canvasContext: STUB_CANVAS });
+      await userEvent.click(screen.getByTestId('canvas-navigation-bar'));
+      expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    });
+
+    it("the requirements pill's \"Add it\" opens Add a part, adding to the end", async () => {
+      renderRoot({ canvasContext: STUB_CANVAS });
+      await userEvent.click(await screen.findByRole('button', { name: 'Required item missing' }));
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Add it' }))[0]!);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Add a part' });
+      expect(within(dialog).getByTestId('add-position')).toHaveTextContent(
+        'It goes at the bottom of this page.',
+      );
+    });
+  });
+
+  // Revert check: render `<RecordsAttention>` with `enabled` always true.
+  it('shows the missing-records link in the top bar, for condos and HOAs only', async () => {
+    recordsAlert.missingCount = 3;
+    const { unmount } = renderRoot();
+    expect(await screen.findByRole('link', { name: '3 missing records' })).toHaveAttribute(
+      'href',
+      '/pm/website?communityId=42#records',
+    );
+    expect(recordsAlert.calls[0]).toEqual([42, { enabled: true }]);
+    unmount();
+
+    recordsAlert.calls = [];
+    render(
+      <EditorRoot
+        {...(rootElement().props as React.ComponentProps<typeof EditorRoot>)}
+        siteIdentity={{ name: 'Sunset Ridge', slug: 'sunset-ridge', communityType: 'apartment' }}
+      />,
+    );
+    expect(screen.queryByRole('link', { name: /missing record/ })).not.toBeInTheDocument();
+    expect(recordsAlert.calls[0]).toEqual([42, { enabled: false }]);
   });
 });
 
@@ -716,69 +945,181 @@ describe('EditorRoot — linked-field facts for the inspector', () => {
   });
 });
 
-describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
-  it('switches to Settings and back, and the old Site and Address tools are gone', async () => {
-    renderRoot();
-    expect(screen.queryByTestId('site-editor-tool-site')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('site-editor-tool-domain')).not.toBeInTheDocument();
+describe('EditorRoot — where each section panel gets its content', () => {
+  const sources = () => JSON.parse(screen.getByTestId('inspector-sources').textContent!);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByText('Settings stand-in: open Documents')).toBeInTheDocument();
-    expect(screen.queryByRole('navigation', { name: 'Website tools' })).not.toBeInTheDocument();
+  it("hands the panels the canvas layout, what Contact lacks and the owners' records", () => {
+    // The layout the canvas draws is the DRAFT look, so it comes from the design
+    // query; the server context's tidewater is the live one.
+    designDraft.value = { layoutId: 'bayfront' };
+    renderRoot({
+      canvasContext: {
+        ...STUB_CANVAS,
+        layout: 'bayfront',
+        preview: {
+          ...STUB_CANVAS.preview,
+          contact: {
+            management: { name: null, email: 'office@example.com', phone: null },
+            board: [],
+            address: '100 Palm Way, Miami, FL',
+            officeHours: null,
+          },
+        },
+        ownerRecordGroups: [{ category: 'budget', label: 'Budgets', postedCount: 3 }],
+      } as never,
+    });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
-    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    expect(sources()).toEqual({
+      layoutId: 'bayfront',
+      contact: { address: false, officeHours: true, phone: true, email: false },
+      ownerRecordGroups: [{ category: 'budget', label: 'Budgets', postedCount: 3 }],
+      recordsApply: true,
+    });
   });
 
-  it("Settings' link to the records returns to the page with Documents open", async () => {
-    renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    await userEvent.click(screen.getByText('Settings stand-in: open Documents'));
+  it('knows nothing of the sources when the community could not be read', () => {
+    renderRoot({ canvasContext: null });
+    expect(sources()).toEqual({
+      layoutId: null,
+      contact: null,
+      ownerRecordGroups: null,
+      recordsApply: true,
+    });
+  });
 
-    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAttribute(
-      'aria-expanded',
-      'true',
+  it('says records do not apply to an apartment community', () => {
+    render(
+      <EditorRoot
+        {...(rootElement().props as React.ComponentProps<typeof EditorRoot>)}
+        siteIdentity={{ name: 'Sunset Ridge', slug: 'sunset-ridge', communityType: 'apartment' }}
+      />,
     );
+    expect(sources().recordsApply).toBe(false);
+  });
+});
+
+describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
+  it('switches to Settings and back', async () => {
+    renderRoot();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    expect(screen.getByTestId('settings-stand-in')).toBeInTheDocument();
+    expect(screen.queryByText('inspector')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    expect(screen.queryByTestId('settings-stand-in')).not.toBeInTheDocument();
+    expect(screen.getByText('inspector')).toBeInTheDocument();
+  });
+});
+
+describe('EditorRoot — Site settings opened from the address (combined plan Task 27)', () => {
+  it('?view=settings&tab=pages opens Site settings on Pages', () => {
+    renderRoot({ initialView: 'settings', initialSettingsTab: 'pages' });
+
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    expect(screen.queryByText('inspector')).not.toBeInTheDocument();
+  });
+
+  it('opens on the website when the address names no view', () => {
+    renderRoot();
+
+    expect(screen.getByText('inspector')).toBeInTheDocument();
+    expect(screen.queryByText(/Requested tab/)).not.toBeInTheDocument();
+  });
+
+  it('hands the Pages, Design and Notice tabs what the tools had', () => {
+    renderRoot({ initialView: 'settings', hasPublishedSite: false });
+
+    expect(
+      screen.getByText(
+        `Settings stand-in props: page ${HOME_PAGE_ID}, published false, custom css false, 0 colour sets`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // Choosing a page remounts the shell (the page-keyed provider), and with it
+  // the view's own state. Without the tab living here, the view dropped back to
+  // General the moment a page was chosen in the Pages tab.
+  // Revert check: drop `onTabChange={setSettingsTab}` in the SettingsView render.
+  it('stays on the tab the PM chose when choosing a page remounts the editor', async () => {
+    renderRoot({ initialView: 'settings' });
+    await userEvent.click(screen.getByRole('button', { name: 'Settings stand-in: show Pages' }));
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Settings stand-in: edit the second page' }),
+    );
+
+    expect(screen.getByText(/Settings stand-in props: page 77/)).toBeInTheDocument();
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
   });
 });
 
 describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
-  function helpButtons() {
-    return screen.getAllByRole('button', { name: 'Help' });
+  function helpButton() {
+    return screen.getByRole('button', { name: 'Help' });
   }
 
-  it('opens from the top bar and closes from the rail, beside the open tool', async () => {
+  it('opens and closes from the top bar, in either area', async () => {
     renderRoot();
-    await openTool('Pages');
-    const [topBar, rail] = helpButtons();
-    await userEvent.click(topBar!);
+    await userEvent.click(helpButton());
     expect(screen.getByRole('complementary', { name: 'Help' })).toBeInTheDocument();
-    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'true');
-
-    await userEvent.click(rail!);
+    await userEvent.click(helpButton());
     expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
+
+    await openPages();
+    await userEvent.click(helpButton());
+    expect(screen.getByRole('complementary', { name: 'Help' })).toBeInTheDocument();
+    expect(screen.getByTestId('settings-stand-in')).toBeInTheDocument();
   });
 
-  it('"Show me" for a tool closes the drawer and opens that tool on the page', async () => {
+  /*
+   * Combined plan Task 28: every "Show me" that opened a rail tool now opens
+   * the Site settings tab holding it, from either area, and the Add tool's
+   * opens the Add a part dialog.
+   *
+   * Revert check (production line): `openSettingsTab(action.tab)` in
+   * `handleShowMe`.
+   */
+  it.each([
+    ['settings pages', 'pages'],
+    ['settings design', 'design'],
+    ['settings notice', 'notice'],
+    ['settings search', 'search'],
+  ])('"Show me: %s" closes the drawer and opens Site settings on %s', async (label, tab) => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    await userEvent.click(helpButtons()[0]!);
-    await userEvent.click(screen.getByRole('button', { name: 'Show me: tool' }));
+    await userEvent.click(helpButton());
+    await userEvent.click(screen.getByRole('button', { name: `Show me: ${label}` }));
 
     expect(screen.queryByRole('complementary', { name: 'Help' })).not.toBeInTheDocument();
-    expect(screen.getByTestId('site-editor-tool-design')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText(`Requested tab: ${tab}`)).toBeInTheDocument();
+  });
+
+  it('"Show me" for adding opens the Add a part dialog on the page, from Site settings', async () => {
+    queries.draft = [hero(), block({ id: 1 })];
+    renderRoot({ canvasContext: STUB_CANVAS });
+    await openPages();
+    await userEvent.click(helpButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: add' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Add a part' });
+    // No position given, so the part goes at the end.
+    expect(within(dialog).getByTestId('add-position')).toHaveTextContent(
+      'It goes at the bottom of this page.',
+    );
+    expect(screen.queryByTestId('settings-stand-in')).not.toBeInTheDocument();
   });
 
   it('"Show me" for a Settings tab asks Settings for it, once', async () => {
     renderRoot();
-    await userEvent.click(helpButtons()[0]!);
-    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings' }));
+    await userEvent.click(helpButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings search' }));
     expect(screen.getByText('Requested tab: search')).toBeInTheDocument();
 
     // The PM's own switch afterwards opens Settings on its first tab again.
     await userEvent.click(screen.getByRole('button', { name: 'Website' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByText('Requested tab: none')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    expect(screen.getByText('Requested tab: general')).toBeInTheDocument();
   });
 });
 
@@ -786,59 +1127,38 @@ describe('EditorRoot — opens straight to editing', () => {
   it('the editor opens straight to editing with no chooser, tour or banner', () => {
     renderRoot({ hasPublishedSite: false });
 
-    // The rail is there from the first paint; nothing sits over the page.
-    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
+    // The page is there from the first paint; nothing sits over it.
+    expect(screen.getByText('inspector')).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     // No guided/free switch, no tabbed Next steps panel, no wizard invitation.
     expect(screen.queryByRole('radio', { name: /guided|free/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     expect(screen.queryByTestId('wizard-entry-banner')).not.toBeInTheDocument();
-    // And none of the code-split pieces behind them is declared at all.
-    for (const gone of ['ModeChooser', 'EditorTour', 'NextSteps', 'GuidedTabs', 'ModeSwitch']) {
+    // And none of the code-split pieces behind them is declared at all — nor
+    // the rail's panels, which went with the rail (combined plan Task 28).
+    for (const gone of [
+      'ModeChooser',
+      'EditorTour',
+      'NextSteps',
+      'GuidedTabs',
+      'ModeSwitch',
+      'DocumentsPanel',
+      'SectionList',
+      'ToolRail',
+    ]) {
       expect(dynamicLoaders.filter((src) => src.includes(gone))).toEqual([]);
     }
   });
 });
 
-describe('EditorRoot — the Documents tool', () => {
-  beforeEach(() => {
-    records.value = [];
-    records.calls = [];
-  });
-
-  it('counts the records groups that need attention on the rail', async () => {
-    records.value = [
-      { id: 1, templateKey: 'a', title: 'Bylaws', category: 'governing_documents', status: 'unsatisfied', documentId: null, documentState: null },
-      { id: 2, templateKey: 'b', title: 'Budget', category: 'financial_records', status: 'unsatisfied', documentId: 9, documentState: 'draft' },
-      { id: 3, templateKey: 'c', title: 'Policy', category: 'insurance', status: 'satisfied', documentId: 7, documentState: 'posted' },
-    ];
-    renderRoot();
-    // Reported by a code-split component, so it arrives after first paint.
-    await waitFor(() =>
-      expect(screen.getByTestId('site-editor-tool-documents')).toHaveAccessibleName(
-        'Documents (2 need attention)',
-      ),
-    );
-    expect(records.calls[0]?.[0]).toBe(42);
-  });
-
-  it('shows no count when every group is up to date', () => {
-    records.value = [
-      { id: 3, templateKey: 'c', title: 'Policy', category: 'insurance', status: 'satisfied', documentId: 7, documentState: 'posted' },
-    ];
-    renderRoot();
-    expect(screen.getByTestId('site-editor-tool-documents')).toHaveAccessibleName('Documents');
-  });
-});
-
 describe('EditorRoot — selected page (D-SEL)', () => {
-  /** The Sections panel row for a block, which carries the selected state. */
+  /** The probe's row for a block, which carries the selected state. */
   function sectionRow() {
     return screen.getByRole('button', { name: 'Text' });
   }
 
   async function selectTheTextSection() {
-    await openTool(/Sections/);
+    await backToWebsite();
     await userEvent.click(sectionRow());
     // Precondition, asserted rather than assumed: a test that "clears" a
     // selection that was never made passes for the wrong reason.
@@ -863,10 +1183,10 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(sectionRow()).not.toHaveAttribute('aria-current');
   });
@@ -892,24 +1212,32 @@ describe('EditorRoot — selected page (D-SEL)', () => {
      * Asserting the unmount rather than the write keeps this test about
      * composition and off the hook internals the other file owns.
      */
+    //
+    // Switched from the top bar's page picker, which keeps the page — and so
+    // the inspector — on screen. (Site settings' Pages tab hides the inspector
+    // anyway, which would unmount it for the wrong reason.)
+    queries.pages = [
+      seededHome,
+      { ...seededHome, id: SECOND_PAGE_ID, name: 'Amenities', slug: 'amenities', isHome: false },
+    ];
     renderRoot();
     expect(inspectorLifecycle).toEqual(['mount']);
 
-    await openTool('Pages');
-    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('button', { name: /Editing page/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Amenities' }));
 
     // Torn down and rebuilt, not merely re-rendered.
     expect(inspectorLifecycle).toEqual(['mount', 'unmount', 'mount']);
   });
 
-  it('does NOT unmount the inspector on an ordinary tab change', async () => {
-    // The control: the remount must be keyed on the PAGE, not on tab traffic,
-    // or every panel click would throw away a pending edit's context.
+  it('does NOT unmount the inspector on an ordinary change to the page view', async () => {
+    // The control: the remount must be keyed on the PAGE, not on other
+    // traffic, or every click would throw away a pending edit's context.
     renderRoot();
     expect(inspectorLifecycle).toEqual(['mount']);
 
-    await openTool('Pages');
-    await openTool(/Sections/);
+    await userEvent.click(screen.getByRole('button', { name: 'Preview on a phone' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
 
     expect(inspectorLifecycle).toEqual(['mount']);
   });
@@ -921,9 +1249,9 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(screen.queryByRole('button', { name: 'Text' })).not.toBeInTheDocument();
   });
@@ -934,8 +1262,8 @@ describe('EditorRoot — selected page (D-SEL)', () => {
     renderRoot();
     await selectTheTextSection();
 
-    await openTool('Pages');
-    await openTool(/Sections/);
+    await openPages();
+    await backToWebsite();
 
     expect(sectionRow()).toHaveAttribute('aria-current', 'true');
   });
@@ -943,7 +1271,7 @@ describe('EditorRoot — selected page (D-SEL)', () => {
   it('tells the Pages panel which page is now selected', async () => {
     renderRoot();
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
@@ -951,15 +1279,14 @@ describe('EditorRoot — selected page (D-SEL)', () => {
 });
 
 /**
- * D-C2's sixth caller. `EditorRoot` feeds `SiteEditorProvider`, which feeds
- * `SectionList` — the DEFAULT tool — and the Inspector. Unfiltered, both listed
- * every page's sections beside a canvas showing one page's.
+ * D-C2's sixth caller. `EditorRoot` feeds `SiteEditorProvider`, which feeds the
+ * section controls and the Inspector. Unfiltered, they held every page's
+ * sections beside a canvas showing one page's.
  *
- * `SectionList` is a STATIC import, so unlike every panel above it really
- * renders here. That is what makes this the composition test the leaf tests
- * could not be.
+ * Read through `SectionsProbe`, which lists the provider's sections from inside
+ * the real provider — the composition the leaf tests cannot see.
  */
-describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2)', () => {
+describe('EditorRoot — the editor context is scoped to the selected page (D-C2)', () => {
   const homeSection = () => screen.queryByRole('button', { name: 'Text' });
   const otherPageSection = () => screen.queryByRole('button', { name: 'Gallery' });
 
@@ -984,7 +1311,7 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
 
   it('lists only the selected page, not every page in the community', async () => {
     renderRoot();
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(homeSection()).toBeInTheDocument();
     expect(otherPageSection()).not.toBeInTheDocument();
@@ -993,9 +1320,9 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
   it('swaps the list when the page changes', async () => {
     renderRoot();
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(otherPageSection()).toBeInTheDocument();
     expect(homeSection()).not.toBeInTheDocument();
@@ -1007,9 +1334,9 @@ describe('EditorRoot — the Sections panel is scoped to the selected page (D-C2
     queries.draft = [hero(), block({ id: 1, pageId: HOME_PAGE_ID })];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(homeSection()).not.toBeInTheDocument();
   });
@@ -1031,14 +1358,14 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
 
     // Leave the Pages tab, so the panel is unmounted exactly as it would be
     // during a header-initiated publish. If the repair still lived in the
     // panel, nothing below could fire.
-    await openTool(/Sections/);
+    await backToWebsite();
 
     // The publish landed: the staged page is gone from the server's list, and
     // the invalidation re-renders the tree with it.
@@ -1047,7 +1374,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
       rerender(rootElement({ initialPages: [seededHome] }));
     });
 
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 
@@ -1061,7 +1388,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
 
     // Captured BEFORE the switch. Text content alone cannot tell the two
     // placements apart: put the region back inside the keyed provider and React
@@ -1086,7 +1413,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
@@ -1105,7 +1432,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     queries.pages = [seededHome];
@@ -1141,7 +1468,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     ];
 
     const { rerender } = renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     // The panel reports the hard delete, then the invalidated list comes back
@@ -1153,7 +1480,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     });
 
     // Repaired…
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
     // …silently.
     expect(toastInfo).not.toHaveBeenCalled();
@@ -1191,7 +1518,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome, stagedSecond];
 
     const { rerender } = renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     // The publish lands: `usePublishSite` invalidates `['pm','site']` and the
@@ -1213,7 +1540,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Create a page' }));
 
     expect(screen.getByText(`Editing page ${CREATED_PAGE_ID}`)).toBeInTheDocument();
@@ -1226,7 +1553,7 @@ describe('EditorRoot — selection repair and the just-created page', () => {
     queries.pages = [seededHome];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
@@ -1258,7 +1585,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, stagedSecondPage];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     const banner = screen.getByTestId('staged-page-banner');
@@ -1278,7 +1605,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, { ...stagedSecondPage, deleteStagedAt: null }];
 
     const { rerender } = renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     expect(screen.queryByTestId('staged-page-banner')).not.toBeInTheDocument();
 
@@ -1302,7 +1629,7 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.error = new Error('Pages unavailable');
 
     renderRoot({ initialPages: [seededHome, stagedSecondPage] });
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('staged-page-banner')).toBeInTheDocument();
@@ -1320,9 +1647,9 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
     queries.pages = [seededHome, stagedSecondPage];
 
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
 
@@ -1331,11 +1658,10 @@ describe('EditorRoot — the page being edited is staged for removal', () => {
 });
 
 describe('EditorRoot — the top bar names the page being edited', () => {
-  // Nothing on screen said which page you were editing. The canvas is scrolled,
-  // the Pages panel is behind a tab, and the Sections tool — the default — is
-  // just a list of section types. So a PM could create a second page, click
-  // back to Sections, and edit for an hour with no indication of the target,
-  // while every write went to that page.
+  // Nothing on screen said which page you were editing. The canvas is scrolled
+  // and the Pages list is in Site settings. So a PM could create a second page,
+  // go back to the page, and edit for an hour with no indication of the
+  // target, while every write went to that page.
   //
   // Asserted through EditorRoot rather than against EditorTopBar directly, for
   // the reason this whole file exists: the shell's own tests pass every prop
@@ -1369,8 +1695,9 @@ describe('EditorRoot — the top bar names the page being edited', () => {
   it('follows the selection to another page', async () => {
     renderRoot();
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await backToWebsite();
 
     expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Amenities');
     // The heading is the route's identity and must NOT churn with the page —
@@ -1402,7 +1729,7 @@ describe('EditorRoot — the preview is titled after the page it renders', () =>
     // Non-null so the dialog branch is reachable at all; the stub ignores it.
     renderRoot({ canvasContext: STUB_CANVAS });
 
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Preview' }));
 
@@ -1446,32 +1773,29 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   });
 
   // Publish (and the requirements pill) stay in the top bar in Settings, so
-  // their routes into the page have to leave Settings too — otherwise the
-  // tool changes behind a view that hides it and nothing visible happens.
-  // Revert check: `setView('website')` in `handleSelectSlot` / `handleGoToPages`.
-  it.each([
-    ['Fix this', 'site-editor-tool-sections'],
-    ['Go to Pages', 'site-editor-tool-pages'],
-  ])("Publish's %s from Settings returns to the page with its tool open", async (action, tool) => {
+  // "Fix this" has to leave Settings — otherwise the selection lands behind a
+  // view that hides it and nothing visible happens.
+  // Revert check: `setView('website')` in `handleGoToSlot`.
+  it("Publish's Fix this from Settings returns to the page", async () => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
-    await userEvent.click(screen.getByRole('button', { name: action }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    expect(screen.getByRole('navigation', { name: 'Website tools' })).toBeInTheDocument();
-    expect(screen.getByTestId(tool)).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByTestId('settings-stand-in')).not.toBeInTheDocument();
+    expect(screen.getByText('inspector')).toBeInTheDocument();
   });
 
   it('switches to the page the offending section is on', async () => {
     renderRoot();
     // Precondition: on home, and the offending section is not reachable here.
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
   });
 
@@ -1491,10 +1815,9 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    // `select` reveals the Sections panel, and the offending row is the only
-    // one on the page we were moved to. Matched loosely: the offending section
-    // is an unpublished draft, so its row carries a "Draft" badge inside the
-    // same button and its accessible name is "GalleryDraft".
+    // The probe lists the page we were moved to, and the offending section is
+    // the only one on it. Matched loosely, as the old Sections list's row
+    // carried a "Draft" badge in its name.
     const row = await screen.findByRole('button', { name: /^Gallery/ });
     expect(row).toHaveAttribute('aria-current', 'true');
     // And nothing on the page we LEFT is selected — the remount discarded it.
@@ -1528,10 +1851,10 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     );
 
     // Away and back again.
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
-    await openTool(/Sections/);
+    await backToWebsite();
 
     expect(screen.getByRole('button', { name: /^Gallery/ })).not.toHaveAttribute('aria-current');
   });
@@ -1560,7 +1883,7 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });
@@ -1599,21 +1922,27 @@ describe('EditorRoot — BOTH page reads fail', () => {
     expect(screen.getByTestId('pages-unavailable-banner')).toBeInTheDocument();
   });
 
-  it('withholds the sections list instead of offering another page\'s rows', async () => {
+  it('withholds the sections instead of offering another page\'s', () => {
     renderRoot({ initialPages: [] });
-    await openTool(/Sections/);
 
-    // Neither page's sections are listed — an unscoped list would show BOTH.
+    // Neither page's sections are offered — an unscoped list would show BOTH.
+    // The inspector (and the provider's list it carries) is withheld outright.
+    expect(screen.queryByText('inspector')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Text/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Gallery/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/Sections are unavailable until/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your sections are hidden until/i)).toBeInTheDocument();
   });
 
-  it('offers no Add panel, because a block written now would land on the home page', async () => {
+  // Revert check (production line): `&& !pagesUnavailable` on the
+  // `<AddPartDialog>` render in `EditorRoot.tsx`.
+  it('opens no Add a part dialog, because a block written now would land on the home page', async () => {
     renderRoot({ initialPages: [] });
 
-    await openTool('Add');
-    expect(screen.getByText(/Sections are unavailable until/i)).toBeInTheDocument();
+    // Help's "Show me" is the one way to ask for it with no canvas showing.
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: add' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByTestId('pages-unavailable-banner')).toBeInTheDocument();
   });
 
   it('leaves the editor alone while the pages query is merely still in flight', () => {
@@ -1663,14 +1992,14 @@ describe('EditorRoot — the server page seed can fail', () => {
     ];
 
     renderRoot({ initialPages: [] });
-    await openTool(/Sections/);
+    await backToWebsite();
 
     // Scoped to home, not showing every page: proof the fallback resolved a
     // real page id rather than leaving it null.
     expect(screen.queryByRole('button', { name: 'Text' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Gallery' })).not.toBeInTheDocument();
 
-    await openTool('Pages');
+    await openPages();
     expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });
@@ -1701,7 +2030,7 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
     // Revert check (production line): `restoreFocusToSelectedRow={focusSelectedRow}`
     // on `<PagesPanel>` in `EditorRoot.tsx`.
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
@@ -1723,15 +2052,15 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
      * rather than running it.
      */
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
     // The real panel does this from its mount effect; the stub exposes it so
     // the parent's half can be driven without a DOM focus race.
     await userEvent.click(screen.getByRole('button', { name: 'Panel took the focus' }));
 
     // Off to Sections — which UNMOUNTS the panel — and back.
-    await openTool(/Sections/);
-    await openTool('Pages');
+    await backToWebsite();
+    await openPages();
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('false');
   });
@@ -1757,7 +2086,7 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
      * version of this fix passed its EditorRoot tests while still latching.
      */
     renderRoot();
-    await openTool('Pages');
+    await openPages();
     await userEvent.click(screen.getByRole('button', { name: 'Edit the home page' }));
 
     expect(screen.getByTestId('pages-focus-flag')).toHaveTextContent('true');
@@ -1765,7 +2094,7 @@ describe('EditorRoot — the row-focus flag is single-use', () => {
 });
 
 describe('EditorRoot — the publish sheet can reach the Pages panel', () => {
-  it('opens the Pages tool when a page-set problem has no section to fix', async () => {
+  it('opens Site settings on Pages when a page-set problem has no section to fix', async () => {
     /*
      * The other half of the "Fix this" seam. A page-set problem — a duplicate
      * address, two home pages, no home page — blocks a publish but has no
@@ -1787,7 +2116,11 @@ describe('EditorRoot — the publish sheet can reach the Pages panel', () => {
     await userEvent.click(publishButton());
     await userEvent.click(screen.getByRole('button', { name: 'Go to Pages' }));
 
-    expect(screen.getByTestId('site-editor-tool-pages')).toHaveAttribute('aria-expanded', 'true');
+    // Site settings, on Pages, where page-set problems are fixed.
+    // Revert check (production line): `openSettingsTab('pages')` in
+    // `handleGoToPages`.
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 });
 

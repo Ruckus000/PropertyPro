@@ -162,6 +162,43 @@ beforeEach(() => {
   quotaLookupMock.mockResolvedValue(null);
 });
 
+describe('v3 editor page — which area it opens on', () => {
+  function renderWith(params: Record<string, string | string[]>) {
+    return WebsiteEditorV3Page({
+      searchParams: Promise.resolve({ communityId: '7', ...params } as Record<string, string>),
+    });
+  }
+
+  it('?view=settings&tab=pages opens Site settings on Pages', async () => {
+    const props = findEditorRootProps(await renderWith({ view: 'settings', tab: 'pages' }));
+
+    expect(props?.['initialView']).toBe('settings');
+    expect(props?.['initialSettingsTab']).toBe('pages');
+  });
+
+  it('opens the website on General settings when the address names neither', async () => {
+    const props = findEditorRootProps(await renderWith({}));
+
+    expect(props?.['initialView']).toBe('website');
+    expect(props?.['initialSettingsTab']).toBe('general');
+  });
+
+  it('opens General for a tab it does not know, and ignores a tab with no view', async () => {
+    const unknown = findEditorRootProps(await renderWith({ view: 'settings', tab: 'billing' }));
+    expect(unknown?.['initialSettingsTab']).toBe('general');
+
+    const stray = findEditorRootProps(await renderWith({ tab: 'pages' }));
+    expect(stray?.['initialView']).toBe('website');
+  });
+
+  it('still refuses a manager without the site editor, whatever the address asks for', async () => {
+    featuresMock.mockResolvedValue({ hasSiteEditor: false });
+    await expect(renderWith({ view: 'settings', tab: 'pages' })).rejects.toThrow(
+      'NEXT_REDIRECT:/pm/dashboard/communities?reason=feature-unavailable',
+    );
+  });
+});
+
 describe('v3 editor page — storage meter seed', () => {
   const QUOTA_500_MB = 500 * 1024 * 1024;
 

@@ -1,10 +1,14 @@
 'use client';
 
 import { useCallback } from 'react';
+import { Info } from 'lucide-react';
 import { contactBlockSchema } from '@propertypro/shared';
 import { Label } from '@/components/ui/label';
 import { useUpsertContentBlock } from '@/hooks/use-content-blocks';
 import { useBlockForm } from '../use-block-form';
+import { useSectionSources, type MissingContactDetails } from '../section-sources-context';
+import { communityProfileHref } from '../source-links';
+import { SourceLink } from './fields/SourceLink';
 import type { BlockFormProps } from '../types';
 
 interface ContactDraft {
@@ -48,6 +52,21 @@ function toCanonical(draft: ContactDraft): unknown {
 }
 
 /**
+ * What the panel says about each detail the Community profile lacks. The page
+ * leaves a missing detail out rather than show an empty line, and the sentence
+ * says so.
+ */
+const MISSING_SENTENCE: Record<keyof MissingContactDetails, string> = {
+  address: "The address isn't added yet, so it's hidden",
+  officeHours: "Office hours aren't added yet, so they're hidden",
+  phone: "The phone number isn't added yet, so it's hidden",
+  email: "The contact email isn't added yet, so it's hidden",
+};
+
+/** The order the details appear on the page. */
+const DETAIL_ORDER = ['address', 'officeHours', 'phone', 'email'] as const;
+
+/**
  * Contact block settings.
  *
  * The block itself is system-of-record: the renderer assembles it from the
@@ -80,10 +99,21 @@ export function ContactForm({ communityId, blockOrder, content }: BlockFormProps
   const boardId = `contact-show-board-${blockOrder}`;
   const managementId = `contact-show-management-${blockOrder}`;
 
+  // The phone and email belong to the management contact: with that switched off
+  // they are hidden by choice, and "isn't added yet" would blame the profile.
+  const { contact } = useSectionSources();
+  const missing =
+    contact === null
+      ? []
+      : DETAIL_ORDER.filter(
+          (detail) =>
+            contact[detail] && (draft.showManagement || (detail !== 'phone' && detail !== 'email')),
+        );
+
   return (
     <div className="space-y-4">
       <p className="text-sm text-content-secondary">
-        This section pulls contact details from your community record, so it stays
+        This section pulls contact details from your Community profile, so it stays
         current on its own. Choose who to show.
       </p>
 
@@ -116,6 +146,25 @@ export function ContactForm({ communityId, blockOrder, content }: BlockFormProps
           Show management contact
         </Label>
       </div>
+
+      {missing.length > 0 && (
+        <div className="space-y-2 rounded-md border border-edge bg-surface-muted p-3">
+          <h3 className="text-sm font-semibold text-content">Not in your Community profile yet</h3>
+          <ul className="space-y-1.5">
+            {missing.map((detail) => (
+              <li key={detail} className="flex items-start gap-1.5 text-sm text-content-secondary">
+                <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{MISSING_SENTENCE[detail]}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="text-sm text-content-secondary">
+        <SourceLink href={communityProfileHref(communityId)}>Open your Community profile</SourceLink>{' '}
+        {missing.length > 0 ? 'to add them.' : 'to change these details.'}
+      </p>
 
       {!draft.showBoard && !draft.showManagement && (
         <p className="text-xs text-content-secondary">
