@@ -148,6 +148,8 @@ describe('selectContact', () => {
   const all = {
     management: { name: 'Coastal', email: 'a@b.com', phone: '305' },
     board: [{ name: 'Sam', title: 'President' }],
+    address: '100 Palm Way, Miami, FL 33101',
+    officeHours: 'Mon-Fri, 9-5',
   };
 
   it('shows both sides when both toggles are on', () => {
@@ -170,9 +172,26 @@ describe('selectContact', () => {
     expect(out.board).toEqual([]);
   });
 
-  it('hides everything when both are off', () => {
+  it('hides the people when both are off, but not the office address and hours', () => {
+    // The live site shows the association's address and hours whatever the
+    // toggles say (they are not a person's details), so the canvas must too, or
+    // the preview stops matching what publishes.
     const out = selectContact({ showManagement: false, showBoard: false }, all);
-    expect(out).toEqual({ management: null, board: [] });
+    expect(out).toEqual({
+      management: null,
+      board: [],
+      address: '100 Palm Way, Miami, FL 33101',
+      officeHours: 'Mon-Fri, 9-5',
+    });
+  });
+
+  it('passes an unset address and hours through as unset', () => {
+    const out = selectContact(
+      { showManagement: true, showBoard: true },
+      { ...all, address: null, officeHours: null },
+    );
+    expect(out.address).toBeNull();
+    expect(out.officeHours).toBeNull();
   });
 });
 

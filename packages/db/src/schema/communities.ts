@@ -10,6 +10,12 @@ import { billingGroups } from './billing-groups';
 export const communities = pgTable('communities', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   name: text('name').notNull(),
+  /**
+   * Optional short form of `name`, for headlines where the full legal name is
+   * too long. NULL = not set, and readers fall back to `name`. At most 60
+   * characters (DB CHECK below).
+   */
+  shortName: text('short_name'),
   slug: text('slug').notNull().unique(),
   communityType: communityTypeEnum('community_type').notNull(),
   /** AGENTS #19: Florida spans Eastern + Central. Timezone is per-community. */
@@ -19,6 +25,11 @@ export const communities = pgTable('communities', {
   city: text('city'),
   state: text('state'),
   zipCode: text('zip_code'),
+  /**
+   * The association office's hours as free text (for example "Mon-Fri, 9-5").
+   * NULL = not set. At most 200 characters (DB CHECK below).
+   */
+  officeHours: text('office_hours'),
   /**
    * Units (condo) or parcels (HOA) — what decides whether Florida's website
    * rules apply at all: §718.111(12)(g) covers condos of 25+ units, §720.303
@@ -182,6 +193,19 @@ export const communities = pgTable('communities', {
   siteOnboardingProgress: jsonb('site_onboarding_progress').$type<{
     lastCompletedStep?: number;
   }>(),
+  /**
+   * The one-time "your website is live" email to owners, sent by the manager's
+   * Email owners click (publishing never sends it). NULL = not sent. The send
+   * claims this column with a conditional update (`WHERE site_live_notice_sent_at
+   * IS NULL`), so a double click, or two managers at once, emails owners exactly
+   * once; a send that fails releases the claim.
+   */
+  siteLiveNoticeSentAt: timestamp('site_live_notice_sent_at', { withTimezone: true }),
+  /**
+   * The manager chose not to email owners. NULL = not dismissed. The offer is
+   * shown while both this and `siteLiveNoticeSentAt` are NULL.
+   */
+  siteLiveNoticeDismissedAt: timestamp('site_live_notice_dismissed_at', { withTimezone: true }),
   /** Mobile help: management contact info. */
   contactName: text('contact_name'),
   contactEmail: text('contact_email'),
@@ -250,4 +274,9 @@ export const communities = pgTable('communities', {
     'communities_unit_count_range',
     sql`${table.unitCount} IS NULL OR (${table.unitCount} >= 1 AND ${table.unitCount} <= 100000)`,
   ),
+  // Profile text bounds: the backstop for a caller that skips the request schema.
+  // NULL means "not set" and passes a CHECK, so only a stored value is measured.
+  // Mirrors migration 0095.
+  check('communities_short_name_len', sql`char_length(${table.shortName}) <= 60`),
+  check('communities_office_hours_len', sql`char_length(${table.officeHours}) <= 200`),
 ]);

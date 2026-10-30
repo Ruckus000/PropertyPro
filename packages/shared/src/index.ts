@@ -101,6 +101,9 @@ export {
   paymentsBlockSchema,
   DOCUMENT_CATEGORIES,
   documentMatchesSectionCategories,
+  LINKED_FIELDS,
+  resolveLinkedText,
+  parseLinkedText,
 } from './site-blocks/index';
 export type {
   BlockType,
@@ -122,6 +125,9 @@ export type {
   AmenitiesBlockContent,
   AmenityItem,
   PaymentsBlockContent,
+  LinkedField,
+  LinkedFacts,
+  LinkedSegment,
 } from './site-blocks/index';
 export {
   starterPackBlocksSchema,

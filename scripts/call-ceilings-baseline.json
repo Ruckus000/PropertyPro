@@ -110,6 +110,9 @@
   "apps/web/src/lib/services/community-export.ts": {
     "unscoped": 1
   },
+  "apps/web/src/lib/services/community-profile-service.ts": {
+    "unscoped": 1
+  },
   "apps/web/src/lib/services/community-search-service.ts": {
     "unscoped": 1
   },

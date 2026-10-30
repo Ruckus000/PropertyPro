@@ -6,6 +6,10 @@
  * result to the pure view. The markup lives in AnnouncementsBlockView so the
  * editor canvas can render exactly what the public site renders — see
  * BlockViewProps in ./types.
+ *
+ * With no announcements it renders nothing: the live site never shows an empty
+ * box (D14). The view keeps its placeholder text, because the editor canvas
+ * renders the view directly and a manager needs to see the empty section.
  */
 import { announcementsBlockSchema, type AnnouncementsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
@@ -28,6 +32,7 @@ export async function AnnouncementsBlock(props: BlockRendererProps) {
     limit: config.limit,
     timeWindowDays: config.timeWindowDays,
   });
+  if (items.length === 0) return null;
 
   // Sanitize here rather than in the view: it is a server concern, and
   // isomorphic-dompurify pulls jsdom in behind it — which must not reach the

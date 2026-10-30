@@ -60,7 +60,7 @@ export const EMPTY_PREVIEW_DATA: CanvasPreviewData = {
   announcements: [],
   documents: [],
   meetings: [],
-  contact: { management: null, board: [] },
+  contact: { management: null, board: [], address: null, officeHours: null },
 };
 
 /**
@@ -118,6 +118,12 @@ export function selectMeetings(
  * The superset is always fetched with both sides on, so turning a toggle off
  * must hide it here — otherwise the canvas would show details the published
  * page does not.
+ *
+ * The office address and hours are NOT behind either toggle on the published
+ * page (they are the association's, not a person's), so they pass through here
+ * for the same reason: the canvas must show what the page shows. Listed one by
+ * one rather than spread, so a field added to `PublicContactInfo` has to be
+ * decided on here instead of passing through unmasked.
  */
 export function selectContact(
   content: Pick<ContactBlockContent, 'showManagement' | 'showBoard'>,
@@ -126,5 +132,7 @@ export function selectContact(
   return {
     management: content.showManagement ? all.management : null,
     board: content.showBoard ? all.board : [],
+    address: all.address,
+    officeHours: all.officeHours,
   };
 }

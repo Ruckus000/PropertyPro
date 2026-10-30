@@ -41,10 +41,12 @@ const CONTEXT: CanvasContext = {
     id: 7,
     slug: 'sunset-condos',
     name: 'Sunset Condos',
+    shortName: null,
     logoUrl: null,
     communityType: 'condo_718',
     city: null,
     state: null,
+    unitCount: null,
     timezone: 'America/New_York',
   },
   theme: {
@@ -76,7 +78,7 @@ const CONTEXT: CanvasContext = {
     ] as never,
     documents: [],
     meetings: [],
-    contact: { management: null, board: [] },
+    contact: { management: null, board: [], address: null, officeHours: null },
   },
 };
 

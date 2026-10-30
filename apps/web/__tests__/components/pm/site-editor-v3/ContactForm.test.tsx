@@ -76,16 +76,19 @@ describe('ContactForm', () => {
     expect(contactBlockSchema.safeParse(written).success).toBe(true);
   });
 
-  it('warns when hiding both leaves the section empty', async () => {
+  it('says what stays on the page when both are hidden', async () => {
+    // The office address and hours are the association's, not a person's, so
+    // neither switch hides them. "Shows nothing" used to be true and is not now.
     const user = setupTimers();
     renderForm({ showBoard: true, showManagement: true });
 
-    expect(screen.queryByText(/shows nothing/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/still shows your address and office hours/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByLabelText('Show board members'));
     await user.click(screen.getByLabelText('Show management contact'));
 
-    expect(screen.getByText(/shows nothing/i)).toBeInTheDocument();
+    expect(screen.getByText(/still shows your address and office hours/i)).toBeInTheDocument();
+    expect(screen.queryByText(/shows nothing/i)).not.toBeInTheDocument();
   });
 
   it('still saves with both hidden — it is valid, just empty', async () => {

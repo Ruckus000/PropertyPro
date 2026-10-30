@@ -11,10 +11,12 @@ const community = {
   id: 7,
   slug: 'sunset-condos',
   name: 'Sunset Condos',
+  shortName: null,
   logoUrl: null,
   communityType: 'condo_718' as const,
   city: 'Miami',
   state: 'FL',
+  unitCount: null,
   timezone: 'America/New_York',
 };
 const theme = {

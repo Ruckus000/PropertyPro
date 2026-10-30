@@ -16,10 +16,17 @@
  * ('budget', 'minutes', 'financial', 'rules', 'other') are matched against the
  * community's category names BY MEANING (`documentMatchesSectionCategories`),
  * not as strings — there is no slug column, and the names are free text.
+ *
+ * Never an empty box (D14). The shell lists the public documents when there are
+ * any, summarises the owners' records (`OwnerRecordsSummary`, below the list
+ * when both) when any group has one posted, and renders nothing when it has
+ * neither. The view keeps its "No documents available." text, because the editor
+ * canvas renders the view directly and a manager needs to see the empty section.
  */
 import { documentsBlockSchema, type DocumentsBlockContent } from '@propertypro/shared';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { DocumentsBlockView } from './DocumentsBlockView';
+import { OwnerRecordsSummary } from './OwnerRecordsSummary';
 import type { BlockRendererProps } from './types';
 
 export async function DocumentsBlock(props: BlockRendererProps) {
@@ -33,17 +40,31 @@ export async function DocumentsBlock(props: BlockRendererProps) {
   }
   const config: DocumentsBlockContent = parsed.data;
   const reader = getPublicCommunityScopedReader(props.community.id);
-  const items = await reader.listDocuments({
-    limit: config.limit,
-    includeCategories: config.includeCategories,
-  });
+  const [items, recordGroups] = await Promise.all([
+    reader.listDocuments({
+      limit: config.limit,
+      includeCategories: config.includeCategories,
+    }),
+    reader.listOwnerRecordGroups(),
+  ]);
+
+  const hasPublicDocuments = items.length > 0;
+  const hasOwnerRecords = recordGroups.some((group) => group.postedCount > 0);
+  if (!hasPublicDocuments && !hasOwnerRecords) return null;
 
   return (
-    <DocumentsBlockView
-      blockId={props.block.id}
-      content={config}
-      data={items}
-      community={props.community}
-    />
+    <>
+      {hasPublicDocuments ? (
+        <DocumentsBlockView
+          blockId={props.block.id}
+          content={config}
+          data={items}
+          community={props.community}
+        />
+      ) : null}
+      {hasOwnerRecords ? (
+        <OwnerRecordsSummary blockId={props.block.id} groups={recordGroups} />
+      ) : null}
+    </>
   );
 }
