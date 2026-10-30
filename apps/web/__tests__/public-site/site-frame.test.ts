@@ -61,12 +61,15 @@ const NOT_ROOTS: Record<string, string> = {
   'app/public-transparency/page.tsx': 'UrgentNoticeBanner has no site- variants',
   // Renders blocks inside Canvas, which carries the frame.
   'components/pm/site-editor-v3/canvas/CanvasBlock.tsx': 'inside the Canvas frame',
+  // Reads a layout's contrast options for the publish checks; renders no public-site component.
+  'components/pm/site-editor-v3/publish/PublishSheet.tsx': 'a type and look-styles data only',
   // Types and data helpers only — they render nothing.
   'lib/public-site/layout-resolver.ts': 'types only',
   'lib/public-site/preview-overrides.ts': 'types only',
   'lib/site-editor/load-canvas-context.ts': 'types only',
   'lib/site-editor/preview-data.ts': 'types only',
   'lib/site-editor/editor-nav.ts': 'types only',
+  'lib/site-looks/looks.ts': 'types only',
 };
 
 describe('site-frame variants', () => {

@@ -21,31 +21,35 @@ import {
   FIRST_CONTENT_SLOT,
   LAST_CONTENT_SLOT,
 } from '@/components/pm/site-editor-v3/panels/add-catalog';
-
-/**
- * Types the site can show but no one can add yet. Quick links and Board members
- * ship in two releases: readers first (Phase 2A), so every live reader handles
- * them before anything writes one; writers second (Phase 2B), which adds their
- * catalog entries and forms and takes them out of this list.
- */
-const NOT_ADDABLE_UNTIL_PHASE_2B: readonly string[] = ['quicklinks', 'board'];
+import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
 
 describe('ADD_CATALOG', () => {
   it('offers every block type except the hero', () => {
     const offered = ADD_CATALOG.map((e) => e.blockType).sort();
-    const expected = BLOCK_TYPES.filter(
-      (t) => t !== 'hero' && !NOT_ADDABLE_UNTIL_PHASE_2B.includes(t),
-    )
+    const expected = BLOCK_TYPES.filter((t) => t !== 'hero')
       .slice()
       .sort();
     expect(offered).toEqual(expected);
   });
 
-  it('does not offer Quick links or Board members until Phase 2B ships their writers', () => {
-    const offered = ADD_CATALOG.map((e) => e.blockType as string);
-    for (const type of NOT_ADDABLE_UNTIL_PHASE_2B) {
-      expect(offered, `${type} is not addable until Phase 2B`).not.toContain(type);
+  it('the Add panel offers Quick links and Board members on every plan', () => {
+    // Both are filled in from records the community already has, so neither is
+    // a Professional "polish" block: the entries must not be gated, and the
+    // route's own plan gate (POLISH_BLOCK_TYPES) leaves them out too
+    // (blocks.test.ts).
+    const quickLinks = ADD_CATALOG.find((e) => e.blockType === 'quicklinks');
+    const board = ADD_CATALOG.find((e) => e.blockType === 'board');
+    expect(quickLinks, 'Quick links is offered').toBeDefined();
+    expect(board, 'Board members is offered').toBeDefined();
+    for (const entry of [quickLinks!, board!]) {
+      expect(entry.isPolish, `${entry.blockType} is on every plan`).toBe(false);
+      expect(entry.needsImage).toBe(false);
+      // The Add panel and the section list agree on the name.
+      expect(entry.label).toBe(sectionLabel(entry.blockType));
+      expect(entry.description.length).toBeGreaterThan(0);
     }
+    expect(quickLinks!.label).toBe('Quick links');
+    expect(board!.label).toBe('Board members');
   });
 
   it('never offers the hero or the tombstone sentinel', () => {

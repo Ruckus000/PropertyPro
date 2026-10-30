@@ -6,13 +6,17 @@
  *     deliberately UNGATED. They serve the public site, public transparency,
  *     the sitemap, the auth-page branding resolver and the demo route, none of
  *     which has a session.
- *   - Writes (`updateBrandingForCommunity`, `markSiteOnboardingComplete`,
- *     `seedDefaultSiteBranding`) require the caller to have already verified a
- *     management role (property_manager / root_manager) in the target
- *     community. See the per-function notes below.
+ *   - Writes (`updateBrandingForCommunity`, `markSiteOnboardingComplete`)
+ *     require the caller to have already verified a management role
+ *     (property_manager / root_manager) in the target community. See the
+ *     per-function notes below.
+ *
+ * A new community's layout, colour set and colours are not written here: they
+ * are its suggested look, published by `applyLookAtCreation`
+ * (`@/lib/services/site-look-service`).
  */
 import { cache } from 'react';
-import { communities, siteLayoutMetadata } from '@propertypro/db';
+import { communities } from '@propertypro/db';
 // Unsafe escape hatch: communities is the root tenant table (no communityId column),
 // so getBrandingForCommunity must query by primary key directly.
 // AUTHZ: P3-47: White-label branding — communities is the root tenant table (no communityId column); getBrandingForCommunity must query by primary key directly, and updateBrandingForCommunity's callers have already verified a management role (or template ownership) in the target community.
@@ -145,18 +149,27 @@ export async function getSiteOnboardingCompletedAt(
 }
 
 /**
- * Stamp `site_onboarding_completed_at = now()` for a community.
+ * Stamp `site_onboarding_completed_at = now()` for a community, ONCE.
+ *
+ * The UPDATE is conditional on the column still being NULL, in the same
+ * statement, so a community that already has a completion moment keeps it: a
+ * repeat call is a no-op, and two calls racing stamp once (a read-then-write
+ * would let both through). Nothing is returned or thrown to say which happened;
+ * no caller needs to know.
+ *
+ * Once, because the column is WHEN a manager first finished choosing a look:
+ * "time to choose a look" is `site_onboarding_completed_at - communities.created_at`,
+ * and every later call (a second wizard publish, "Keep this look" again) would
+ * move it. Every other reader only asks whether it is set.
  *
  * Called from the publish route when the wizard's final-step "Publish my
- * site" action carries `markOnboardingComplete: true`. Writing it on every
- * wizard publish (rather than only the first) is intentional: re-running the
- * wizard to completion is a fresh completion event, and only null-vs-set
- * matters to the consumers. Idempotent in effect.
+ * site" action carries `markOnboardingComplete: true`, and from the look
+ * route's `keepCurrent`.
  *
  * Callers must have already verified a management role (property_manager /
- * root_manager) in the target community. The publish route does this via
- * `ensurePmAccess` → `requireRole(membership, PM_MANAGER_ROLES)` plus
- * `requirePlanFeature('hasSiteEditor')` before invoking.
+ * root_manager) in the target community. Both routes do this through their
+ * `ensurePmAccess` (`requireRole(membership, PM_MANAGER_ROLES)` plus
+ * `requirePlanFeature('hasSiteEditor')`) before invoking.
  */
 export async function markSiteOnboardingComplete(
   communityId: number,
@@ -165,7 +178,7 @@ export async function markSiteOnboardingComplete(
   await db
     .update(communities)
     .set({ siteOnboardingCompletedAt: new Date() })
-    .where(eq(communities.id, communityId));
+    .where(and(eq(communities.id, communityId), isNull(communities.siteOnboardingCompletedAt)));
 }
 
 export interface BrandingPatch {
@@ -220,53 +233,4 @@ export async function updateBrandingForCommunity(
 ): Promise<CommunityBranding> {
   const { after } = await applyLiveBrandingPatchUnscoped(communityId, patch, options);
   return after ?? {};
-}
-
-/**
- * Maps a community type to its default public-site layout (spec §4.0).
- * condo_718 → tidewater · hoa_720 → boulevard · apartment → sable.
- */
-const SITE_LAYOUT_BY_COMMUNITY_TYPE: Record<string, string> = {
-  condo_718: 'tidewater',
-  hoa_720: 'boulevard',
-  apartment: 'sable',
-};
-
-/**
- * Seed the default site branding (layout + theme preset) for a freshly-created
- * community (spec §4.0 — "the site is always live").
- *
- * Derives `layoutId` from the community type, then reads that layout's
- * `default_preset_slug` from the platform-level `site_layout_metadata` catalog
- * for `themePresetSlug`. Merges into the community's branding jsonb.
- *
- * Idempotent: if branding already carries a `layoutId` (community already
- * customized, or this ran before), it no-ops so a re-run never clobbers a PM's
- * choice. Best-effort by contract — the caller (`createCommunityForPm`)
- * wraps it in try/catch so a catalog read failure never rolls back creation.
- *
- * NOTE: this only seeds branding; the starter-pack *blocks* are applied
- * separately by `applyStarterPackToCommunity`. Completion tracking
- * (`site_onboarding_completed_at`) is intentionally left null so the dashboard
- * prompts still surface — see [[getSiteOnboardingCompletedAt]].
- */
-export async function seedDefaultSiteBranding(
-  communityId: number,
-  communityType: string,
-): Promise<void> {
-  const existing = await getBrandingForCommunity(communityId);
-  if (existing?.layoutId) return; // already customized/seeded — never clobber
-
-  const layoutId = SITE_LAYOUT_BY_COMMUNITY_TYPE[communityType];
-  if (!layoutId) return; // unknown type → leave branding to the renderer default
-
-  const db = createUnscopedClient();
-  const rows = await db
-    .select({ defaultPresetSlug: siteLayoutMetadata.defaultPresetSlug })
-    .from(siteLayoutMetadata)
-    .where(eq(siteLayoutMetadata.slug, layoutId))
-    .limit(1);
-  const themePresetSlug = rows[0]?.defaultPresetSlug ?? null;
-
-  await updateBrandingForCommunity(communityId, { layoutId, themePresetSlug });
 }

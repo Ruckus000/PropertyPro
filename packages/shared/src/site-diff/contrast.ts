@@ -21,14 +21,26 @@
  * (packages/tokens/src/semantic.ts). The pairs below are the ones that put text
  * on a brand colour or a brand colour on a surface.
  *
+ * `--theme-secondary` is consumed by no token, but three of the four looks paint
+ * it behind text directly: Heritage's page, and the alternating section bands of
+ * Bayfront and Palm Grove. So it is checked exactly when the caller says the
+ * site's layout paints it (`layoutPaintsSecondary`) and passes it: the grey caption
+ * text (`--text-secondary`) on it at 4.5:1, which is the lightest text the looks
+ * set there, so passing it means the near-black body text passes too; and the
+ * primary as headings on it at 3:1. Both are advisory even at the write path. A
+ * legacy layout paints none of it, and its sites see nothing new.
+ *
+ * The accent is checked as the site's look paints it (`lookAccent`): the white or
+ * default dark text a look sets on its accent, or a text accent on white and on
+ * the secondary colour. Without a look, as on every legacy layout, it keeps the
+ * original pair, default dark text on the accent.
+ *
  * NOT checked, on purpose:
  *   - `--theme-primary-hover`, which is `darkenHex(primary, 15)` — a monotone
  *     luminance reduction against white, so if the primary/white pair passes,
  *     hover passes. Pinned as a property test rather than a runtime check.
- *   - `--theme-secondary`. **Nothing in the token system references it.**
- *     `toCssVars` emits it and one preview component sets it, but no semantic
- *     token consumes it. Blocking a PM on a colour that paints zero pixels
- *     would be superstition. (Worth resolving in Phase 8: wire it up or drop it.)
+ *   - `--theme-secondary` on a layout that does not paint it. Warning a PM about
+ *     a colour that paints zero pixels would be superstition.
  *   - Fonts, which are not a contrast concern.
  */
 import type { Issue, IssueSeverity } from './types';
@@ -88,6 +100,9 @@ export function contrastRatio(a: string, b: string): number | null {
 /** WCAG 2.1 AA for normal-size body text. */
 export const AA_NORMAL_TEXT_RATIO = 4.5;
 
+/** WCAG 2.1 AA for large text, which headings are. */
+export const AA_LARGE_TEXT_RATIO = 3;
+
 /**
  * Fixed sides of each checked pair, mirroring
  * `packages/tokens/src/primitives.ts`. Named rather than inlined so the tie to
@@ -97,11 +112,26 @@ const TEXT_INVERSE = '#FFFFFF'; // gray-0    → text.inverse
 const SURFACE_PAGE = '#FBF7F1'; // sand-50   → surface.page
 const BRAND_SURFACE = '#FCF1ED'; // coral-50 → status.brand.background
 const TEXT_PRIMARY = '#111827'; // gray-900  → text.primary
+const TEXT_SECONDARY = '#4B5563'; // gray-600  → text.secondary
+const SURFACE_CARD = '#FFFEFC'; // sand-0    → surface.card, the "white" the looks paint
 
 /** The theme colours this gate can see, already resolved by the caller. */
 export interface ResolvedBrandColors {
   primaryColor: string;
   accentColor: string;
+  /**
+   * Checked only when `layoutPaintsSecondary` says the layout paints it. Absent,
+   * nothing on the secondary colour is checked.
+   */
+  secondaryColor?: string;
+}
+
+/** How a look paints its accent colour (its `LOOK_STYLES` entry in apps/web). */
+export interface LookAccent {
+  /** `text`: the accent is a text colour; `background`: text sits on it. */
+  accentUse: 'text' | 'background';
+  /** The text on an accent background: white (`inverse`) or default dark (`text`). Unused for `text`. */
+  onAccent: 'inverse' | 'text';
 }
 
 export interface ContrastIssueOptions {
@@ -116,19 +146,37 @@ export interface ContrastIssueOptions {
    * one argument.
    */
   severity: IssueSeverity;
+  /**
+   * Whether the site's layout paints the secondary colour behind text (a look's
+   * page or its section bands). Only then are text and headings checked on it.
+   * Absent means no, which is right for every legacy layout.
+   */
+  layoutPaintsSecondary?: boolean;
+  /**
+   * How the site's look paints its accent; the accent is checked as it is
+   * actually used. Absent, as for every legacy layout, keeps the original pair:
+   * default dark text on the accent.
+   */
+  lookAccent?: LookAccent;
 }
 
 interface CheckedPair {
   field: string;
   /** Which resolved colour participates. */
   colorKey: keyof ResolvedBrandColors;
-  against: string;
+  /** The other side: a fixed token colour, or another of the resolved colours. */
+  against: string | { colorKey: keyof ResolvedBrandColors };
   label: string;
+  /** The ratio the pair needs. Absent means body text, 4.5:1. */
+  minimum?: number;
   /** Some pairs are advisory even at the write path. */
   alwaysWarning?: boolean;
+  /** Checked only when the layout paints the secondary colour (`layoutPaintsSecondary`). */
+  onSecondary?: true;
 }
 
-const CHECKED_PAIRS: CheckedPair[] = [
+/** The primary colour's pairs, the same on every layout. */
+const PRIMARY_PAIRS: CheckedPair[] = [
   {
     field: 'primaryColor',
     colorKey: 'primaryColor',
@@ -167,12 +215,79 @@ const CHECKED_PAIRS: CheckedPair[] = [
     label: 'your primary colour as text on the brand tint',
     alwaysWarning: true,
   },
+];
+
+/** The original accent pair: every legacy layout's, and a look's whose accent sits under dark text. */
+const DARK_TEXT_ON_ACCENT: CheckedPair = {
+  field: 'accentColor',
+  colorKey: 'accentColor',
+  against: TEXT_PRIMARY,
+  label: 'default dark text on your accent colour',
+  alwaysWarning: true,
+};
+
+/** A look whose accent sits under white text. */
+const WHITE_TEXT_ON_ACCENT: CheckedPair = {
+  field: 'accentColor',
+  colorKey: 'accentColor',
+  against: TEXT_INVERSE,
+  label: 'white text on your accent colour',
+  alwaysWarning: true,
+};
+
+/** A look whose accent is a text colour: on white, and on the secondary colour where the layout paints it. */
+const ACCENT_AS_TEXT: CheckedPair[] = [
   {
     field: 'accentColor',
     colorKey: 'accentColor',
-    against: TEXT_PRIMARY,
-    label: 'default dark text on your accent colour',
+    against: SURFACE_CARD,
+    label: 'your accent colour as text on white',
     alwaysWarning: true,
+  },
+  {
+    field: 'accentColor',
+    colorKey: 'accentColor',
+    against: { colorKey: 'secondaryColor' },
+    label: 'your accent colour as text on your secondary colour',
+    alwaysWarning: true,
+    onSecondary: true,
+  },
+];
+
+/**
+ * The accent pairs to check: what the layout actually paints. A legacy layout
+ * (no `look`) keeps the original pair. All are advisory even at the write path,
+ * as the accent pair always has been.
+ */
+function accentPairs(look: LookAccent | undefined): CheckedPair[] {
+  if (look === undefined) return [DARK_TEXT_ON_ACCENT];
+  if (look.accentUse === 'text') return ACCENT_AS_TEXT;
+  return [look.onAccent === 'inverse' ? WHITE_TEXT_ON_ACCENT : DARK_TEXT_ON_ACCENT];
+}
+
+/**
+ * The secondary colour, where a look paints it behind text. Advisory: the
+ * colour has never been checked, and must not start blocking anything.
+ */
+const SECONDARY_PAIRS: CheckedPair[] = [
+  {
+    field: 'secondaryColor',
+    colorKey: 'secondaryColor',
+    // The lightest text the looks set on it (captions, notes): a section's
+    // `text-content-secondary`. Where it passes, near-black body text does too.
+    against: TEXT_SECONDARY,
+    label: 'grey caption text on your secondary colour',
+    alwaysWarning: true,
+    onSecondary: true,
+  },
+  {
+    field: 'secondaryColor',
+    colorKey: 'secondaryColor',
+    against: { colorKey: 'primaryColor' },
+    label: 'your primary colour as headings on your secondary colour',
+    minimum: AA_LARGE_TEXT_RATIO,
+    alwaysWarning: true,
+    onSecondary: true,
   },
 ];
 
@@ -181,31 +296,39 @@ const CHECKED_PAIRS: CheckedPair[] = [
  *
  * An unparseable colour is always an `error` naming its field — that is a
  * malformed value, not a taste question, and it means the site is silently
- * rendering a fallback the PM did not choose.
+ * rendering a fallback the PM did not choose. The one exception is the secondary
+ * colour, reported as a warning: its check is advisory only.
  */
 export function contrastIssues(
   colors: ResolvedBrandColors,
-  { severity }: ContrastIssueOptions,
+  { severity, layoutPaintsSecondary = false, lookAccent }: ContrastIssueOptions,
 ): Issue[] {
   const issues: Issue[] = [];
   const seenUnparseable = new Set<string>();
 
-  for (const pair of CHECKED_PAIRS) {
+  for (const pair of [...PRIMARY_PAIRS, ...accentPairs(lookAccent), ...SECONDARY_PAIRS]) {
+    // The secondary is checked only where the layout paints it, and only when the
+    // caller passed it.
+    if (pair.onSecondary && (!layoutPaintsSecondary || colors.secondaryColor === undefined)) continue;
+
     const value = colors[pair.colorKey];
-    if (parseHex(value) === null) {
+    if (value === undefined || parseHex(value) === null) {
       if (!seenUnparseable.has(pair.colorKey)) {
         seenUnparseable.add(pair.colorKey);
         issues.push({
           field: pair.field,
           message: `"${String(value)}" is not a 6-digit hex colour like #C2533A, so the site falls back to its default instead.`,
-          severity: 'error',
+          severity: pair.colorKey === 'secondaryColor' ? 'warning' : 'error',
         });
       }
       continue;
     }
 
-    const ratio = contrastRatio(value, pair.against);
-    if (ratio === null || ratio >= AA_NORMAL_TEXT_RATIO) continue;
+    const against = typeof pair.against === 'string' ? pair.against : colors[pair.against.colorKey];
+    const minimum = pair.minimum ?? AA_NORMAL_TEXT_RATIO;
+    // An unparseable `against` colour is reported by its own pair, not here.
+    const ratio = against === undefined ? null : contrastRatio(value, against);
+    if (ratio === null || ratio >= minimum) continue;
 
     // Naming WCAG AA and the audience is deliberate. This advisory is
     // non-blocking by design (see the long note on `contrastIssues` in
@@ -217,7 +340,7 @@ export function contrastIssues(
     // See docs/audits/2026-08-09-legal-risk-audit.md F-12.
     issues.push({
       field: pair.field,
-      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${AA_NORMAL_TEXT_RATIO}:1 required by WCAG 2.1 AA. Residents with low vision may be unable to read this text. Publishing is still allowed, but the association carries the accessibility risk.`,
+      message: `${pair.label} has a contrast ratio of ${ratio.toFixed(2)}:1, below the ${minimum}:1 required by WCAG 2.1 AA. Residents with low vision may be unable to read this text. Publishing is still allowed, but the association carries the accessibility risk.`,
       severity: pair.alwaysWarning ? 'warning' : severity,
     });
   }

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { PresetChooser, type PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
+import { PresetCards, PresetChooser, type PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
 
 function wrap(node: ReactNode) {
   const client = new QueryClient({
@@ -188,5 +189,35 @@ describe('<PresetChooser>', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent(/internal error/i);
     });
+  });
+});
+
+describe('<PresetCards>', () => {
+  it('lets a card be chosen', () => {
+    const onChoose = vi.fn();
+    render(<PresetCards presets={SAMPLE_PRESETS} selected="bay-light" onChoose={onChoose} name="cards" />);
+
+    expect(screen.getAllByRole('radio').every((radio) => !(radio as HTMLInputElement).disabled)).toBe(true);
+    fireEvent.click(screen.getByLabelText(/midnight coast/i));
+
+    expect(onChoose).toHaveBeenCalledWith('midnight-coast');
+  });
+
+  it('holds every card still while disabled, and says so in the card', async () => {
+    const user = userEvent.setup();
+    const onChoose = vi.fn();
+    render(<PresetCards presets={SAMPLE_PRESETS} selected="bay-light" onChoose={onChoose} name="cards" disabled />);
+
+    const radios = screen.getAllByRole('radio') as HTMLInputElement[];
+    expect(radios).toHaveLength(SAMPLE_PRESETS.length);
+    expect(radios.every((radio) => radio.disabled)).toBe(true);
+    // A person's click, on the card or on its radio: neither chooses it.
+    await user.click(screen.getByTestId('preset-card-midnight-coast'));
+    await user.click(screen.getByLabelText(/midnight coast/i));
+
+    expect(onChoose).not.toHaveBeenCalled();
+    // The card itself shows it, so a pointer is not offered a click that does nothing.
+    expect(screen.getByTestId('preset-card-midnight-coast')).toHaveClass('cursor-not-allowed');
+    expect(screen.getByTestId('preset-card-midnight-coast')).not.toHaveClass('cursor-pointer');
   });
 });

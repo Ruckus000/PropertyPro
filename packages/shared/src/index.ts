@@ -101,12 +101,15 @@ export {
   paymentsBlockSchema,
   quicklinksBlockSchema,
   boardBlockSchema,
+  DEFAULT_BOARD_HEADING,
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
+  STOCK_PHOTO_ALT,
   DOCUMENT_CATEGORIES,
   documentMatchesSectionCategories,
   LINKED_FIELDS,
   resolveLinkedText,
+  resolveHeroHeadline,
   parseLinkedText,
 } from './site-blocks/index';
 export type {

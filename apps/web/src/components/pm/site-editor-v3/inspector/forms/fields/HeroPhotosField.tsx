@@ -2,7 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, Trash2, X } from 'lucide-react';
-import { MAX_HERO_PHOTOS, STOCK_PHOTO_SRC, type HeroPhoto } from '@propertypro/shared';
+import {
+  MAX_HERO_PHOTOS,
+  STOCK_PHOTO_ALT,
+  STOCK_PHOTO_IDS,
+  STOCK_PHOTO_SRC,
+  type HeroPhoto,
+  type StockPhotoId,
+} from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -22,12 +29,62 @@ import { useHeroPhotos, type HeroPhotoUploadItem } from '@/hooks/use-hero-photos
 
 const ALT_MAX = 200;
 
+const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
+
+/** What a manager calls each stock photo, in the sentence "the ___ photo". */
+const STOCK_PHOTO_NAME: Readonly<Record<StockPhotoId, string>> = {
+  sunset: 'sunset',
+  palms: 'palm-lined street',
+};
+
 /** A picked file, described but not yet uploaded. */
 interface StagedPhoto {
   id: string;
   file: File;
   alt: string;
   decorative: boolean;
+  /**
+   * The stock photo this file takes the place of when it lands, rather than
+   * joining the end of the list. Held by id, not position, because the list can
+   * be reordered while the file waits. It counts only while that photo is in the
+   * list (`replacingRows`); a removal or a swap moves or clears it
+   * (`followStockPhoto`).
+   */
+  replaces?: StockPhotoId;
+}
+
+/**
+ * The stock photo a swap would offer for `current`: the other one, when it is not
+ * already in the list, so a swap never puts the same photo in the strip twice.
+ *
+ * ponytail: with two stock photos "the other one" is a single button. A third would
+ * make this a choice. Trigger: STOCK_PHOTO_IDS grows past two.
+ */
+function swapTarget(photos: readonly HeroPhoto[], current: StockPhotoId): StockPhotoId | null {
+  const taken = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
+  return STOCK_PHOTO_IDS.find((id) => id !== current && !taken.has(id)) ?? null;
+}
+
+/**
+ * The waiting files that will take a stock photo's place, by row id; every other
+ * waiting file needs a place of its own.
+ *
+ * A file takes a stock photo's place only while that photo is in the list, and only
+ * one file can take it (the first, which is also the order they land in). A second
+ * file aimed at the same photo, or one aimed at a photo that has gone, lands at the
+ * end. The counter and the "Add photos" control are built on this, and the hero holds
+ * at most MAX_HERO_PHOTOS.
+ */
+function replacingRows(
+  staged: readonly StagedPhoto[],
+  photos: readonly HeroPhoto[],
+): ReadonlySet<string> {
+  const places = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
+  const replacing = new Set<string>();
+  for (const row of staged) {
+    if (row.replaces !== undefined && places.delete(row.replaces)) replacing.add(row.id);
+  }
+  return replacing;
 }
 
 export interface HeroPhotosFieldProps {
@@ -47,10 +104,12 @@ export interface HeroPhotosFieldProps {
  * Hero photo list: upload, describe, reorder, remove.
  *
  * A stock photo (D3: one of ours, served from public/site-looks/, with no path)
- * shows its thumbnail and its description read-only, and moves and removes like
- * any other photo; it can never be decorative. It is carried through every
- * change unchanged. Choosing, replacing and describing stock photos arrives with
- * the looks' writers.
+ * shows its thumbnail and moves and removes like any other photo. Its description
+ * is the manager's to reword, but it can never be decorative. It can also be
+ * swapped for the other stock photo, which brings that photo's own description
+ * with it, or replaced by one of the manager's own uploads, which takes its place
+ * in the list rather than going to the end and carries the upload's own
+ * description, never the stock photo's.
  *
  * Reordering is buttons only — no drag library. Phase 2b-2 already declined
  * `@dnd-kit` for the section list ("native HTML5 drag plus the required
@@ -69,13 +128,14 @@ export function HeroPhotosField({
   // discipline. Two regions announce the same move twice.
   const [announcement, setAnnouncement] = useState('');
 
-  const [staged, setStaged] = useState<StagedPhoto[]>([]);
   const [rejected, setRejected] = useState<{ name: string; message: string }[]>([]);
 
   const listRef = useRef<HTMLUListElement | null>(null);
   const addRef = useRef<HTMLInputElement | null>(null);
   // Where focus should land after the list re-renders, by row index.
-  const focusAfterRef = useRef<{ index: number; action: 'remove' | 'move' } | null>(null);
+  const focusAfterRef = useRef<{ index: number; action: 'remove' | 'move' | 'swap' } | null>(
+    null,
+  );
   const stagedSeqRef = useRef(0);
 
   // `handleUploaded` fires once per file from inside the queue's sequential
@@ -84,11 +144,16 @@ export function HeroPhotosField({
   // photo. The ref is always the committed list.
   const photosRef = useRef(photos);
   photosRef.current = photos;
+  const [staged, setStaged] = useState<StagedPhoto[]>([]);
+  // The queue hands back only the item it was given, not the stock photo that
+  // item replaces, so `handleUploaded` looks that up here, in the rows as last
+  // committed.
+  const stagedRef = useRef(staged);
+  stagedRef.current = staged;
 
   const handleUploaded = useCallback(
     (result: { storagePath: string }, item: HeroPhotoUploadItem) => {
-      onChange([
-        ...photosRef.current,
+      const uploaded: HeroPhoto =
         // The BASE path, not `variant1600Path` — the renderer appends the
         // variant suffixes. See `stripVariantSuffix` for the history.
         //
@@ -99,8 +164,20 @@ export function HeroPhotosField({
         // exists precisely to catch a missing one.
         item.decorative
           ? { path: result.storagePath, decorative: true }
-          : { path: result.storagePath, alt: item.alt.trim() },
-      ]);
+          : { path: result.storagePath, alt: item.alt.trim() };
+
+      // A file staged to replace a stock photo takes that photo's place. If the
+      // stock photo is gone by now (removed while this uploaded) there is no
+      // place to take, and the upload goes at the end like any other.
+      const replaces = stagedRef.current.find((row) => row.id === item.id)?.replaces;
+      const current = photosRef.current;
+      const at =
+        replaces === undefined
+          ? -1
+          : current.findIndex((photo) => 'stock' in photo && photo.stock === replaces);
+      onChange(
+        at < 0 ? [...current, uploaded] : current.map((photo, i) => (i === at ? uploaded : photo)),
+      );
       setStaged((prev) => prev.filter((row) => row.id !== item.id));
     },
     [onChange],
@@ -112,8 +189,12 @@ export function HeroPhotosField({
   });
 
   // Staged rows hold a slot too, or picking 8 then picking 8 again would
-  // stage 16 for a list capped at 8.
-  const remaining = MAX_HERO_PHOTOS - photos.length - staged.length;
+  // stage 16 for a list capped at 8. One that replaces a stock photo does not:
+  // it takes that photo's place, so the list ends the same length. Which ones do
+  // is read from the list as it is now, not remembered, so an edit from outside
+  // the field cannot leave a file counted as free.
+  const replacing = replacingRows(staged, photos);
+  const remaining = MAX_HERO_PHOTOS - photos.length - (staged.length - replacing.size);
   const allDescribed = staged.every((row) => row.decorative || row.alt.trim().length > 0);
   const canUpload = staged.length > 0 && allDescribed && !isUploading;
 
@@ -134,7 +215,11 @@ export function HeroPhotosField({
       }
       const row = rows[Math.min(pending.index, rows.length - 1)];
       const selector =
-        pending.action === 'remove' ? 'button[data-remove]' : 'button[data-move-focus]';
+        pending.action === 'remove'
+          ? 'button[data-remove]'
+          : pending.action === 'swap'
+            ? 'button[data-swap]'
+            : 'button[data-move-focus]';
       (row?.querySelector<HTMLElement>(selector) ?? row)?.focus();
     }, 0);
     return () => clearTimeout(id);
@@ -152,15 +237,48 @@ export function HeroPhotosField({
     focusAfterRef.current = { index: target, action: 'move' };
   };
 
+  /**
+   * A stock photo has left the list, removed or swapped for `to`. The file waiting
+   * to take its place follows it to `to`, or, with no `to`, becomes an ordinary add
+   * that needs a place of its own. Left alone it would land at the end of a full hero
+   * as a ninth photo, under a note still promising a replacement.
+   */
+  const followStockPhoto = (from: StockPhotoId, to?: StockPhotoId) =>
+    setStaged((prev) =>
+      prev.map((row) => {
+        if (row.replaces !== from) return row;
+        const { replaces: _from, ...ordinary } = row;
+        return to === undefined ? ordinary : { ...ordinary, replaces: to };
+      }),
+    );
+
   const remove = (index: number) => {
+    const removed = photos[index];
     const next = photos.filter((_, i) => i !== index);
     onChange(next);
+    if (removed !== undefined && 'stock' in removed) followStockPhoto(removed.stock);
     setAnnouncement(
       next.length === 0
         ? 'Photo removed. No photos left.'
         : `Photo ${index + 1} removed. ${next.length} ${next.length === 1 ? 'photo' : 'photos'} left.`,
     );
     focusAfterRef.current = { index, action: 'remove' };
+  };
+
+  /** Puts the other stock photo in this one's place, with that photo's own description. */
+  const swapStock = (index: number) => {
+    const current = photos[index];
+    if (current === undefined || !('stock' in current)) return;
+    const other = swapTarget(photos, current.stock);
+    if (other === null) return;
+    const next = photos.slice();
+    // Not the old description: "Sunset over the water" on a street of palm trees
+    // would tell a screen-reader user about a picture that is not there.
+    next[index] = { stock: other, alt: STOCK_PHOTO_ALT[other] };
+    onChange(next);
+    followStockPhoto(current.stock, other);
+    setAnnouncement(`Photo ${index + 1} changed to the ${STOCK_PHOTO_NAME[other]} photo.`);
+    focusAfterRef.current = { index, action: 'swap' };
   };
 
   const setPhoto = (index: number, patch: Partial<HeroPhoto>) => {
@@ -180,11 +298,13 @@ export function HeroPhotosField({
    * PUT round trip on a file finalize would reject or upscale, and reuses the
    * wording the onboarding wizard already shows for the same two failures.
    */
-  const onPick = async (picked: File[]) => {
+  const onPick = async (picked: File[], replaces?: StockPhotoId) => {
     const accepted: StagedPhoto[] = [];
     const failures: { name: string; message: string }[] = [];
 
-    for (const file of picked.slice(0, Math.max(remaining, 0))) {
+    // A replacement is one file, and takes no place in the list.
+    const room = replaces === undefined ? Math.max(remaining, 0) : 1;
+    for (const file of picked.slice(0, room)) {
       const basic = validateImageFile(file, { maxBytes: HERO_MAX_BYTES });
       if (basic) {
         failures.push({ name: file.name, message: basic.message });
@@ -204,10 +324,19 @@ export function HeroPhotosField({
         file,
         alt: '',
         decorative: false,
+        ...(replaces === undefined ? {} : { replaces }),
       });
     }
 
-    setStaged((prev) => [...prev, ...accepted]);
+    // A file chosen for a stock photo that already has one waiting replaces it:
+    // two uploads cannot both take the same place. A file turned down above
+    // leaves the earlier one alone.
+    setStaged((prev) => [
+      ...(replaces !== undefined && accepted.length > 0
+        ? prev.filter((row) => row.replaces !== replaces)
+        : prev),
+      ...accepted,
+    ]);
     setRejected(failures);
     setAnnouncement(
       [
@@ -251,6 +380,8 @@ export function HeroPhotosField({
             const decorativeId = `hero-photo-decorative-${blockOrder}-${index}`;
             const isStock = 'stock' in photo;
             const isDecorative = !isStock && photo.decorative === true;
+            const swapTo = isStock ? swapTarget(photos, photo.stock) : null;
+            const replaceId = `hero-photo-replace-${blockOrder}-${index}`;
             return (
               <li
                 // Keyed by path, NOT index. With an index key React reuses the
@@ -278,19 +409,54 @@ export function HeroPhotosField({
                     <Label htmlFor={altId} className="text-xs">
                       Alt text
                     </Label>
-                    {isStock ? (
-                      <Input id={altId} value={photo.alt} readOnly />
-                    ) : (
-                      <Input
-                        id={altId}
-                        value={photo.alt ?? ''}
-                        maxLength={ALT_MAX}
-                        disabled={isDecorative}
-                        onChange={(event) => setPhoto(index, { alt: event.target.value })}
-                      />
-                    )}
+                    <Input
+                      id={altId}
+                      value={photo.alt ?? ''}
+                      maxLength={ALT_MAX}
+                      disabled={isDecorative}
+                      onChange={(event) => setPhoto(index, { alt: event.target.value })}
+                    />
                   </div>
                 </div>
+
+                {isStock && (
+                  <div className="space-y-2">
+                    {swapTo !== null && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        data-swap
+                        // The docked column is 320px wide and the longest label
+                        // ("…the palm-lined street photo instead") is wider than
+                        // the row, so let it wrap rather than run off the edge. The
+                        // height is a floor for that reason: 44px below 768px and
+                        // 36px from there up (the touch-target rule in design.md).
+                        className="h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-9"
+                        onClick={() => swapStock(index)}
+                      >
+                        {`Use the ${STOCK_PHOTO_NAME[swapTo]} photo instead`}
+                      </Button>
+                    )}
+                    <div className="space-y-1">
+                      <Label htmlFor={replaceId} className="text-xs">
+                        {`Replace the ${STOCK_PHOTO_NAME[photo.stock]} photo with your own`}
+                      </Label>
+                      <Input
+                        id={replaceId}
+                        type="file"
+                        accept={ACCEPTED_TYPES}
+                        disabled={isUploading}
+                        onChange={(event) => {
+                          const files = Array.from(event.target.files ?? []);
+                          // Reset the input so re-picking the same file fires change again.
+                          event.target.value = '';
+                          if (files.length > 0) void onPick(files, photo.stock);
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   {/* The schema has no decorative stock photo: ours are described. */}
@@ -392,6 +558,12 @@ export function HeroPhotosField({
                   </Button>
                 </div>
 
+                {row.replaces !== undefined && replacing.has(row.id) && (
+                  <p className="text-xs text-content-secondary">
+                    {`Replaces the ${STOCK_PHOTO_NAME[row.replaces]} photo.`}
+                  </p>
+                )}
+
                 <div className="flex flex-col gap-1">
                   <Label htmlFor={altId} className="text-xs">
                     {`Alt text for ${row.file.name}`}
@@ -450,7 +622,7 @@ export function HeroPhotosField({
           ref={addRef}
           id={`hero-photo-add-${blockOrder}`}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={ACCEPTED_TYPES}
           multiple
           disabled={remaining <= 0 || isUploading}
           onChange={(event) => {

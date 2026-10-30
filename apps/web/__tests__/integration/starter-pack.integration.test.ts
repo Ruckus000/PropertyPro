@@ -1,18 +1,17 @@
 /**
- * Starter sections for demo communities, applied on demo entry.
+ * The starter pack, against real Postgres.
  *
- * The admin preview opens the board and resident demo links together, so two
- * first entries race. Only real Postgres shows whether the community row lock
- * keeps the pack from landing twice; a mock cannot.
+ * A new community no longer gets a starter pack (it gets its suggested look: see
+ * new-community-look.integration.test.ts), but the seeded fixtures still apply
+ * one, and racing applies are the case only real Postgres can answer: whether
+ * the community row lock keeps the pack from landing twice, and a draft home
+ * page goes live with it. A mock cannot show either.
  *
  * Nothing is mocked — no-mock-guard forbids it under __tests__/integration/.
  */
 import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import {
-  applyStarterPackToCommunity,
-  applyStarterPackToDemoCommunity,
-} from '@/lib/services/starter-pack-service';
+import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { ensureHomePage } from '@/lib/services/site-pages-service';
 import {
   type TestKitState,
@@ -23,15 +22,14 @@ import {
   getDescribeDb,
 } from './helpers/multi-tenant-test-kit';
 
-requireDatabaseUrlInCI('Demo starter pack integration tests');
+requireDatabaseUrlInCI('Starter pack integration tests');
 
 const describeDb = getDescribeDb();
 
-describeDb('demo starter sections (db-backed integration)', () => {
+describeDb('starter pack (db-backed integration)', () => {
   let state: TestKitState | null = null;
-  const inAWeek = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  async function createCommunity(label: string, isDemo: boolean): Promise<number> {
+  async function createCommunity(label: string): Promise<number> {
     if (!state) throw new Error('Not initialized');
     const [row] = await state.db
       .insert(state.dbModule.communities)
@@ -40,9 +38,6 @@ describeDb('demo starter sections (db-backed integration)', () => {
         slug: `starter-pack-${label}-${state.runSuffix}`,
         communityType: 'condo_718',
         timezone: 'America/New_York',
-        isDemo,
-        // enforce_demo_timestamps: a demo carries both.
-        ...(isDemo ? { trialEndsAt: inAWeek(), demoExpiresAt: inAWeek() } : {}),
       })
       .returning({ id: state.dbModule.communities.id });
     if (!row) throw new Error(`Failed to create community "${label}"`);
@@ -78,18 +73,17 @@ describeDb('demo starter sections (db-backed integration)', () => {
     if (state) await teardownTestKit(state);
   });
 
-  it('applies the pack once when entries race, and publishes a draft home page', async () => {
+  it('applies the pack once when applies race, and publishes a draft home page', async () => {
     if (!state) throw new Error('Not initialized');
     const packSize = await condoPackSize();
     expect(packSize).toBeGreaterThan(0);
-    const communityId = await createCommunity('race', true);
-    // A demo whose editor was opened before demos got starter sections: the
-    // first editor load created a draft home page with nothing on it.
+    const communityId = await createCommunity('race');
+    // A community whose editor was opened before it had a site: the first editor
+    // load created a draft home page with nothing on it.
     await ensureHomePage(communityId);
 
-    // Called directly, not through the demo wrapper, which swallows errors: the
-    // section-order unique index already stops a second pack landing, but only
-    // by failing the losing entry. The row lock makes every racer succeed.
+    // The section-order unique index already stops a second pack landing, but
+    // only by failing the losing apply. The row lock makes every racer succeed.
     const results = await Promise.all([
       applyStarterPackToCommunity(communityId, 'condo_718'),
       applyStarterPackToCommunity(communityId, 'condo_718'),
@@ -119,25 +113,5 @@ describeDb('demo starter sections (db-backed integration)', () => {
       .from(communities)
       .where(eq(communities.id, communityId));
     expect(community?.sitePublishedAt?.getTime()).toBe(maxBlockStamp);
-  });
-
-  it('keeps a demo site the prospect emptied empty', async () => {
-    if (!state) throw new Error('Not initialized');
-    const communityId = await createCommunity('emptied', true);
-    await applyStarterPackToDemoCommunity(communityId);
-    expect(await liveBlockCount(communityId)).toBeGreaterThan(0);
-    // Removing a section soft-deletes it (removeSiteBlock).
-    const { siteBlocks } = state.dbModule;
-    await state.db.update(siteBlocks).set({ deletedAt: new Date() }).where(eq(siteBlocks.communityId, communityId));
-
-    await applyStarterPackToDemoCommunity(communityId);
-
-    expect(await liveBlockCount(communityId)).toBe(0);
-  });
-
-  it('leaves a community that is not a demo alone', async () => {
-    const communityId = await createCommunity('real', false);
-    await applyStarterPackToDemoCommunity(communityId);
-    expect(await liveBlockCount(communityId)).toBe(0);
   });
 });

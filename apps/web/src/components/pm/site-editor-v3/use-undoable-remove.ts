@@ -57,8 +57,7 @@ type RestorableBlockType = UpsertContentBlockInput['blockType'];
  * be undone for. `hero` is absent on purpose: it is pinned to slot 1 and has no
  * remove control at all.
  *
- * `quicklinks` and `board` join when the upsert contract does, in the release
- * that ships their writers; the `satisfies` below refuses them until then, and
+ * The `satisfies` below refuses a type the contract cannot write, and
  * `undo-toast.test.tsx` fails for any contract type missing here.
  */
 const RESTORABLE_BLOCK_TYPES = [
@@ -72,6 +71,8 @@ const RESTORABLE_BLOCK_TYPES = [
   'gallery',
   'amenities',
   'payments',
+  'quicklinks',
+  'board',
 ] as const satisfies readonly RestorableBlockType[];
 
 function isRestorable(blockType: string): blockType is RestorableBlockType {

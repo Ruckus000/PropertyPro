@@ -15,7 +15,7 @@ import {
 } from '@propertypro/shared/server';
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';
-import { applyStarterPackToDemoCommunity } from '@/lib/services/starter-pack-service';
+import { fillDemoCommunitySite } from '@/lib/services/site-look-service';
 import {
   getDemoCommunityExpiry,
   getDemoInstanceForLogin,
@@ -197,7 +197,7 @@ export async function GET(request: Request) {
   if (!communityId) {
     return loginError(trustedBaseUrl, 'demo_setup_incomplete');
   }
-  await applyStarterPackToDemoCommunity(communityId);
+  await fillDemoCommunitySite(communityId);
 
   // Allow explicit redirect override (used by admin preview tabs)
   const explicitRedirect = url.searchParams.get('redirect');

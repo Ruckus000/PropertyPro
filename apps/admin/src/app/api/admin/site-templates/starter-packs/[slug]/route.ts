@@ -4,7 +4,8 @@
  *          AND community_type are immutable; version unchanged (versioning is
  *          explicit via new-version).
  * DELETE — archive (is_archived=true). 409 if it is the last non-archived pack
- *          for its community_type (would leave new communities empty).
+ *          for its community_type (Reset to starter and the demo seed would
+ *          have no pack to use).
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';

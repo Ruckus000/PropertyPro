@@ -107,8 +107,9 @@ const FRAME_WIDTH: Record<PreviewDevice, string> = {
  * the block views' classes read (`canvasThemeVars`). Both used to be missing:
  * the canvas was a bare stack of blocks under the route layout's DEFAULT theme
  * variables, so choosing a template in the Design panel (a layout plus a
- * colour set) changed `context` and nothing visible. No block view reads the
- * `layout` prop, and none reads `theme` for colour.
+ * colour set) changed `context` and nothing visible. Of the block views only
+ * the hero reads the `layout` prop (a look's hero style), and none reads
+ * `theme` for colour.
  */
 export function Canvas({
   communityId,

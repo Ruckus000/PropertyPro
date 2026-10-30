@@ -57,11 +57,12 @@ condo maintenance request (`wo-inbox`, `mr-list`) and a wind-mitigation report
 (`ins-wind`). The demo seed itself is unchanged.
 
 For the website editor shots it also adds Sunset Condos' starter sections (the
-seed builds no website, but every real new community gets them) and saves free
-edit as `cam`'s editor mode, since the never-published site would otherwise open
-the first-run chooser over every shot. Run the fixtures before anyone opens the
-editor: the first visit creates an unpublished Home page, and the starter
-sections then land on a page marked Draft.
+seed builds no website; a real new community now starts with its suggested look
+instead, so these shots show a starter-pack site) and saves free edit as `cam`'s
+editor mode, since the never-published site would otherwise open the first-run
+chooser over every shot. Run the fixtures before anyone opens the editor: the
+first visit creates an unpublished Home page, and the starter sections then land
+on a page marked Draft.
 
 ## Date-sensitive fills
 

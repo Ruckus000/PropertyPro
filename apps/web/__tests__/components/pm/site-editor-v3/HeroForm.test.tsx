@@ -171,6 +171,51 @@ describe('HeroForm — reconciliation', () => {
     expect(sent.photos).toEqual([SUNSET, POOL]);
   });
 
+  it("saves a reworded stock description, trimmed, with the photo still in its place", async () => {
+    const SUNSET = { stock: 'sunset', alt: 'Sunset over the water, with palm trees in silhouette' };
+    const POOL = { path: '7/hero/pool.jpg', alt: 'The pool' };
+    renderHero({ headline: 'Welcome to Sunset Condos', photos: [SUNSET, POOL] });
+
+    await act(async () => {
+      const input = screen.getAllByLabelText('Alt text')[0] as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )!.set!;
+      setter.call(input, '  The marina at sunset  ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settleAutosave();
+
+    expect(updateHeroMock).toHaveBeenCalledTimes(1);
+    expect(updateHeroMock.mock.calls[0]![0].photos).toEqual([
+      { stock: 'sunset', alt: 'The marina at sunset' },
+      POOL,
+    ]);
+  });
+
+  it('does not save while a stock photo has no description, and says why', async () => {
+    // The schema has no decorative stock photo: an undescribed one is refused.
+    renderHero({
+      headline: 'Welcome to Sunset Condos',
+      photos: [{ stock: 'sunset', alt: 'Sunset over the water, with palm trees in silhouette' }],
+    });
+
+    await act(async () => {
+      const input = screen.getAllByLabelText('Alt text')[0] as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )!.set!;
+      setter.call(input, '   ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await settleAutosave();
+
+    expect(updateHeroMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/describe every photo/i)).toBeInTheDocument();
+  });
+
   it('does not write anything on mount for a hero with a stock photo', async () => {
     renderHero({
       headline: 'Welcome to Sunset Condos',

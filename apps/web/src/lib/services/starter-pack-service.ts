@@ -1,9 +1,17 @@
 /**
- * PR #5: Apply a community-type-matched starter pack to a new community.
+ * PR #5: Apply a community-type-matched starter pack to a community.
  *
- * Called through `seedNewCommunitySite` (createCommunityForPm, and signup
- * provisioning's community_created step) AFTER the community is inserted. Selects
- * the highest-version, non-archived site_starter_packs row for the
+ * No longer how a new community gets its site: `seedNewCommunitySite` publishes
+ * the suggested look instead (`site-look-service`'s `applyLookAtCreation`), and a
+ * prospect demo gets the same on entry (`fillDemoCommunitySite`). This still
+ * serves the seeded fixtures (`scripts/seed-demo.ts`,
+ * `scripts/help-capture/fixtures.ts`), which are shared test data with their own
+ * consumers, and the tests that need a site on a type's legacy layout. Admin's
+ * "reset to starter" has its own implementation in apps/admin. A site on a
+ * legacy layout can still be holding any version of a pack, which is why a look
+ * switch reads every version (`site-look-service`).
+ *
+ * Selects the highest-version, non-archived site_starter_packs row for the
  * community_type (ties broken by id desc), then inserts one published
  * site_blocks row per entry in the pack's blocks jsonb. No-ops when every
  * pack for the type is archived (or none exists).
@@ -11,13 +19,9 @@
  * Idempotent: if the community already has any published site_blocks,
  * skip the apply.
  *
- * AUTHZ: caller MUST have just created the community, or be provisioning a
- * demo. `createCommunityForPm` calls this immediately after inserting the
- * creator as the community's root_manager, so there is no prior membership to
- * verify. Signup provisioning calls it in `community_created`, BEFORE
- * `user_linked` adds any membership: the authority there is the paid Checkout
- * that created the community, under the job's claim, not a member. The demo seed and `applyStarterPackToDemoCommunity` (demo entry,
- * after the demo instance is validated) write only to demo communities. Reads platform-level catalog via unscoped client, inserts via
+ * AUTHZ: caller MUST have just created the community, or be seeding a fixture:
+ * the demo seed and the help-capture fixtures write only to the communities
+ * they create. Reads platform-level catalog via unscoped client, inserts via
  * scoped client.
  */
 import { communities, createScopedClient, siteBlocks, sitePages, siteStarterPacks } from '@propertypro/db';
@@ -127,44 +131,4 @@ export async function applyStarterPackToCommunity(
 
     return { applied: true, blockCount: blocks.length, packSlug };
   });
-}
-
-/**
- * Starter sections for a demo community, on entry. Demo communities are built
- * by `seedCommunity` (the admin app's demo creation and the local demo seed),
- * which, unlike `createCommunityForPm`, applies no starter pack: a prospect
- * opening the website editor found an empty page.
- *
- * The admin app cannot import this service, so the web app's demo entry routes
- * call it instead, which also fills demos created before this existed. A no-op
- * for a community that is not a demo, or that has published sections.
- *
- * A community that has ever had a section row (a draft, or one removed: removal
- * soft-deletes) is left alone, so a prospect who empties the site keeps it
- * empty.
- *
- * ponytail: runs on every demo entry (two small reads once filled), and the
- * removed rows it relies on are purged after 30 days (`cleanupSoftDeletedSiteBlocks`),
- * about a demo's lifetime. Moving this into `seedCommunity` (it needs
- * `ensureHomePage` in packages/db) ends both. Trigger: a demo lives past the
- * 30-day purge, so the pack would re-apply to an emptied site.
- *
- * Best-effort, like `createCommunityForPm`'s call: a failure is logged and
- * never blocks the entry.
- */
-export async function applyStarterPackToDemoCommunity(communityId: number): Promise<void> {
-  try {
-    const scoped = createScopedClient(communityId);
-    const [community] = (await scoped.selectFrom(
-      communities,
-      { communityType: communities.communityType, isDemo: communities.isDemo },
-      eq(communities.id, communityId),
-    )) as unknown as Array<{ communityType: CommunityType; isDemo: boolean }>;
-    if (!community?.isDemo) return;
-    // Removed rows included: they are the point here.
-    if ((await scoped.queryIncludingDeleted(siteBlocks)).length > 0) return;
-    await applyStarterPackToCommunity(communityId, community.communityType);
-  } catch (err) {
-    console.error('applyStarterPackToDemoCommunity failed', { communityId, err });
-  }
 }

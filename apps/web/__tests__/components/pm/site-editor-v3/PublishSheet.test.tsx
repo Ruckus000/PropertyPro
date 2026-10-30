@@ -34,6 +34,7 @@ import { ApiRequestError } from '@/lib/api/request-json';
 import { PublishConflictError, type PublishSiteResult } from '@/hooks/use-publish-site';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
+import type { LayoutId } from '@/components/public-site/blocks/types';
 
 // ── block fixtures ─────────────────────────────────────────────────────────
 
@@ -263,11 +264,16 @@ interface RenderOptions {
    * section cases pass a condo or HOA explicitly.
    */
   communityType?: string;
+  /** Omitted by every case that is not about the contrast advisories. */
+  brandColors?: { primaryColor: string; accentColor: string; secondaryColor?: string };
+  layout?: LayoutId;
 }
 
 function renderSheet({
   onOpenChange = vi.fn(),
   onFixIssue,
+  brandColors,
+  layout,
   // Defaulted, not optional-in-practice: `onGoToPages` is a REQUIRED prop, and
   // `BlockingIssues` no longer guards the button on its presence — so a harness
   // that omitted it rendered a live "Go to Pages" wired to `undefined` in every
@@ -286,6 +292,8 @@ function renderSheet({
       onGoToPages={onGoToPages}
       complianceSubject={{ communityType, unitCount: null }}
       {...(onFixIssue ? { onFixIssue } : {})}
+      {...(brandColors ? { brandColors } : {})}
+      {...(layout ? { layout } : {})}
     />
   );
   const view = render(element);
@@ -1886,5 +1894,85 @@ describe('PublishSheet — Florida-required sections (v4 Phase 2)', () => {
     renderSheet({ communityType: 'apartment' });
 
     expect(screen.queryByText(/Florida law/)).not.toBeInTheDocument();
+  });
+});
+
+// ── contrast on a look's secondary colour ─────────────────────────────────
+
+describe("PublishSheet — contrast on a look's secondary colour", () => {
+  /*
+   * Heritage's navy and bronze over a slate secondary, which a Pro custom colour
+   * could set: grey caption text on it is 1.36:1, and so are navy headings.
+   *
+   * Revert check (production line): the `!layoutPaintsSecondary` condition in
+   * `contrastIssues`' secondary-pair guard. Without it the legacy-layout and
+   * plain-simple cases below go red.
+   */
+  const SLATE_SECONDARY = { primaryColor: '#1D2B4A', accentColor: '#7A5B27', secondaryColor: '#374151' };
+  const TEXT_ON_SECONDARY = /^grey caption text on your secondary colour has a contrast ratio of 1\.36:1, below the 4\.5:1/;
+  const HEADINGS_ON_SECONDARY = /^your primary colour as headings on your secondary colour has a contrast ratio of 1\.36:1, below the 3:1/;
+
+  it.each(['heritage', 'bayfront', 'palm-grove'] as const)(
+    'warns about text and headings on the secondary colour %s paints, without blocking',
+    (layout) => {
+      renderSheet({ brandColors: SLATE_SECONDARY, layout });
+
+      expect(screen.getByText(TEXT_ON_SECONDARY)).toBeInTheDocument();
+      expect(screen.getByText(HEADINGS_ON_SECONDARY)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+    },
+  );
+
+  it.each(['tidewater', 'boulevard', 'sable', 'plain-simple'] as const)(
+    'says nothing about the secondary colour on %s, which does not paint it',
+    (layout) => {
+      renderSheet({ brandColors: SLATE_SECONDARY, layout });
+
+      expect(screen.queryByText(/on your secondary colour/)).not.toBeInTheDocument();
+      // The sheet still ran the colour checks: the existing accent advisory is there.
+      expect(screen.getByText(/^default dark text on your accent colour/)).toBeInTheDocument();
+    },
+  );
+
+  it('says nothing about the secondary colour when the editor passes no layout', () => {
+    renderSheet({ brandColors: SLATE_SECONDARY });
+
+    expect(screen.queryByText(/on your secondary colour/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^default dark text on your accent colour/)).toBeInTheDocument();
+  });
+});
+
+describe('PublishSheet — the accent, as the look paints it', () => {
+  /*
+   * Palm Grove puts white text on its terracotta accent (4.99:1). The original
+   * pair, default dark text on the accent (3.56:1), would warn every new HOA
+   * site about a pair its page never paints.
+   *
+   * Revert check (production line): `accentPairs` in `contrastIssues` returning
+   * the original pair for every look. The first case goes red.
+   */
+  const PALM_GROVE = { primaryColor: '#2D5E4A', accentColor: '#B4532A', secondaryColor: '#FBF6EA' };
+
+  it("raises no colour warning for Palm Grove's own colours on Palm Grove", () => {
+    renderSheet({ brandColors: PALM_GROVE, layout: 'palm-grove' });
+
+    expect(screen.queryByText(/accent colour|secondary colour/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the original accent pair for the same colours on a legacy layout', () => {
+    renderSheet({ brandColors: PALM_GROVE, layout: 'tidewater' });
+
+    expect(
+      screen.getByText(/^default dark text on your accent colour has a contrast ratio of 3\.56:1/),
+    ).toBeInTheDocument();
+  });
+
+  it("warns, without blocking, when a custom accent fails the pair Palm Grove paints", () => {
+    renderSheet({ brandColors: { ...PALM_GROVE, accentColor: '#E9A23B' }, layout: 'palm-grove' });
+
+    expect(
+      screen.getByText(/^white text on your accent colour has a contrast ratio of 2\.17:1, below the 4\.5:1/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
   });
 });

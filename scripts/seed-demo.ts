@@ -1762,8 +1762,10 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
     communityIdsBySlug[community.slug] = result.communityId;
     communitySeedResults.push(result);
-    // The starter sections every real new community gets (createCommunityForPm).
-    // seedCommunity applies none, so the demo's website editor opened empty.
+    // seedCommunity builds no website, so the demo's editor would open empty.
+    // These seeded fixtures stay on starter packs: they are shared test data
+    // with their own consumers. A new community (createCommunityForPm) gets its
+    // suggested look instead, and a prospect demo gets it on first entry.
     await applyStarterPackToCommunity(result.communityId, community.communityType);
   }
   debugSeed('communities seeded via seedCommunity');

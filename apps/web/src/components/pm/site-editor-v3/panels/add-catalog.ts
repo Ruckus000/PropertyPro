@@ -35,11 +35,13 @@ import {
   FileText,
   Images,
   Image as ImageIcon,
+  Link2,
   ListChecks,
   Mail,
   Megaphone,
   MessageCircleQuestion,
   Type,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -60,7 +62,9 @@ export type AddableBlockType =
   | 'faq'
   | 'gallery'
   | 'amenities'
-  | 'payments';
+  | 'payments'
+  | 'quicklinks'
+  | 'board';
 
 export interface AddCatalogEntry {
   blockType: AddableBlockType;
@@ -154,6 +158,29 @@ export const ADD_CATALOG: readonly AddCatalogEntry[] = [
     // leave the form's echo check comparing '{}' against the defaulted object
     // the refetch returns, and every toggle would trigger a spurious save.
     seed: { showBoard: true, showManagement: true },
+  },
+  {
+    blockType: 'quicklinks',
+    label: 'Quick links',
+    description:
+      'Shortcuts to meetings, news, owner documents and contact details, updated automatically.',
+    icon: Link2,
+    // On every plan: it stores nothing but `hidden`, and which links show is
+    // decided when the page renders.
+    isPolish: false,
+    needsImage: false,
+    seed: {},
+  },
+  {
+    blockType: 'board',
+    label: 'Board members',
+    description: 'The people on your board, by name and title, updated automatically.',
+    icon: Users,
+    // On every plan: the people come from the board seats already recorded, and
+    // only the heading is the manager's.
+    isPolish: false,
+    needsImage: false,
+    seed: {},
   },
   {
     blockType: 'faq',

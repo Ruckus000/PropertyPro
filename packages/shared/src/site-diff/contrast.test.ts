@@ -166,3 +166,217 @@ describe('contrastIssues', () => {
     expect(issues[0]!.message).toMatch(/\d+\.\d{2}:1/);
   });
 });
+
+describe('contrastIssues — the secondary colour a look paints', () => {
+  // Heritage's navy and bronze; each case sets the secondary it is about.
+  const LOOK = { primaryColor: '#1D2B4A', accentColor: '#7A5B27' };
+  const TEXT_ON_SECONDARY = 'grey caption text on your secondary colour';
+  const HEADINGS_ON_SECONDARY = 'your primary colour as headings on your secondary colour';
+
+  /** At publish, on a layout that paints the secondary colour. */
+  function onLook(colors: { primaryColor: string; accentColor: string; secondaryColor?: string }) {
+    return contrastIssues(colors, { severity: 'warning', layoutPaintsSecondary: true });
+  }
+  function about(issues: ReturnType<typeof contrastIssues>, label: string) {
+    return issues.filter((i) => i.message.startsWith(label));
+  }
+
+  it('warns when grey caption text on the secondary colour is under 4.5:1', () => {
+    // #C7C7C7 is the lightest grey under the line: 4.47:1 against #4B5563.
+    const issues = about(onLook({ ...LOOK, secondaryColor: '#C7C7C7' }), TEXT_ON_SECONDARY);
+    expect(issues, 'grey captions on #C7C7C7 read at 4.47:1 and must warn').toHaveLength(1);
+    expect(issues[0]).toMatchObject({ field: 'secondaryColor', severity: 'warning' });
+    expect(issues[0]!.message).toContain('4.47:1, below the 4.5:1 required by WCAG 2.1 AA');
+  });
+
+  it('stays quiet about caption text from 4.5:1 up', () => {
+    // #C8C8C8, the next grey up, is the first to pass (4.52:1); Heritage's cream is 7.13:1.
+    expect(about(onLook({ ...LOOK, secondaryColor: '#C8C8C8' }), TEXT_ON_SECONDARY)).toHaveLength(0);
+    expect(about(onLook({ ...LOOK, secondaryColor: '#FBF8F1' }), TEXT_ON_SECONDARY)).toHaveLength(0);
+  });
+
+  it('warns on a tan secondary that near-black text passes but the captions on it fail', () => {
+    // #C4B59A: near-black body text reads at 8.81:1, the grey captions at 3.75:1.
+    const issues = about(onLook({ ...LOOK, secondaryColor: '#C4B59A' }), TEXT_ON_SECONDARY);
+    expect(issues, 'grey captions on tan #C4B59A read at 3.75:1 and must warn').toHaveLength(1);
+    expect(issues[0]!.message).toMatch(/^grey caption text on your secondary colour has a contrast ratio of 3\.75:1/);
+  });
+
+  it('checks nothing on the secondary colour when the caller passes none', () => {
+    // A look layout, but no colour to check: no '"undefined" is not a 6-digit hex colour'.
+    const issues = contrastIssues(LOOK, {
+      severity: 'warning',
+      layoutPaintsSecondary: true,
+      lookAccent: { accentUse: 'text', onAccent: 'inverse' },
+    });
+    const aboutSecondary = issues
+      .filter((i) => i.field === 'secondaryColor' || i.message.includes('secondary colour') || i.message.includes('undefined'))
+      .map((i) => i.message);
+    expect(aboutSecondary, aboutSecondary.join('\n')).toEqual([]);
+  });
+
+  it('warns when the primary as headings on the secondary colour is under 3:1', () => {
+    // A white secondary keeps caption text passing, so only the heading pair speaks.
+    const justUnder = about(
+      onLook({ primaryColor: '#959595', accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' }),
+      HEADINGS_ON_SECONDARY,
+    );
+    expect(justUnder).toHaveLength(1);
+    expect(justUnder[0]).toMatchObject({ field: 'secondaryColor', severity: 'warning' });
+
+    const wellUnder = about(
+      onLook({ primaryColor: '#AAAAAA', accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' }),
+      HEADINGS_ON_SECONDARY,
+    );
+    expect(wellUnder[0]!.message).toMatch(/ratio of \d+\.\d{2}:1, below the 3:1 required by WCAG 2\.1 AA/);
+  });
+
+  it('holds headings to 3:1, not 4.5:1', () => {
+    // #949494 is the first grey to pass 3:1 on white (3.03:1); #888888 is 3.54:1,
+    // which would fail a body-text threshold and must not warn here.
+    for (const primaryColor of ['#949494', '#888888']) {
+      const issues = onLook({ primaryColor, accentColor: '#FCF1ED', secondaryColor: '#FFFFFF' });
+      expect(about(issues, HEADINGS_ON_SECONDARY), primaryColor).toHaveLength(0);
+    }
+  });
+
+  it('is advisory even at the write path, so it never blocks', () => {
+    const issues = contrastIssues(
+      { ...LOOK, secondaryColor: '#111827' },
+      { severity: 'error', layoutPaintsSecondary: true },
+    );
+    const onSecondary = issues.filter((i) => i.field === 'secondaryColor');
+    expect(onSecondary).toHaveLength(2);
+    expect(onSecondary.every((i) => i.severity === 'warning')).toBe(true);
+    expect(publishBlocked(onSecondary)).toBe(false);
+  });
+
+  it('checks nothing on the secondary colour when the layout does not paint it', () => {
+    const colors = { ...LOOK, secondaryColor: '#111827' };
+    for (const options of [{ severity: 'warning' as const }, { severity: 'warning' as const, layoutPaintsSecondary: false }]) {
+      expect(contrastIssues(colors, options).some((i) => i.field === 'secondaryColor')).toBe(false);
+    }
+  });
+
+  it('reports an unparseable secondary once, as a warning, when the layout paints it', () => {
+    const issues = onLook({ ...LOOK, secondaryColor: '#abc' }).filter((i) => i.field === 'secondaryColor');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.severity).toBe('warning');
+    expect(issues[0]!.message).toMatch(/6-digit hex/);
+  });
+
+  it('adds to the existing pairs without changing them', () => {
+    const DEFAULTS = { primaryColor: '#C2533A', accentColor: '#FCF1ED' };
+    const before = contrastIssues(DEFAULTS, { severity: 'error' });
+    const after = contrastIssues(
+      { ...DEFAULTS, secondaryColor: '#FFFFFF' },
+      { severity: 'error', layoutPaintsSecondary: true },
+    );
+    expect(before.length).toBeGreaterThan(0);
+    expect(after).toEqual(before);
+  });
+});
+
+describe('contrastIssues — the accent, as each look paints it', () => {
+  const ON_WHITE_TEXT = { accentUse: 'background', onAccent: 'inverse' } as const; // Palm Grove
+  const ON_DARK_TEXT = { accentUse: 'background', onAccent: 'text' } as const; // Bayfront, Plain & Simple
+  const AS_TEXT = { accentUse: 'text', onAccent: 'inverse' } as const; // Heritage
+
+  /** The accent's issues, each named by its label. */
+  function accentLabels(issues: ReturnType<typeof contrastIssues>) {
+    return issues.filter((i) => i.field === 'accentColor').map((i) => i.message.split(' has a contrast ratio')[0]);
+  }
+
+  it('keeps the original pair without a look: default dark text on the accent', () => {
+    // Heritage's bronze, on a legacy layout: dark text on it is 2.83:1.
+    const issues = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#7A5B27' }, { severity: 'warning' });
+    expect(accentLabels(issues)).toEqual(['default dark text on your accent colour']);
+  });
+
+  it('checks white text on an accent a look puts white text on', () => {
+    // Palm Grove's terracotta takes white at 4.99:1, though dark text on it would be 3.56:1.
+    const own = contrastIssues(
+      { primaryColor: '#2D5E4A', accentColor: '#B4532A' },
+      { severity: 'warning', lookAccent: ON_WHITE_TEXT },
+    );
+    expect(accentLabels(own)).toEqual([]);
+
+    // A custom gold accent fails white text: 2.17:1.
+    const gold = contrastIssues(
+      { primaryColor: '#2D5E4A', accentColor: '#E9A23B' },
+      { severity: 'warning', lookAccent: ON_WHITE_TEXT },
+    ).filter((i) => i.field === 'accentColor');
+    expect(gold).toHaveLength(1);
+    expect(gold[0]!.message).toMatch(/^white text on your accent colour has a contrast ratio of 2\.17:1, below the 4\.5:1/);
+    expect(gold[0]!.severity).toBe('warning');
+  });
+
+  it('checks default dark text on an accent a look puts dark text on', () => {
+    // Bayfront's gold takes dark text at 8.19:1; a custom bronze accent fails at 2.83:1.
+    const own = contrastIssues(
+      { primaryColor: '#0B4F5C', accentColor: '#E9A23B' },
+      { severity: 'warning', lookAccent: ON_DARK_TEXT },
+    );
+    expect(accentLabels(own)).toEqual([]);
+
+    const bronze = contrastIssues(
+      { primaryColor: '#0B4F5C', accentColor: '#7A5B27' },
+      { severity: 'warning', lookAccent: ON_DARK_TEXT },
+    ).filter((i) => i.field === 'accentColor');
+    expect(bronze).toHaveLength(1);
+    expect(bronze[0]!.message).toMatch(/^default dark text on your accent colour has a contrast ratio of 2\.83:1/);
+  });
+
+  it('checks a text accent on white and on the secondary colour the layout paints', () => {
+    const options = { severity: 'warning' as const, lookAccent: AS_TEXT, layoutPaintsSecondary: true };
+    // Heritage's bronze reads at 6.21:1 on white and 5.90:1 on its cream.
+    const own = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#7A5B27', secondaryColor: '#FBF8F1' }, options);
+    expect(accentLabels(own)).toEqual([]);
+
+    // A custom tan accent fails as text on both: 2.24:1 and 2.13:1.
+    const tan = contrastIssues({ primaryColor: '#1D2B4A', accentColor: '#C9A86A', secondaryColor: '#FBF8F1' }, options);
+    expect(accentLabels(tan)).toEqual([
+      'your accent colour as text on white',
+      'your accent colour as text on your secondary colour',
+    ]);
+
+    // #8E6A2F passes on white (4.90:1) and fails on a darker cream (3.99:1): the pairs are separate.
+    const darkerCream = contrastIssues(
+      { primaryColor: '#1D2B4A', accentColor: '#8E6A2F', secondaryColor: '#F0E6D2' },
+      options,
+    );
+    expect(accentLabels(darkerCream)).toEqual(['your accent colour as text on your secondary colour']);
+  });
+
+  it('checks a text accent on the secondary colour only where the layout paints it', () => {
+    const issues = contrastIssues(
+      { primaryColor: '#1D2B4A', accentColor: '#C9A86A', secondaryColor: '#FBF8F1' },
+      { severity: 'warning', lookAccent: AS_TEXT },
+    );
+    expect(accentLabels(issues)).toEqual(['your accent colour as text on white']);
+  });
+
+  it('keeps every accent pair advisory, even at the write path', () => {
+    // A mid grey fails every accent pair: white on it 4.48:1, dark text 3.96:1, as text on white 4.44:1.
+    for (const lookAccent of [ON_WHITE_TEXT, ON_DARK_TEXT, AS_TEXT]) {
+      const issues = contrastIssues(
+        { primaryColor: '#1D2B4A', accentColor: '#777777', secondaryColor: '#999999' },
+        { severity: 'error', lookAccent, layoutPaintsSecondary: true },
+      ).filter((i) => i.field === 'accentColor');
+      expect(issues.length, lookAccent.accentUse).toBeGreaterThan(0);
+      expect(publishBlocked(issues)).toBe(false);
+    }
+  });
+
+  it('still reports an unparseable accent once, as an error, under a look', () => {
+    for (const lookAccent of [ON_WHITE_TEXT, ON_DARK_TEXT, AS_TEXT]) {
+      const issues = contrastIssues(
+        { primaryColor: '#1D2B4A', accentColor: '#abc', secondaryColor: '#FBF8F1' },
+        { severity: 'warning', lookAccent, layoutPaintsSecondary: true },
+      ).filter((i) => i.field === 'accentColor');
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toMatchObject({ severity: 'error' });
+      expect(issues[0]!.message).toMatch(/6-digit hex/);
+    }
+  });
+});

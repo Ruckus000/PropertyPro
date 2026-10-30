@@ -192,10 +192,14 @@ type BrandingKey = 'siteSettings' | 'siteFooter' | 'draftLook';
  * Every interpolation is a bound parameter, including the key name; the casts
  * are there because Postgres cannot infer a parameter's type from `->` or
  * `ARRAY[…]` on its own.
+ *
+ * Pass `executor` (a transaction's handle) to run the UPDATE inside that
+ * transaction; left out, it runs on its own.
  */
 export async function mergeBranding(
   communityId: number,
   patches: Partial<Record<BrandingKey, object>>,
+  executor?: Pick<ReturnType<typeof createUnscopedClient>, 'execute'>,
 ): Promise<void> {
   const entries = (Object.entries(patches) as [BrandingKey, object][]).filter(
     ([, patch]) => Object.keys(patch).length > 0,
@@ -217,7 +221,7 @@ export async function mergeBranding(
     )`;
   }
 
-  const db = createUnscopedClient();
+  const db = executor ?? createUnscopedClient();
   await db.execute(sql`UPDATE communities SET branding = ${expr} WHERE id = ${communityId}`);
 }
 
