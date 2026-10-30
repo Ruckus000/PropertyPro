@@ -1,0 +1,21 @@
+# The Postgres MAJOR version CI's service container runs. The one place it is set.
+#
+# Read by: integration-tests.yml and tenant-isolation-game-day.yml (`pin` job,
+# then a step that refuses to run tests unless the live server reports this
+# major), postgres-digest-bump.yml (the tag it resolves weekly) and
+# ci-image-mirror.yml (the GHCR bookkeeping tag `<major>-<hex12>`).
+#
+# Why 17: production is Supabase Postgres 17 (17.6, measured 2026-10-30 with
+# `select current_setting('server_version')`), and e2e already runs 17
+# (Supabase CLI 2.116.0, `major_version = 17`, image supabase/postgres:17.6.1.165).
+# integration-tests is the production-deploy gate, so it must exercise the
+# production major. It was 16 with no recorded reason until 2026-10-30.
+#
+# It tracks the latest 17.x, not 17.6: an exact minor would freeze CI out of
+# security patches. CI therefore runs a NEWER minor than production (17.11 vs
+# 17.6 on 2026-10-30). Minors are bug-fix only, so that gap is accepted.
+#
+# To change major: edit this line AND write the new tag's index digest to
+# postgres-image-digest in the same commit. The two must agree; the
+# server-version step in both consumers fails the run if they do not.
+17
