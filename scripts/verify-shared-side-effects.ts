@@ -76,6 +76,7 @@ import { join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { isMainModule } from './lib/is-main-module';
+import { parseRootArg, RootArgError } from './lib/root-arg';
 
 /** Repo root, resolved from this file rather than cwd. */
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '../..');
@@ -371,16 +372,22 @@ export function scanSharedPackage(root: string = SHARED_SRC): Violation[] {
  * inside the real `packages/shared/src`: other guards' subprocess tests walk
  * that tree concurrently, and a file appearing and vanishing mid-walk makes
  * `readdirSync` and `readFileSync` disagree — an intermittent failure in an
- * unrelated test. Tests point at a temp directory instead.
+ * unrelated test. Tests point at a temp directory instead. A mistyped `--root`
+ * throws `RootArgError` (see `lib/root-arg.ts`), which `main()` turns into exit 2.
  */
 export function resolveScanRoot(argv: readonly string[]): string {
-  const index = argv.indexOf('--root');
-  const value = index === -1 ? undefined : argv[index + 1];
-  return value === undefined ? SHARED_SRC : resolve(value);
+  return parseRootArg(argv) ?? SHARED_SRC;
 }
 
 function main(): void {
-  const root = resolveScanRoot(process.argv.slice(2));
+  let root: string;
+  try {
+    root = resolveScanRoot(process.argv.slice(2));
+  } catch (err) {
+    if (!(err instanceof RootArgError)) throw err;
+    console.error(`\n❌ Cannot check: ${err.message}\nUsage: verify-shared-side-effects.ts [--root <dir>]`);
+    process.exit(2);
+  }
   const label = relative(REPO_ROOT, root) || root;
 
   // Tri-state, per .claude/rules/verification.md: exit 2 means "I could not

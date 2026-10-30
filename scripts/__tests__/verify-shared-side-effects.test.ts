@@ -245,6 +245,13 @@ describe('end to end', () => {
     expect(Number(match?.[1])).toBeGreaterThan(0);
   });
 
+  // A bare --root (an unset $ROOT) used to scan packages/shared/src and pass.
+  it('exits 2 rather than 0 on a bare --root', () => {
+    const { status, output } = runGuard(['--root']);
+    expect(status).toBe(2);
+    expect(output).toContain('--root needs a directory.');
+  });
+
   it('exits 2 rather than 0 when the scan root does not exist', () => {
     const { status, output } = runGuard(['--root', join(tmpdir(), 'no-such-dir-9f3a2c')]);
     expect(status).toBe(2);
