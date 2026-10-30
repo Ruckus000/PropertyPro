@@ -1,8 +1,15 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { X, Upload, FileUp } from "lucide-react";
+import React, { useCallback, useRef, useState } from "react";
+import { Upload, FileUp } from "lucide-react";
 import { Button } from "@propertypro/ui";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AlertBanner } from "@/components/shared/alert-banner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { useDocumentCategories } from "@/hooks/use-document-categories";
@@ -12,12 +19,19 @@ import {
   categoryRequiresRedactionAttestation,
 } from "@/components/documents/redaction-attestation-field";
 
-interface UploadDocumentModalProps {
+export interface UploadDocumentModalProps {
   communityId: number;
   defaultTitle: string;
   categoryName: string;
   onUploaded: (documentId: number) => void;
   onClose: () => void;
+  /**
+   * Ask the server not to link the document to a record itself. For a caller
+   * that links it, in `onUploaded`, to the record the person chose: posting a
+   * document otherwise links it to the one record it fits, which can be a
+   * different record, so one file would fill two.
+   */
+  skipAutoLink?: boolean;
 }
 
 export function UploadDocumentModal({
@@ -26,6 +40,7 @@ export function UploadDocumentModal({
   categoryName,
   onUploaded,
   onClose,
+  skipAutoLink = false,
 }: UploadDocumentModalProps) {
   const [title, setTitle] = useState(defaultTitle);
   const [file, setFile] = useState<File | null>(null);
@@ -46,15 +61,6 @@ export function UploadDocumentModal({
   // operations rows file into Contracts / Inspection Reports, which are not.
   const requiresAttestation =
     resolvedCategoryId != null && categoryRequiresRedactionAttestation(resolvedCategoryName);
-
-  // Close on Escape
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && !isUploading) onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, isUploading]);
 
   function handleFileSelect(files: FileList | null) {
     const first = files?.[0];
@@ -80,6 +86,7 @@ export function UploadDocumentModal({
         categoryId: resolvedCategoryId,
         file,
         redactionAttested,
+        ...(skipAutoLink ? { skipAutoLink: true } : {}),
       });
       setWarnings(result.warnings);
       // Clear the file AND the attestation before the early-return below. On a
@@ -103,34 +110,21 @@ export function UploadDocumentModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !isUploading) onClose();
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        // Escape, the overlay and the close button all land here; none closes mid-upload.
+        if (!open && !isUploading) onClose();
       }}
     >
-      <div
-        className="
-          w-full max-w-lg mx-4
-          rounded-[var(--radius-lg)] bg-surface-card
-          border border-edge-subtle
-          shadow-[var(--elevation-e3)]
-          animate-in fade-in-0 zoom-in-95 duration-quick
-          flex flex-col
-        "
-      >
+      <DialogContent size="md" className="gap-0 p-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
-          <h3 className="text-base font-semibold text-content">Upload Document</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isUploading}
-            className="rounded-[var(--radius-sm)] p-1 hover:bg-surface-hover transition-colors disabled:opacity-50"
-          >
-            <X size={16} className="text-content-tertiary" />
-          </button>
-        </div>
+        <DialogHeader className="border-b border-edge-subtle px-4 py-3 pr-14 text-left">
+          <DialogTitle className="text-base font-semibold text-content">Upload Document</DialogTitle>
+          <DialogDescription className="sr-only">
+            Choose a file to upload. It is linked to this record once it uploads.
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Body */}
         <div className="px-4 py-4 flex flex-col gap-4">
@@ -206,11 +200,21 @@ export function UploadDocumentModal({
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            // Reachable by keyboard: the file input itself is hidden.
+            role="button"
+            tabIndex={isUploading ? -1 : 0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             className={`
               flex flex-col items-center justify-center gap-2
               rounded-[var(--radius-md)]
               border-2 border-dashed
               py-8 cursor-pointer transition-colors duration-quick
+              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus
               ${dragOver
                 ? "border-[var(--border-focus)] bg-[var(--status-info-bg)]"
                 : file
@@ -236,14 +240,16 @@ export function UploadDocumentModal({
                 </span>
               </>
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={(e) => handleFileSelect(e.target.files)}
-              disabled={isUploading || isLoadingCategories || resolvedCategoryId == null}
-            />
           </div>
+          {/* Outside the drop zone (a control may not hold another) and `hidden`, so it
+              is never focused or announced: the drop zone opens it. */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            onChange={(e) => handleFileSelect(e.target.files)}
+            disabled={isUploading || isLoadingCategories || resolvedCategoryId == null}
+          />
 
           {requiresAttestation && (
             <RedactionAttestationField
@@ -291,7 +297,7 @@ export function UploadDocumentModal({
             {isUploading ? `Uploading ${progress}%` : "Upload & Link"}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

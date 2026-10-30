@@ -1,8 +1,9 @@
 /**
  * Authenticated, framable live-preview of a community's public site, rendered
- * with the wizard's CURRENT layout/preset SELECTION (passed as query overrides)
- * rather than the saved branding. Embedded as an iframe by the onboarding
- * wizard so PMs see the real layout react to their choices.
+ * with a layout/preset or look SELECTION (passed as query overrides) rather
+ * than the saved branding. Embedded as an iframe by the look picker and the
+ * dashboard's website card (`LookPreviewFrame`), so PMs see the real site in
+ * the look they are choosing.
  *
  * Route: /pm/site-preview?communityId=X&layout=<slug>&preset=<slug>&preview=true
  *        /pm/site-preview?communityId=X&look=<id>&preview=true
@@ -31,9 +32,9 @@
  * server-only block renderers (SoR blocks) work with the community's real data.
  *
  * Deliberately OUTSIDE `(authenticated)`, in its own route group, because that
- * layout renders `AppShell` unconditionally — so the wizard's 490px-wide iframe
- * used to contain the whole app: top bar, search, breadcrumb trail and the
- * billing banners, in mobile-drawer mode. Route groups do not appear in URLs, so
+ * layout renders `AppShell` unconditionally — so a narrow preview iframe (the
+ * retired setup wizard's, 490px wide) used to contain the whole app: top bar,
+ * search, breadcrumb trail and the billing banners, in mobile-drawer mode. Route groups do not appear in URLs, so
  * `/pm/site-preview` is unchanged and middleware still protects it (`/pm` is in
  * `PROTECTED_PATH_PREFIXES`). The group has no `layout.tsx` and inherits the root
  * one, like `(public)/`: the four group layouts that do exist all exist to mount
@@ -166,7 +167,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
   const headerLogoUrl = siteLogoUrl ?? theme.logoUrl;
   // Pro+ custom CSS overrides win over the resolved theme, exactly as they do on
   // the live site. Consequence worth knowing rather than "fixing": for a community
-  // that has overrides, switching preset in the wizard will NOT move the
+  // that has overrides, switching preset in a preview will NOT move the
   // overridden tokens here — because it will not move them in production either.
   const cssVars = siteThemeCssVars(theme, (lookBranding ?? rawBranding)?.customCssOverrides);
   const fontLinks = toFontLinks(theme);
@@ -203,10 +204,10 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
       {/*
         `inert`, because this is a picture of the site, not the site. Every link
         in here is root-relative (`PageNav`'s `/about`, the header's Resident
-        Login), so inside the wizard's iframe on the PM host they resolve to app
+        Login), so inside a preview iframe on the PM host they resolve to app
         routes, 404, and replace the preview with no way back. `inert` also keeps
-        the frame out of the tab order, so a keyboard user traversing the wizard
-        does not walk into a preview they cannot act on. Scrolling still works.
+        the frame out of the tab order, so a keyboard user traversing the page
+        around it does not walk into a preview they cannot act on. Scrolling still works.
         Same attribute the shell uses on its main column behind the mobile
         drawer (`components/layout/app-shell.tsx`).
       */}

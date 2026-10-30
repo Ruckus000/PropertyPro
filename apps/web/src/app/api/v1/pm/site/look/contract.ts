@@ -11,11 +11,24 @@
  *     marks the website setup complete, which retires the dashboard card, and
  *     the "Customize your portal" checklist item. The completion moment is
  *     stamped once, so keeping again changes nothing. It answers `{ ok: true }`.
+ *     With `withdrawDraftedLook: true` (the look picker's Keep this look) it
+ *     first takes a drafted look back off (`withdrawDraftedLook`), whatever
+ *     the live layout is, keeping the manager's edits. The dashboard card's
+ *     Dismiss leaves it out, so a look drafted elsewhere is not discarded.
  *
  * The body is a strict union, so a request is exactly one of the two: both
  * keys, neither, `keepCurrent: false` and any other key are 400s. `lookId` is
  * checked against the four looks here, not against the layouts the public site
  * can draw: a legacy layout (tidewater, boulevard, sable) is not a look.
+ *
+ * POST is the look picker's **Publish this look** (D9): one click drafts the
+ * look (the same switch as PATCH, which changes nothing when the card already
+ * drafted it), publishes the site, and marks the website setup and the
+ * "Customize your portal" checklist item complete. It never emails anyone.
+ * `expectedPublishedAt` is the publish route's concurrency token: a site
+ * published elsewhere since the page loaded is a 409 and nothing goes live.
+ * It answers with when the site was published, or `publishedAt: null` when
+ * there was nothing to publish (the live look, with no other change pending).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 import { LOOK_IDS } from '@/lib/site-looks/looks';
@@ -24,7 +37,14 @@ const communityId = z.number().int().positive();
 
 const siteLookPatchBody = z.union([
   z.object({ communityId, lookId: z.enum(LOOK_IDS) }).strict(),
-  z.object({ communityId, keepCurrent: z.literal(true) }).strict(),
+  z
+    .object({
+      communityId,
+      keepCurrent: z.literal(true),
+      /** Also take a drafted look back off the site (the look picker's Keep this look). */
+      withdrawDraftedLook: z.literal(true).optional(),
+    })
+    .strict(),
 ]);
 
 /** What a switch did to the home page's sections (`LookSwitchCounts`). */
@@ -40,6 +60,28 @@ export const siteLookPatchContract = defineRoute({
   path: '/api/v1/pm/site/look',
   request: { body: siteLookPatchBody },
   response: z.union([lookSwitchCountsSchema, z.object({ ok: z.literal(true) })]),
+  permission: { resource: 'settings', action: 'write' },
+  tenantScope: { in: 'body' },
+});
+
+const siteLookPostBody = z
+  .object({
+    communityId,
+    lookId: z.enum(LOOK_IDS),
+    /** The `latestPublishedAt` the picker loaded (ISO 8601), or null for a site never published. */
+    expectedPublishedAt: z.string().datetime().nullable(),
+  })
+  .strict();
+
+export const siteLookPostContract = defineRoute({
+  method: 'POST',
+  path: '/api/v1/pm/site/look',
+  request: { body: siteLookPostBody },
+  response: z.object({
+    /** When the site went live with the look; null when nothing needed publishing. */
+    publishedAt: z.string().nullable(),
+    lookId: z.enum(LOOK_IDS),
+  }),
   permission: { resource: 'settings', action: 'write' },
   tenantScope: { in: 'body' },
 });

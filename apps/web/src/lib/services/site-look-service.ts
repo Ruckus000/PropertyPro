@@ -10,6 +10,8 @@
  *   as draft rows and tombstones, and the look as `branding.draftLook`. The
  *   editor's Publish makes it live and its Discard throws it away, both
  *   unchanged. Picking the live look again restores what is live.
+ * - `withdrawDraftedLook`: the manager keeps the live look (Keep this look): a
+ *   drafted look is taken back off, on any live layout, keeping their edits.
  * - `loadLookSwitchInput`: what a switch is planned from, read without writing.
  *   The switch and the look previews share it, so they cannot plan from
  *   different inputs.
@@ -23,8 +25,9 @@
  * member of it (the same footing as `applyStarterPackToCommunity`).
  * `fillDemoCommunitySite` is called by the demo entry routes after the demo
  * instance is validated, and writes only to a community that is a demo. The
- * caller of `draftLookSwitch` has verified a manager role in the community and
- * the `hasSiteEditor` plan feature (the website routes' gate).
+ * caller of `draftLookSwitch` or `withdrawDraftedLook` has verified a manager
+ * role in the community and the `hasSiteEditor` plan feature (the website
+ * routes' gate).
  * `loadLookSwitchInput` reads one community's site and the platform's starter
  * packs, and writes nothing.
  */
@@ -58,11 +61,13 @@ import {
   getLook,
   lookIdForLayout,
   planLookSwitchWithCounts,
+  planReturnToLive,
   suggestedLookFor,
   type LookDefinition,
   type LookId,
   type LookSection,
   type LookSwitchCounts,
+  type LiveSection,
   type PlanLookSwitchInput,
   type SiteSection,
 } from '@/lib/site-looks/looks';
@@ -97,6 +102,10 @@ export interface LookSwitchInput extends Omit<PlanLookSwitchInput, 'incoming'> {
   published: ReadonlyMap<number, { blockType: string; content: unknown }>;
   /** The layout being left: the drafted one when there is one, else the live one. */
   outgoingLayoutId: string | null;
+  /** The published home-page rows in slot order, whatever the live layout is. */
+  liveRows: readonly LiveSection[];
+  /** Whether a different layout is drafted over the live one (a look, or a layout that is not one). */
+  layoutDrafted: boolean;
 }
 
 /** What `applyLookAtCreation` can be asked to do differently. */
@@ -356,6 +365,10 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
     ? [requireLook(outgoingLookId).sections]
     : await starterPackVersions(community.communityType, tx);
   const liveLookId = lookIdForLayout(liveLayoutId);
+  const liveRows: LiveSection[] = [...published.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([slot, row]) => ({ id: row.id, slot, blockType: row.blockType as BlockType, content: row.content }));
+  const layoutDrafted = outgoingLayoutId !== liveLayoutId;
 
   return {
     homePageId,
@@ -363,17 +376,58 @@ export async function loadLookSwitchInput(communityId: number, tx?: Tx): Promise
     published,
     outgoingDefaults,
     outgoingLayoutId,
+    liveRows,
+    layoutDrafted,
     draftedLookId: lookIdForLayout(branding.draftLook?.layoutId),
-    live: liveLookId
-      ? {
-          lookId: liveLookId,
-          sections: [...published.entries()]
-            .sort(([a], [b]) => a - b)
-            .map(([slot, row]) => ({ id: row.id, slot, blockType: row.blockType as BlockType, content: row.content })),
-          otherLayoutDrafted: outgoingLayoutId !== liveLayoutId,
-        }
-      : null,
+    live: liveLookId ? { lookId: liveLookId, sections: liveRows, otherLayoutDrafted: layoutDrafted } : null,
   };
+}
+
+/**
+ * Take a drafted look back off the site, keeping the live one ("Keep this look"
+ * in the look picker): the home page returns to its live rows, keeping every
+ * edit the manager made since (`planReturnToLive`, the same rule as picking the
+ * live look's card), and the drafted look's layout, colour set, colours and
+ * fonts are withdrawn. In one transaction under the community row lock.
+ *
+ * Unlike picking the live card, it needs no live look, so it also works on a
+ * site whose live layout is a legacy one, which no card can return to. With no
+ * other layout drafted it writes nothing, so drafted colours alone (the Design
+ * panel's) are left as they are. Returns whether anything was withdrawn.
+ */
+export async function withdrawDraftedLook(
+  communityId: number,
+  opts: { actorUserId: string },
+): Promise<{ withdrawn: boolean }> {
+  return withCommunityLock(communityId, async (tx, scoped) => {
+    const input = await loadLookSwitchInput(communityId, tx);
+    if (!input.layoutDrafted) return { withdrawn: false };
+    const executor = tx as unknown as Executor;
+    const { sections, kind, ...counts } = planReturnToLive(input.current, input.outgoingDefaults, input.liveRows);
+
+    const homePageId = await ensureHomePage(communityId, tx);
+    await writeHomeDrafts(scoped, communityId, homePageId, input.published, sections);
+    await logAuditEvent(
+      {
+        userId: opts.actorUserId,
+        communityId,
+        action: 'update',
+        resourceType: 'community_site',
+        resourceId: String(communityId),
+        metadata: {
+          lookSwitch: true,
+          withdrawn: true,
+          kind,
+          fromLayoutId: input.outgoingLayoutId,
+          pageId: homePageId,
+          ...counts,
+        },
+      },
+      executor,
+    );
+    await withdrawDraftDesign(communityId, SWITCHED_LOOK_FIELDS, { actorUserId: opts.actorUserId, executor });
+    return { withdrawn: true };
+  });
 }
 
 // ---------------------------------------------------------------------------

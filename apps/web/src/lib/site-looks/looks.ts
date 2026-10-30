@@ -364,9 +364,25 @@ export function planLookSwitchWithCounts({
   if (draftedLookId === incoming.id) return asItIs(current, 'already-drafted');
   if (live !== null && live.lookId === incoming.id) {
     if (!live.otherLayoutDrafted) return asItIs(current, 'live-look');
-    return { ...planBackToLive(current, outgoingDefaults, live.sections), kind: 'back-to-live' };
+    return planReturnToLive(current, outgoingDefaults, live.sections);
   }
   return { ...planAgainst(current, outgoingDefaults, incoming.sections), kind: 'switch' };
+}
+
+/**
+ * The home page back to what is live, whatever the live layout is (the
+ * `back-to-live` rule of `planLookSwitch`, `planBackToLive`): the live rows in
+ * their live order, each edit the manager made since kept in its place, the
+ * drafted look's untouched defaults dropped. It needs the live rows, not a live
+ * look, so it also takes a drafted look back off a site whose live layout is a
+ * legacy one ("Keep this look" in the look picker, `withdrawDraftedLook`).
+ */
+export function planReturnToLive(
+  current: readonly SiteSection[],
+  outgoingDefaults: readonly (readonly LookSection[])[],
+  live: readonly LiveSection[],
+): LookSwitchPlan {
+  return { ...planBackToLive(current, outgoingDefaults, live), kind: 'back-to-live' };
 }
 
 /** The page as it is: nothing replaced, added or removed. */

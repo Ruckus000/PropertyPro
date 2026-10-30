@@ -163,7 +163,8 @@ export const POST = withErrorHandler(
     void completeDocumentSteps(effectiveCommunityId, userId, body.categoryId);
 
     // A draft is not posted, so it fills no record until it is (PATCH `{ posted: true }`).
-    if (!body.draft) {
+    // `skipAutoLink`: the caller links the document to the record a person chose.
+    if (!body.draft && body.skipAutoLink !== true) {
       await autoLinkPostedDocument(
         effectiveCommunityId,
         Number((result.document as Record<string, unknown>)['id']),

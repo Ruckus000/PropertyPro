@@ -17,6 +17,11 @@ export interface UploadRequest {
   redactionAttested?: boolean;
   /** Save as a draft: managers only, no notifications, no attestation yet. */
   draft?: boolean;
+  /**
+   * Skip the server's automatic record linking, for a caller that links the
+   * document itself to the record a person chose.
+   */
+  skipAutoLink?: boolean;
 }
 
 export interface ReplaceFileRequest {
@@ -163,6 +168,7 @@ export async function uploadDocumentFile(
       mimeType: request.file.type,
       redactionAttested: request.redactionAttested ?? false,
       ...(request.draft ? { draft: true } : {}),
+      ...(request.skipAutoLink ? { skipAutoLink: true } : {}),
     }),
   });
 

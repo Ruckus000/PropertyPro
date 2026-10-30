@@ -40,6 +40,7 @@ import {
   type NavItemWithGateStatus,
 } from './nav-config';
 import { useAdminJoinRequests } from '@/hooks/use-admin-join-requests';
+import { useRecordsAlert } from '@/hooks/use-records-alert';
 import { useSidebar } from './sidebar-context';
 import { SidebarTenantSwitcher } from './sidebar-tenant-switcher';
 import { UpgradeDialog } from '../billing/upgrade-dialog';
@@ -53,6 +54,9 @@ const CommunityPickerDialog = dynamic(
   () => import('./community-picker-dialog').then((m) => m.CommunityPickerDialog),
   { ssr: false },
 );
+
+/** How long the missing-records count counts as fresh across navigations. */
+const RECORDS_BADGE_STALE_MS = 5 * 60 * 1000;
 
 interface AppSidebarProps {
   communityId: number | null;
@@ -146,14 +150,40 @@ export function AppSidebar({
   const showRequestBadge = !isPmContext && communityId !== null && role !== null && isAdminRole(role) && !lapsedAdmin;
   const requestsQ = useAdminJoinRequests({ communityId: communityId ?? undefined, enabled: showRequestBadge });
   const pendingRequests = showRequestBadge ? (requestsQ.data?.length ?? 0) : 0;
-  const badgeFor = (item: NavItemWithGateStatus): Pick<NavRailItem, 'badge' | 'badgeVariant' | 'badgeDescription'> =>
-    item.badgeSignal === 'pendingJoinRequests' && pendingRequests > 0
-      ? {
-          badge: pendingRequests,
-          badgeVariant: 'brand',
-          badgeDescription: `${pendingRequests} pending join ${pendingRequests === 1 ? 'request' : 'requests'}`,
-        }
-      : {};
+
+  // Missing Florida records: the Website item's count (D11). Only a manager of a
+  // condo or HOA whose plan has the site editor can have any (apartments owe
+  // none, and the GET refuses everyone else), so no one else sends the request.
+  // This sidebar is on every authenticated page, so the answer stays fresh for
+  // five minutes instead of refetching on each navigation; publishing, a look
+  // switch or a records change invalidates it sooner.
+  const showRecordsBadge =
+    showRequestBadge &&
+    (communityType === 'condo_718' || communityType === 'hoa_720') &&
+    features?.hasSiteEditor === true;
+  const recordsQ = useRecordsAlert(communityId ?? 0, {
+    enabled: showRecordsBadge,
+    staleTime: RECORDS_BADGE_STALE_MS,
+  });
+  const missingRecords = showRecordsBadge ? (recordsQ.data?.missingCount ?? 0) : 0;
+
+  const badgeFor = (item: NavItemWithGateStatus): Pick<NavRailItem, 'badge' | 'badgeVariant' | 'badgeDescription'> => {
+    if (item.badgeSignal === 'pendingJoinRequests' && pendingRequests > 0) {
+      return {
+        badge: pendingRequests,
+        badgeVariant: 'brand',
+        badgeDescription: `${pendingRequests} pending join ${pendingRequests === 1 ? 'request' : 'requests'}`,
+      };
+    }
+    if (item.badgeSignal === 'missingRecords' && missingRecords > 0) {
+      return {
+        badge: missingRecords,
+        badgeVariant: 'warning',
+        badgeDescription: `${missingRecords} missing ${missingRecords === 1 ? 'record' : 'records'}`,
+      };
+    }
+    return {};
+  };
 
   const allVisible: NavItemWithGateStatus[] = isPmContext
     ? PM_NAV_ITEMS.map((i) => ({

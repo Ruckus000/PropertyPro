@@ -80,6 +80,76 @@ describe('notifyResidentsOfSitePublish', () => {
     });
   });
 
+  it('notifyResidentsOfSitePublish defaults to audience all', async () => {
+    await notifyResidentsOfSitePublish(INPUT);
+
+    expect(createAnnouncementMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ audience: 'all' }),
+    );
+    expect(createNotificationsMock).toHaveBeenCalledWith(
+      42,
+      expect.anything(),
+      'all',
+      'user-1',
+    );
+    expect(queueDeliveryMock).toHaveBeenCalledWith(expect.objectContaining({ audience: 'all' }));
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: expect.objectContaining({ audience: 'all' }) }),
+    );
+  });
+
+  it('owners_only reaches the announcement, the in-app recipients, the email recipients and the audit row', async () => {
+    /*
+     * Announcement audience is enforced in several places that each pick their
+     * own recipients, and they have disagreed before. All four read the one
+     * `audience` input; this pins each of them.
+     */
+    await notifyResidentsOfSitePublish({ ...INPUT, audience: 'owners_only' });
+
+    expect(createAnnouncementMock).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ audience: 'owners_only' }),
+    );
+    expect(createNotificationsMock).toHaveBeenCalledWith(
+      42,
+      expect.anything(),
+      'owners_only',
+      'user-1',
+    );
+    expect(queueDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ audience: 'owners_only' }),
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ audience: 'owners_only', source: 'site_publish' }),
+      }),
+    );
+  });
+
+  it('the default wording is the site-update wording; the live notice words its own', async () => {
+    const inApp = () => createNotificationsMock.mock.calls.at(-1)![1].body as string;
+    const body = () => createAnnouncementMock.mock.calls.at(-1)![1].body as string;
+
+    await notifyResidentsOfSitePublish(INPUT);
+    expect(body()).toMatch(
+      /^<p>The community website has been updated\.<\/p><p><a href="[^"]*sunset-condos[^"]*">View the updated site<\/a><\/p>$/,
+    );
+    expect(inApp()).toBe('The community website has been updated.');
+
+    await notifyResidentsOfSitePublish({
+      ...INPUT,
+      summary: 'Our community website is live',
+      audience: 'owners_only',
+      intro: 'Your community now has a website.',
+      linkLabel: 'Visit the website',
+    });
+    expect(body()).toContain('<p>Your community now has a website.</p>');
+    expect(body()).toContain('>Visit the website</a>');
+    expect(body()).not.toMatch(/has been updated|View the updated site/);
+    expect(inApp()).toBe('Your community now has a website.');
+  });
+
   it('delivers as the publishing user, so the email signature carries their title', async () => {
     await notifyResidentsOfSitePublish(INPUT);
 

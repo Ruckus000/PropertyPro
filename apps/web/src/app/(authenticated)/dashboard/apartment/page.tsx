@@ -22,6 +22,8 @@ import {
   celebrationNextStepFor,
   type CelebrationNextStep,
 } from '@/lib/onboarding/celebration-next-step';
+import { WebsiteLiveCard } from '@/components/website-home/website-live-card';
+import { loadWebsiteLiveCard } from '@/lib/dashboard/load-website-live-card';
 import { ApartmentDashboard } from '@/components/dashboard/apartment-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -72,11 +74,14 @@ export default async function ApartmentDashboardPage({
   // Started (not awaited) so the metrics resolve inside the Suspense
   // boundary — the route shell flushes immediately and panels stream in.
   const metricsPromise = loadApartmentMetrics(context.communityId, userId, membership);
+  // Null unless a manager's website setup is not done (D18); resolves with the page.
+  const websiteCardPromise = loadWebsiteLiveCard(context.communityId, membership.role, features);
 
   return (
     <Suspense fallback={<ApartmentDashboardSkeleton />}>
       <ApartmentDashboardPanels
         metricsPromise={metricsPromise}
+        websiteCardPromise={websiteCardPromise}
         communityId={context.communityId}
         userId={userId}
         celebrationNextStep={celebrationNextStep}
@@ -101,6 +106,7 @@ function ApartmentDashboardSkeleton() {
 
 interface ApartmentDashboardPanelsProps {
   metricsPromise: ReturnType<typeof loadApartmentMetrics>;
+  websiteCardPromise: ReturnType<typeof loadWebsiteLiveCard>;
   communityId: number;
   userId: string;
   celebrationNextStep: CelebrationNextStep | null;
@@ -109,20 +115,29 @@ interface ApartmentDashboardPanelsProps {
 
 async function ApartmentDashboardPanels({
   metricsPromise,
+  websiteCardPromise,
   communityId,
   userId,
   celebrationNextStep,
   canWriteAnnouncements,
 }: ApartmentDashboardPanelsProps) {
-  const metrics = await metricsPromise;
+  const [metrics, websiteCard] = await Promise.all([metricsPromise, websiteCardPromise]);
 
   return (
     <div className="space-y-6">
+      {websiteCard ? (
+        <WebsiteLiveCard
+          communityId={communityId}
+          communityName={metrics.communityName}
+          publicUrl={websiteCard.publicUrl}
+        />
+      ) : null}
       <OnboardingChecklist
         communityId={communityId}
         communityName={metrics.communityName}
         userId={userId}
         nextStep={celebrationNextStep}
+        variant={websiteCard ? 'secondary' : 'primary'}
       />
       <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
       <ApartmentDashboard

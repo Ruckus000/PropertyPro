@@ -64,7 +64,29 @@ export interface NotifyResidentsOfSitePublishInput {
   actorUserId: string;
   /** The PM's one-line description of what changed. Already length-validated. */
   summary: string;
+  /**
+   * Who is told. Defaults to every resident (`'all'`). The website home's
+   * **Email owners** action passes `'owners_only'`.
+   *
+   * The audience is applied in all four places that pick or record recipients,
+   * from this one value: the announcement row (which the resident feed filters
+   * on), the in-app notification recipients, the email delivery recipients and
+   * the audit metadata. Naming it once and passing it to each is what keeps them
+   * from drifting apart.
+   */
+  audience?: 'all' | 'owners_only';
+  /**
+   * The body's first line, and the in-app notification's body. Defaults to the
+   * site-update wording. The one-time "site is live" notice passes its own, so
+   * it never claims the site "has been updated".
+   */
+  intro?: string;
+  /** The link's text under the intro. Defaults to the site-update wording. */
+  linkLabel?: string;
 }
+
+const DEFAULT_INTRO = 'The community website has been updated.';
+const DEFAULT_LINK_LABEL = 'View the updated site';
 
 /** Escape before interpolating PM text into the announcement body HTML. */
 function escapeHtml(value: string): string {
@@ -98,7 +120,8 @@ async function resolveCommunitySlug(communityId: number): Promise<string | null>
 }
 
 /**
- * Post the publish as an announcement and fan it out to every resident.
+ * Post the publish as an announcement and fan it out to the audience (every
+ * resident unless `audience` narrows it).
  *
  * Never throws. See the failure-semantics note above.
  */
@@ -106,6 +129,9 @@ export async function notifyResidentsOfSitePublish({
   communityId,
   actorUserId,
   summary,
+  audience = 'all',
+  intro = DEFAULT_INTRO,
+  linkLabel = DEFAULT_LINK_LABEL,
 }: NotifyResidentsOfSitePublishInput): Promise<SitePublishNotificationResult> {
   const trimmed = summary.trim();
 
@@ -117,9 +143,9 @@ export async function notifyResidentsOfSitePublish({
   const title = trimmed;
   const body = sanitizeHtml(
     [
-      '<p>The community website has been updated.</p>',
+      `<p>${escapeHtml(intro)}</p>`,
       siteUrl
-        ? `<p><a href="${escapeHtml(siteUrl)}">View the updated site</a></p>`
+        ? `<p><a href="${escapeHtml(siteUrl)}">${escapeHtml(linkLabel)}</a></p>`
         : '',
     ]
       .filter(Boolean)
@@ -131,7 +157,7 @@ export async function notifyResidentsOfSitePublish({
     const created = await createAnnouncementForCommunity(communityId, {
       title,
       body,
-      audience: 'all',
+      audience,
       // Never pinned. A site update is routine; pinning it would displace
       // whatever the board actually chose to pin.
       isPinned: false,
@@ -154,12 +180,12 @@ export async function notifyResidentsOfSitePublish({
     {
       category: 'announcement',
       title,
-      body: 'The community website has been updated.',
+      body: intro,
       actionUrl: `/announcements/${announcementId}`,
       sourceType: 'announcement',
       sourceId: String(announcementId),
     },
-    'all',
+    audience,
     actorUserId,
   ).catch((error: unknown) => {
     console.error('[site-publish-notification] in-app notification failed', {
@@ -174,7 +200,7 @@ export async function notifyResidentsOfSitePublish({
     const recipientCount = await queueAnnouncementDelivery({
       communityId,
       announcementId,
-      audience: 'all',
+      audience,
       title,
       body,
       isPinned: false,
@@ -193,7 +219,7 @@ export async function notifyResidentsOfSitePublish({
       resourceType: 'announcement',
       resourceId: String(announcementId),
       communityId,
-      metadata: { recipientCount, audience: 'all', source: 'site_publish' },
+      metadata: { recipientCount, audience, source: 'site_publish' },
     });
 
     return { status: 'sent', announcementId, recipientCount };

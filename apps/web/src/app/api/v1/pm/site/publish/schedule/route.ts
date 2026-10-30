@@ -68,6 +68,7 @@ export const POST = withErrorHandler(
   runRoute(createSitePublishScheduleContract, async ({ body, req }) => {
     const { userId, communityId, membership } = await ensurePmAccess(req, body.communityId);
 
+    // ponytail: compatibility path for tabs opened before the Email owners deploy; the editor no longer sends notifyResidents, so only pre-deploy tabs reach it. Trigger: remove after the deploy-skew window, once no pending schedule carries notify_summary.
     if (body.notifyResidents) {
       requirePermission(membership, 'announcements', 'write');
     }

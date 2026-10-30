@@ -8,7 +8,6 @@ import { ToolRail } from './ToolRail';
 import { X } from 'lucide-react';
 import { usePanelWidth } from './use-panel-width';
 import dynamic from 'next/dynamic';
-import { GUIDED_PANEL_ID } from './guided-panel-id';
 
 // Below 768px only — a desktop PM never renders it (v4 Phase 3: the editor's
 // first-load JavaScript is at its budget).
@@ -16,12 +15,7 @@ const PhoneGate = dynamic(() => import('./PhoneGate').then((m) => m.PhoneGate), 
   loading: () => null,
 });
 
-// Guided mode only, so Free-edit PMs never fetch it (v4 Phase 3; the editor's
-// first-load JavaScript is at its budget).
-const GuidedTabs = dynamic(() => import('./GuidedTabs').then((m) => m.GuidedTabs), {
-  loading: () => null,
-});
-import { HELP_DRAWER_ID, TOOL_PANEL_TITLES, type EditorMode, type EditorToolId } from './tools';
+import { HELP_DRAWER_ID, TOOL_PANEL_TITLES, type EditorToolId } from './tools';
 import type { UrgentNotice } from '@/hooks/use-urgent-notice';
 
 const PANEL_ID = 'site-editor-tool-panel';
@@ -65,11 +59,10 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   /**
    * Full-width strip between the top bar and the columns.
    *
-   * Deliberately above the columns rather than inside a tool panel: its one
-   * consumer is the "you never finished the wizard" prompt, which is about the
-   * whole site and would be missable behind a tab the PM has no reason to open.
-   * Not rendered under the phone gate — the gate is a deliberately minimal
-   * surface for posting an urgent notice, and setup guidance is not that.
+   * Deliberately above the columns rather than inside a tool panel: what it
+   * carries is about the whole site and would be missable behind a tab the PM
+   * has no reason to open. Not rendered under the phone gate — the gate is a
+   * deliberately minimal surface for posting an urgent notice.
    */
   banner?: React.ReactNode;
   /** Which area is showing (v4 Phase 5). Forwarded to the top bar's switch. */
@@ -89,14 +82,6 @@ export interface EditorShellProps extends EditorTopBarPageProps {
   helpOpen: boolean;
   /** Opens or closes the drawer — the rail's Help tile and the top bar's button. */
   onHelpToggle: () => void;
-  /**
-   * Guided or Free edit (v4 Phase 3). Guided swaps the rail for a panel that
-   * never closes, with tabs on top and `steps` (the Next steps checklist)
-   * when no tool is chosen.
-   */
-  mode: EditorMode;
-  onModeChange: (mode: EditorMode) => void;
-  steps: React.ReactNode;
 }
 
 /**
@@ -168,9 +153,6 @@ export function EditorShell({
   help,
   helpOpen,
   onHelpToggle,
-  mode,
-  onModeChange,
-  steps,
 }: EditorShellPropsWithTool) {
   // Closed by default: the v4 builder opens on the page itself, with the rail
   // offering the tools rather than one already covering a third of the screen.
@@ -229,8 +211,6 @@ export function EditorShell({
         onViewChange={onViewChange}
         helpOpen={helpOpen}
         onHelpToggle={onHelpToggle}
-        mode={mode}
-        onModeChange={onModeChange}
       />
 
       {banner ? (
@@ -254,34 +234,6 @@ export function EditorShell({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
-          {mode === 'guided' ? (
-            <>
-              <aside
-                id={GUIDED_PANEL_ID}
-                data-tour="steps"
-                role="tabpanel"
-                aria-labelledby={`${GUIDED_PANEL_ID}-title`}
-                className="flex min-h-0 shrink-0 flex-col border-r border-edge bg-surface-card"
-                style={{ width: panelWidth }}
-              >
-                <GuidedTabs
-                  activeTool={activeTool}
-                  onActiveToolChange={setActiveTool}
-                  helpOpen={helpOpen}
-                  onHelpToggle={onHelpToggle}
-                />
-                {/* `relative`: see the Free-edit panel's scroller below. */}
-                <div
-                  data-testid="tool-panel-scroller"
-                  className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-3"
-                >
-                  {activeTool === null ? steps : renderToolPanel(activeTool)}
-                </div>
-              </aside>
-              <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
-            </>
-          ) : (
-            <>
           <ToolRail
             active={activeTool}
             onSelect={setActiveTool}
@@ -333,13 +285,10 @@ export function EditorShell({
               <PanelResizer width={panelWidth} onWidthChange={setPanelWidth} />
             </>
           ) : null}
-            </>
-          )}
 
           {/* `relative` for the same reason as the tool panel's scroller. */}
           <div
             data-testid="canvas-scroller"
-            data-tour="page"
             className="relative min-w-0 flex-1 overflow-y-auto bg-surface-page"
           >
             {children}

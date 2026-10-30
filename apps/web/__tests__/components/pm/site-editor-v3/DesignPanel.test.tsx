@@ -48,7 +48,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { DesignPanel } from '@/components/pm/site-editor-v3/panels/DesignPanel';
-import type { PresetCardData } from '@/components/pm/onboarding-wizard/PresetChooser';
+import type { PresetCardData } from '@/components/pm/site-editor-v3/panels/preset-cards';
 import { LOOKS } from '@/lib/site-looks/looks';
 
 const preset = (slug: string, displayName: string): PresetCardData => ({

@@ -107,6 +107,14 @@ export const createDocumentBodySchema = z.object({
    * moment owners can first see it (PATCH `{ posted: true }`).
    */
   draft: z.boolean().optional(),
+  /**
+   * Leave automatic record linking (D12) out of this upload. For a caller that
+   * links the document itself, from the person's own choice of record (the
+   * website home's Add records drawer): the server's guess could otherwise
+   * link the same document to a different item first, and the two links would
+   * both stand. Only `true` means anything.
+   */
+  skipAutoLink: z.literal(true).optional(),
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;

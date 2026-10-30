@@ -5,11 +5,9 @@
  * Inventory of `(authenticated)/pm/**` pages (2026-09-29):
  *   aggregate (deny)  — dashboard/communities, reports, portfolio/templates
  *   per-community     — dashboard/[community_id] (narrowed: consented id only;
- *                       any other id → /dashboard under a support session),
- *                       onboarding/website (resolves membership for ?communityId,
- *                       which middleware pins to the session community)
+ *                       any other id → /dashboard under a support session)
  *   redirect-only     — dashboard/communities/new, settings/branding,
- *                       settings/website (no data read)
+ *                       settings/website, onboarding/website (no data read)
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

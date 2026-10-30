@@ -15,9 +15,9 @@
  * Two properties are load-bearing and must not be "tidied up":
  *
  *  1. **`useSelectedSitePage()` returns `null` outside a provider — it must not
- *     throw.** `onboarding-wizard/ConfirmPublish.tsx` calls `useContentBlocks`
- *     from outside the editor tree entirely; a throwing hook would crash the
- *     wizard's publish step. `null` means "no page selected", which the write
+ *     throw.** `useContentBlocks` is also called from outside the editor tree
+ *     (the website home's look picker), and a throwing hook would crash those
+ *     surfaces. `null` means "no page selected", which the write
  *     hooks translate into the pre-11b-3 behaviour of omitting `pageId` and
  *     letting the server default to home.
  *

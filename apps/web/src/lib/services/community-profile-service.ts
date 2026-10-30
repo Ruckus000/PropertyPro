@@ -8,7 +8,6 @@
  * explicit-id-filter pattern used by community-contact-service.ts.
  *
  * Companion to:
- *   - apps/web/src/app/api/v1/pm/onboarding/website/route.ts (wizard name edit)
  *   - apps/web/src/app/api/v1/community/profile/route.ts (the profile)
  *   - apps/web/src/app/api/v1/community/unit-count/route.ts (the count)
  */

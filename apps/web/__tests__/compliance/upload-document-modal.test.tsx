@@ -50,8 +50,9 @@ function renderModal(overrides?: { onUploaded?: (id: number) => void; onClose?: 
   );
 }
 
-function chooseFile(container: HTMLElement, name: string) {
-  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+function chooseFile(_container: HTMLElement, name: string) {
+  // The modal renders in a dialog portal, outside the render container.
+  const input = document.body.querySelector('input[type="file"]') as HTMLInputElement;
   fireEvent.change(input, {
     target: { files: [new File(['x'], name, { type: 'application/pdf' })] },
   });
@@ -117,5 +118,90 @@ describe('UploadDocumentModal redaction attestation', () => {
 
     chooseFile(container, 'reserves.pdf');
     expect(screen.getByRole('button', { name: 'Upload & Link' })).toBeDisabled();
+  });
+});
+
+describe('UploadDocumentModal skipAutoLink', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useDocumentUploadMock.mockReturnValue({
+      uploadDocument: uploadDocumentMock,
+      isUploading: false,
+      progress: 0,
+      error: null,
+    });
+    // A category that needs no attestation, so one click uploads.
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [{ id: 3, name: 'Governing Documents', slug: 'governing-documents', description: null }],
+      isLoading: false,
+      error: null,
+      resolveCategoryId: () => 3,
+    });
+    uploadDocumentMock.mockResolvedValue({ document: { id: 21 }, warnings: [] });
+  });
+
+  async function upload(skipAutoLink?: boolean) {
+    const { container } = render(
+      <UploadDocumentModal
+        communityId={133}
+        defaultTitle="Bylaws"
+        categoryName="Governing Documents"
+        onUploaded={vi.fn()}
+        onClose={vi.fn()}
+        {...(skipAutoLink === undefined ? {} : { skipAutoLink })}
+      />,
+    );
+    chooseFile(container, 'bylaws.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Upload & Link' }));
+    await vi.waitFor(() => expect(uploadDocumentMock).toHaveBeenCalledTimes(1));
+    return uploadDocumentMock.mock.calls[0]![0] as Record<string, unknown>;
+  }
+
+  it('asks the server not to link the document itself when the caller links it', async () => {
+    expect(await upload(true)).toMatchObject({ skipAutoLink: true });
+  });
+
+  it('sends the request it always has without the prop', async () => {
+    expect(await upload()).not.toHaveProperty('skipAutoLink');
+  });
+});
+
+describe('UploadDocumentModal dialog', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useDocumentUploadMock.mockReturnValue({ uploadDocument: uploadDocumentMock, isUploading: false, progress: 0, error: null });
+    useDocumentCategoriesMock.mockReturnValue({
+      categories: [{ id: 3, name: 'Governing Documents', slug: 'governing-documents', description: null }],
+      isLoading: false,
+      error: null,
+      resolveCategoryId: () => 3,
+    });
+  });
+
+  it('is a titled dialog that takes focus, closes on Escape, and has a named close button', async () => {
+    const onClose = vi.fn();
+    render(
+      <UploadDocumentModal communityId={133} defaultTitle="Bylaws" categoryName="Governing Documents" onUploaded={vi.fn()} onClose={onClose} />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: 'Upload Document' });
+    await vi.waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    // The drop zone is reachable from the keyboard.
+    expect(screen.getByRole('button', { name: /Drop a file here or click to browse/ })).toHaveAttribute('tabindex', '0');
+
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not close mid-upload', () => {
+    useDocumentUploadMock.mockReturnValue({ uploadDocument: uploadDocumentMock, isUploading: true, progress: 40, error: null });
+    const onClose = vi.fn();
+    render(
+      <UploadDocumentModal communityId={133} defaultTitle="Bylaws" categoryName="Governing Documents" onUploaded={vi.fn()} onClose={onClose} />,
+    );
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -93,7 +93,8 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
   const records = checklist.data;
   // A hidden section is true whatever the records say; "all set" is not.
   if (sectionsSet && records === undefined) return null;
-  const recordsMissing = records !== undefined && missingRecordItems(records, subject).length > 0;
+  const missingRecordCount = records === undefined ? 0 : missingRecordItems(records, subject).length;
+  const recordsMissing = missingRecordCount > 0;
   const allSet = sectionsSet && !recordsMissing;
   let label = 'Required items: all set';
   if (!sectionsSet) {
@@ -128,6 +129,7 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
           onClose={close}
           onGoToSection={onGoToSection}
           onAddSection={onAddSection}
+          missingRecordCount={missingRecordCount}
         />
       </PopoverContent>
     </Popover>

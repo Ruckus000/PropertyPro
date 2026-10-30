@@ -3,9 +3,9 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { getFeaturesForCommunity, resolvePlanId } from '@propertypro/shared';
-import { getCommunityPublicInfo } from '@/lib/api/branding';
-import { FoundingAhaPanel } from '@/components/onboarding/founding-aha-panel';
+import { getFeaturesForCommunity } from '@propertypro/shared';
+import { WebsiteLiveCard } from '@/components/website-home/website-live-card';
+import { loadWebsiteLiveCard } from '@/lib/dashboard/load-website-live-card';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { canActAsBoard, checkPermissionV2 } from '@/lib/db/access-control';
@@ -89,19 +89,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     isUnitOwner: membership.isUnitOwner,
   });
 
-  const planId = resolvePlanId(membership.subscriptionPlan);
-  const showFoundingAha =
-    membership.role === 'root_manager' &&
-    planId === 'essentials' &&
-    features.hasCompliance;
-
   // Start the heavy loads WITHOUT awaiting — they resolve inside the
   // Suspense boundary below, so the shell + skeleton flush to the browser
   // immediately and the panels stream in when the data arrives.
   const dataPromise = loadDashboardData(context.communityId, userId, membership);
-  const publicInfoPromise = showFoundingAha
-    ? getCommunityPublicInfo(context.communityId)
-    : Promise.resolve(null);
+  // Null unless a manager's website setup is not done (D18); resolves with the page.
+  const websiteCardPromise = loadWebsiteLiveCard(context.communityId, membership.role, features);
 
   return (
     <ErrorBoundary>
@@ -114,7 +107,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <Suspense fallback={<DashboardSkeleton />}>
           <DashboardPanels
             dataPromise={dataPromise}
-            publicInfoPromise={publicInfoPromise}
+            websiteCardPromise={websiteCardPromise}
             communityId={context.communityId}
             userId={userId}
             celebrationNextStep={celebrationNextStep}
@@ -122,7 +115,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             hasViolations={features.hasViolations}
             hasEsign={features.hasEsign}
             canWriteAnnouncements={canWriteAnnouncements}
-            showFoundingAha={showFoundingAha}
           />
         </Suspense>
       </div>
@@ -132,7 +124,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
 interface DashboardPanelsProps {
   dataPromise: ReturnType<typeof loadDashboardData>;
-  publicInfoPromise: Promise<Awaited<ReturnType<typeof getCommunityPublicInfo>> | null>;
+  websiteCardPromise: ReturnType<typeof loadWebsiteLiveCard>;
   communityId: number;
   userId: string;
   celebrationNextStep: CelebrationNextStep | null;
@@ -141,12 +133,11 @@ interface DashboardPanelsProps {
   hasViolations: boolean;
   hasEsign: boolean;
   canWriteAnnouncements: boolean;
-  showFoundingAha: boolean;
 }
 
 async function DashboardPanels({
   dataPromise,
-  publicInfoPromise,
+  websiteCardPromise,
   communityId,
   userId,
   celebrationNextStep,
@@ -154,17 +145,16 @@ async function DashboardPanels({
   hasViolations,
   hasEsign,
   canWriteAnnouncements,
-  showFoundingAha,
 }: DashboardPanelsProps) {
-  const [data, publicInfo] = await Promise.all([dataPromise, publicInfoPromise]);
+  const [data, websiteCard] = await Promise.all([dataPromise, websiteCardPromise]);
 
   return (
     <div className="space-y-6">
-      {showFoundingAha && publicInfo ? (
-        <FoundingAhaPanel
+      {websiteCard ? (
+        <WebsiteLiveCard
           communityId={communityId}
-          communitySlug={publicInfo.slug}
           communityName={data.communityName}
+          publicUrl={websiteCard.publicUrl}
         />
       ) : null}
       <OnboardingChecklist
@@ -172,7 +162,7 @@ async function DashboardPanels({
         communityName={data.communityName}
         userId={userId}
         nextStep={celebrationNextStep}
-        variant={showFoundingAha ? 'secondary' : 'primary'}
+        variant={websiteCard ? 'secondary' : 'primary'}
       />
       <DashboardWelcome firstName={data.firstName} communityName={data.communityName} />
       <div className="grid gap-6 lg:grid-cols-2">

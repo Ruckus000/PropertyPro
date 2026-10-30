@@ -192,13 +192,16 @@ test.describe('first-run onboarding: a fresh community', () => {
     const residentName = `Pat Resident ${suffix}`;
     const documentTitle = `First Run Declaration ${suffix}`;
 
-    // ── 1. The founder lands on the dashboard with a setup checklist ──────
+    // ── 1. The founder lands on the dashboard: the website card, then the checklist ──
+    // A new community's site is live from day one, so the "Your website is live"
+    // card leads and the checklist sits below it in its secondary form.
     const portal = await signInAs(page, community.founderEmail, communityId);
     expect(portal).toBe(`/dashboard?communityId=${communityId}`);
-    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
-    await expect(checklist.getByRole('heading', { name: 'Finish setting up your community' })).toBeVisible({
+    await expect(page.getByRole('region', { name: 'Your website is live' })).toBeVisible({
       timeout: 60_000,
     });
+    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
+    await expect(checklist.getByRole('heading', { name: 'Strengthen your community' })).toBeVisible();
     await expect(checklist.getByText(/^0 of \d+ complete$/)).toBeVisible();
 
     // ── 2. Add a unit, starting from the checklist's own action ───────────
@@ -315,10 +318,12 @@ test.describe('first-run onboarding: a fresh community', () => {
     await expect(page).toHaveURL(new RegExp(`/dashboard/apartment\\?communityId=${community.communityId}`), {
       timeout: 60_000,
     });
-    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
-    await expect(checklist.getByRole('heading', { name: 'Finish setting up your community' })).toBeVisible({
+    // Apartments have websites too, so the same card leads here.
+    await expect(page.getByRole('region', { name: 'Your website is live' })).toBeVisible({
       timeout: 60_000,
     });
+    const checklist = page.getByRole('region', { name: `Setup checklist for ${community.name}` });
+    await expect(checklist.getByRole('heading', { name: 'Strengthen your community' })).toBeVisible();
     await expect(checklist.getByText('Upload your community rules')).toBeVisible();
     await expect(checklist.getByText('Add your units')).toBeVisible();
     // Apartments have no compliance feature, so no compliance step.

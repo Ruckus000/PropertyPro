@@ -156,7 +156,7 @@ export const COMMUNITIES_API_NON_ID_SEGMENTS: ReadonlySet<string> = new Set([
  * `apps/web/src` for every `searchParams` key read):
  *
  *   - `communityId` — ~20 pages (`app/mobile/**`, `(site-editor)/pm/website-editor`,
- *     `(site-preview)/pm/site-preview`, `pm/onboarding/website`, …) read
+ *     `(site-preview)/pm/site-preview`, `pm/website`, …) read
  *     `Number(searchParams.communityId)` and call `requireCommunityMembership`
  *     with it. On a tenant SUBDOMAIN `resolveCommunityContext` takes the host
  *     and ignores this param, so the header says A while the page renders B.

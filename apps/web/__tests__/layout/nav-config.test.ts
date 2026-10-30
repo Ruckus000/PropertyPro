@@ -227,19 +227,27 @@ describe('nav href generation', () => {
     expect(byId.get('compliance')?.href(42)).toBe('/communities/42/compliance');
   });
 
-  it('points both Website entries at the editor, not the retired settings page', () => {
-    // /pm/settings/website is now a redirect into /pm/website-editor. Linking
-    // at it would cost every PM two route loads to reach the editor.
+  it('the Website nav item opens the website home', () => {
+    // The community item lands on /pm/website (status, looks, records), not the
+    // editor or the retired wizard. The portfolio rail has no tenant in scope,
+    // so it still goes to the editor, which bounces to the community picker.
     const community = new Map(NAV_ITEMS.map((item) => [item.id, item]));
     const portfolio = new Map(PM_NAV_ITEMS.map((item) => [item.id, item]));
 
-    expect(community.get('website')?.href(42)).toBe('/pm/website-editor?communityId=42');
+    expect(community.get('website')?.href(42)).toBe('/pm/website?communityId=42');
     expect(portfolio.get('branding')?.href(0)).toBe('/pm/website-editor');
   });
 
-  it('highlights Website on the editor path', () => {
+  it('counts the missing Florida records on the Website item', () => {
+    expect(NAV_ITEMS.find((item) => item.id === 'website')?.badgeSignal).toBe('missingRecords');
+  });
+
+  it('highlights Website on the website home, the look picker and the editor', () => {
     // `matchPrefixes` used to be ['/pm/settings'] alone, which silently stopped
-    // matching the moment traffic moved to /pm/website-editor.
+    // matching the moment traffic moved to /pm/website-editor; the home and the
+    // picker (/pm/website/looks) are the next such move.
+    expect(getActiveItemId(NAV_ITEMS, '/pm/website')).toBe('website');
+    expect(getActiveItemId(NAV_ITEMS, '/pm/website/looks')).toBe('website');
     expect(getActiveItemId(NAV_ITEMS, '/pm/website-editor')).toBe('website');
     expect(getActiveItemId(PM_NAV_ITEMS, '/pm/website-editor')).toBe('branding');
   });
@@ -363,6 +371,8 @@ describe('isPmPortfolioPath', () => {
     expect(isPmPortfolioPath('/pm/site-preview')).toBe(false);
     expect(isPmPortfolioPath('/pm/onboarding/website')).toBe(false);
     expect(isPmPortfolioPath('/pm/website-editor')).toBe(false);
+    expect(isPmPortfolioPath('/pm/website')).toBe(false);
+    expect(isPmPortfolioPath('/pm/website/looks')).toBe(false);
     // Per-community PM dashboard redirect — not the portfolio list.
     expect(isPmPortfolioPath('/pm/dashboard/12')).toBe(false);
   });

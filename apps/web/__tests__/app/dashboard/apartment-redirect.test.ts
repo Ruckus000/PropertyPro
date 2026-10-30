@@ -71,7 +71,8 @@ vi.mock('@/lib/queries/cross-community', () => ({
 vi.mock('@/lib/dashboard/load-dashboard-data', () => ({ loadDashboardData: vi.fn() }));
 vi.mock('@/lib/db/access-control', () => ({ checkPermissionV2: vi.fn(() => true) }));
 vi.mock('@/lib/api/branding', () => ({ getCommunityPublicInfo: vi.fn() }));
-vi.mock('@/components/onboarding/founding-aha-panel', () => ({ FoundingAhaPanel: () => null }));
+vi.mock('@/components/website-home/website-live-card', () => ({ WebsiteLiveCard: () => null }));
+vi.mock('@/lib/dashboard/load-website-live-card', () => ({ loadWebsiteLiveCard: vi.fn() }));
 vi.mock('@/components/onboarding/onboarding-checklist', () => ({ OnboardingChecklist: () => null }));
 vi.mock('@/components/dashboard/dashboard-welcome', () => ({ DashboardWelcome: () => null }));
 vi.mock('@/components/dashboard/dashboard-announcements', () => ({ DashboardAnnouncements: () => null }));

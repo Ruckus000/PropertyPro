@@ -137,9 +137,12 @@ function toMissing(item: ChecklistItemData, state: MissingRecord['state']): Miss
 }
 
 /**
- * The records a covered association still owes the website: applicable,
- * non-conditional items whose record is not up and current. Empty below the
- * statute's size threshold and for apartments, where nothing is owed.
+ * The records a covered association still owes the website: applicable items
+ * whose record is not up and current. A conditional item is owed once it has a
+ * record (a draft, or a posted file that has gone out of date), as
+ * `summarizeRecords` counts it; with no record it is a question for
+ * `conditionalRecordItems` instead. Empty below the statute's size threshold
+ * and for apartments, where nothing is owed.
  *
  * The state is the same one `summarizeRecords` reads off the loader's derived
  * status, so a link to a draft or a deleted file is `not_posted` /
@@ -151,7 +154,7 @@ export function missingRecordItems(
 ): MissingRecord[] {
   if (requirementLevel(subject) !== 'required') return [];
   return items.flatMap((item) => {
-    if (item.isApplicable === false || item.isConditional) return [];
+    if (item.isApplicable === false || (item.isConditional && !hasRecord(item))) return [];
     const state = itemStatus(item);
     return state === 'up_to_date' ? [] : [toMissing(item, state)];
   });
@@ -174,14 +177,18 @@ export function conditionalRecordItems(
 }
 
 /**
- * Items whose record was linked by automatic matching and still is. A manual
- * relink moves `documentId` and leaves `autoLinkedDocumentId` behind. The
- * null check comes first: two nulls are equal.
+ * Items whose record was linked by automatic matching and still is, and whose
+ * document is still posted. A manual relink moves `documentId` and leaves
+ * `autoLinkedDocumentId` behind. The null check comes first: two nulls are
+ * equal. A document since taken back to a draft or deleted is listed as missing
+ * (`missingRecordItems`), so it is not counted here as well.
  */
 export function autoLinkedRecordCount(items: readonly ChecklistItemData[]): number {
   return items.filter(
     (item) =>
-      item.autoLinkedDocumentId != null && item.documentId === item.autoLinkedDocumentId,
+      item.autoLinkedDocumentId != null &&
+      item.documentId === item.autoLinkedDocumentId &&
+      item.documentState === 'posted',
   ).length;
 }
 

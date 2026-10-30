@@ -49,7 +49,7 @@ function complianceStatus(score: number): string {
 
 /**
  * Derives the "Site" pill from the two raw onboarding signals.
- *   - customized: the PM completed the wizard (site_onboarding_completed_at set)
+ *   - customized: website setup is done (site_onboarding_completed_at set)
  *   - draft:      not completed, but unpublished draft blocks exist (started)
  *   - default:    neither — site is still using the auto-applied starter pack
  * Reuses existing StatusBadge keys: compliant (green), submitted (info), neutral.
@@ -175,7 +175,7 @@ export const portfolioColumns: ColumnDef<PortfolioCommunity, unknown>[] = [
       const { statusKey, label } = siteStatus(community);
       return (
         <a
-          href={`/pm/onboarding/website?communityId=${community.communityId}`}
+          href={`/pm/website?communityId=${community.communityId}`}
           aria-label={`Customize the public site for ${community.communityName} (${label})`}
           className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2"
         >

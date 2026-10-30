@@ -7,10 +7,12 @@
  * client can be used here. Callers verify a management role
  * (property_manager / root_manager) in the target community before
  * invoking — the rows returned are not community-sensitive but the
- * wizard surface that consumes them is gated.
+ * editor and preview pages that consume them are gated. (The `ForWizard`
+ * names date from the retired setup wizard; the Design panel and the
+ * signed-in preview are the readers now.)
  *
  * Note what the callers do NOT do: both page callers
- * (pm/onboarding/website, pm/site-preview) check membership + role only.
+ * (pm/site-preview, pm/website-editor) check membership + role only.
  * The `hasSiteEditor` plan gate lives on the mutating route, not on this
  * read path.
  */

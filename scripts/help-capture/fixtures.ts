@@ -55,7 +55,6 @@ import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { createVisitorForCommunity } from '@/lib/services/package-visitor-service';
 import { createPollForCommunity } from '@/lib/services/polls-service';
 import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
-import { mergeUserPreference } from '@/lib/services/user-preferences-service';
 import { setCommunitySnowbirdEnabled } from '@/lib/services/snowbird-digest-subscription-service';
 import { createArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { CAPTURE_COMMUNITIES } from './manifest-schema';
@@ -155,10 +154,6 @@ async function main(): Promise<void> {
   await step('website starter sections (Sunset Condos)', async () =>
     (await applyStarterPackToCommunity(condoId, 'condo_718')).applied,
   );
-  // The site is never published, so the editor's first-run chooser would cover
-  // every editor shot. Key and shape: app/api/v1/pm/site-editor/preferences/route.ts.
-  await mergeUserPreference(camId, 'site_editor_mode', { mode: 'free' });
-  done.push('+ website editor mode for cam: free edit (set on every run)');
 
   // pk-pending, pk-pickup (site manager) and pk-mine (tenant). Inserted
   // directly: createPackageForCommunity notifies the unit's residents.
