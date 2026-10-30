@@ -23,6 +23,9 @@
 
 set -euo pipefail
 
+# ponytail: both upstreams are anonymous, so a run where both are throttled
+# still goes red. Trigger: a red run with both copies failing — then pull ECR
+# authenticated (AWS credentials as a repo secret) instead of adding a third.
 UPSTREAMS="mirror.gcr.io/library/postgres public.ecr.aws/docker/library/postgres"
 
 digest="${1:-}" dest_repo="${2:-}"
