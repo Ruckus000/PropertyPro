@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AUDIT_LOG_TRIGGER_APPROVED_FILES } from '../lib/audit-log-trigger-approved-files';
 
 /**
  * `verify-audit-log-trigger-overrides.ts` walks `apps/` and `packages/` looking
@@ -32,19 +33,6 @@ const tsxBin = join(repoRoot, 'node_modules', '.bin', 'tsx');
 const OVERRIDE_STATEMENT =
   'ALTER TABLE compliance_audit_log DISABLE TRIGGER compliance_audit_log_append_only_guard';
 
-/**
- * The guard's own approved list. It checks each of these against the root it
- * scans (each must still override the trigger, under `pg_advisory_xact_lock`),
- * so a fixture tree has to carry them. If the guard's list changes, the
- * fixture-tree tests fail on a missing file, which points straight here.
- */
-const APPROVED_FILES = [
-  'apps/web/__tests__/integration/helpers/multi-tenant-test-kit.ts',
-  'apps/web/__tests__/elections/vote-integration.test.ts',
-  'packages/db/__tests__/reconcile-auth-user-id.integration.test.ts',
-  'packages/db/src/seed/community/users.ts',
-];
-
 const OVERRIDE_SOURCE = `const q = ${JSON.stringify(OVERRIDE_STATEMENT)};\n`;
 const APPROVED_SOURCE = `await tx.execute('select pg_advisory_xact_lock(1)');\n${OVERRIDE_SOURCE}`;
 
@@ -69,7 +57,9 @@ function plant(relPath: string, content: string): void {
 
 beforeEach(() => {
   fixtureRoot = mkdtempSync(join(tmpdir(), 'audit-log-trigger-overrides-'));
-  for (const file of APPROVED_FILES) plant(file, APPROVED_SOURCE);
+  // The guard checks each approved file against the root it scans, so every
+  // fixture tree carries them.
+  for (const file of AUDIT_LOG_TRIGGER_APPROVED_FILES) plant(file, APPROVED_SOURCE);
 });
 
 afterEach(() => {
@@ -134,14 +124,11 @@ describe('guard:audit-log-trigger-overrides', () => {
     expect(status).toBe(1);
   }, 60_000);
 
-  // Every mistyped --root must refuse (exit 2, "could not check"), never fall
-  // back to scanning the repo and pass, and never report a violation (exit 1).
+  // A mistyped --root must refuse (exit 2, "could not check"), never fall back
+  // to scanning the repo and pass, and never report a violation (exit 1). Every
+  // parse form is covered in root-arg.test.ts; this proves the guard wires it.
   it.each([
     ['a bare --root', ['--root']],
-    ['an empty value', ['--root', '']],
-    ['an empty = value', ['--root=']],
-    ['a flag in place of the value', ['--root', '--verbose']],
-    ['an unrecognised argument', ['--roots', '/tmp']],
     ['a directory that does not exist', ['--root', join(tmpdir(), 'no-such-dir-4c1e9b')]],
   ])('refuses (exit 2) %s', (_label, args) => {
     const { status, output } = runGuard(args);
@@ -156,6 +143,16 @@ describe('guard:audit-log-trigger-overrides', () => {
     rmSync(join(fixtureRoot, 'apps'), { recursive: true, force: true });
     const { status, output } = runGuard(['--root', fixtureRoot]);
     expect(output).toContain('Cannot check');
+    expect(status).toBe(2);
+  }, 60_000);
+
+  // So is a root missing an approved file: the list or the root is wrong, which
+  // is not an unauthorized override.
+  it('refuses (exit 2) a root missing an approved file', () => {
+    const missing = AUDIT_LOG_TRIGGER_APPROVED_FILES[2];
+    rmSync(join(fixtureRoot, missing));
+    const { status, output } = runGuard(['--root', fixtureRoot]);
+    expect(output).toContain(`Cannot check: approved file ${join(fixtureRoot, missing)} is missing.`);
     expect(status).toBe(2);
   }, 60_000);
 });

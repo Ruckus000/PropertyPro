@@ -15,18 +15,22 @@ jobs:
   # The Postgres digest lives in scripts/ci/postgres-image-digest, not in this
   # file: postgres-digest-bump.yml moves it, and GITHUB_TOKEN may push a change
   # to that file but can never push one under .github/workflows/. A service
-  # image cannot read a file, so this job reads it and passes it on.
+  # image cannot read a file, so this job reads it and passes it on. The major
+  # version (and why it is 17) lives beside it in scripts/ci/postgres-image-tag.
   pin:
     name: postgres-pin
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       digest: ${{ steps.read.outputs.digest }}
+      major: ${{ steps.read.outputs.major }}
     steps:
       - name: Checkout the pin
         uses: actions/checkout@v4
         with:
-          sparse-checkout: scripts/ci/postgres-image-digest
+          sparse-checkout: |
+            scripts/ci/postgres-image-digest
+            scripts/ci/postgres-image-tag
           sparse-checkout-cone-mode: false
 
       - name: Read the pinned digest
@@ -40,6 +44,12 @@ jobs:
             exit 1
           fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          major=$(grep -v '^[[:space:]]*#' scripts/ci/postgres-image-tag | tr -d '[:space:]')
+          if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+            echo "::error file=scripts/ci/postgres-image-tag::Not a major version: '${major}'"
+            exit 1
+          fi
+          echo "major=$major" >> "$GITHUB_OUTPUT"
 
   tenant-isolation-game-day:
     name: tenant-isolation-game-day
@@ -54,7 +64,7 @@ jobs:
         # integration-tests.yml: anonymous pulls from shared runner IPs get
         # rate-limited (Docker Hub, then ECR Public on 2026-09-27).
         # The digest comes from scripts/ci/postgres-image-digest via the `pin` job.
-        image: ghcr.io/ruckus000/postgres:16@${{ needs.pin.outputs.digest }}
+        image: ghcr.io/ruckus000/postgres:${{ needs.pin.outputs.major }}@${{ needs.pin.outputs.digest }}
         credentials:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
@@ -92,6 +102,22 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Assert the service runs the pinned Postgres major
+        # Pulling by digest IGNORES the tag in `image:` (GHCR has no bare
+        # `:<major>` tag at all — only `<major>-<hex12>` bookkeeping tags), so
+        # the tag cannot say which version ran. This makes the pair agree: a
+        # digest from another major fails here, before any test runs.
+        env:
+          PG_MAJOR: ${{ needs.pin.outputs.major }}
+        run: |
+          set -euo pipefail
+          got=$(psql "$DATABASE_URL" -tAX -v ON_ERROR_STOP=1 -c "select current_setting('server_version_num')::int / 10000")
+          echo "Postgres $(psql "$DATABASE_URL" -tAX -c 'show server_version') (pinned major ${PG_MAJOR})"
+          if [ "$got" != "$PG_MAJOR" ]; then
+            echo "::error file=scripts/ci/postgres-image-digest::Service is Postgres ${got}, but scripts/ci/postgres-image-tag pins ${PG_MAJOR}"
+            exit 1
+          fi
 
       - name: Stub Supabase primitives
         # Shared single source of truth (see scripts/sql/local-supabase-stub.sql).
