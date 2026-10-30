@@ -105,7 +105,8 @@ line says where.
   Postmark digest was **read 2026-09-22: one known source (Amazon SES — Resend's
   upstream), 8/8 fully aligned, zero unknown senders** — the item's last open step, closed;
   result and standing posture in §5.5. The follow-through (first digest window fully under
-  reject, ~09-27) is a dated GitHub issue: #1160, checkable with `pnpm dmarc:check`.
+  reject, ~09-27) was GitHub issue #1160. It is now a manual read of Postmark's weekly
+  digest email (§5.5); the scripted check was retired on 2026-10-30.
 
 - **5. Nothing polls the readiness probe** — closed 2026-09-08.
   `.github/workflows/production-health.yml` polls readiness, cron-health and both

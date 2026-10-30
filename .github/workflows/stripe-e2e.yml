@@ -14,9 +14,9 @@ name: Stripe E2E
 # whenever Stripe has a blip, and would deny secrets to fork PRs, where it would
 # then fail for everyone outside the repo.
 #
-# So it runs on its own cadence and is NOT a required check. What it buys is a
-# daily answer to "does the paid signup path still work end to end", which
-# nothing else in CI can tell you: these four defects
+# So it runs on its own triggers and is NOT a required check. What it buys is an
+# answer to "does the paid signup path still work end to end", which nothing
+# else in CI can tell you: these four defects
 # (docs/signup-checkout-provisioning.md §2) all survived a fully green CI.
 #
 # ## Triggers
@@ -24,10 +24,15 @@ name: Stripe E2E
 #   - pull_request, but only for commits touching billing/signup/e2e code. Fork
 #     PRs get no secrets and so land in the "not configured" path below, which
 #     reports clearly instead of failing.
-#   - schedule, daily. Stripe can change Checkout's markup under us at any time
-#     without a commit on our side; three of the four selector faults this suite
-#     already hit were exactly that kind of change.
 #   - workflow_dispatch, for running it on demand.
+#
+# ponytail: no daily schedule while the test-mode secrets below are unset. Until
+# 2026-10-30 a daily cron ran here, stopped at the "not configured" gate in ~4 s
+# and reported success, which read as "signup is tested daily" when nothing ran.
+# Trigger: the day both secrets are added, restore
+# `schedule: - cron: '20 7 * * *'`. Stripe can change Checkout's markup without
+# a commit on our side, and three of the four selector faults this suite hit
+# were exactly that kind of change, so a configured suite needs the daily run.
 #
 # ## Setup required before this can do anything
 #
@@ -59,10 +64,6 @@ on:
       - 'packages/db/migrations/**'
       - 'scripts/seed-stripe-test-prices.ts'
       - '.github/workflows/stripe-e2e.yml'
-  schedule:
-    # 07:20 UTC daily. Offset off the hour so it does not queue behind the
-    # crowd of on-the-hour cron workflows.
-    - cron: '20 7 * * *'
   workflow_dispatch:
 
 permissions:
