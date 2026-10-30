@@ -42,6 +42,7 @@ on:
   push:
     paths:
       - 'scripts/ci/postgres-image-digest'
+      - 'scripts/ci/postgres-image-tag'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/stripe-e2e.yml'
       - '.github/workflows/ci-image-mirror.yml'
@@ -88,6 +89,13 @@ jobs:
             exit 1
           fi
 
+          # The major, for the bookkeeping tag below (scripts/ci/postgres-image-tag).
+          major=$(grep -v '^[[:space:]]*#' scripts/ci/postgres-image-tag | tr -d '[:space:]')
+          if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+            echo "::error file=scripts/ci/postgres-image-tag::Not a major version: '${major}'"
+            exit 1
+          fi
+
           dest_repo="ghcr.io/${OWNER,,}/postgres"
           printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
 
@@ -96,7 +104,7 @@ jobs:
             # A tag per digest keeps every mirrored version tagged (never an
             # orphaned untagged version) and lets the bump job add one without
             # moving another. Consumers pull by digest; the tag is bookkeeping.
-            dest="${dest_repo}:16-${hex:0:12}"
+            dest="${dest_repo}:${major}-${hex:0:12}"
 
             if skopeo inspect --raw "docker://${dest_repo}@${digest}" >/dev/null 2>&1; then
               echo "Already mirrored: ${dest_repo}@${digest}"
