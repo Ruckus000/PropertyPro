@@ -22,8 +22,9 @@ name: CI Image Mirror
 # What this does NOT change: the image. `skopeo copy --all --preserve-digests`
 # copies the multi-arch index byte-for-byte, so the GHCR digest IS the pinned
 # upstream digest, and the job below refuses to pass unless it can read that
-# exact digest back from GHCR. The upstream stays public.ecr.aws's mirror of the
-# Docker Hub official image; only the place our runners pull from moves.
+# exact digest back from GHCR. The upstream stays the Docker Hub official image
+# (pulled from mirror.gcr.io, falling back to public.ecr.aws — see
+# scripts/ci/mirror-postgres-digest.sh); only the place our runners pull from moves.
 #
 # The package is created by GITHUB_TOKEN from this repo's workflow, which links
 # it to the repo and grants this repo's workflows access. Consumers therefore
@@ -47,6 +48,7 @@ on:
       - '.github/workflows/stripe-e2e.yml'
       - '.github/workflows/ci-image-mirror.yml'
       - 'scripts/ci/supabase-images.sh'
+      - 'scripts/ci/mirror-postgres-digest.sh'
   workflow_dispatch:
 
 permissions:
@@ -65,9 +67,6 @@ jobs:
       contents: read
       # Create/update the ghcr.io/<owner>/postgres package. Scoped to this job.
       packages: write
-
-    env:
-      SOURCE_REPO: public.ecr.aws/docker/library/postgres
 
     steps:
       - name: Checkout
@@ -89,40 +88,9 @@ jobs:
             exit 1
           fi
 
-          # The major, for the bookkeeping tag below (scripts/ci/postgres-image-tag).
-          major=$(grep -v '^[[:space:]]*#' scripts/ci/postgres-image-tag | tr -d '[:space:]')
-          if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
-            echo "::error file=scripts/ci/postgres-image-tag::Not a major version: '${major}'"
-            exit 1
-          fi
-
-          dest_repo="ghcr.io/${OWNER,,}/postgres"
           printf '%s' "$GH_TOKEN" | skopeo login ghcr.io -u "$GH_ACTOR" --password-stdin
-
           for digest in $digests; do
-            hex="${digest#sha256:}"
-            # A tag per digest keeps every mirrored version tagged (never an
-            # orphaned untagged version) and lets the bump job add one without
-            # moving another. Consumers pull by digest; the tag is bookkeeping.
-            dest="${dest_repo}:${major}-${hex:0:12}"
-
-            if skopeo inspect --raw "docker://${dest_repo}@${digest}" >/dev/null 2>&1; then
-              echo "Already mirrored: ${dest_repo}@${digest}"
-            else
-              echo "Mirroring ${SOURCE_REPO}@${digest} -> ${dest}"
-              skopeo copy --all --preserve-digests --retry-times 3 \
-                "docker://${SOURCE_REPO}@${digest}" "docker://${dest}"
-            fi
-
-            # Fail closed: prove GHCR serves the EXACT pinned bytes. A copy that
-            # re-wrote the index would change its digest and every consumer's
-            # pull-by-digest would then fail, and with it the deploy gate.
-            got="sha256:$(skopeo inspect --raw "docker://${dest_repo}@${digest}" | sha256sum | cut -d' ' -f1)"
-            if [ "$got" != "$digest" ]; then
-              echo "::error::GHCR returned ${got} for ${digest}"
-              exit 1
-            fi
-            echo "Verified: ${dest_repo}@${digest}"
+            scripts/ci/mirror-postgres-digest.sh "$digest" "ghcr.io/${OWNER,,}/postgres"
           done
 
   # `supabase start` pulls ~12 images from public.ecr.aws/supabase anonymously;
