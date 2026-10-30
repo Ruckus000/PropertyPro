@@ -570,23 +570,16 @@ but now it *looks* configured, which is worse than the honest bounce.
    DNS of its own is unsupportable — but it means the next digest (~2026-09-27, the
    first window fully under reject) deserves one glance, and a new *intentional*
    subdomain sender needs its own `_dmarc` (or DKIM + alignment) before it can mail.
-   **That glance is now automated, not remembered.** `.github/workflows/dmarc-digest-
-   check.yml` runs `scripts/dmarc-digest-check.ts` (`pnpm dmarc:check`) every Monday
-   07:17 UTC over a trailing 14-day window — the shape mirrors `production-health.yml`:
-   GitHub, not a Vercel cron, because a watcher must not share the failure domain it
-   watches. The script's tri-state exit is inherited verbatim — 0 clean · 1 finding ·
-   2 could-not-check (missing token, HTTP error, unparseable payload, **or zero reports**
-   — a domain sending any mail gets daily aggregate reports, so an empty window means the
-   `rua` pipeline broke, which is exactly the silent failure class this checklist exists
-   to kill; a missing `DMARC_API_TOKEN` repo secret therefore goes red on purpose, same
-   posture as #976-era "seventeen dead crons behind a green dashboard"). Its allowlist is
-   deliberately one entry (`amazonses.com` = SES, Resend's upstream): a second entry can
-   only ever mean a human widened it after looking. The first scheduled run (~2026-09-28)
-   covers the first full-reject week; tracked to first-green-run in issue
-   [#1160](https://github.com/Ruckus000/PropertyPro/issues/1160). **Prerequisite the
-   workflow cannot self-satisfy: `DMARC_API_TOKEN` must be added under Settings → Secrets
-   and variables → Actions** (the DMARC dashboard's account token; GET-only use here, but
-   the token itself is write-capable — rotate it if it ever appears in a chat log).
+   **That glance is manual: read the weekly Postmark digest email.** Postmark's free
+   plan emails a weekly aggregate digest; its API, which a scripted check needs, is a
+   paid plan. An automated watcher (`dmarc-digest-check.yml` + `scripts/dmarc-digest-
+   check.ts`) was added on 2026-09-28 but never ran: the `DMARC_API_TOKEN` secret it
+   needed was never added, so it was red every Monday until it was disabled and then
+   deleted on 2026-10-30, rather than paying for the plan. What to look for in each
+   digest: any source other than `amazonses.com` (SES, Resend's upstream, the only
+   legitimate sender) and any unaligned row. Under `reject`, either means mail is
+   being bounced. Nothing alerts on this now. If a digest stops arriving, the `rua`
+   pipeline broke.
 
    > **`propertyprofl.com` — the other domain, and now the softer target.** Verified
    > 2026-09-10 (wildcard control empty, so these absences are real): Google Workspace MX
