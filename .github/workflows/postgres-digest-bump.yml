@@ -6,9 +6,10 @@ name: Postgres Image Digest Bump
 # it silently freezes the Postgres patch level, including security patches, until
 # somebody happens to notice. This job is that process.
 #
-# Weekly it resolves what `postgres:16` currently points at on the ECR Public
-# mirror and, if that differs from what is pinned, copies the new digest into
-# this repo's GHCR package (where the consumers actually pull from — see
+# Weekly it resolves what `postgres:<major>` currently points at on the ECR
+# Public mirror (the major is scripts/ci/postgres-image-tag; it never changes
+# the major, only the digest within it) and, if that differs from what is
+# pinned, copies the new digest into this repo's GHCR package (where the consumers actually pull from — see
 # ci-image-mirror.yml), pushes a branch moving the pin, and opens an ISSUE
 # linking to it. The mirror step MUST precede the branch: the PR's
 # integration-tests pulls the new digest from GHCR, and a push made with
@@ -58,12 +59,23 @@ jobs:
 
     env:
       IMAGE_REPO: docker/library/postgres
-      IMAGE_TAG: '16'
       REGISTRY: public.ecr.aws
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Read the pinned major
+        # The tag to resolve, single-sourced in scripts/ci/postgres-image-tag
+        # (see that file for why it is 17). Exported for every later step.
+        run: |
+          set -euo pipefail
+          major=$(grep -v '^[[:space:]]*#' scripts/ci/postgres-image-tag | tr -d '[:space:]')
+          if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+            echo "::error file=scripts/ci/postgres-image-tag::Not a major version: '${major}'"
+            exit 1
+          fi
+          echo "IMAGE_TAG=$major" >> "$GITHUB_ENV"
 
       - name: Resolve the current digest for the tag
         id: resolve
@@ -164,9 +176,9 @@ jobs:
             # YAML block scalar must stay indented, and a column-0 continuation
             # silently ends the block and breaks the whole workflow file.
             git commit \
-              -m "chore(ci): bump pinned postgres:16 digest" \
+              -m "chore(ci): bump pinned postgres:${IMAGE_TAG} digest" \
               -m "${CURRENT} -> ${LATEST}" \
-              -m "Pushed automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:16 on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases. The new digest was copied to this repo's GHCR package before this commit."
+              -m "Pushed automatically by .github/workflows/postgres-digest-bump.yml. The tag still resolves to postgres:${IMAGE_TAG} on the ECR Public mirror; only the digest moved, which is how upstream ships patch releases. The new digest was copied to this repo's GHCR package before this commit."
 
             git push origin "$branch"
           fi
@@ -186,7 +198,7 @@ jobs:
 
           compare="https://github.com/${REPO}/compare/main...${branch}?expand=1"
           {
-            printf '`postgres:16` on the ECR Public mirror now resolves to a new image\n'
+            printf '`postgres:%s` on the ECR Public mirror now resolves to a new image\n' "$IMAGE_TAG"
             printf 'index — that is how upstream ships patch releases. The pin is\n'
             printf 'stale; the bump is already on a branch.\n\n'
             printf '| | |\n|---|---|\n'
@@ -194,7 +206,7 @@ jobs:
             printf '| To | `%s` |\n' "$LATEST"
             printf '| Branch | `%s` |\n\n' "$branch"
             printf '**[Open the PR](%s)** — suggested title:\n' "$compare"
-            printf '`chore(ci): bump pinned postgres:16 digest to %s`\n\n' "$short"
+            printf '`chore(ci): bump pinned postgres:%s digest to %s`\n\n' "$IMAGE_TAG" "$short"
             printf 'Opened by a person, the PR runs CI normally. Merge once\n'
             printf '`integration-tests` is green: it is the primary consumer of this\n'
             printf 'image and will pull the new digest, which has already been copied\n'

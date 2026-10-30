@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copy one postgres:16 image index, by digest, into our GHCR package.
+# Copy one Postgres image index, by digest, into our GHCR package.
 #
 #   mirror-postgres-digest.sh <sha256:digest> <dest-repo>   # e.g. ghcr.io/ruckus000/postgres
 #
@@ -19,7 +19,7 @@
 # of retries before giving up.
 #
 # Exit: 0 mirrored or already present, and verified · 1 no upstream worked, or
-# the read-back did not match · 2 bad arguments.
+# the read-back did not match · 2 bad arguments or an unreadable postgres-image-tag.
 
 set -euo pipefail
 
@@ -33,10 +33,17 @@ if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || [ -z "$dest_rep
   echo "usage: mirror-postgres-digest.sh <sha256:digest> <dest-repo>" >&2
   exit 2
 fi
+# The major, single-sourced in postgres-image-tag next to this script, names
+# the bookkeeping tag. Read here so neither caller can pass a different one.
+major=$(grep -v '^[[:space:]]*#' "$(dirname "$0")/postgres-image-tag" | tr -d '[:space:]')
+if ! printf '%s' "$major" | grep -Eq '^[0-9]+$'; then
+  echo "::error file=scripts/ci/postgres-image-tag::Not a major version: '${major}'"
+  exit 2
+fi
 hex="${digest#sha256:}"
 # A tag per digest keeps every mirrored version tagged (never an orphaned
 # untagged version). Consumers pull by digest; the tag is bookkeeping.
-dest="${dest_repo}:16-${hex:0:12}"
+dest="${dest_repo}:${major}-${hex:0:12}"
 
 if skopeo inspect --raw "docker://${dest_repo}@${digest}" >/dev/null 2>&1; then
   echo "Already mirrored: ${dest_repo}@${digest}"

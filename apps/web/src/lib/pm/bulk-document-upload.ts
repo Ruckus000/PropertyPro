@@ -9,7 +9,9 @@
  * that per-community Promise.allSettled error capture stays at the route)
  * and for verifying PM permissions for each communityId BEFORE invoking.
  */
+import { captureException } from '@sentry/nextjs';
 import { createScopedClient, documents } from '@propertypro/db';
+import { autoLinkCommunityRecords } from '@/lib/services/record-auto-link-service';
 
 export interface BulkDocumentInput {
   fileName: string;
@@ -36,8 +38,9 @@ export async function insertBulkDocumentsForCommunity(params: {
   const { communityId, uploadedBy, docs } = params;
   const scoped = createScopedClient(communityId);
   let created = 0;
+  const createdIds: number[] = [];
   for (const doc of docs) {
-    await scoped.insert(documents, {
+    const [row] = await scoped.insert(documents, {
       title: doc.fileName,
       description: doc.description ?? null,
       categoryId: doc.categoryId ?? null,
@@ -48,6 +51,23 @@ export async function insertBulkDocumentsForCommunity(params: {
       uploadedBy,
     });
     created++;
+    if (row) createdIds.push(Number(row['id']));
+  }
+
+  // Bulk rows are inserted posted, so link the records THESE rows unambiguously
+  // fill (D12), with one read for the whole batch. Only these: linking the
+  // documents the community already had is a backfill, which a person reviews
+  // first. Bookkeeping: a failure is reported, never thrown, because the
+  // documents are already saved.
+  if (createdIds.length > 0) {
+    try {
+      await autoLinkCommunityRecords(communityId, uploadedBy, { documentIds: createdIds });
+    } catch (err) {
+      captureException(err, {
+        tags: { record_auto_link: 'bulk_upload' },
+        extra: { communityId },
+      });
+    }
   }
   return { created };
 }

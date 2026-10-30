@@ -13,6 +13,11 @@ export default defineConfig({
     // with nothing wrong. This is a ceiling, not a target: a guard that truly
     // hangs still fails.
     testTimeout: 30_000,
+    // Fails the run if any test creates, deletes or renames a file inside the
+    // repo, even one it removes again in afterEach. Planted fixtures race the
+    // guards that scan the same trees in parallel workers; see
+    // lib/tree-write-sentinel.ts.
+    globalSetup: ['./vitest.global-setup.ts'],
   },
   resolve: {
     // Scripts are not a workspace package, so `@propertypro/*` specifiers have

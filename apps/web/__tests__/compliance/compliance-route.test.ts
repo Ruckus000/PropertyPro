@@ -10,16 +10,19 @@
  *
  * Coverage:
  *   - GET happy path (status derivation + auto-complete fire-and-forget)
+ *   - GET carries autoLinkedDocumentId and notApplicableReason
  *   - GET 400 invalid/missing communityId query
  *   - GET 401 unauth, 403 per gate (membership / condo-feature / permission)
  *   - POST happy (generate + audit), already-generated, empty-template, race
  *   - POST 400 missing communityId / extra keys (strict)
  *   - POST 401 unauth, 403 demo-grace (before membership), 403 per gate
  *   - PATCH happy per action (?? null documentId coercion), not-found 400
+ *   - PATCH mark_not_applicable requires a 1-200 character reason (trimmed):
+ *     stored and audited with the action; mark_applicable clears it
  *   - PATCH 400 link_document without documentId, extra keys, missing id
  *   - PATCH 401 unauth, 403 demo-grace (before membership), 403 per gate
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
@@ -240,6 +243,57 @@ describe('GET /api/v1/compliance', () => {
       [3, 'deleted'],
       [4, null],
     ]);
+  });
+
+  it('returns autoLinkedDocumentId and notApplicableReason', async () => {
+    // The website's records screens read both. An item counts as linked
+    // automatically while documentId === autoLinkedDocumentId (a manual relink
+    // or unlink moves documentId and leaves this behind), and a "doesn't apply"
+    // item shows the reason its manager gave.
+    listComplianceChecklistItemsMock.mockResolvedValueOnce([
+      {
+        id: 1,
+        templateKey: '718_budget',
+        isApplicable: true,
+        documentId: 31,
+        autoLinkedDocumentId: 31,
+        notApplicableReason: null,
+        documentPostedAt: '2026-09-01T00:00:00.000Z',
+        deadline: null,
+        rollingWindow: null,
+      },
+      {
+        id: 2,
+        templateKey: '718_sirs',
+        isApplicable: false,
+        documentId: null,
+        autoLinkedDocumentId: null,
+        notApplicableReason: 'Our building is under three stories.',
+        documentPostedAt: null,
+        deadline: null,
+        rollingWindow: null,
+      },
+    ]);
+    const queryWhere = vi
+      .fn()
+      .mockResolvedValueOnce([{ id: 31, deletedAt: null, postedAt: '2026-09-01T00:00:00.000Z' }]);
+    createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock, queryWhere });
+
+    const res = await GET(getReq('55'), undefined);
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: Array<Record<string, unknown>> };
+    expect(json.data[0]).toMatchObject({
+      id: 1,
+      documentId: 31,
+      autoLinkedDocumentId: 31,
+      notApplicableReason: null,
+    });
+    expect(json.data[1]).toMatchObject({
+      id: 2,
+      autoLinkedDocumentId: null,
+      notApplicableReason: 'Our building is under three stories.',
+    });
   });
 
   it('drops the posting clock below the website rule’s size threshold', async () => {
@@ -612,7 +666,12 @@ describe('PATCH /api/v1/compliance', () => {
     });
 
     const res = await PATCH(
-      bodyReq('PATCH', { id: 7, communityId: 42, action: 'mark_not_applicable' }),
+      bodyReq('PATCH', {
+        id: 7,
+        communityId: 42,
+        action: 'mark_not_applicable',
+        reason: 'Our building has no elevator.',
+      }),
       undefined,
     );
 
@@ -621,6 +680,167 @@ describe('PATCH /api/v1/compliance', () => {
       42,
       7,
       expect.objectContaining({ isApplicable: false }),
+    );
+  });
+
+  it('stores and audits the reason', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({
+      id: 7,
+      title: 'Budget',
+      isApplicable: false,
+      notApplicableReason: 'Our building has no elevator.',
+      deadline: null,
+      rollingWindow: null,
+    });
+
+    const res = await PATCH(
+      bodyReq('PATCH', {
+        id: 7,
+        communityId: 42,
+        action: 'mark_not_applicable',
+        reason: '  Our building has no elevator.  ',
+      }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    // Stored trimmed, and the update carries nothing the action did not ask for.
+    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(42, 7, {
+      isApplicable: false,
+      notApplicableReason: 'Our building has no elevator.',
+      lastModifiedBy: USER_ID,
+    });
+    // The audit row carries the reason and nothing else in newValues.
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'mark_not_applicable',
+        resourceType: 'compliance_checklist_item',
+        resourceId: '7',
+        newValues: { reason: 'Our building has no elevator.' },
+      }),
+    );
+  });
+
+  it('accepts a reason of exactly 200 characters', async () => {
+    const reason = 'x'.repeat(200);
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({
+      id: 7,
+      title: 'Budget',
+      isApplicable: false,
+      notApplicableReason: reason,
+      deadline: null,
+      rollingWindow: null,
+    });
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 7, communityId: 42, action: 'mark_not_applicable', reason }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(
+      42,
+      7,
+      expect.objectContaining({ notApplicableReason: reason }),
+    );
+  });
+
+  describe('a reason that mark_not_applicable cannot accept', () => {
+    // A row exists, so the only thing standing between these requests and a
+    // 200 is the body schema. `vi.clearAllMocks()` keeps implementations, so
+    // this one is reset here rather than left to leak into the next test.
+    beforeEach(() => {
+      updateComplianceChecklistItemMock.mockResolvedValue({
+        id: 7,
+        title: 'Budget',
+        isApplicable: false,
+        deadline: null,
+        rollingWindow: null,
+      });
+    });
+
+    afterEach(() => {
+      updateComplianceChecklistItemMock.mockReset();
+    });
+
+    type ValidationBody = {
+      error: { code: string; details: { fields: Array<{ field: string }> } };
+    };
+
+    async function expectReasonRejected(payload: Record<string, unknown>): Promise<void> {
+      const res = await PATCH(bodyReq('PATCH', payload), undefined);
+
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as ValidationBody;
+      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.details.fields.map((f) => f.field)).toEqual(['reason']);
+      expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    }
+
+    it('returns 400 when mark_not_applicable has no reason', async () => {
+      await expectReasonRejected({ id: 7, communityId: 42, action: 'mark_not_applicable' });
+    });
+
+    it.each([
+      ['empty', ''],
+      ['only spaces', '   '],
+      ['over 200 characters', 'x'.repeat(201)],
+    ])('returns 400 when the reason is %s', async (_label, reason) => {
+      await expectReasonRejected({ id: 7, communityId: 42, action: 'mark_not_applicable', reason });
+    });
+  });
+
+  it('mark_applicable clears the reason', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({
+      id: 8,
+      title: 'Budget',
+      isApplicable: true,
+      notApplicableReason: null,
+      deadline: null,
+      rollingWindow: null,
+    });
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 8, communityId: 42, action: 'mark_applicable' }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(42, 8, {
+      isApplicable: true,
+      notApplicableReason: null,
+      lastModifiedBy: USER_ID,
+    });
+  });
+
+  it('does not store or audit a reason sent with another action', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({
+      id: 5,
+      title: 'Budget',
+      documentId: 77,
+      documentPostedAt: '2026-01-01T00:00:00.000Z',
+      deadline: null,
+      rollingWindow: null,
+    });
+
+    const res = await PATCH(
+      bodyReq('PATCH', {
+        id: 5,
+        communityId: 42,
+        action: 'link_document',
+        documentId: 77,
+        reason: 'Not a reason this action keeps.',
+      }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    expect(updateComplianceChecklistItemMock.mock.calls[0]?.[2]).not.toHaveProperty(
+      'notApplicableReason',
+    );
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'link_document', newValues: { documentId: 77 } }),
     );
   });
 

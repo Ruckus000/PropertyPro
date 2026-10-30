@@ -16,6 +16,8 @@ interface PatchPayload {
   communityId: number;
   action: PatchAction;
   documentId?: number;
+  /** Required by the route for `mark_not_applicable`. */
+  reason?: string;
 }
 
 async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
@@ -104,11 +106,17 @@ export function useComplianceMutations(communityId: number) {
   });
 
   const markNotApplicable = useMutation({
-    mutationFn: (vars: { itemId: number }) =>
-      patchChecklistItem({ id: vars.itemId, communityId, action: "mark_not_applicable" }),
+    mutationFn: (vars: { itemId: number; reason: string }) =>
+      patchChecklistItem({
+        id: vars.itemId,
+        communityId,
+        action: "mark_not_applicable",
+        reason: vars.reason,
+      }),
     onMutate: (vars) =>
       optimisticUpdate(vars.itemId, () => ({
         isApplicable: false,
+        notApplicableReason: vars.reason,
         status: "not_applicable" as const,
       })),
     onError,
@@ -122,6 +130,7 @@ export function useComplianceMutations(communityId: number) {
     onMutate: (vars) =>
       optimisticUpdate(vars.itemId, () => ({
         isApplicable: true,
+        notApplicableReason: null,
         status: "unsatisfied" as const,
       })),
     onError,

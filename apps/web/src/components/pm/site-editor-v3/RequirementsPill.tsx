@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic';
 import { Info, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
+import { missingRecordItems, recordsPostedTotals } from '@/lib/site-editor/records-status';
 import { useRequiredSections } from './required-sections-context';
 import type { SlotTarget } from './publish/PublishSheet';
 
@@ -40,12 +42,20 @@ export interface RequirementsPillProps {
  *    because nothing is wrong.
  *  - `none` (apartments): nothing at all.
  *
+ * "All set" needs both: every required section visible AND every record the
+ * statute lists posted and current. A site with the sections but no documents
+ * reads "Records: 9 of 12 posted", never "all set". Sections are checked
+ * first, and a hidden one reads "Required item missing" whatever the records
+ * say. The checklist is only requested for the `required` shape.
+ *
  * Silent while the site is loading — "missing" about a site that has not loaded
- * yet would be false. Below 1280px the label collapses to its icon; the trigger
+ * yet would be false — and while the records are loading or could not be read,
+ * for the same reason in the other direction: "all set" would be a guess. Below 1280px the label collapses to its icon; the trigger
  * keeps an accessible name either way.
  */
 export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPillProps) {
-  const { level, statuses, threshold } = useRequiredSections();
+  const { level, statuses, threshold, subject, communityId } = useRequiredSections();
+  const checklist = useComplianceChecklist(communityId, { enabled: level === 'required' });
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
 
@@ -79,8 +89,19 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
   }
 
   if (statuses.length === 0) return null;
-  const allSet = statuses.every((s) => s.state === 'visible');
-  const label = allSet ? 'Required items: all set' : 'Required item missing';
+  const sectionsSet = statuses.every((s) => s.state === 'visible');
+  const records = checklist.data;
+  // A hidden section is true whatever the records say; "all set" is not.
+  if (sectionsSet && records === undefined) return null;
+  const recordsMissing = records !== undefined && missingRecordItems(records, subject).length > 0;
+  const allSet = sectionsSet && !recordsMissing;
+  let label = 'Required items: all set';
+  if (!sectionsSet) {
+    label = 'Required item missing';
+  } else if (records !== undefined && recordsMissing) {
+    const { posted, total } = recordsPostedTotals(records);
+    label = `Records: ${posted} of ${total} posted`;
+  }
   const Icon = allSet ? ShieldCheck : ShieldAlert;
 
   return (

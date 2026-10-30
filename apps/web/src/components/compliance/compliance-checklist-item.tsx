@@ -20,6 +20,19 @@ export interface ChecklistItemData {
   rollingWindow?: { months: number } | null;
   isConditional?: boolean;
   isApplicable?: boolean;
+  /**
+   * Why the item was marked "doesn't apply", in the manager's words (1-200
+   * characters). Null for an applicable item and for any item marked before
+   * reasons were recorded.
+   */
+  notApplicableReason?: string | null;
+  /**
+   * The document automatic linking attached, if it ever did. The item counts as
+   * auto-linked only while `documentId` equals it: a later manual relink or
+   * unlink moves `documentId` and leaves this behind. Check that it is non-null
+   * first, because two nulls are equal.
+   */
+  autoLinkedDocumentId?: number | null;
   status: ComplianceStatus;
 }
 
