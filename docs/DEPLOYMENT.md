@@ -47,6 +47,40 @@ Configure these in GitHub repository Settings > Secrets and Variables > Actions.
 | `NOTIFICATION_DIGEST_CRON_SECRET` | Bearer token for digest cron endpoint | Generated shared secret |
 | `COUPON_SYNC_RETRY_CRON_SECRET` | Bearer token for coupon sync retry cron endpoint | Generated shared secret |
 | `READINESS_CHECK_SECRET` | Bearer token for `/api/v1/internal/readiness` and `/api/v1/internal/cron-health`, read by `production-health.yml` | Same value as the Vercel variable of the same name |
+| `SCHEMA_CHECK_DATABASE_URL` | **Required by every deploy.** Production connection for `deploy.yml`'s `schema` job (`pnpm db:schema:verify`), as the no-grant `schema_check` role below. Unset, every deploy is refused | §3.1 |
+
+### 3.1 `SCHEMA_CHECK_DATABASE_URL`
+
+Before building, Deploy compares the commit's Drizzle schema with production's
+`pg_catalog` and refuses if the code declares a table, column or enum value
+production lacks. The failure names the migration to apply. That is the check
+that would have stopped the 2026-10-29 outage (#1416 shipped before `0095`).
+See `scripts/verify-prod-schema.ts`.
+
+It reads only `pg_catalog`, which every role can read, so it connects as a role
+with **no** table or schema grants. Create it once in the Supabase SQL editor,
+with a password you generate (`openssl rand -hex 24`):
+
+```sql
+create role schema_check login password '<generated>'
+  nosuperuser nocreatedb nocreaterole noinherit;
+alter role schema_check set default_transaction_read_only = on;
+alter role schema_check set statement_timeout = '15s';
+```
+
+Then add the repository secret (not an environment secret: the `schema` job
+has no `environment:`) as the **Session pooler** string from the dashboard's
+Connect panel, with the user swapped for `schema_check.<project-ref>` and that
+password.
+
+Check it before relying on it: `DATABASE_URL='<that string>' pnpm db:schema:verify`
+should print `declared: … tables` and exit 0. A known-held gap (today
+`0062_secret_ballot`'s `selection_digest`) prints as `allowed:` and is listed in
+`KNOWN_MISSING` in the script.
+
+If the check itself is broken (secret rotated, pooler down), a manual
+**Run workflow** with `skip_schema_check` ticked deploys without it, with a
+warning on the run.
 
 ### Repository Variables
 
