@@ -106,10 +106,11 @@ export async function createCommunityForPm(
     console.error('createChecklistItems failed', { communityId, err });
   }
 
-  // 5b. Starter website: published starter-pack sections + default layout and
-  // colour set (spec §4.0 "site is always live"). Outside the transaction and
-  // best-effort: a failure must not roll back the community, its memberships,
-  // categories and audit log. Never throws.
+  // 5b. The website, live from day one: the suggested look for the community's
+  // type, with its layout, colours, fonts and published sections (spec §4.0
+  // "site is always live"). Outside the transaction and best-effort: a failure
+  // must not roll back the community, its memberships, categories and audit log.
+  // Never throws.
   await seedNewCommunitySite(communityId, input.communityType);
 
   // 6. Audit log (outside transaction — best-effort, should not fail a

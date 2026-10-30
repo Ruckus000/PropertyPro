@@ -60,12 +60,15 @@ export function PresetCards({
   selected,
   onChoose,
   name,
+  disabled = false,
 }: {
   presets: PresetCardData[];
   selected: string | null;
   onChoose: (slug: string) => void;
   /** Radio-group name; must be unique on the page. */
   name: string;
+  /** Hold every card still, for a save that is under way: no card takes a click. */
+  disabled?: boolean;
 }) {
   // No `sm:`/`lg:` columns, for the same reason `LayoutChooser` has none: those
   // test the VIEWPORT while this fieldset lives in the wizard's half-width pane,
@@ -81,10 +84,12 @@ export function PresetCards({
           <label
             key={preset.slug}
             data-testid={`preset-card-${preset.slug}`}
-            className={`relative cursor-pointer rounded-md border p-4 transition-colors ${
+            className={`relative rounded-md border p-4 transition-colors ${
+              disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'
+            } ${
               isSelected
                 ? 'border-interactive bg-interactive-subtle ring-2 ring-interactive'
-                : 'border-edge bg-surface-card hover:border-interactive-hover'
+                : `border-edge bg-surface-card ${disabled ? '' : 'hover:border-interactive-hover'}`
             }`}
           >
             <input
@@ -92,6 +97,7 @@ export function PresetCards({
               name={name}
               value={preset.slug}
               checked={isSelected}
+              disabled={disabled}
               onChange={() => onChoose(preset.slug)}
               className="sr-only"
             />

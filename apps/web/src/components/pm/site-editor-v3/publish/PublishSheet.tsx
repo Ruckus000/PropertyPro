@@ -80,6 +80,8 @@ import {
 } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import type { LayoutId } from '@/components/public-site/blocks/types';
+import { contrastOptionsFor } from '@/components/public-site/layouts/look-styles';
 import { useSitePublishToken } from '@/hooks/use-content-blocks';
 import {
   usePublishSite,
@@ -132,6 +134,15 @@ export interface PublishSheetProps {
    * not shown. Never blocking — see the long note on `contrastIssues`.
    */
   brandColors?: ResolvedBrandColors;
+  /**
+   * The layout this publish puts live: the draft look's, else the live one. On
+   * a look, the accent is checked as that look uses it, and a look that paints
+   * the secondary colour behind text (Heritage's page, the section bands of
+   * Bayfront and Palm Grove) also gets text and headings checked on it, from
+   * `brandColors.secondaryColor` (`contrastOptionsFor`). Omit, or pass a legacy
+   * layout, and the advisories are the original pairs.
+   */
+  layout?: LayoutId;
   /**
    * Jump to the section a blocking issue is about. The sheet closes first, then
    * calls this with the section's `block_order` slot; the editor owns selection.
@@ -322,6 +333,7 @@ export function PublishSheet({
   onOpenChange,
   communityId,
   brandColors,
+  layout,
   onFixIssue,
   onGoToPages,
   complianceSubject,
@@ -345,6 +357,7 @@ export function PublishSheet({
           <PublishSheetBody
             communityId={communityId}
             brandColors={brandColors}
+            layout={layout}
             onFixIssue={onFixIssue}
             onGoToPages={onGoToPages}
             onOpenChange={onOpenChange}
@@ -359,6 +372,7 @@ export function PublishSheet({
 interface BodyProps {
   communityId: number;
   brandColors?: ResolvedBrandColors;
+  layout?: LayoutId;
   onFixIssue?: (target: SlotTarget) => void;
   // Required all the way down, matching `PublishSheetProps`. An optional
   // restatement here would put the hole straight back: `PublishSheet` forwards
@@ -373,6 +387,7 @@ interface BodyProps {
 function PublishSheetBody({
   communityId,
   brandColors,
+  layout,
   onFixIssue,
   onGoToPages,
   onOpenChange,
@@ -455,7 +470,15 @@ function PublishSheetBody({
     // Advisory at publish on purpose: branding is unstaged and already live on
     // the public site, so blocking here cannot un-ship a bad ratio — it would
     // only stop an unrelated copy fix. See the note on `contrastIssues`.
-    const contrast = brandColors ? contrastIssues(brandColors, { severity: 'warning' }) : [];
+    // On a look, the colours are checked as that look paints them (the secondary
+    // where it is painted, the accent as it is used); a legacy layout, or none
+    // passed, keeps the original pairs.
+    const contrast = brandColors
+      ? contrastIssues(brandColors, {
+          severity: 'warning',
+          ...(layout === undefined ? {} : contrastOptionsFor(layout)),
+        })
+      : [];
     /*
      * The PAGE-SET rules, which this sheet did not run at all until round 5.
      *
@@ -479,7 +502,7 @@ function PublishSheetBody({
      */
     const required = requiredSectionIssues(complianceSubject, validated);
     return [...structural, ...pageSetIssues, ...required, ...contrast];
-  }, [validated, brandColors, pageSetIssues, complianceSubject]);
+  }, [validated, brandColors, layout, pageSetIssues, complianceSubject]);
 
   const blocking = useMemo(() => issues.filter((i) => i.severity === 'error'), [issues]);
   const warnings = useMemo(() => issues.filter((i) => i.severity === 'warning'), [issues]);

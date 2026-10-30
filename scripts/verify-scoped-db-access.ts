@@ -358,6 +358,19 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // PR #5: Starter pack apply — reads platform-level site_starter_packs catalog (no community_id);
   // inserts into site_blocks via scoped client after community creation.
   resolve(repoRoot, 'apps/web/src/lib/services/starter-pack-service.ts'),
+  // Website looks — the starter pack's successor. Opens one transaction holding the
+  // community row lock (the scoped client cannot open one) and, for a site on a
+  // legacy layout, reads every site_starter_packs version (platform catalog, no
+  // community_id). Tenant rows are written through createScopedClient(communityId,
+  // tx) or logAuditEvent(..., tx). The community's own row (communities, the root
+  // tenant table) is written on the transaction by primary key only:
+  // site_published_at at creation, and branding.draftLook on a switch, by two
+  // writers in site-design-service: writeDraftDesign (through site-settings-service's
+  // mergeBranding) saves a look, and withdrawDraftDesign's own
+  // `UPDATE communities ... WHERE id = ${communityId}` withdraws one on the way
+  // back to the live look. Callers are community creation, or a route that
+  // verified a manager role + hasSiteEditor.
+  resolve(repoRoot, 'apps/web/src/lib/services/site-look-service.ts'),
   // PR #5b: Theme preset catalog reader — reads platform-level site_theme_presets
   // (no community_id). Powers the onboarding wizard Step 2 preset chooser.
   // Routes calling this helper MUST have already verified management-tier

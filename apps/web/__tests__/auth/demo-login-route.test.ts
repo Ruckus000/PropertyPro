@@ -91,10 +91,10 @@ vi.mock('@propertypro/db', () => ({
   communities: communitiesTable,
 }));
 
-// Starter sections on demo entry; starter-pack-service.test.ts covers the apply.
-const applyStarterPackToDemoCommunityMock = vi.hoisted(() => vi.fn(async () => undefined));
-vi.mock('@/lib/services/starter-pack-service', () => ({
-  applyStarterPackToDemoCommunity: applyStarterPackToDemoCommunityMock,
+// The suggested look on demo entry; site-look-service.test.ts covers the fill.
+const fillDemoCommunitySiteMock = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock('@/lib/services/site-look-service', () => ({
+  fillDemoCommunitySite: fillDemoCommunitySiteMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -226,7 +226,7 @@ describe('demo-login route hardening', () => {
       token_hash: HASHED_TOKEN,
       type: 'magiclink',
     });
-    expect(applyStarterPackToDemoCommunityMock).toHaveBeenCalledWith(42);
+    expect(fillDemoCommunitySiteMock).toHaveBeenCalledWith(42);
   });
 
   it('keeps legacy plaintext-secret flow working without encryption key', async () => {

@@ -73,6 +73,12 @@ export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFor
   gallery: dynamic(() => import('./forms/GalleryForm').then((m) => m.GalleryForm), {
     loading: InspectorFormSkeleton,
   }),
+  quicklinks: dynamic(() => import('./forms/QuickLinksForm').then((m) => m.QuickLinksForm), {
+    loading: InspectorFormSkeleton,
+  }),
+  board: dynamic(() => import('./forms/BoardForm').then((m) => m.BoardForm), {
+    loading: InspectorFormSkeleton,
+  }),
 
   // One component, three entries. These blocks differ only in the type they
   // write and the placeholder they show, and `SorEmptyTextForm` reads both
@@ -90,8 +96,8 @@ export const blockFormRegistry: Partial<Record<BlockType, ComponentType<BlockFor
  * Every current `BlockType` is covered — the Add panel made that a requirement
  * rather than a nicety, since offering a type the inspector cannot configure
  * creates a section the PM is then stuck with. The map stays `Partial` anyway,
- * because a NEW block type ships in `BLOCK_TYPES` before its form exists, and
- * this guard is what keeps that intermediate state renderable.
+ * because a NEW block type ships in `BLOCK_TYPES` before its form exists, and this
+ * guard is what keeps that intermediate state renderable.
  */
 export function hasForm(blockType: string): boolean {
   return Object.prototype.hasOwnProperty.call(blockFormRegistry, blockType);

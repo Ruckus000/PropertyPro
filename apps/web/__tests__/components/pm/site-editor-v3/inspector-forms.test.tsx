@@ -1,6 +1,8 @@
 /**
  * The remaining Phase 9 inspector forms: layout variant (text/image/amenities)
- * and empty-state copy (announcements/documents/meetings).
+ * and empty-state copy (announcements/documents/meetings); then the website
+ * builder's writers: the Quick links and Board members forms, and the hero
+ * form's "Shows as" line for linked fields.
  *
  * `TextForm.test.tsx` covers the shared autosave/reconciliation machinery, so
  * this file sticks to what each form adds: keyboard operation, the schema
@@ -8,10 +10,17 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { BlockType } from '@propertypro/shared';
+import type { BlockType, LinkedFacts } from '@propertypro/shared';
+import { HeroBlock } from '@/components/public-site/blocks/HeroBlock';
+import type { PublicCommunity } from '@/components/public-site/blocks/types';
 import { ImageForm } from '@/components/pm/site-editor-v3/inspector/forms/ImageForm';
 import { AmenitiesForm } from '@/components/pm/site-editor-v3/inspector/forms/AmenitiesForm';
 import { SorEmptyTextForm } from '@/components/pm/site-editor-v3/inspector/forms/SorEmptyTextForm';
+import { QuickLinksForm } from '@/components/pm/site-editor-v3/inspector/forms/QuickLinksForm';
+import { BoardForm } from '@/components/pm/site-editor-v3/inspector/forms/BoardForm';
+import { ContactForm } from '@/components/pm/site-editor-v3/inspector/forms/ContactForm';
+import { HeroForm } from '@/components/pm/site-editor-v3/inspector/forms/HeroForm';
+import { LinkedFactsProvider } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 
 const upsertMock = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/use-content-blocks', () => ({
@@ -21,11 +30,24 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   useUpsertContentBlock: () => ({ mutateAsync: upsertMock, isPending: false }),
 }));
 
+// The hero form writes through its own endpoint and its photo field reaches the
+// upload queue; neither is under test here, only the form's own text.
+const updateHeroMock = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/use-hero-block', () => ({
+  useHeroBlock: () => ({ data: null }),
+  useUpdateHeroBlock: () => ({ mutateAsync: updateHeroMock, isPending: false }),
+}));
+vi.mock('@/hooks/use-hero-photos', () => ({
+  useHeroPhotos: () => ({ uploads: [], upload: vi.fn(), dismiss: vi.fn(), isUploading: false }),
+}));
+
 import { setupTimers, settleAutosave } from './autosave-harness';
 
 beforeEach(() => {
   upsertMock.mockReset();
   upsertMock.mockResolvedValue(undefined);
+  updateHeroMock.mockReset();
+  updateHeroMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -338,6 +360,352 @@ describe('SorEmptyTextForm', () => {
       expect(screen.getByLabelText('Empty-state message')).toHaveAccessibleDescription(
         'Your website hides this section while it has nothing to list. This message only shows here in the editor. Leave blank to use the default.',
       );
+    });
+  });
+});
+
+describe('QuickLinksForm', () => {
+  function renderQuickLinks(content: unknown = {}) {
+    return render(
+      <QuickLinksForm communityId={1} blockType="quicklinks" blockOrder={4} content={content} />,
+    );
+  }
+  const text = () => document.body.textContent ?? '';
+
+  it('says the section fills itself in from meetings, announcements, documents and contact details', () => {
+    renderQuickLinks();
+    expect(text()).toMatch(/fills itself in/i);
+    for (const source of ['meetings', 'announcements', 'owner documents', 'contact details']) {
+      expect(text(), `names ${source}`).toMatch(new RegExp(source, 'i'));
+    }
+    // The page calls the announcements link "News".
+    expect(text()).toMatch(/announcements \(shown as News\)/);
+  });
+
+  it('says a link shows only when its section is on the page and has something to show', () => {
+    renderQuickLinks();
+    expect(text()).toMatch(
+      /a shortcut appears only when its section is on the page and has something to show/i,
+    );
+  });
+
+  it('says the owner documents link always shows, and why', () => {
+    // The one link that does not depend on a section: it is where owners sign in.
+    renderQuickLinks();
+    expect(text()).toMatch(/owner documents always appears, because it is where owners sign in/i);
+  });
+
+  it('has nothing to fill in', () => {
+    renderQuickLinks();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('writes nothing, however long it stays open', async () => {
+    setupTimers();
+    renderQuickLinks({ hidden: true });
+    await settleAutosave();
+    expect(upsertMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('BoardForm', () => {
+  function renderBoard(content: unknown = {}) {
+    return render(<BoardForm communityId={1} blockType="board" blockOrder={5} content={content} />);
+  }
+  const written = () => upsertMock.mock.calls.at(-1)![0] as {
+    blockType: string;
+    blockOrder: number;
+    content: Record<string, unknown>;
+  };
+
+  it('shows the stored heading, with the default as the placeholder', () => {
+    renderBoard({ heading: 'Your board' });
+    const heading = screen.getByLabelText('Heading');
+    expect(heading).toHaveValue('Your board');
+    expect(heading).toHaveAttribute('placeholder', 'Board of Directors');
+  });
+
+  it('writes a typed heading to the board section', async () => {
+    const user = setupTimers();
+    renderBoard({});
+
+    await user.type(screen.getByLabelText('Heading'), 'Your board');
+    await settleAutosave();
+
+    expect(upsertMock).toHaveBeenLastCalledWith({
+      blockType: 'board',
+      blockOrder: 5,
+      content: { heading: 'Your board' },
+    });
+  });
+
+  it('omits the heading when it is cleared, so the default returns', async () => {
+    // `heading` is `.min(1)`: an empty string would be refused, and an absent key
+    // is what makes the renderer keep "Board of Directors".
+    const user = setupTimers();
+    renderBoard({ heading: 'Your board' });
+
+    await user.clear(screen.getByLabelText('Heading'));
+    await settleAutosave();
+
+    expect(written().content).toEqual({});
+  });
+
+  it('treats spaces alone as no heading, and trims the rest', async () => {
+    const user = setupTimers();
+    renderBoard({ heading: 'Your board' });
+
+    await user.clear(screen.getByLabelText('Heading'));
+    await user.type(screen.getByLabelText('Heading'), '   ');
+    await settleAutosave();
+    expect(written().content).toEqual({});
+
+    await user.type(screen.getByLabelText('Heading'), 'Our officers  ');
+    await settleAutosave();
+    expect(written().content).toEqual({ heading: 'Our officers' });
+  });
+
+  it('keeps a hidden section hidden when its heading is edited', async () => {
+    // `hidden` is set by the section list's eye toggle, not by this form, and a
+    // save replaces the whole content.
+    const user = setupTimers();
+    renderBoard({ heading: 'Our board', hidden: true });
+
+    await user.type(screen.getByLabelText('Heading'), '!');
+    await settleAutosave();
+
+    expect(written().content).toEqual({ heading: 'Our board!', hidden: true });
+  });
+
+  it('limits the heading to the 80 characters the section stores', () => {
+    renderBoard({});
+    expect(screen.getByLabelText('Heading')).toHaveAttribute('maxlength', '80');
+  });
+
+  it('says where the names and titles come from, and that no contact details are shown', () => {
+    renderBoard({});
+    const text = document.body.textContent ?? '';
+    expect(text).toMatch(/names and titles come from the board seats recorded in PropertyPro/i);
+    expect(text).toMatch(/no contact details, such as email addresses or phone numbers, are shown/i);
+  });
+
+  it('says the website leaves the section out while no one holds a seat', () => {
+    renderBoard({});
+    expect(document.body.textContent).toMatch(
+      /if no one holds a board seat yet, your website leaves this section out/i,
+    );
+  });
+
+  it('tells the manager how to keep the board from appearing twice', () => {
+    // The Contact section lists the board too, unless its own switch is off.
+    renderBoard({});
+    expect(
+      screen.getByText(
+        'If your Contact section also lists the board, untick “Show board members” there so the board appears only once.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('names a switch the Contact form really has', () => {
+    const { unmount } = render(
+      <ContactForm communityId={1} blockType="contact" blockOrder={3} content={{}} />,
+    );
+    expect(screen.getByLabelText('Show board members')).toBeInTheDocument();
+    unmount();
+  });
+});
+
+describe('HeroForm — "Shows as" for linked fields', () => {
+  const HARBOR: LinkedFacts = {
+    name: 'Harbor Pointe Condominium Association, Inc.',
+    shortName: 'Harbor Pointe',
+    city: 'Miami',
+    unitCount: 120,
+  };
+
+  function renderHero(content: unknown, facts: LinkedFacts | null = HARBOR) {
+    return render(
+      <LinkedFactsProvider facts={facts}>
+        <HeroForm communityId={7} blockType="hero" blockOrder={1} content={content} />
+      </LinkedFactsProvider>,
+    );
+  }
+  const headline = () => screen.getByLabelText(/headline/i) as HTMLInputElement;
+  const subtitle = () => screen.getByLabelText('Subtitle') as HTMLTextAreaElement;
+
+  it('the hero form shows "Shows as: Welcome to Harbor Pointe" for "Welcome to {{name}}"', () => {
+    renderHero({ headline: 'Welcome to {{name}}' });
+    expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
+  });
+
+  it('keeps the typed words in the field, and the line next to it for a screen reader', () => {
+    renderHero({ headline: 'Welcome to {{name}}', subtitle: '{{units}} homes in {{city}}.' });
+    expect(headline()).toHaveValue('Welcome to {{name}}');
+    expect(headline()).toHaveAccessibleDescription('Shows as: Welcome to Harbor Pointe');
+    expect(subtitle()).toHaveValue('{{units}} homes in {{city}}.');
+    expect(subtitle()).toHaveAccessibleDescription('Shows as: 120 homes in Miami.');
+  });
+
+  it('follows the headline as it is typed', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to {{name}}' });
+
+    await user.type(headline(), ' today');
+
+    expect(screen.getByText('Shows as: Welcome to Harbor Pointe today')).toBeInTheDocument();
+  });
+
+  it('fills the subtitle from the community facts', () => {
+    renderHero({
+      headline: 'Welcome',
+      subtitle: '{{units}} homes in {{city}}. Meeting notices and records, all in one place.',
+    });
+    expect(
+      screen.getByText(
+        'Shows as: 120 homes in Miami. Meeting notices and records, all in one place.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows what is left when a sentence drops for a fact the community has not given', () => {
+    // The page drops the whole sentence, not just the token, and the line is how
+    // the author sees that it happened.
+    renderHero(
+      {
+        headline: 'Welcome',
+        subtitle: '{{units}} homes in {{city}}. Meeting notices and records, all in one place.',
+      },
+      { ...HARBOR, city: null, unitCount: null },
+    );
+    expect(
+      screen.getByText('Shows as: Meeting notices and records, all in one place.'),
+    ).toBeInTheDocument();
+  });
+
+  it('says the subtitle shows nothing when every sentence drops', () => {
+    renderHero(
+      { headline: 'Welcome', subtitle: '{{units}} homes in {{city}}.' },
+      { ...HARBOR, city: null },
+    );
+    expect(
+      screen.getByText(
+        "Shows as: nothing. It uses a detail your Community profile doesn't have yet.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows the community name when the whole headline drops, as the page does', () => {
+    // The page keeps its <h1> by falling back to the display name.
+    renderHero({ headline: '{{city}}' }, { ...HARBOR, city: null });
+    expect(screen.getByText('Shows as: Harbor Pointe')).toBeInTheDocument();
+
+    renderHero({ headline: '{{city}}' }, { ...HARBOR, shortName: null, city: null });
+    expect(
+      screen.getByText('Shows as: Harbor Pointe Condominium Association, Inc.'),
+    ).toBeInTheDocument();
+  });
+
+  it('adds no line for words that use no linked detail, or for an empty subtitle', () => {
+    renderHero({ headline: 'Welcome home' });
+    expect(screen.queryByText(/Shows as/)).not.toBeInTheDocument();
+    expect(headline()).not.toHaveAccessibleDescription();
+  });
+
+  it('adds no line when the community facts are not known', () => {
+    renderHero({ headline: 'Welcome to {{name}}' }, null);
+    expect(screen.queryByText(/Shows as/)).not.toBeInTheDocument();
+  });
+
+  it('shows a name holding markup or a token exactly as typed, and creates no element', () => {
+    const { container } = renderHero(
+      { headline: 'Welcome to {{name}}', subtitle: 'Home of {{name}}.' },
+      { ...HARBOR, shortName: null, name: '<b>Rose</b> {{city}} Court' },
+    );
+    expect(screen.getByText('Shows as: Welcome to <b>Rose</b> {{city}} Court')).toBeInTheDocument();
+    expect(container.querySelector('b')).toBeNull();
+  });
+
+  it('saves the words as typed, never the line it shows', async () => {
+    // The tokens are what keep the site current after a rename; saving the
+    // resolved text would freeze today's name into the hero.
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to {{name}}', subtitle: 'Old.' });
+
+    await user.clear(subtitle());
+    // Pasted: `type` reads a brace as the start of a key name.
+    await user.click(subtitle());
+    await user.paste('{{units}} homes.');
+    await settleAutosave();
+
+    const sent = updateHeroMock.mock.calls.at(-1)![0];
+    expect(sent.headline).toBe('Welcome to {{name}}');
+    expect(sent.subtitle).toBe('{{units}} homes.');
+  });
+
+  describe('matches the page', () => {
+    // The line is only worth having if it is what the page shows. Rendered
+    // through the real HeroBlock, so the two cannot drift apart unnoticed.
+    const NOTHING = "Shows as: nothing. It uses a detail your Community profile doesn't have yet.";
+
+    function pageOf(content: unknown, facts: LinkedFacts) {
+      const community: PublicCommunity = {
+        id: 1,
+        slug: 'harbor-pointe',
+        name: facts.name,
+        shortName: facts.shortName,
+        logoUrl: null,
+        communityType: 'condo_718',
+        city: facts.city,
+        state: 'FL',
+        unitCount: facts.unitCount,
+        timezone: 'America/New_York',
+      };
+      const view = render(
+        <HeroBlock
+          block={{ id: 1, blockType: 'hero', blockOrder: 1, content }}
+          community={community}
+          theme={{
+            primaryColor: '#0e3338',
+            secondaryColor: '#f6f1e6',
+            accentColor: '#c66f49',
+            headingFont: 'Fraunces',
+            bodyFont: 'Manrope',
+          }}
+          layout="tidewater"
+        />,
+      );
+      const shown = {
+        headline: view.container.querySelector('h1')?.textContent ?? '',
+        subtitle: view.container.querySelector('p')?.textContent ?? '',
+      };
+      view.unmount();
+      return shown;
+    }
+
+    // Each headline and subtitle uses a linked detail: that is when the form
+    // shows a line at all.
+    const WELCOME = 'Welcome to {{name}}';
+    const COUNTED = '{{units}} homes in {{city}}. Notices for {{name}} here.';
+    const CASES: [string, { headline: string; subtitle: string }, LinkedFacts][] = [
+      ['every fact known', { headline: WELCOME, subtitle: COUNTED }, HARBOR],
+      ['no city, no count', { headline: WELCOME, subtitle: COUNTED }, { ...HARBOR, city: null, unitCount: null }],
+      ['no short name', { headline: '{{name}}', subtitle: 'The website of {{name}}.' }, { ...HARBOR, shortName: null }],
+      ['headline drops whole', { headline: '{{city}}', subtitle: COUNTED }, { ...HARBOR, city: null }],
+      ['subtitle drops whole', { headline: WELCOME, subtitle: '{{units}} homes.' }, { ...HARBOR, unitCount: null }],
+      ['a name that ends in a full stop', { headline: '{{name}}.', subtitle: 'Home of {{name}}.' }, { ...HARBOR, shortName: null }],
+      ['a name holding a token', { headline: WELCOME, subtitle: 'Home of {{name}}.' }, { ...HARBOR, shortName: null, name: 'Rose {{city}} Court' }],
+    ];
+
+    it.each(CASES)('%s', (_label, content, facts) => {
+      const page = pageOf(content, facts);
+      renderHero(content, facts);
+
+      expect(screen.getByText(`Shows as: ${page.headline}`)).toBeInTheDocument();
+      expect(
+        screen.getByText(page.subtitle === '' ? NOTHING : `Shows as: ${page.subtitle}`),
+      ).toBeInTheDocument();
     });
   });
 });

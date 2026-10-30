@@ -168,6 +168,8 @@ describe('AddPanel', () => {
       'gallery',
       'amenities',
       'payments',
+      'quicklinks',
+      'board',
     ]) {
       expect(screen.getByTestId(`add-section-${type}`)).toBeInTheDocument();
     }
@@ -267,6 +269,26 @@ describe('AddPanel', () => {
     it('enables polish blocks on a Pro plan', () => {
       renderPanel({ hasPolishBlocks: true });
       expect(screen.getByTestId('add-section-faq')).toBeEnabled();
+    });
+
+    it('offers Quick links and Board members on an Essentials plan, with no upsell', async () => {
+      // They are filled in from records the community already has, so unlike the
+      // polish blocks above they are not gated: enabled, no Professional badge.
+      renderPanel({ hasPolishBlocks: false });
+
+      for (const type of ['quicklinks', 'board']) {
+        const button = screen.getByTestId(`add-section-${type}`);
+        expect(button).toBeEnabled();
+        expect(button).not.toHaveAttribute('title');
+      }
+
+      await userEvent.click(screen.getByTestId('add-section-quicklinks'));
+      expect(upsertMutateAsync).toHaveBeenLastCalledWith({
+        blockType: 'quicklinks',
+        blockOrder: 2,
+        content: {},
+        pageId: HOME_PAGE_ID,
+      });
     });
   });
 

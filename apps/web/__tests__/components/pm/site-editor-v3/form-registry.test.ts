@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { BLOCK_TYPES } from '@propertypro/shared';
 import { blockFormRegistry, hasForm } from '@/components/pm/site-editor-v3/inspector/form-registry';
+import { ADD_CATALOG } from '@/components/pm/site-editor-v3/panels/add-catalog';
 
 // The root `pnpm test` runner and a direct `vitest` run inside apps/web have
 // different working directories, so a single cwd-relative path passes in one
@@ -48,14 +49,27 @@ describe('form registry — dispatch', () => {
     // The Add panel offers every creatable type, so a gap here would mean a PM
     // could add a section they then could not configure anywhere in v3. This is
     // the assertion that keeps those two lists honest.
-    //
-    // Quick links and Board members are not addable until Phase 2B ships their
-    // writers (`add-catalog.test.ts` holds the same exclusion); their forms
-    // arrive with those writers, which remove both exclusions.
-    const notAddableUntilPhase2B: readonly string[] = ['quicklinks', 'board'];
     for (const blockType of BLOCK_TYPES) {
-      if (notAddableUntilPhase2B.includes(blockType)) continue;
       expect(hasForm(blockType), `${blockType} has no inspector form`).toBe(true);
+    }
+  });
+
+  it('every addable type has a dynamic form', () => {
+    // Stronger than the coverage check above: a form that exists but is imported
+    // statically renders correctly and passes every behavioural test, and costs
+    // the editor route's first load. The registry binds a type either straight
+    // to a `dynamic(...)` call or, for the three empty-state types, to the one
+    // shared `dynamic(...)` constant.
+    const source = readFileSync(join(INSPECTOR_DIR, 'form-registry.ts'), 'utf8');
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+    expect(ADD_CATALOG.length).toBeGreaterThan(0);
+    for (const { blockType } of ADD_CATALOG) {
+      expect(hasForm(blockType), `${blockType} has no inspector form`).toBe(true);
+      expect(
+        code,
+        `${blockType}'s form is not imported through next/dynamic`,
+      ).toMatch(new RegExp(`\\b${blockType}\\s*:\\s*(dynamic\\(|sorEmptyTextForm\\b)`));
     }
   });
 

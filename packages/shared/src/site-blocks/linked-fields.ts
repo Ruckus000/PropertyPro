@@ -162,3 +162,20 @@ export function resolveLinkedText(text: string, facts: LinkedFacts): string {
 
   return kept.join('').trim();
 }
+
+/**
+ * The hero's headline as the page shows it: `text` resolved, and, when nothing is
+ * left of it, the community's display name (the short name when it is not blank,
+ * else the full name, which is what `{{name}}` stands for).
+ *
+ * A hero always has a heading: the layouts skip their own empty-state hero whenever
+ * a hero block validates, so this is the page's only one. A headline that drops
+ * whole, say `{{city}}` for a community with no city, therefore shows the name
+ * rather than nothing. The public page and the editor's "Shows as" line both call
+ * this, so what the editor says the page shows is what the page shows.
+ *
+ * The result is empty only when the name itself is blank.
+ */
+export function resolveHeroHeadline(text: string, facts: LinkedFacts): string {
+  return resolveLinkedText(text, facts) || resolveLinkedText('{{name}}', facts);
+}

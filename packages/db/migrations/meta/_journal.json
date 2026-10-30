@@ -666,6 +666,13 @@
       "when": 1793225846680,
       "tag": "0096_site_blocks_quicklinks_board",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1793232446826,
+      "tag": "0097_site_looks_catalog",
+      "breakpoints": true
     }
   ]
 }

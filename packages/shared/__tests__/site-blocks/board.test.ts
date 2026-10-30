@@ -7,7 +7,7 @@
  * address. The schema is strict to keep it that way.
  */
 import { describe, it, expect } from 'vitest';
-import { boardBlockSchema } from '../../src/site-blocks/board';
+import { boardBlockSchema, DEFAULT_BOARD_HEADING } from '../../src/site-blocks/board';
 import * as shared from '../../src/index';
 
 const accepts = (content: unknown) => boardBlockSchema.safeParse(content).success;
@@ -51,5 +51,21 @@ describe('boardBlockSchema', () => {
 
   it('is re-exported from the package entry point', () => {
     expect(shared.boardBlockSchema).toBe(boardBlockSchema);
+    expect(shared.DEFAULT_BOARD_HEADING).toBe('Board of Directors');
+  });
+});
+
+describe('DEFAULT_BOARD_HEADING', () => {
+  // The heading the section shows when the manager has not named it. It lives
+  // beside the schema because the public view and the editor's form both read it.
+
+  it('is "Board of Directors"', () => {
+    expect(DEFAULT_BOARD_HEADING).toBe('Board of Directors');
+  });
+
+  it('is a heading the schema would accept, so a manager can type it back', () => {
+    // An undefined heading is also accepted (it is optional), so check it is text.
+    expect(typeof DEFAULT_BOARD_HEADING).toBe('string');
+    expect(accepts({ heading: DEFAULT_BOARD_HEADING })).toBe(true);
   });
 });

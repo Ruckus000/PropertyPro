@@ -139,6 +139,7 @@ import type { SitePanelProps } from './panels/SitePanel';
 import type { EditorView } from './EditorTopBar';
 import type { StylingPanelTheme } from './panels/StylingPanel';
 import { AutosaveStatusProvider, useAutosaveStatus } from './inspector/autosave-status';
+import { LinkedFactsProvider } from './inspector/linked-facts-context';
 import { useSiteDiff } from './use-site-diff';
 import { RequiredSectionsProvider, useRequiredSections } from './required-sections-context';
 import { RequirementsPill } from './RequirementsPill';
@@ -1249,7 +1250,6 @@ export function EditorRoot({
             return (
               <DesignPanel
                 communityId={communityId}
-                communityType={siteIdentity.communityType}
                 presets={presets}
                 hasSiteCustomCss={hasSiteCustomCss}
                 theme={resolveStylingTheme(canvasContext)}
@@ -1286,7 +1286,15 @@ export function EditorRoot({
         // Returns null when nothing is selected, so passing it unconditionally
         // costs an empty render rather than a branch here — except while the
         // page is unknown, where an inspector save would target home.
-        inspector={pagesUnavailable ? null : <Inspector communityId={communityId} />}
+        inspector={
+          pagesUnavailable ? null : (
+            // The hero form previews its linked fields with the facts the canvas
+            // draws them with.
+            <LinkedFactsProvider facts={canvasContext?.community ?? null}>
+              <Inspector communityId={communityId} />
+            </LinkedFactsProvider>
+          )
+        }
       >
         {pagesUnavailable ? (
           // NOT the unfiltered canvas. `blocksForPage(blocks, null)` returns
@@ -1362,6 +1370,7 @@ export function EditorRoot({
         <PublishSheetMount
           communityId={communityId}
           theme={canvasContext?.theme ?? null}
+          layout={canvasContext?.layout ?? null}
           onOpenChange={setPublishOpen}
           onFixIssue={handleSelectSlot}
           onGoToPages={handleGoToPages}
@@ -1385,12 +1394,14 @@ export function EditorRoot({
 function PublishSheetMount({
   communityId,
   theme,
+  layout,
   onOpenChange,
   onFixIssue,
   onGoToPages,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
+  layout: CanvasContext['layout'] | null;
   onOpenChange: (open: boolean) => void;
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
@@ -1434,10 +1445,14 @@ function PublishSheetMount({
             brandColors: {
               primaryColor: theme.primaryColor,
               accentColor: theme.accentColor,
+              secondaryColor: theme.secondaryColor,
             },
           }
         : {})}
       onFixIssue={handleFixIssue}
+      // The draft look's layout, like the colours: a look that paints the
+      // secondary colour behind text gets text and headings checked on it.
+      {...(layout ? { layout } : {})}
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
       complianceSubject={subject}

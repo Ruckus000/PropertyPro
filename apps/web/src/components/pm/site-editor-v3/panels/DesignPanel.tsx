@@ -1,24 +1,31 @@
 'use client';
 
 /**
- * The Design tool (website builder v4, Phase 4b): template, colour set, and —
- * on Professional — custom colours, which save as a draft and go live on
- * Publish (`site-design-service`). The logos at the bottom are the exception:
+ * The Design tool (website builder v4, Phase 4b; looks, Phase 2B): look, colour
+ * set, and — on Professional — custom colours, which save as a draft and go live
+ * on Publish (`site-design-service`). The logos at the bottom are the exception:
  * they are live as soon as they save (see `LogosSection`).
  *
- * Templates are named (layout, colour set) pairs — see `design-templates.ts`
- * for why they carry no pages. The colour-set grid is the wizard's own
- * `PresetCards`, so a set looks the same in both places.
+ * A look is a whole design: a layout, a colour set and the home page's starting
+ * sections (D1). Choosing one drafts it through `PATCH /api/v1/pm/site/look`,
+ * which keeps every section the manager has edited (D5). It lists
+ * `LOOK_SUMMARIES`, not the registry, so the panel's chunk stays small.
  *
- * No plan lock on templates or colour sets: Essentials could already pick any
- * set in the wizard, and the Design panel does not take that away. Only the
+ * ponytail: this list of looks is interim. Trigger: the look picker
+ * (`/pm/website/looks`) exists; the Design tab then keeps colours, fonts and
+ * logos and links to the picker instead of listing looks.
+ *
+ * The colour-set grid is the wizard's own `PresetCards`, so a set looks the same
+ * in both places.
+ *
+ * No plan lock on looks or colour sets: Essentials could already pick any set in
+ * the wizard, and the Design panel does not take that away. Only the
  * custom-colours section is Professional, as it always was.
  */
 
-import { useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown } from 'lucide-react';
-import type { CommunityType, SiteLook } from '@propertypro/shared';
+import { Check } from 'lucide-react';
+import type { SiteLook } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,14 +33,14 @@ import {
   PresetCards,
   type PresetCardData,
 } from '@/components/pm/onboarding-wizard/PresetChooser';
+import { useDraftSiteLook } from '@/hooks/use-draft-site-look';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
-import { DESIGN_TEMPLATES, LAYOUT_NAMES, type DesignTemplate } from '../design-templates';
+import { LOOK_SUMMARIES, type LookSummary } from '@/lib/site-looks/look-summaries';
 import { LogosSection } from './LogosSection';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
 
 export interface DesignPanelProps {
   communityId: number;
-  communityType: CommunityType;
   /** Non-archived `site_theme_presets`, from the page's server render. */
   presets: PresetCardData[];
   hasSiteCustomCss: boolean;
@@ -48,14 +55,13 @@ function nextLook(design: { live: SiteLook; draft: SiteLook }): SiteLook {
 
 export function DesignPanel({
   communityId,
-  communityType,
   presets,
   hasSiteCustomCss,
   theme,
 }: DesignPanelProps) {
   const design = useSiteDesign(communityId);
   const save = useSaveSiteDesign(communityId);
-  const [showAll, setShowAll] = useState(false);
+  const draftLook = useDraftSiteLook(communityId);
 
   if (design.isError) {
     return (
@@ -81,25 +87,35 @@ export function DesignPanel({
   }
 
   const look = nextLook(design.data);
-  const presetSlugs = new Set(presets.map((p) => p.slug));
   const presetName = new Map(presets.map((p) => [p.slug, p.displayName]));
-  // A template whose colour set was archived is hidden, not offered broken.
-  const available = DESIGN_TEMPLATES.filter((t) => presetSlugs.has(t.presetSlug));
-  const own = available.filter((t) => t.forType === communityType);
-  const templates = showAll || own.length === 0 ? available : own;
+  // A look's id is its layout id (D2), so the look that will publish is the one
+  // whose id is the layout the draft-over-live design carries. None when the
+  // site is on a layout that predates the looks.
+  const selectedLookId = LOOK_SUMMARIES.find((summary) => summary.id === look.layoutId)?.id ?? null;
+  // The look the website has now, which is where "choosing a look" can lead back to.
+  const liveLookId = LOOK_SUMMARIES.find((summary) => summary.id === design.data.live.layoutId)?.id ?? null;
+  const busy = save.isPending || draftLook.isPending;
   const customColoursActive =
     look.customCssOverrides != null && Object.keys(look.customCssOverrides).length > 0;
 
-  function chooseTemplate(template: DesignTemplate) {
-    if (look.layoutId === template.layoutId && look.themePresetSlug === template.presetSlug) return;
-    save.mutate(
-      { layoutId: template.layoutId, themePresetSlug: template.presetSlug },
-      {
-        onSuccess: () =>
-          toast.success(`Now using ${template.name}. Publish to put it on your website.`),
-        onError: (err) => toast.error(err.message),
-      },
-    );
+  function chooseLook(summary: LookSummary) {
+    if (summary.id === selectedLookId) return;
+    // Choosing the look the website already has takes the drafted one back, which
+    // leaves nothing of the look to publish. The counts the route returns cannot
+    // tell the panel so: a way back with nothing edited still counts the sections
+    // it put back (5 replaced, 1 added and 1 removed, Heritage to Bayfront), and a
+    // switch that keeps every edited section counts as nothing, the same as one
+    // that changed nothing. The panel knows which look is live.
+    const returnsToLive = summary.id === liveLookId;
+    draftLook.mutate(summary.id, {
+      onSuccess: () =>
+        toast.success(
+          returnsToLive
+            ? 'Your website already uses this look.'
+            : `Now using ${summary.name}. Publish to put it on your website.`,
+        ),
+      onError: (err) => toast.error(err.message),
+    });
   }
 
   function chooseColourSet(slug: string) {
@@ -119,61 +135,59 @@ export function DesignPanel({
   return (
     <div className="space-y-8" data-testid="tool-panel-design">
       <p className="text-sm text-content-secondary">
-        A template sets the overall look. Your words, photos, and sections stay the same when
-        you switch. Template and colour changes wait until you publish.
+        A look sets your site&apos;s design and the sections on its home page. Sections you&apos;ve
+        edited stay as they are. Look and colour changes wait until you publish.
       </p>
 
-      <section aria-labelledby="design-template-heading" className="space-y-3">
+      <section aria-labelledby="design-look-heading" className="space-y-3">
         <div className="flex items-baseline justify-between gap-2">
-          <h3 id="design-template-heading" className="text-sm font-semibold text-content">
-            Template
+          <h3 id="design-look-heading" className="text-sm font-semibold text-content">
+            Look
           </h3>
-          <span className="text-xs text-content-tertiary">Your sections stay the same</span>
+          <span className="text-xs text-content-tertiary">Your edits stay</span>
         </div>
-        <div role="radiogroup" aria-label="Template" className="space-y-2">
-          {templates.map((template) => {
-            const selected =
-              look.layoutId === template.layoutId && look.themePresetSlug === template.presetSlug;
+        {selectedLookId === null ? (
+          <p data-testid="design-older-look-note" className="text-sm text-content-secondary">
+            Your site uses an older look. Choose one below to switch to it.
+          </p>
+        ) : null}
+        <div role="radiogroup" aria-label="Look" className="space-y-2">
+          {LOOK_SUMMARIES.map((summary) => {
+            const selected = summary.id === selectedLookId;
             return (
               <button
-                key={template.id}
+                key={summary.id}
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                disabled={save.isPending}
-                data-testid={`design-template-${template.id}`}
-                onClick={() => chooseTemplate(template)}
+                disabled={busy}
+                data-testid={`design-look-${summary.id}`}
+                onClick={() => chooseLook(summary)}
                 className={`w-full rounded-[var(--radius-md)] border p-3 text-left transition-colors disabled:opacity-60 ${
                   selected
                     ? 'border-interactive ring-2 ring-interactive'
                     : 'border-edge hover:border-interactive-hover'
                 }`}
               >
-                <span className="block text-sm font-semibold text-content">{template.name}</span>
-                <span className="block text-xs text-content-tertiary">
-                  {LAYOUT_NAMES[template.layoutId]} · {presetName.get(template.presetSlug)}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="block text-sm font-semibold text-content">{summary.name}</span>
+                  {selected ? (
+                    <span
+                      aria-hidden="true"
+                      className="inline-flex items-center gap-1 rounded-full bg-interactive px-2 py-0.5 text-xs font-medium text-content-inverse"
+                    >
+                      <Check className="h-3 w-3" />
+                      Selected
+                    </span>
+                  ) : null}
                 </span>
                 <span className="mt-1 block text-xs text-content-secondary">
-                  {template.description}
+                  {summary.description}
                 </span>
               </button>
             );
           })}
         </div>
-        {own.length > 0 && own.length < available.length ? (
-          <button
-            type="button"
-            aria-expanded={showAll}
-            onClick={() => setShowAll((v) => !v)}
-            className="flex w-full items-center justify-center gap-1 text-sm font-medium text-interactive hover:text-interactive-hover"
-          >
-            {showAll ? 'Show fewer templates' : 'Show all templates'}
-            <ChevronDown
-              aria-hidden="true"
-              className={`h-4 w-4 transition-transform ${showAll ? 'rotate-180' : ''}`}
-            />
-          </button>
-        ) : null}
       </section>
 
       <section aria-labelledby="design-colours-heading" className="space-y-3">
@@ -181,7 +195,7 @@ export function DesignPanel({
           <h3 id="design-colours-heading" className="text-sm font-semibold text-content">
             Colours &amp; fonts
           </h3>
-          <span className="text-xs text-content-tertiary">Works with any template</span>
+          <span className="text-xs text-content-tertiary">Works with any look</span>
         </div>
         {customColoursActive ? (
           <AlertBanner
@@ -219,6 +233,7 @@ export function DesignPanel({
             selected={look.themePresetSlug ?? null}
             onChoose={chooseColourSet}
             name="design-colour-set"
+            disabled={busy}
           />
         )}
       </section>

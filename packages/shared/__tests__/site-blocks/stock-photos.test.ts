@@ -8,7 +8,12 @@
  * every community's bucket would add quota accounting for nothing.
  */
 import { describe, it, expect } from 'vitest';
-import { STOCK_PHOTO_IDS, STOCK_PHOTO_SRC } from '../../src/site-blocks/stock-photos';
+import {
+  STOCK_PHOTO_ALT,
+  STOCK_PHOTO_IDS,
+  STOCK_PHOTO_SRC,
+} from '../../src/site-blocks/stock-photos';
+import { heroPhotoSchema } from '../../src/site-blocks/hero';
 import { imagePathSchema } from '../../src/site-blocks/types';
 import * as shared from '../../src/index';
 
@@ -37,8 +42,23 @@ describe('stock photos', () => {
     }
   });
 
+  it('has a description for every id and none for anything else', () => {
+    expect(Object.keys(STOCK_PHOTO_ALT).sort()).toEqual([...STOCK_PHOTO_IDS].sort());
+  });
+
+  it('describes each photo in words a hero can store as it stands', () => {
+    // The editor swaps one stock photo for the other and writes this description
+    // with it, so it has to satisfy the same schema a typed one does.
+    for (const id of STOCK_PHOTO_IDS) {
+      expect(heroPhotoSchema.safeParse({ stock: id, alt: STOCK_PHOTO_ALT[id] }).success, id).toBe(
+        true,
+      );
+    }
+  });
+
   it('are re-exported from the package entry point', () => {
     expect(shared.STOCK_PHOTO_IDS).toBe(STOCK_PHOTO_IDS);
     expect(shared.STOCK_PHOTO_SRC).toBe(STOCK_PHOTO_SRC);
+    expect(shared.STOCK_PHOTO_ALT).toBe(STOCK_PHOTO_ALT);
   });
 });
