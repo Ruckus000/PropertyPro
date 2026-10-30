@@ -165,7 +165,7 @@ export const PATCH = withErrorHandler(
   runRoute(compliancePatchContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    const { id, action: patchAction, documentId } = body;
+    const { id, action: patchAction, documentId, reason } = body;
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
@@ -197,12 +197,15 @@ export const PATCH = withErrorHandler(
       case 'mark_not_applicable':
         updateData = {
           isApplicable: false,
+          // The contract's refinement guarantees a reason for this action.
+          notApplicableReason: reason!,
           lastModifiedBy: userId,
         };
         break;
       case 'mark_applicable':
         updateData = {
           isApplicable: true,
+          notApplicableReason: null,
           lastModifiedBy: userId,
         };
         break;
@@ -222,7 +225,9 @@ export const PATCH = withErrorHandler(
       resourceId: String(id),
       communityId,
       metadata: { itemTitle: row['title'] as string },
-      newValues: { documentId: documentId ?? null },
+      // "Doesn't apply" is audited with its reason and nothing else.
+      newValues:
+        patchAction === 'mark_not_applicable' ? { reason } : { documentId: documentId ?? null },
     });
 
     return result;

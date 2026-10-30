@@ -36,6 +36,8 @@ import { visibleBlocks } from '@/lib/site/visible-blocks';
  * publish sheet and the server's delete guard also use.
  */
 export interface RequiredSectionsValue {
+  /** The community the editor is open on; 0 outside the provider. */
+  communityId: number;
   /**
    * Community type + unit count — what every rule here is asked about. The
    * count is the one this session last SAVED, so a correction in the pill
@@ -84,6 +86,7 @@ export interface RequiredSectionsValue {
 }
 
 const NOTHING_REQUIRED: RequiredSectionsValue = {
+  communityId: 0,
   subject: { communityType: '', unitCount: null },
   level: 'none',
   unitCountUnknown: false,
@@ -167,6 +170,7 @@ export function RequiredSectionsProvider({
           );
     const isRequired = (blockType: string) => isRequiredSectionType(subject, blockType);
     return {
+      communityId,
       subject,
       level: requirementLevel(subject),
       unitCountUnknown: unitCountUnknown(subject),
@@ -204,7 +208,7 @@ export function RequiredSectionsProvider({
         return true;
       },
     };
-  }, [communityType, unitCount, canEditUnitCount, saveUnitCount, isSavingUnitCount, pages, upsertBlock]);
+  }, [communityId, communityType, unitCount, canEditUnitCount, saveUnitCount, isSavingUnitCount, pages, upsertBlock]);
 
   return (
     <RequiredSectionsContext.Provider value={value}>{children}</RequiredSectionsContext.Provider>

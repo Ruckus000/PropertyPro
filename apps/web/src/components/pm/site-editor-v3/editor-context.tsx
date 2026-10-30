@@ -23,7 +23,7 @@ import {
   useCanvasSelection,
   type CanvasSelection,
 } from './canvas/use-canvas-selection';
-import { nextContentSlot } from './panels/add-catalog';
+import { nextContentSlot } from './panels/content-slots';
 import { sectionLabel } from './section-label';
 
 export type MoveDirection = 'up' | 'down';

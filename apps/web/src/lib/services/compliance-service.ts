@@ -12,6 +12,7 @@
 import {
   complianceChecklistItems,
   createScopedClient,
+  logAuditEvent,
 } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
 
@@ -119,11 +120,13 @@ export async function linkMinutesDocumentToChecklist(
  * document being soft-deleted, so a deleted document can no longer keep an
  * item "satisfied".
  *
- * Called from the documents DELETE handler. The compliance calculator also
- * defends against this at read time (treating a soft-deleted document as
- * unlinked), but clearing the FK keeps the data model honest and the audit
- * trail readable. The two writes are not atomic — the read-time defense
- * covers the brief window where the checklist row still references the row.
+ * Called from the documents DELETE handler and when a posted document is taken
+ * back to a draft. Each item it unlinks is audited as `unlink_document`. The
+ * compliance calculator also defends against this at read time (treating a
+ * soft-deleted document as unlinked), but clearing the FK keeps the data model
+ * honest and the audit trail readable. The two writes are not atomic — the
+ * read-time defense covers the brief window where the checklist row still
+ * references the row.
  *
  * Lives here rather than in the route so the route does not import the
  * `complianceChecklistItems` table directly (ADR-003 / guard:route-table-imports).
@@ -134,7 +137,7 @@ export async function unlinkChecklistItemsForDocument(
   actorUserId: string,
 ): Promise<void> {
   const scoped = createScopedClient(communityId);
-  await scoped.update(
+  const unlinked = (await scoped.update(
     complianceChecklistItems,
     {
       documentId: null,
@@ -142,7 +145,21 @@ export async function unlinkChecklistItemsForDocument(
       lastModifiedBy: actorUserId,
     },
     eq(complianceChecklistItems.documentId, documentId),
-  );
+  )) as Array<Record<string, unknown>> | undefined;
+
+  // One `unlink_document` per item, as the manual Unlink action records it: an
+  // item that stops counting as posted must say when, and why, in its own trail.
+  for (const row of unlinked ?? []) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'unlink_document',
+      resourceType: 'compliance_checklist_item',
+      resourceId: String(row['id']),
+      communityId,
+      oldValues: { documentId },
+      newValues: { documentId: null },
+    });
+  }
 }
 
 /**

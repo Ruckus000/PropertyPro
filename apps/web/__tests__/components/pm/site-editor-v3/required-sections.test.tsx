@@ -14,6 +14,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { RequiredSectionPage } from '@propertypro/shared';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
+import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import { SectionList } from '@/components/pm/site-editor-v3/panels/SectionList';
 import { FloatControls } from '@/components/pm/site-editor-v3/canvas/FloatControls';
 import { RequirementsPill } from '@/components/pm/site-editor-v3/RequirementsPill';
@@ -57,6 +58,33 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   usePublishedBlocks: () => ({ data: [] }),
   useUpsertContentBlock: () => ({ mutate: upsertMutate, isPending: false }),
 }));
+
+// The pill reads the compliance checklist; `undefined` data is "still loading".
+const checklist = vi.hoisted(() => ({
+  data: undefined as ChecklistItemData[] | undefined,
+  isError: false,
+}));
+vi.mock('@/hooks/use-compliance-checklist', () => ({
+  useComplianceChecklist: (_communityId: number, options?: { enabled?: boolean }) =>
+    options?.enabled === false ? { data: undefined, isError: false } : checklist,
+}));
+
+function recordItem(id: number, posted: boolean): ChecklistItemData {
+  return {
+    id,
+    templateKey: `k${id}`,
+    title: `Record ${id}`,
+    category: 'governing_documents',
+    status: posted ? 'satisfied' : 'unsatisfied',
+    documentId: posted ? id : null,
+    documentState: posted ? 'posted' : null,
+  };
+}
+
+/** `posted` of `total` records on the website; the rest nothing posted. */
+function records(posted: number, total: number): ChecklistItemData[] {
+  return Array.from({ length: total }, (_, i) => recordItem(i + 1, i < posted));
+}
 
 const requestRemove = vi.fn();
 vi.mock('@/components/pm/site-editor-v3/use-undoable-remove', () => ({
@@ -131,6 +159,8 @@ beforeEach(() => {
   upsertMutate.mockClear();
   unitCountApi.mutateAsync.mockReset();
   editor.blocks = [block(2, 'text'), block(3, 'meetings'), block(4, 'documents')];
+  checklist.data = records(12, 12);
+  checklist.isError = false;
 });
 
 describe('SectionList — required sections', () => {
@@ -244,6 +274,30 @@ describe('RequirementsPill', () => {
   it('reads "all set" when both sections are visible', () => {
     renderWith(pill());
     expect(screen.getByTestId('requirements-pill')).toHaveAccessibleName('Required items: all set');
+  });
+
+  it('the pill reads "Records: 9 of 12 posted" for the fixture and is not "all set"', () => {
+    checklist.data = records(9, 12);
+    renderWith(pill());
+    const trigger = screen.getByTestId('requirements-pill');
+    expect(trigger).toHaveAccessibleName('Records: 9 of 12 posted');
+    expect(trigger).toHaveTextContent('Records: 9 of 12 posted');
+    expect(trigger).not.toHaveTextContent(/all set/i);
+    // Not the green "set" colours either.
+    expect(trigger).toHaveClass('text-status-danger');
+  });
+
+  it('keeps naming a hidden section first, whatever the records say', () => {
+    checklist.data = records(9, 12);
+    editor.blocks = [block(3, 'meetings', { content: { hidden: true } }), block(4, 'documents')];
+    renderWith(pill());
+    expect(screen.getByTestId('requirements-pill')).toHaveAccessibleName('Required item missing');
+  });
+
+  it('says nothing while the records are loading or could not be read', () => {
+    checklist.data = undefined;
+    const { container } = renderWith(pill());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('shows a hidden section on this page in one click, writing to this page', async () => {

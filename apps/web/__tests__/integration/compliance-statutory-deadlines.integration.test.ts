@@ -258,18 +258,71 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
     );
 
     if (conditionalItem) {
+      const reason = 'Our building is under three stories.';
       const patchResponse = await route.PATCH(
         jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
           id: conditionalItem['id'],
           communityId: communityA.id,
           action: 'mark_not_applicable',
+          reason,
         }),
       );
 
       expect(patchResponse.status).toBe(200);
       const patchJson = await parseJson<{ data: Record<string, unknown> }>(patchResponse);
       expect(patchJson.data['isApplicable']).toBe(false);
+      expect(patchJson.data['notApplicableReason']).toBe(reason);
+
+      // The next read carries the stored reason, and the item's (absent)
+      // automatic link as an explicit null, straight from the real columns.
+      const rereadResponse = await route.GET(
+        new NextRequest(apiUrl(`/api/v1/compliance?communityId=${communityA.id}`)),
+      );
+      const reread = await parseJson<{ data: Array<Record<string, unknown>> }>(rereadResponse);
+      const reloaded = reread.data.find((i) => i['id'] === conditionalItem['id']);
+      expect(reloaded?.['notApplicableReason']).toBe(reason);
+      expect(reloaded?.['autoLinkedDocumentId']).toBeNull();
+
+      // The audit row records the reason and nothing else.
+      const auditRows = await kit.sqlClient`
+        SELECT new_values FROM compliance_audit_log
+        WHERE community_id = ${communityA.id}
+          AND action = 'mark_not_applicable'
+          AND resource_id = ${String(conditionalItem['id'])}
+        ORDER BY id DESC
+        LIMIT 1
+      `;
+      expect(auditRows[0]?.new_values).toEqual({ reason });
     }
+  });
+
+  it('refuses to mark an item not applicable without a reason', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    setActor(kit, 'actorA');
+
+    const getResponse = await route.GET(
+      new NextRequest(apiUrl(`/api/v1/compliance?communityId=${communityA.id}`)),
+    );
+    const getJson = await parseJson<{ data: Array<Record<string, unknown>> }>(getResponse);
+    const applicable = getJson.data.find((i) => i['isApplicable'] !== false);
+    expect(applicable).toBeDefined();
+
+    const patchResponse = await route.PATCH(
+      jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
+        id: applicable?.['id'],
+        communityId: communityA.id,
+        action: 'mark_not_applicable',
+      }),
+    );
+
+    expect(patchResponse.status).toBe(400);
+    const [row] = await kit.sqlClient`
+      SELECT is_applicable FROM compliance_checklist_items WHERE id = ${applicable?.['id'] as number}
+    `;
+    expect(row?.is_applicable).toBe(true);
   });
 
   it('marking an item back to applicable reverts its status', async () => {
@@ -301,6 +354,7 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
       expect(patchResponse.status).toBe(200);
       const patchJson = await parseJson<{ data: Record<string, unknown> }>(patchResponse);
       expect(patchJson.data['isApplicable']).toBe(true);
+      expect(patchJson.data['notApplicableReason']).toBeNull();
       expect(['unsatisfied', 'overdue']).toContain(patchJson.data['status']);
     }
   });

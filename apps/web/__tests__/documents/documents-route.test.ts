@@ -42,6 +42,8 @@ const {
   createScopedClientMock,
   scopedUpdateMock,
   complianceChecklistItemsTable,
+  autoLinkDocumentMock,
+  captureExceptionMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -68,6 +70,16 @@ const {
   createScopedClientMock: vi.fn(),
   scopedUpdateMock: vi.fn(),
   complianceChecklistItemsTable: Symbol('compliance_checklist_items'),
+  autoLinkDocumentMock: vi.fn(),
+  captureExceptionMock: vi.fn(),
+}));
+
+vi.mock('@/lib/services/record-auto-link-service', () => ({
+  autoLinkDocument: autoLinkDocumentMock,
+}));
+
+vi.mock('@sentry/nextjs', () => ({
+  captureException: captureExceptionMock,
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -447,6 +459,35 @@ describe('POST /api/v1/documents', () => {
     const json = (await res.json()) as { data: unknown; warnings?: unknown };
     expect(json.data).toEqual(DOCUMENT_ROW_JSON);
     expect(json.warnings).toEqual(warnings);
+  });
+
+  it('documents POST calls autoLinkDocument once for a posted upload and never for a draft', async () => {
+    autoLinkDocumentMock.mockResolvedValue({ templateKey: '718_bylaws', outcome: 'linked' });
+
+    await POST(jsonPost(VALID_CREATE_BODY));
+
+    expect(autoLinkDocumentMock).toHaveBeenCalledTimes(1);
+    expect(autoLinkDocumentMock).toHaveBeenCalledWith(42, 7, 'user-admin');
+
+    autoLinkDocumentMock.mockClear();
+    await POST(jsonPost({ ...VALID_CREATE_BODY, draft: true }));
+
+    expect(autoLinkDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('an auto-link failure does not fail the upload', async () => {
+    const failure = new Error('checklist read failed');
+    autoLinkDocumentMock.mockRejectedValueOnce(failure);
+
+    const res = await POST(jsonPost(VALID_CREATE_BODY));
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: unknown };
+    expect(json.data).toEqual(DOCUMENT_ROW_JSON);
+    expect(captureExceptionMock).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({ tags: { record_auto_link: 'document_upload' } }),
+    );
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -839,6 +880,36 @@ describe('PATCH /api/v1/documents - drafts (posted)', () => {
       complianceChecklistItemsTable,
       expect.objectContaining({ documentId: null, documentPostedAt: null }),
       expect.anything(),
+    );
+  });
+
+  it('posting a draft links it to its record; taking one back does not', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+    autoLinkDocumentMock.mockResolvedValue({ templateKey: '718_budget', outcome: 'linked' });
+
+    await patch({ posted: true, redactionAttested: true });
+
+    expect(autoLinkDocumentMock).toHaveBeenCalledTimes(1);
+    expect(autoLinkDocumentMock).toHaveBeenCalledWith(42, 7, 'user-admin');
+
+    autoLinkDocumentMock.mockClear();
+    getDocumentForPublishAuditMock.mockResolvedValue(POSTED);
+    await patch({ posted: false });
+
+    expect(autoLinkDocumentMock).not.toHaveBeenCalled();
+  });
+
+  it('an auto-link failure does not fail posting, and residents are still told', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue(DRAFT);
+    autoLinkDocumentMock.mockRejectedValueOnce(new Error('checklist read failed'));
+
+    const res = await patch({ posted: true, redactionAttested: true });
+
+    expect(res.status).toBe(200);
+    expect(sendDocumentPostedNotificationsMock).toHaveBeenCalled();
+    expect(captureExceptionMock).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { record_auto_link: 'document_post' } }),
     );
   });
 

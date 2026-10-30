@@ -13,6 +13,7 @@
  * orphan storage objects but no dangling row. A retry replaces them at the
  * same paths and inserts cleanly.
  */
+import { captureException } from '@sentry/nextjs';
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { logAuditEvent, createPresignedDownloadUrl } from '@propertypro/db';
@@ -40,6 +41,7 @@ import {
 import { markMeetingMinutesPosted } from '@/lib/services/meeting-service';
 import { linkMinutesDocumentToChecklist } from '@/lib/services/compliance-service';
 import { completeDocumentSteps } from '@/lib/services/onboarding-checklist-service';
+import { autoLinkDocument } from '@/lib/services/record-auto-link-service';
 
 // Chromium needs a real Node runtime, more memory, and a longer timeout.
 export const runtime = 'nodejs';
@@ -239,6 +241,18 @@ export const POST = withErrorHandler(
           });
         }
       }
+    }
+
+    // 7b. Link the published document to the Florida record it is, when the
+    //     evidence is unambiguous (D12). After step 7, so minutes already linked
+    //     there are left alone. Bookkeeping: a failure is reported, never thrown.
+    try {
+      await autoLinkDocument(communityId, documentId, userId);
+    } catch (err) {
+      captureException(err, {
+        tags: { record_auto_link: 'authored_publish' },
+        extra: { communityId, documentId },
+      });
     }
 
     // 8. Audit. NOTE: a documents-row insert satisfies no compliance item on its

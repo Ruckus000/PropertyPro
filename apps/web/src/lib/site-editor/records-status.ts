@@ -10,6 +10,7 @@
  * words.
  */
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
+import { requirementLevel, type ComplianceSubject } from '@propertypro/shared';
 import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 
 export type RecordsStatus = 'nothing_posted' | 'not_posted' | 'out_of_date' | 'up_to_date';
@@ -114,4 +115,84 @@ export function summarizeRecords(items: readonly ChecklistItemData[]): RecordsGr
 /** How many groups are not up to date — the Documents tool's badge. */
 export function recordsNeedingAttention(groups: readonly RecordsGroup[]): number {
   return groups.filter((g) => g.status !== 'up_to_date').length;
+}
+
+export interface MissingRecord {
+  itemId: number;
+  templateKey: string;
+  title: string;
+  category: string;
+  /** Never `up_to_date`: that is the one state that is not missing. */
+  state: Exclude<RecordsStatus, 'up_to_date'>;
+}
+
+function toMissing(item: ChecklistItemData, state: MissingRecord['state']): MissingRecord {
+  return {
+    itemId: item.id,
+    templateKey: item.templateKey,
+    title: item.title,
+    category: item.category,
+    state,
+  };
+}
+
+/**
+ * The records a covered association still owes the website: applicable,
+ * non-conditional items whose record is not up and current. Empty below the
+ * statute's size threshold and for apartments, where nothing is owed.
+ *
+ * The state is the same one `summarizeRecords` reads off the loader's derived
+ * status, so a link to a draft or a deleted file is `not_posted` /
+ * `nothing_posted`, never counted as posted.
+ */
+export function missingRecordItems(
+  items: readonly ChecklistItemData[],
+  subject: ComplianceSubject,
+): MissingRecord[] {
+  if (requirementLevel(subject) !== 'required') return [];
+  return items.flatMap((item) => {
+    if (item.isApplicable === false || item.isConditional) return [];
+    const state = itemStatus(item);
+    return state === 'up_to_date' ? [] : [toMissing(item, state)];
+  });
+}
+
+/**
+ * Conditional items (a SIRS, video recordings) that have no record yet: the
+ * ones to ask "does this apply to you?" about, rather than call missing.
+ */
+export function conditionalRecordItems(
+  items: readonly ChecklistItemData[],
+  subject: ComplianceSubject,
+): MissingRecord[] {
+  if (requirementLevel(subject) !== 'required') return [];
+  return items.flatMap((item) => {
+    if (item.isApplicable === false || !item.isConditional) return [];
+    if (hasRecord(item) || item.status === 'satisfied') return [];
+    return [toMissing(item, 'nothing_posted')];
+  });
+}
+
+/**
+ * Items whose record was linked by automatic matching and still is. A manual
+ * relink moves `documentId` and leaves `autoLinkedDocumentId` behind. The
+ * null check comes first: two nulls are equal.
+ */
+export function autoLinkedRecordCount(items: readonly ChecklistItemData[]): number {
+  return items.filter(
+    (item) =>
+      item.autoLinkedDocumentId != null && item.documentId === item.autoLinkedDocumentId,
+  ).length;
+}
+
+/** The pill's "9 of 12 posted": records on the website and current, over all owed. */
+export function recordsPostedTotals(items: readonly ChecklistItemData[]): {
+  posted: number;
+  total: number;
+} {
+  const groups = summarizeRecords(items);
+  return {
+    posted: groups.reduce((n, g) => n + g.satisfied, 0),
+    total: groups.reduce((n, g) => n + g.total, 0),
+  };
 }

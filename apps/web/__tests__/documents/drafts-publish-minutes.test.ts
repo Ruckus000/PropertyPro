@@ -28,6 +28,8 @@ const {
   linkMinutesDocumentToChecklistMock,
   meetingsTableMock,
   filtersMock,
+  autoLinkDocumentMock,
+  captureExceptionMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -39,6 +41,8 @@ const {
   softDeleteDocumentDraftMock: vi.fn().mockResolvedValue(undefined),
   createAuthoredDocumentMock: vi.fn(),
   linkMinutesDocumentToChecklistMock: vi.fn().mockResolvedValue(null),
+  autoLinkDocumentMock: vi.fn(),
+  captureExceptionMock: vi.fn(),
   meetingsTableMock: {
     id: Symbol('meetings.id'),
     minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
@@ -110,6 +114,14 @@ vi.mock('@/lib/services/compliance-service', () => ({
   linkMinutesDocumentToChecklist: linkMinutesDocumentToChecklistMock,
 }));
 
+vi.mock('@/lib/services/record-auto-link-service', () => ({
+  autoLinkDocument: autoLinkDocumentMock,
+}));
+
+vi.mock('@sentry/nextjs', () => ({
+  captureException: captureExceptionMock,
+}));
+
 vi.mock('@/lib/services/document-draft-service', () => ({
   getAuthorDisplayName: vi.fn().mockResolvedValue({ fullName: 'Marisol Reyes' }),
   getCommunityForDocumentPublish: vi.fn().mockResolvedValue({ name: 'Sunset Condos' }),
@@ -161,6 +173,7 @@ describe('publishing a draft authored from a meeting', () => {
       timezone: 'America/New_York',
     });
     createAuthoredDocumentMock.mockResolvedValue({ document: { id: 900 }, warnings: [] });
+    autoLinkDocumentMock.mockResolvedValue({ templateKey: null, outcome: 'not_eligible' });
     getMeetingForDraftSeedMock.mockResolvedValue({ id: 13, title: 'August Board Meeting' });
     getDocumentDraftByIdMock.mockResolvedValue({
       id: 5,
@@ -313,5 +326,38 @@ describe('publishing a draft authored from a meeting', () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as { data: { documentId: number } };
     expect(body.data.documentId).toBe(900);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Automatic linking (D12): a published authored document fills the record it
+  // unambiguously is. Asked after the minutes link above, so minutes already
+  // linked there are left alone.
+  // ---------------------------------------------------------------------------
+
+  it('asks for the published document to be linked to its record, after the minutes link', async () => {
+    mockMeetingRow({ id: 13, minutesApprovedAt: null });
+
+    await publish();
+
+    expect(autoLinkDocumentMock).toHaveBeenCalledTimes(1);
+    expect(autoLinkDocumentMock).toHaveBeenCalledWith(42, 900, 'author-1');
+    expect(linkMinutesDocumentToChecklistMock.mock.invocationCallOrder[0]).toBeLessThan(
+      autoLinkDocumentMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('still publishes when automatic linking fails', async () => {
+    mockMeetingRow({ id: 13, minutesApprovedAt: null });
+    const failure = new Error('checklist unavailable');
+    autoLinkDocumentMock.mockRejectedValueOnce(failure);
+
+    const response = await publish();
+
+    expect(response.status).toBe(200);
+    expect(softDeleteDocumentDraftMock).toHaveBeenCalledWith(42, 5);
+    expect(captureExceptionMock).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({ tags: { record_auto_link: 'authored_publish' } }),
+    );
   });
 });
