@@ -37,6 +37,7 @@
 import { spawnSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { withoutGitEnv } from './git-env';
 
 /** Top-level directories whose absence means we are not looking at the repo. */
 export const REQUIRED_ROOTS = ['apps', 'packages', 'scripts'] as const;
@@ -74,7 +75,9 @@ export function listWatchedDirectories(
   const res = spawnSync(
     'git',
     ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 },
+    // An inherited GIT_DIR (a git hook started this run) would make git read
+    // that repository instead of `root`.
+    { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024, env: withoutGitEnv() },
   );
   if (res.error) refuse(`could not run git ls-files in ${root}: ${String(res.error)}`);
   if (res.status !== 0) refuse(`git ls-files exited ${res.status} in ${root}: ${res.stderr.trim()}`);
