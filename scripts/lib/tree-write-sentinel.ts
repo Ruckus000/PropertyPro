@@ -37,6 +37,7 @@
 import { spawnSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { withoutGitEnv } from './git-env';
 
 /** Top-level directories whose absence means we are not looking at the repo. */
 export const REQUIRED_ROOTS = ['apps', 'packages', 'scripts'] as const;
@@ -74,7 +75,9 @@ export function listWatchedDirectories(
   const res = spawnSync(
     'git',
     ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 },
+    // An inherited GIT_DIR (a git hook started this run) would make git read
+    // that repository instead of `root`.
+    { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024, env: withoutGitEnv() },
   );
   if (res.error) refuse(`could not run git ls-files in ${root}: ${String(res.error)}`);
   if (res.status !== 0) refuse(`git ls-files exited ${res.status} in ${root}: ${res.stderr.trim()}`);
@@ -158,5 +161,30 @@ export function formatChanges(changes: TreeChange[]): string {
     '(mkdtempSync) and point the guard at them with a --root option or a root parameter.',
     'If YOU created or deleted files in the repo during the run (an editor swap file, a',
     'branch switch), re-run.',
+  ].join('\n');
+}
+
+/**
+ * The teardown message when `core.bare` went from not-true to true during the
+ * run, or undefined. Nothing sets it on purpose, so a flip is always a defect,
+ * even one made by a parallel run in another worktree of the same repo: every
+ * checkout then fails with "must be run in a work tree" (see `git-env.ts`).
+ * `before`/`after` are `git config --get core.bare` output, undefined when git
+ * could not be asked.
+ */
+export function coreBareFlipMessage(
+  before: string | undefined,
+  after: string | undefined,
+  repoRoot: string,
+): string | undefined {
+  if (before === 'true' || after !== 'true') return undefined;
+  // POSIX single-quoting, so the printed command survives any path.
+  const root = `'${repoRoot.replaceAll("'", `'\\''`)}'`;
+  return [
+    'tree-write sentinel: core.bare became true in the repo config during the run, so every',
+    'checkout of this repo now fails with "must be run in a work tree". Some git call (this',
+    'run, or a parallel one in another worktree) hit this repo when it meant a temp dir; give',
+    'test git calls withoutGitEnv() (lib/git-env.ts). Restore with:',
+    `  git config --file "$(git -C ${root} rev-parse --path-format=absolute --git-common-dir)/config" core.bare false`,
   ].join('\n');
 }

@@ -87,7 +87,7 @@ describe('website editor articles', () => {
     // The Documents tool was deleted with the rail.
     expect(text).not.toMatch(/\*\*Documents\*\* tool/);
     expect(text).toContain('**Records** list on your website home');
-    expect(text).toMatch(/top bar shows a link with how many records are missing/);
+    expect(text).toMatch(/top bar shows a link with a warning sign and how many records are missing/);
     expect(text).not.toMatch(/\bcompliant\b|\$\d/i);
   });
 

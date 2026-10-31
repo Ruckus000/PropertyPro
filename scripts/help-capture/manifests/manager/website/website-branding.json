@@ -24,7 +24,7 @@
         },
         {
           "type": "scrollTo",
-          "selector": "#design-custom-heading"
+          "selector": "role=button[name=/Save colours/]"
         }
       ],
       "clipTo": [
