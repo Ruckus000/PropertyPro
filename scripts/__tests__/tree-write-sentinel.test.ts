@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, inject, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest';
+import { withoutGitEnv } from '../lib/git-env';
 import {
+  coreBareFlipMessage,
   diffSnapshots,
   formatChanges,
   listWatchedDirectories,
@@ -30,6 +32,23 @@ const smallTree = (): void => {
 };
 
 const snap = () => snapshotDirectories(root, DIRS);
+
+// Every git call here runs without the inherited GIT_* variables: localci runs
+// this suite from the pre-push hook, which exports the real repo's GIT_DIR, and
+// `git init` then re-initialises THAT repo as bare instead of creating one in
+// `dir`. `-C dir` alone does not prevent it. The developer's global and system
+// config are ignored too, so their hooks and templates never run here. Built per
+// call: a test may stub process.env.
+const testGitEnv = (): NodeJS.ProcessEnv => ({
+  ...withoutGitEnv(),
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+});
+
+const gitInit = (dir: string): void => {
+  const init = spawnSync('git', ['-C', dir, 'init', '-q'], { encoding: 'utf-8', env: testGitEnv() });
+  expect(init.status, init.stderr).toBe(0);
+};
 
 const write = (rel: string, content = 'x\n'): void => {
   mkdirSync(dirname(join(root, rel)), { recursive: true });
@@ -98,8 +117,7 @@ describe('diffSnapshots', () => {
 
 describe('listWatchedDirectories', () => {
   it('lists what git would show, minus ignored and dot-prefixed directories', () => {
-    const init = spawnSync('git', ['init', '-q', root], { encoding: 'utf-8' });
-    expect(init.status, init.stderr).toBe(0);
+    gitInit(root);
     write('.gitignore', 'dist/\n');
     write('apps/web/src/a.ts');
     write('packages/ui/src/index.ts');
@@ -128,20 +146,77 @@ describe('listWatchedDirectories', () => {
   });
 
   it('refuses when git lists nothing under a required root', () => {
-    spawnSync('git', ['init', '-q', root]);
+    gitInit(root);
     write('apps/a.ts');
     write('packages/b.ts');
     expect(() => listWatchedDirectories(root, { minDirectories: 1 })).toThrow(/no files under "scripts"/);
   });
 
   it('refuses when it found too few directories', () => {
-    spawnSync('git', ['init', '-q', root]);
+    gitInit(root);
     for (const dir of ['apps', 'packages', 'scripts']) write(`${dir}/a.ts`);
     expect(() => listWatchedDirectories(root, { minDirectories: 50 })).toThrow(/found only 4 directories/);
   });
 
   it('finds a non-trivial population in the real repo', () => {
     expect(listWatchedDirectories(join(import.meta.dirname, '..', '..')).length).toBeGreaterThan(500);
+  });
+});
+
+describe('an inherited git environment', () => {
+  // The pre-push hook that starts localci exports GIT_DIR, and this suite
+  // inherits it. In a linked worktree that is `.git/worktrees/<name>`, whose
+  // config is the main repo's shared `.git/config`; a `git init` under it
+  // writes `core.bare = true` there (with or without `-C`). Recreate that
+  // shape under os.tmpdir() and check nothing here touches it.
+  let decoy: string;
+  let worktreeGitDir: string;
+
+  const git = (...args: string[]): string => {
+    const res = spawnSync('git', args, { encoding: 'utf-8', env: testGitEnv() });
+    expect(res.status, res.stderr).toBe(0);
+    return res.stdout.trim();
+  };
+
+  const mainIsBare = (): string => git('config', '--file', join(decoy, 'main', '.git', 'config'), '--get', 'core.bare');
+
+  beforeEach(() => {
+    decoy = mkdtempSync(join(tmpdir(), 'tree-write-sentinel-decoy-'));
+    const main = join(decoy, 'main');
+    mkdirSync(main);
+    gitInit(main);
+    // A tracked file only the decoy has: a sentinel that read the decoy's
+    // index would list `decoy-only`.
+    mkdirSync(join(main, 'decoy-only'));
+    writeFileSync(join(main, 'decoy-only', 'tracked.ts'), 'export {};\n');
+    git('-C', main, 'add', '.');
+    git('-C', main, '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', 'init');
+    git('-C', main, 'worktree', 'add', '-q', join(decoy, 'wt'));
+    worktreeGitDir = git('-C', join(decoy, 'wt'), 'rev-parse', '--absolute-git-dir');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    rmSync(decoy, { recursive: true, force: true });
+  });
+
+  it('leaves the repository an inherited GIT_DIR points at untouched', () => {
+    expect(mainIsBare()).toBe('false');
+    vi.stubEnv('GIT_DIR', worktreeGitDir);
+
+    gitInit(root);
+    expect(mainIsBare()).toBe('false');
+    expect(existsSync(join(root, '.git'))).toBe(true);
+
+    for (const dir of ['apps', 'packages', 'scripts']) write(`${dir}/a.ts`);
+    expect(listWatchedDirectories(root, { minDirectories: 1 })).toEqual(['.', 'apps', 'packages', 'scripts']);
+    expect(mainIsBare()).toBe('false');
+  });
+
+  it('strips every GIT_* variable and keeps the rest', () => {
+    const env = { GIT_DIR: '/x', GIT_WORK_TREE: '/y', GIT_INDEX_FILE: '/z', NODE_ENV: 'test', PATH: '/bin' } as const;
+    expect(withoutGitEnv(env)).toEqual({ NODE_ENV: 'test', PATH: '/bin' });
+    expect(env.GIT_DIR).toBe('/x'); // the input is not mutated
   });
 });
 
@@ -155,6 +230,34 @@ describe('formatChanges', () => {
     expect(message).toContain('  - ./: an entry was created and deleted again during the run');
     expect(message).toContain('  - apps/web/src/lib/: added a.ts; removed b.ts');
     expect(message).toContain('os.tmpdir()');
+  });
+});
+
+describe('coreBareFlipMessage', () => {
+  it('is silent unless core.bare went from not-true to true', () => {
+    expect(coreBareFlipMessage('false', 'false', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('true', 'true', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('true', 'false', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('false', undefined, '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('false', 'true', '/r')).toContain('core.bare became true');
+    expect(coreBareFlipMessage(undefined, 'true', '/r')).toContain('core.bare became true');
+  });
+
+  it('prints a restore command that works on a path with quotes and $(...) in it', () => {
+    const repo = join(root, "it's $(touch pwned)");
+    mkdirSync(repo);
+    gitInit(repo);
+    const git = (...args: string[]) =>
+      spawnSync('git', args, { encoding: 'utf-8', env: testGitEnv() });
+    expect(git('-C', repo, 'config', 'core.bare', 'true').status).toBe(0);
+
+    const message = coreBareFlipMessage('false', 'true', repo)!;
+    const command = message.split('\n').at(-1)!.trim();
+    const res = spawnSync('sh', ['-c', command], { cwd: root, encoding: 'utf-8', env: testGitEnv() });
+
+    expect(res.status, res.stderr).toBe(0);
+    expect(git('-C', repo, 'config', '--get', 'core.bare').stdout.trim()).toBe('false');
+    expect(existsSync(join(root, 'pwned'))).toBe(false);
   });
 });
 
