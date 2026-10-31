@@ -1,68 +1,8 @@
 import React from 'react';
 import { signupTrialMarketingLine } from '@propertypro/shared';
 import { CheckIcon, SectionMark } from './marketing-brand';
-
-const INCLUDED_IN_ALL = [
-  'Unlimited board members',
-  'Unlimited owners',
-  'Statute monitoring',
-  'Hosting and SSL',
-  'Custom domain',
-  'Audit trail export',
-];
-
-/** `null` renders "Not included"; a string renders as an included value. */
-interface ComparisonRow {
-  label: string;
-  essentials: string | null;
-  professional: string | null;
-  manager: string | null;
-}
-
-const ROWS: ComparisonRow[] = [
-  {
-    label: 'Compliance list & deadlines',
-    essentials: 'Included',
-    professional: 'Included',
-    manager: 'Included',
-  },
-  {
-    label: 'Association website & owner portal',
-    essentials: 'Branded',
-    professional: 'Branded',
-    manager: 'White-label',
-  },
-  {
-    label: 'Meeting notices & minutes',
-    essentials: 'Included',
-    professional: 'Included',
-    manager: 'Included',
-  },
-  {
-    label: 'Mobile resident portal',
-    essentials: null,
-    professional: 'Included',
-    manager: 'Included',
-  },
-  {
-    label: 'E-sign, maintenance & violations',
-    essentials: null,
-    professional: 'Included',
-    manager: 'Included',
-  },
-  {
-    label: 'Portfolio roll-up & bulk posting',
-    essentials: null,
-    professional: null,
-    manager: 'Included',
-  },
-  {
-    label: 'Volume pricing & dedicated onboarding',
-    essentials: null,
-    professional: null,
-    manager: 'Included',
-  },
-];
+import { PricingPlanSwitcher } from './pricing-plan-switcher';
+import { INCLUDED_IN_ALL, PLANS, ROWS } from './pricing-plans';
 
 function Cell({ value, pick }: { value: string | null; pick?: boolean }) {
   const className = [pick ? 'mk-pick' : '', value === null ? 'mk-no' : '']
@@ -104,6 +44,7 @@ export function PricingSection() {
         </div>
 
         <div className="mk-price">
+          {/* Desktop and tablet. Below 900px CSS hides it for the switcher. */}
           <table className="mk-ptbl">
             <caption className="sr-only">
               PropertyPro plans compared. Essentials is $199 a month, Professional is $349
@@ -112,75 +53,53 @@ export function PricingSection() {
             <thead>
               <tr>
                 <td />
-                <th scope="col" className="mk-pick">
-                  {/* Not "Most popular" — that is a claim about customers we do not
-                      have yet. This states where we point boards, which is true. */}
-                  <span className="mk-flag">Where most boards start</span>
-                  <span className="mk-tier">Essentials</span>
-                  <span className="mk-amt">
-                    $199<span>/mo</span>
-                  </span>
-                  <span className="mk-for">
-                    Self-managed condos and HOAs getting compliant
-                  </span>
-                </th>
-                <th scope="col">
-                  <span className="mk-tier">Professional</span>
-                  <span className="mk-amt">
-                    $349<span>/mo</span>
-                  </span>
-                  <span className="mk-for">The full single-community toolkit</span>
-                </th>
-                <th scope="col">
-                  <span className="mk-tier">Property Manager</span>
-                  <span className="mk-amt">Let&apos;s talk</span>
-                  <span className="mk-for">Management companies running portfolios</span>
-                </th>
+                {PLANS.map((plan) => (
+                  <th scope="col" className={plan.flag ? 'mk-pick' : undefined} key={plan.key}>
+                    {plan.flag ? <span className="mk-flag">{plan.flag}</span> : null}
+                    <span className="mk-tier">{plan.name}</span>
+                    <span className="mk-amt">
+                      {plan.amount}
+                      {plan.perMonth ? <span>/mo</span> : null}
+                    </span>
+                    <span className="mk-for">{plan.forWhom}</span>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {ROWS.map((row) => (
                 <tr key={row.label}>
                   <th scope="row">{row.label}</th>
-                  <Cell value={row.essentials} pick />
-                  <Cell value={row.professional} />
-                  <Cell value={row.manager} />
+                  {PLANS.map((plan) => (
+                    <Cell value={row[plan.key]} pick={Boolean(plan.flag)} key={plan.key} />
+                  ))}
                 </tr>
               ))}
               <tr>
                 <th scope="row">
                   <span className="sr-only">Sign up</span>
                 </th>
-                <td className="mk-pick">
-                  <a
-                    className="mk-pill mk-pill-primary mk-pill-sm"
-                    href="/signup?plan=essentials&communityType=condo_718"
-                  >
-                    Start free trial
-                  </a>
-                </td>
-                <td>
-                  <a
-                    className="mk-pill mk-pill-ghost mk-pill-sm"
-                    href="/signup?plan=professional&communityType=condo_718"
-                  >
-                    Start free trial
-                  </a>
-                </td>
-                <td>
-                  <a className="mk-pill mk-pill-ghost mk-pill-sm" href="/contact">
-                    Talk to us
-                  </a>
-                </td>
+                {PLANS.map((plan) => (
+                  <td className={plan.flag ? 'mk-pick' : undefined} key={plan.key}>
+                    <a
+                      className={`mk-pill ${plan.cta.primary ? 'mk-pill-primary' : 'mk-pill-ghost'} mk-pill-sm`}
+                      href={plan.cta.href}
+                    >
+                      {plan.cta.label}
+                    </a>
+                  </td>
+                ))}
               </tr>
             </tbody>
           </table>
+          <PricingPlanSwitcher />
           <div className="mk-pfoot">
             {/* Rendered from the shared helper, NOT hand-written. `activation-smoke`
                 asserts the literal phrase "card required" here, and this line is
                 the one place the page promises a trial length — both have to keep
                 agreeing with what Stripe Checkout actually does. Rewording it by
-                hand is how they drift. */}
+                hand is how they drift. Shared by the table and the phone switcher,
+                so the phrase appears exactly once in #pricing. */}
             <span>
               {signupTrialMarketingLine()} Nothing is charged until the trial ends.
             </span>

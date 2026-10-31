@@ -50,11 +50,43 @@
   --mk-disp:var(--font-fraunces),Georgia,"Times New Roman",serif;
   --mk-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
 
-  --mk-maxw:1260px; --mk-gutter:56px;
+  /* Layout. --mk-maxw is the CONTENT width; the gutter sits outside it. The
+     margins stop growing at 64px and every extra pixel goes to the columns
+     (IBM Carbon 2x Grid), so a 1728px laptop gets a 1520px column instead of
+     1148px with 290px of empty cream on each side. round(…, 4px) keeps every
+     fluid space on the 4px grid (.claude/rules/design.md). */
+  --mk-maxw:1520px;
+  --mk-gutter:round(clamp(20px,3.5vw,64px),4px);
+  --mk-nav-h:round(clamp(68px,1.5vw + 48px,76px),4px);
+  --mk-rail:round(clamp(260px,21vw,400px),4px);
+  --mk-rail-gap:round(clamp(44px,4.2vw,88px),4px);
+  --mk-sec-pad:round(clamp(64px,6vw,120px),8px);
+  --mk-gap-grid:round(clamp(28px,2.2vw,48px),4px);
+  --mk-wide-gap:round(clamp(48px,4.5vw,96px),8px);
+  --mk-btn-h:round(clamp(48px,.6vw + 40px,54px),4px);
+  --mk-row-y:round(clamp(12px,.9vw,16px),4px);
+  --mk-row-x:round(clamp(16px,1.3vw,24px),4px);
+  --mk-inset:round(clamp(16px,1.2vw,24px),4px);
+
+  /* Measure (USWDS): 45–90 characters a line, 66 ideal. Paragraphs are capped
+     in ch so the wider column goes to grids and imagery, not to line length. */
+  --mk-measure:62ch; --mk-measure-lede:50ch;
+
+  /* Type: ONE 8-step scale; every role points at a step (was 27 distinct sizes).
+     The fluid steps keep growing to ~1900px instead of capping at ~1360px.
+     At 1728px: 13 · 15 · 18 · 21 · 25 · 41 · 55 · 84. */
+  --mk-fs-xs:13px;                            /* labels, citations, captions */
+  --mk-fs-sm:clamp(14px,.2vw + 11.5px,15px);  /* UI text, card body, table cells */
+  --mk-fs-md:clamp(16px,.55vw + 8.5px,18px);  /* body */
+  --mk-fs-lg:clamp(19px,.6vw + 11px,23px);    /* lede */
+  --mk-fs-xl:clamp(22px,.9vw + 9px,28px);     /* card headings */
+  --mk-fs-2xl:clamp(28px,1.8vw + 10px,44px);  /* rail headings, figures */
+  --mk-fs-3xl:clamp(32px,2.6vw + 10px,60px);  /* section headings, counters */
+  --mk-fs-4xl:clamp(38px,4.4vw + 8px,92px);   /* display: hero, reckoning */
 
   position:relative;
   background:var(--mk-cream); color:var(--mk-ink);
-  font-family:var(--mk-sans); font-size:16px; line-height:1.55;
+  font-family:var(--mk-sans); font-size:var(--mk-fs-md); line-height:1.55;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
 
@@ -63,6 +95,8 @@
 .marketing-theme::after{content:"";position:fixed;inset:0;z-index:100;pointer-events:none;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");background-size:140px}
 
 .marketing-theme h1,.marketing-theme h2,.marketing-theme h3,.marketing-theme h4{margin:0;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+/* USWDS: headings 1–1.35. Wrapped card titles inherited the body's 1.55. */
+.marketing-theme h3{line-height:1.3}
 .marketing-theme p{margin:0;text-wrap:pretty}
 .marketing-theme a{color:var(--mk-coral-d);text-decoration:none}
 /* Hover must DARKEN. The mockup hovered coral-d -> coral, which lightens the
@@ -76,12 +110,12 @@
 .marketing-theme .mk-band-ink :focus-visible,.marketing-theme .mk-foot :focus-visible,.marketing-theme .mk-close :focus-visible{outline-color:var(--mk-gold)}
 @media(forced-colors:active){.marketing-theme :focus-visible{outline:3px solid CanvasText}}
 @media(prefers-reduced-motion:no-preference){html:has(.marketing-theme){scroll-behavior:smooth}}
-.marketing-theme [id]{scroll-margin-top:88px}
+.marketing-theme [id]{scroll-margin-top:calc(var(--mk-nav-h) + 20px)}
 .marketing-theme .mk-mono{font-family:var(--mk-mono);font-variant-numeric:tabular-nums}
 
 /* layout */
-.marketing-theme .mk-wrap{max-width:var(--mk-maxw);margin:0 auto;padding:0 var(--mk-gutter);width:100%}
-.marketing-theme .mk-band{padding:80px 0}
+.marketing-theme .mk-wrap{width:min(100% - 2*var(--mk-gutter),var(--mk-maxw));margin-inline:auto}
+.marketing-theme .mk-band{padding:var(--mk-sec-pad) 0}
 .marketing-theme .mk-band-warm,.marketing-theme .mk-band-alt{background:var(--mk-cream-2)}
 .marketing-theme .mk-band-ink{background:var(--mk-ink);color:var(--mk-onink)}
 .marketing-theme .mk-band-ink h2,.marketing-theme .mk-band-ink h3{color:var(--mk-cream)}
@@ -144,7 +178,7 @@
 .marketing-theme .mk-swash{font-style:italic;font-weight:400;color:var(--mk-coral-d);font-variation-settings:"opsz" 144;font-family:fraunces,"Fraunces Italic Fallback",Georgia,"Times New Roman",serif}
 .marketing-theme .mk-muted{color:var(--mk-ink-2)}
 /* section marker: 07 —— PRICING */
-.marketing-theme .mk-mark{display:flex;align-items:center;gap:14px;font-size:12px;line-height:1.55;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--mk-ink-3);width:max-content;max-width:none;margin-top:0}
+.marketing-theme .mk-mark{display:flex;align-items:center;gap:12px;font-size:var(--mk-fs-xs);line-height:1.55;font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--mk-ink-3);width:max-content;max-width:none;margin-top:0}
 .marketing-theme .mk-mark .mk-lb{white-space:nowrap}
 .marketing-theme .mk-mark .mk-ix{font-family:var(--mk-mono);font-weight:500;letter-spacing:.06em;color:var(--mk-coral-d);font-variant-numeric:tabular-nums;white-space:nowrap}
 .marketing-theme .mk-mark .mk-er{flex:0 0 44px;height:1px;background:var(--mk-line-2)}
@@ -156,7 +190,7 @@
 .marketing-theme .mk-card{background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:7px}
 
 /* buttons — named .mk-pill* because /resources and /contact already use those */
-.marketing-theme .mk-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:4px;font-size:15px;font-weight:600;border:1px solid transparent;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+.marketing-theme .mk-pill{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:var(--mk-btn-h);padding:0 24px;border-radius:4px;font-size:var(--mk-fs-sm);font-weight:600;border:1px solid transparent;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
 .marketing-theme .mk-pill:hover{text-decoration:none}
 /* Filled on coral-d, not coral. White on --mk-coral is 4.57:1 nominal but 4.49:1 as
    rendered, because the paper-grain overlay composites over it — the page's primary
@@ -169,33 +203,36 @@
 .marketing-theme .mk-pill-inverse:hover{background:#fff;color:var(--mk-ink);transform:translateY(-1px)}
 .marketing-theme .mk-pill-ghost-inverse{background:transparent;color:var(--mk-cream);border-color:rgba(216,200,188,.42)}
 .marketing-theme .mk-pill-ghost-inverse:hover{border-color:var(--mk-cream);color:#fff}
-.marketing-theme .mk-pill-sm{min-height:40px;padding:0 15px;font-size:13.5px}
-.marketing-theme .mk-arrow{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;min-height:44px}
+.marketing-theme .mk-pill-sm{min-height:40px;padding:0 16px;font-size:var(--mk-fs-sm)}
+.marketing-theme .mk-arrow{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:var(--mk-fs-sm);min-height:44px}
+/* Front-End Design Checklist: links define a visited state. The darker end of
+   the same ramp, so it stays AA (7.4:1). */
+.marketing-theme .mk-arrow:visited,.marketing-theme .mk-arrow:active{color:var(--mk-coral-ink)}
 .marketing-theme .mk-arrow::after{content:"→";transition:transform .18s ease}
 .marketing-theme .mk-arrow:hover::after{transform:translateX(4px)}
 
 /* nav */
 .marketing-theme .mk-nav{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--mk-cream) 86%,transparent);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-bottom:1px solid var(--mk-line);transition:box-shadow .2s ease}
 .marketing-theme .mk-nav.mk-stuck{box-shadow:0 6px 20px -14px rgba(80,40,20,.34)}
-.marketing-theme .mk-nav-in{display:flex;align-items:center;justify-content:space-between;height:68px;gap:32px}
-.marketing-theme .mk-logo{display:flex;align-items:center;gap:11px;font-family:var(--mk-disp);font-weight:600;font-size:20px;letter-spacing:-.012em;color:var(--mk-ink);white-space:nowrap;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-nav-in{display:flex;align-items:center;justify-content:space-between;height:var(--mk-nav-h);gap:32px}
+.marketing-theme .mk-logo{display:flex;align-items:center;gap:12px;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-lg);letter-spacing:-.012em;color:var(--mk-ink);white-space:nowrap;font-variation-settings:"opsz" 48}
 .marketing-theme .mk-logo:hover{color:var(--mk-ink);text-decoration:none}
-.marketing-theme .mk-logo .mk-logomark{width:29px;height:29px;flex:0 0 auto;display:block;overflow:visible}
+.marketing-theme .mk-logo .mk-logomark{width:1.45em;height:1.45em;flex:0 0 auto;display:block;overflow:visible}
 .marketing-theme .mk-logo .mk-logomark-a{fill:var(--mk-coral)}
-.marketing-theme .mk-nav-links{display:flex;gap:28px;font-size:14.5px;font-weight:500}
-.marketing-theme .mk-nav-links a{position:relative;color:var(--mk-ink-2);padding:22px 0;white-space:nowrap}
+.marketing-theme .mk-nav-links{display:flex;gap:round(clamp(28px,2vw,40px),4px);font-size:var(--mk-fs-sm);font-weight:500}
+.marketing-theme .mk-nav-links a{position:relative;color:var(--mk-ink-2);padding:24px 0;white-space:nowrap}
 .marketing-theme .mk-nav-links a:hover{color:var(--mk-ink);text-decoration:none}
-.marketing-theme .mk-nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:20px;height:1.5px;background:var(--mk-coral);transition:right .2s ease}
+.marketing-theme .mk-nav-links a::after{content:"";position:absolute;left:0;right:100%;bottom:22px;height:1.5px;background:var(--mk-coral);transition:right .2s ease}
 .marketing-theme .mk-nav-links a:hover::after{right:0}
 .marketing-theme .mk-nav-links a[aria-current]{color:var(--mk-ink);font-weight:600}
 .marketing-theme .mk-nav-links a[aria-current]::after{right:0;background:var(--mk-ink)}
-.marketing-theme .mk-nav-right{display:flex;align-items:center;gap:16px;font-size:14.5px;font-weight:600}
-.marketing-theme .mk-nav-right>a:first-child{color:var(--mk-ink-2);padding:12px 2px;white-space:nowrap}
+.marketing-theme .mk-nav-right{display:flex;align-items:center;gap:16px;font-size:var(--mk-fs-sm);font-weight:600}
+.marketing-theme .mk-nav-right>a:first-child{color:var(--mk-ink-2);padding:12px 4px;white-space:nowrap}
 .marketing-theme .mk-nav-right>a:first-child:hover{color:var(--mk-ink);text-decoration:none}
-.marketing-theme .mk-nav-toggle{display:none;align-items:center;gap:9px;min-height:44px;padding:0 15px;border:1px solid var(--mk-edge-control);border-radius:4px;font-weight:600;font-size:14.5px;background:var(--mk-card);cursor:pointer}
+.marketing-theme .mk-nav-toggle{display:none;align-items:center;gap:8px;min-height:44px;padding:0 16px;border:1px solid var(--mk-edge-control);border-radius:4px;font-weight:600;font-size:var(--mk-fs-sm);background:var(--mk-card);cursor:pointer}
 .marketing-theme .mk-mobile-menu{border-bottom:1px solid var(--mk-line);background:var(--mk-card)}
 .marketing-theme .mk-mobile-menu-in{display:flex;flex-direction:column;padding:4px 0 16px}
-.marketing-theme .mk-mobile-menu-in a{min-height:52px;display:flex;align-items:center;color:var(--mk-ink-2);font-weight:500;font-size:16.5px;border-bottom:1px solid var(--mk-line)}
+.marketing-theme .mk-mobile-menu-in a{min-height:52px;display:flex;align-items:center;color:var(--mk-ink-2);font-weight:500;font-size:var(--mk-fs-md);border-bottom:1px solid var(--mk-line)}
 .marketing-theme .mk-mobile-menu-in a:hover{color:var(--mk-ink);text-decoration:none}
 .marketing-theme .mk-mobile-menu-in a:last-child{border-bottom:0;margin-top:14px;justify-content:center}
 /* WCAG 1.4.3. `.mk-mobile-menu-in a` is (0,2,1) and outranks `.mk-pill-primary`
@@ -205,23 +242,24 @@
 .marketing-theme .mk-mobile-menu-in a.mk-pill-primary{color:#fff}
 
 /* hero */
-.marketing-theme .mk-hero{padding:72px 0 84px}
-.marketing-theme .mk-hero-grid{display:grid;grid-template-columns:1.04fr .96fr;gap:60px;align-items:start}
-.marketing-theme .mk-hero h1{font-size:clamp(42px,5.3vw,72px);margin:22px 0 0;max-width:19ch;font-family:fraunces,"Fraunces 144 Fallback",Georgia,"Times New Roman",serif}
-.marketing-theme .mk-hero-lede{margin-top:26px;font-size:19.5px;line-height:1.5;max-width:45ch;color:var(--mk-ink-2)}
+.marketing-theme .mk-hero{padding:round(clamp(72px,5vw,104px),8px) 0 round(clamp(80px,6vw,120px),8px)}
+.marketing-theme .mk-hero-grid{display:grid;grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr);gap:var(--mk-wide-gap);align-items:start}
+.marketing-theme .mk-hero h1{font-size:var(--mk-fs-4xl);line-height:1.03;margin:24px 0 0;max-width:19ch;font-family:fraunces,"Fraunces 144 Fallback",Georgia,"Times New Roman",serif}
+.marketing-theme .mk-hero-lede{margin-top:round(clamp(24px,1.8vw,32px),4px);font-size:var(--mk-fs-lg);line-height:1.5;max-width:var(--mk-measure-lede);color:var(--mk-ink-2)}
 .marketing-theme .mk-hero-lede b{color:var(--mk-ink);font-weight:600}
-.marketing-theme .mk-hero-cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap;align-items:center}
-.marketing-theme .mk-facts{margin-top:44px;border-top:1px solid var(--mk-line-2);display:grid;grid-template-columns:repeat(3,1fr)}
-.marketing-theme .mk-fact{padding:18px 22px 0 0;border-right:1px solid var(--mk-line)}
+.marketing-theme .mk-hero-cta{display:flex;gap:16px;margin-top:round(clamp(32px,2.2vw,40px),4px);flex-wrap:wrap;align-items:center}
+.marketing-theme .mk-facts{margin-top:round(clamp(44px,3vw,60px),4px);border-top:1px solid var(--mk-line-2);display:grid;grid-template-columns:repeat(3,1fr)}
+.marketing-theme .mk-fact{padding:20px 24px 0 0;border-right:1px solid var(--mk-line)}
+.marketing-theme .mk-fact+.mk-fact{padding-left:round(clamp(0px,1.4vw,28px),4px)}
 .marketing-theme .mk-fact:last-child{border-right:0;padding-right:0}
-.marketing-theme .mk-fact b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:30px;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72}
+.marketing-theme .mk-fact b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-2xl);letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72}
 .marketing-theme .mk-fact.mk-live b{color:var(--mk-coral-d)}
-.marketing-theme .mk-fact span{display:block;font-size:13px;color:var(--mk-ink-2);margin-top:7px;max-width:22ch;line-height:1.4}
-.marketing-theme .mk-hero-art{padding-top:48px}
+.marketing-theme .mk-fact span{display:block;font-size:var(--mk-fs-xs);color:var(--mk-ink-2);margin-top:8px;max-width:24ch;line-height:1.4}
+.marketing-theme .mk-hero-art{padding-top:round(clamp(48px,3.4vw,64px),8px)}
 
 /* product surface — the in-page browser mockups */
 .marketing-theme .mk-surface{border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-s0);overflow:hidden;box-shadow:0 1px 1px rgba(80,40,20,.04),0 22px 48px -26px rgba(80,40,20,.34)}
-.marketing-theme .mk-sbar{display:flex;align-items:center;gap:7px;height:40px;padding:0 13px;background:var(--mk-s25);border-bottom:1px solid var(--mk-s200)}
+.marketing-theme .mk-sbar{display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;background:var(--mk-s25);border-bottom:1px solid var(--mk-s200)}
 .marketing-theme .mk-sbar i{width:9px;height:9px;border-radius:99px;display:block;flex:0 0 auto}
 .marketing-theme .mk-sbar i:nth-child(1){background:#f6b4a4}
 .marketing-theme .mk-sbar i:nth-child(2){background:#f3d488}
@@ -229,204 +267,235 @@
 /* `min-width:0` is what makes the ellipsis actually truncate. A flex item
    defaults to `min-width:auto`, so this nowrap URL would otherwise refuse to
    shrink and push the whole surface — and the page — wider than a phone. */
-.marketing-theme .mk-surl{margin-left:8px;min-width:0;font-family:var(--mk-mono);font-size:12px;color:var(--mk-g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.marketing-theme .mk-sbody{background:var(--mk-s0);color:var(--mk-g900);font-size:13px}
-.marketing-theme .mk-shead{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:17px 18px;border-bottom:1px solid var(--mk-s200)}
+.marketing-theme .mk-surl{margin-left:8px;min-width:0;font-family:var(--mk-mono);font-size:var(--mk-fs-xs);color:var(--mk-g500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.marketing-theme .mk-sbody{background:var(--mk-s0);color:var(--mk-g900);font-size:var(--mk-fs-sm)}
+.marketing-theme .mk-shead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:var(--mk-inset) var(--mk-row-x);border-bottom:1px solid var(--mk-s200)}
 /* Class selectors, not `.mk-shead h3` / `.mk-shead p`. The title inside a
    product mockup is picture content, not document structure — an <h3> there
    trips axe's heading-order beside the hero's <h1>. And a bare `.mk-shead p`
    outranks `.mk-sscore`, flattening the 34px animated figure to 12px; the v6
    mockup has that bug and we do not want it. */
-.marketing-theme .mk-shead-title{font-family:var(--mk-disp);font-weight:600;font-size:20px;letter-spacing:-.012em;font-variation-settings:"opsz" 48}
-.marketing-theme .mk-shead-sub{font-size:12px;color:var(--mk-g500);margin-top:3px}
-.marketing-theme .mk-sscore{display:flex;align-items:baseline;gap:3px;font-family:var(--mk-disp);font-weight:600;font-size:34px;line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72;white-space:nowrap;transition:color .3s ease}
+.marketing-theme .mk-shead-title{font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-lg);letter-spacing:-.012em;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-shead-sub{font-size:var(--mk-fs-xs);color:var(--mk-g500);margin-top:4px}
+.marketing-theme .mk-sscore{display:flex;align-items:baseline;gap:4px;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-2xl);line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 72;white-space:nowrap;transition:color .3s ease}
 .marketing-theme .mk-sscore.mk-up{color:var(--mk-green)}
-.marketing-theme .mk-sscore span{font-family:var(--mk-sans);font-size:13px;font-weight:500;color:var(--mk-g500);letter-spacing:0}
-.marketing-theme .mk-srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:13px 18px;border-bottom:1px solid var(--mk-s100);transition:background .25s ease}
+.marketing-theme .mk-sscore span{font-family:var(--mk-sans);font-size:var(--mk-fs-xs);font-weight:500;color:var(--mk-g500);letter-spacing:0}
+.marketing-theme .mk-srow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:var(--mk-row-y) var(--mk-row-x);border-bottom:1px solid var(--mk-s100);transition:background .25s ease}
 .marketing-theme .mk-srow:last-child{border-bottom:0}
 .marketing-theme .mk-srow.mk-at{background:var(--mk-coral-wash);box-shadow:inset 3px 0 0 var(--mk-coral)}
-.marketing-theme .mk-srow b{display:block;font-weight:500;font-size:13.5px}
+.marketing-theme .mk-srow b{display:block;font-weight:500;font-size:var(--mk-fs-sm)}
 /* `mk-srow` is a `minmax(0,1fr) auto` grid, so column one can shrink to 73px at
    375px — but a monospace statute citation has no space to wrap at and spilled
    out of it (measured: 7 overflowing boxes on the home page at 375px, 0 with
    this). `anywhere`, not `break-word`, because there is no word boundary. */
 .marketing-theme .mk-srow small,.marketing-theme .mk-srow b{overflow-wrap:anywhere}
-.marketing-theme .mk-srow small{display:block;font-family:var(--mk-mono);font-size:12px;color:var(--mk-g500);margin-top:3px}
+.marketing-theme .mk-srow small{display:block;font-family:var(--mk-mono);font-size:var(--mk-fs-xs);color:var(--mk-g500);margin-top:4px}
 .marketing-theme .mk-srow .mk-ord{color:var(--mk-g500);font-weight:500}
 .marketing-theme .mk-srow .mk-act{display:flex;align-items:center;gap:8px}
-.marketing-theme .mk-resolve{min-height:36px;padding:0 13px;border-radius:5px;background:var(--mk-coral-d);color:#fff;font-size:12.5px;font-weight:600;white-space:nowrap;border:0;cursor:pointer;transition:background .15s ease}
+.marketing-theme .mk-resolve{min-height:36px;padding:0 12px;border-radius:5px;background:var(--mk-coral-d);color:#fff;font-size:var(--mk-fs-xs);font-weight:600;white-space:nowrap;border:0;cursor:pointer;transition:background .15s ease}
 .marketing-theme .mk-resolve:hover{background:var(--mk-coral-ink)}
-.marketing-theme .mk-pin{display:inline-flex;align-items:center;gap:5px;height:23px;padding:0 9px;border-radius:99px;font-size:12px;font-weight:500;border:1px solid;white-space:nowrap}
+/* One filled button per region (design.md). The demo's Publish buttons looked
+   exactly like the real "Start a trial" CTA beside them — four solid coral
+   buttons above the fold. Outlined, with only the highlighted row's button
+   filled, the trial CTA is the one solid coral in the hero copy. */
+.marketing-theme .mk-hero-art .mk-srow:not(.mk-at) .mk-resolve{background:var(--mk-card);color:var(--mk-coral-d);box-shadow:inset 0 0 0 1px var(--mk-coral-d)}
+.marketing-theme .mk-hero-art .mk-srow:not(.mk-at) .mk-resolve:hover{background:var(--mk-coral-wash);color:var(--mk-coral-ink)}
+.marketing-theme .mk-pin{display:inline-flex;align-items:center;gap:4px;min-height:24px;padding:0 8px;border-radius:99px;font-size:var(--mk-fs-xs);font-weight:500;border:1px solid;white-space:nowrap}
 .marketing-theme .mk-pin svg{width:12px;height:12px;flex:0 0 auto}
 .marketing-theme .mk-pin-ok{color:var(--mk-green);background:var(--mk-green-wash);border-color:var(--mk-green-line)}
 .marketing-theme .mk-pin-warn{color:var(--mk-amber);background:var(--mk-amber-wash);border-color:var(--mk-amber-line)}
 .marketing-theme .mk-pin-bad{color:var(--mk-red);background:var(--mk-red-wash);border-color:var(--mk-red-line)}
 .marketing-theme .mk-pin-flat{color:var(--mk-g600);background:var(--mk-s100);border-color:var(--mk-s200)}
-.marketing-theme .mk-sfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-top:1px solid var(--mk-s200);background:var(--mk-s25);font-family:var(--mk-mono);font-size:11.5px;color:var(--mk-g500);min-height:44px}
-.marketing-theme .mk-sfoot button{font-family:var(--mk-sans);font-size:12.5px;font-weight:600;color:var(--mk-coral-d);min-height:32px;padding:0 4px;background:none;border:0;cursor:pointer}
+.marketing-theme .mk-sfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px var(--mk-row-x);border-top:1px solid var(--mk-s200);background:var(--mk-s25);font-family:var(--mk-mono);font-size:var(--mk-fs-xs);color:var(--mk-g500);min-height:44px}
+.marketing-theme .mk-sfoot button{font-family:var(--mk-sans);font-size:var(--mk-fs-xs);font-weight:600;color:var(--mk-coral-d);min-height:32px;padding:0 4px;background:none;border:0;cursor:pointer}
 .marketing-theme .mk-sfoot button:hover{text-decoration:underline}
-.marketing-theme .mk-cap{margin-top:14px;font-size:13px;color:var(--mk-ink-3);max-width:46ch;line-height:1.5}
+.marketing-theme .mk-cap{margin-top:16px;font-size:var(--mk-fs-xs);color:var(--mk-ink-3);max-width:52ch;line-height:1.5}
 .marketing-theme .mk-cap b{color:var(--mk-ink-2);font-weight:600}
 
 /* section heads */
 .marketing-theme .mk-head{max-width:46ch}
-.marketing-theme .mk-head h2{font-size:clamp(32px,3.7vw,48px);margin:16px 0 0}
-.marketing-theme .mk-head p:not(.mk-mark){margin-top:20px;font-size:17.5px;color:var(--mk-ink-2);max-width:56ch}
+.marketing-theme .mk-head h2{font-size:var(--mk-fs-3xl);margin:16px 0 0}
+.marketing-theme .mk-head p:not(.mk-mark){margin-top:20px;font-size:var(--mk-fs-md);color:var(--mk-ink-2);max-width:var(--mk-measure)}
 .marketing-theme .mk-band-ink .mk-head p:not(.mk-mark){color:var(--mk-onink)}
 /* two-column section: short sticky head left, evidence right — no orphan column */
-.marketing-theme .mk-sec{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:64px;align-items:start}
+.marketing-theme .mk-sec{display:grid;grid-template-columns:minmax(0,var(--mk-rail)) minmax(0,1fr);gap:var(--mk-rail-gap);align-items:start}
 .marketing-theme .mk-sec-end{align-items:end}
-.marketing-theme .mk-sec-l{position:sticky;top:104px;align-self:start}
+.marketing-theme .mk-sec-l{position:sticky;top:calc(var(--mk-nav-h) + 36px);align-self:start}
 .marketing-theme .mk-sec-l-static{position:static}
-.marketing-theme .mk-sec-l h2{font-size:clamp(27px,2.7vw,36px);margin:16px 0 0}
-.marketing-theme .mk-sec-l>p:not(.mk-mark){margin-top:16px;font-size:16px;color:var(--mk-ink-2)}
-.marketing-theme .mk-sec-l .mk-arrow{margin-top:18px}
-.marketing-theme .mk-sec-note{margin-top:20px;padding-top:16px;border-top:1px solid var(--mk-line-2);font-size:13px;color:var(--mk-ink-3);line-height:1.6}
+.marketing-theme .mk-sec-l h2{font-size:var(--mk-fs-2xl);margin:16px 0 0}
+.marketing-theme .mk-sec-l>p:not(.mk-mark){margin-top:16px;color:var(--mk-ink-2)}
+.marketing-theme .mk-sec-l .mk-arrow{margin-top:16px}
+.marketing-theme .mk-sec-note{margin-top:20px;padding-top:16px;border-top:1px solid var(--mk-line-2);font-size:var(--mk-fs-xs);color:var(--mk-ink-3);line-height:1.6}
 
 /* deadline tiles — the statute, as figures */
-.marketing-theme .mk-dl{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--mk-line-2);border:1px solid var(--mk-line-2);border-radius:7px;overflow:hidden}
-.marketing-theme .mk-dlt{background:var(--mk-card);padding:26px 26px 28px;transition:background .16s ease}
+.marketing-theme .mk-dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--mk-line-2);border:1px solid var(--mk-line-2);border-radius:7px;overflow:hidden}
+.marketing-theme .mk-dlt{background:var(--mk-card);padding:round(clamp(24px,1.8vw,32px),4px);transition:background .16s ease}
+@media(min-width:1400px){.marketing-theme .mk-dl{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .marketing-theme .mk-dlt:hover{background:var(--mk-cream)}
-.marketing-theme .mk-dlt .mk-c{font-family:var(--mk-mono);font-size:12px;color:var(--mk-coral-d);letter-spacing:-.01em}
-.marketing-theme .mk-dlt b{display:block;margin-top:16px;font-family:var(--mk-disp);font-weight:600;font-size:clamp(32px,3.2vw,44px);line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
-.marketing-theme .mk-dlt .mk-u{display:block;margin-top:7px;font-size:13px;color:var(--mk-ink-3)}
-.marketing-theme .mk-dlt h3{margin-top:20px;font-size:16px;letter-spacing:-.008em}
-.marketing-theme .mk-dlt p{margin-top:5px;font-size:14px;color:var(--mk-ink-2);max-width:34ch}
+.marketing-theme .mk-dlt .mk-c{font-family:var(--mk-mono);font-size:var(--mk-fs-xs);color:var(--mk-coral-d);letter-spacing:-.01em}
+.marketing-theme .mk-dlt b{display:block;margin-top:16px;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-2xl);line-height:1;letter-spacing:-.025em;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-dlt .mk-u{display:block;margin-top:8px;font-size:var(--mk-fs-xs);color:var(--mk-ink-3)}
+.marketing-theme .mk-dlt h3{margin-top:24px;font-size:var(--mk-fs-md);letter-spacing:-.008em}
+.marketing-theme .mk-dlt p{margin-top:8px;font-size:var(--mk-fs-sm);color:var(--mk-ink-2);max-width:34ch}
 
 /* who it's for — the imagery band */
-.marketing-theme .mk-who{margin-top:44px;display:grid;grid-template-columns:repeat(3,1fr);gap:28px}
+.marketing-theme .mk-who{margin-top:round(clamp(44px,3vw,64px),4px);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--mk-gap-grid)}
 .marketing-theme .mk-wcard{display:grid;gap:0}
-.marketing-theme .mk-wshot{position:relative;width:100%;aspect-ratio:1/1;background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:6px;overflow:hidden}
+.marketing-theme .mk-wshot{position:relative;width:100%;aspect-ratio:5/4;background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:6px;overflow:hidden}
 .marketing-theme .mk-wshot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-.marketing-theme .mk-wcard .mk-n{margin-top:18px;font-family:var(--mk-mono);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
-.marketing-theme .mk-wcard h3{margin-top:10px;font-family:var(--mk-disp);font-weight:600;font-size:22px;letter-spacing:-.015em;font-variation-settings:"opsz" 48}
-.marketing-theme .mk-wcard p{margin-top:8px;font-size:15px;color:var(--mk-ink-2);max-width:30ch}
-.marketing-theme .mk-wcard .mk-stat{margin-top:14px;padding-top:12px;border-top:1px solid var(--mk-line-2);font-size:13px;color:var(--mk-ink-3)}
+.marketing-theme .mk-wcard .mk-n{margin-top:20px;font-family:var(--mk-mono);font-size:var(--mk-fs-xs);font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
+.marketing-theme .mk-wcard h3{margin-top:8px;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-xl);letter-spacing:-.015em;font-variation-settings:"opsz" 48}
+.marketing-theme .mk-wcard p{margin-top:8px;color:var(--mk-ink-2);max-width:36ch}
+.marketing-theme .mk-wcard .mk-stat{margin-top:16px;padding-top:12px;border-top:1px solid var(--mk-line-2);font-size:var(--mk-fs-xs);color:var(--mk-ink-3)}
 .marketing-theme .mk-wcard .mk-stat b{color:var(--mk-ink);font-weight:600;font-variant-numeric:tabular-nums}
 
 /* full-bleed photographic band */
-.marketing-theme .mk-shotband{position:relative;height:340px;background:var(--mk-ink-soft);color:var(--mk-cream);overflow:hidden}
+.marketing-theme .mk-shotband{position:relative;height:clamp(250px,22vw,440px);background:var(--mk-ink-soft);color:var(--mk-cream);overflow:hidden}
 .marketing-theme .mk-shotband img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 /* The scrim has to cover the TALLEST the caption ever gets, not the shortest.
    At 390px it wraps to two lines and climbed out of the old single-stop
    gradient into bright sky — measured 3.00:1 at p95 against 12px text.
    Three stops keep the glyph band opaque and still fade out at the top. */
-.marketing-theme .mk-shotband .mk-sbcap{position:absolute;left:0;right:0;bottom:0;padding:22px var(--mk-gutter);background:linear-gradient(to top,rgba(35,22,16,.94) 0%,rgba(35,22,16,.88) 55%,rgba(35,22,16,.62) 80%,transparent 100%);color:var(--mk-cream);font-family:var(--mk-mono);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+/* Sentence case at 15px, not 72 characters of 12px uppercase (USWDS: avoid long
+   runs of uppercase). Padded to line up with the content column above. */
+.marketing-theme .mk-shotband .mk-sbcap{position:absolute;left:0;right:0;bottom:0;padding:24px max(var(--mk-gutter),(100% - var(--mk-maxw)) / 2);background:linear-gradient(to top,rgba(35,22,16,.94) 0%,rgba(35,22,16,.88) 55%,rgba(35,22,16,.62) 80%,transparent 100%);color:var(--mk-cream);font-size:var(--mk-fs-sm);font-weight:500}
 
 /* the reckoning band */
-.marketing-theme .mk-reck{max-width:24ch}
-.marketing-theme .mk-reck h2{font-size:clamp(38px,5.4vw,74px);margin-top:18px}
-.marketing-theme .mk-reck-sub{margin-top:26px;font-size:19px;color:var(--mk-onink);max-width:44ch}
+/* The cap is measured on the headline itself: 24ch of BODY text squeezed an
+   84px headline into five lines. */
+.marketing-theme .mk-reck h2{font-size:var(--mk-fs-4xl);margin-top:16px;max-width:12ch}
+.marketing-theme .mk-reck-sub{margin-top:round(clamp(24px,1.8vw,32px),4px);font-size:var(--mk-fs-lg);color:var(--mk-onink);max-width:var(--mk-measure-lede)}
 .marketing-theme .mk-reck-sub b{color:#fff;font-weight:600}
-.marketing-theme .mk-counter{margin-top:44px;padding-top:32px;border-top:1px solid rgba(216,200,188,.24);display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
-.marketing-theme .mk-cbox b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:clamp(34px,4vw,52px);line-height:1;letter-spacing:-.025em;color:var(--mk-gold);font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
-.marketing-theme .mk-cbox span{display:block;margin-top:10px;font-size:14px;color:var(--mk-onink);max-width:26ch}
+.marketing-theme .mk-counter{margin-top:round(clamp(44px,3vw,64px),4px);padding-top:32px;border-top:1px solid rgba(216,200,188,.24);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--mk-gap-grid)}
+.marketing-theme .mk-cbox b{display:block;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-3xl);line-height:1;letter-spacing:-.025em;color:var(--mk-gold);font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-cbox span{display:block;margin-top:12px;font-size:var(--mk-fs-sm);color:var(--mk-onink);max-width:28ch}
 
 /* obligation checker (dark panel — its own field styling, see the form note below) */
-.marketing-theme .mk-checker{margin-top:52px;border-top:1px solid rgba(216,200,188,.24);padding-top:40px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:56px;align-items:start}
-.marketing-theme .mk-checker h3{font-family:var(--mk-disp);font-weight:600;font-size:28px;line-height:1.1;letter-spacing:-.015em;font-variation-settings:"opsz" 72}
-.marketing-theme .mk-checker>div>p{margin-top:14px;font-size:15.5px;color:var(--mk-onink);max-width:34ch}
-.marketing-theme .mk-cfield{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
-.marketing-theme .mk-cfield select,.marketing-theme .mk-cfield input{min-height:48px;border:1px solid rgba(216,200,188,.34);border-radius:4px;background:rgba(216,200,188,.09);color:var(--mk-cream);padding:0 14px;font-size:15px}
+.marketing-theme .mk-checker{margin-top:round(clamp(48px,3.6vw,72px),8px);border-top:1px solid rgba(216,200,188,.24);padding-top:round(clamp(40px,2.8vw,56px),8px);display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:var(--mk-wide-gap);align-items:start}
+.marketing-theme .mk-checker h3{font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-xl);line-height:1.1;letter-spacing:-.015em;font-variation-settings:"opsz" 72}
+.marketing-theme .mk-checker>div>p{margin-top:16px;color:var(--mk-onink);max-width:40ch}
+.marketing-theme .mk-cfield{display:flex;gap:8px;flex-wrap:wrap;margin-top:24px}
+.marketing-theme .mk-cfield select,.marketing-theme .mk-cfield input{min-height:var(--mk-btn-h);border:1px solid rgba(216,200,188,.34);border-radius:4px;background:rgba(216,200,188,.09);color:var(--mk-cream);padding:0 16px;font-size:var(--mk-fs-sm)}
 .marketing-theme .mk-cfield input{flex:1;min-width:120px}
 .marketing-theme .mk-cfield input::placeholder{color:var(--mk-onink-2)}
 .marketing-theme .mk-cfield .mk-pill-primary{background:var(--mk-gold);color:var(--mk-ink);box-shadow:none}
 .marketing-theme .mk-cfield .mk-pill-primary:hover{background:var(--mk-gold-2);color:var(--mk-ink)}
-.marketing-theme .mk-cres{border-left:2px solid var(--mk-gold);padding:2px 0 2px 24px;font-size:16.5px;line-height:1.6;color:var(--mk-onink)}
+.marketing-theme .mk-cres{border-left:2px solid var(--mk-gold);padding:4px 0 4px 24px;font-size:var(--mk-fs-md);line-height:1.6;color:var(--mk-onink);max-width:var(--mk-measure)}
 .marketing-theme .mk-cres b{color:#fff;font-weight:600}
-.marketing-theme .mk-cite{display:block;margin-top:14px;font-family:var(--mk-mono);font-size:12.5px;color:var(--mk-onink-2)}
-.marketing-theme .mk-cres .mk-pill{margin-top:22px}
+.marketing-theme .mk-cite{display:block;margin-top:16px;font-family:var(--mk-mono);font-size:var(--mk-fs-xs);color:var(--mk-onink-2)}
+.marketing-theme .mk-cres .mk-pill{margin-top:24px}
 
 /* two-up: copy beside a product surface */
-.marketing-theme .mk-pitem{display:grid;grid-template-columns:.84fr 1.16fr;gap:60px;align-items:center}
+.marketing-theme .mk-pitem{display:grid;grid-template-columns:minmax(0,.84fr) minmax(0,1.16fr);gap:var(--mk-wide-gap);align-items:center}
 .marketing-theme .mk-pitem.mk-flip>div:first-child{order:2}
-.marketing-theme .mk-pitem h3{font-family:var(--mk-disp);font-weight:600;font-size:31px;line-height:1.1;letter-spacing:-.018em;font-variation-settings:"opsz" 96;max-width:22ch}
-.marketing-theme .mk-pitem>div>p:not(.mk-mark){margin-top:18px;font-size:16.5px;color:var(--mk-ink-2);max-width:40ch}
-.marketing-theme .mk-pitem .mk-arrow{margin-top:14px}
+.marketing-theme .mk-pitem h3{font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-2xl);line-height:1.1;letter-spacing:-.018em;font-variation-settings:"opsz" 96;max-width:22ch}
+.marketing-theme .mk-pitem>div>p:not(.mk-mark){margin-top:20px;color:var(--mk-ink-2);max-width:44ch}
+.marketing-theme .mk-pitem .mk-arrow{margin-top:16px}
 /* micro-UI tiles — capabilities shown, not described */
-.marketing-theme .mk-tiles{margin-top:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.marketing-theme .mk-tiles{margin-top:24px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--mk-gap-grid)}
 .marketing-theme .mk-tile{border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(80,40,20,.04)}
-.marketing-theme .mk-tui{background:var(--mk-s25);border-bottom:1px solid var(--mk-line);padding:16px;display:grid;gap:7px;align-content:center;min-height:106px}
-.marketing-theme .mk-mrow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--mk-s0);border:1px solid var(--mk-s200);border-radius:5px;padding:9px 11px;font-size:12.5px;font-weight:500;color:var(--mk-g900)}
-.marketing-theme .mk-mrow .mk-k{font-family:var(--mk-mono);font-size:12px;font-weight:400;color:var(--mk-g500);white-space:nowrap}
-.marketing-theme .mk-mrow .mk-kk{font-family:var(--mk-mono);font-size:12px;font-weight:500;color:var(--mk-teal);white-space:nowrap}
-.marketing-theme .mk-mrow .mk-kr{font-family:var(--mk-mono);font-size:12px;font-weight:500;color:var(--mk-red);white-space:nowrap}
-.marketing-theme .mk-tb{padding:16px 18px 18px}
-.marketing-theme .mk-tb h3{font-size:15.5px;letter-spacing:-.008em}
-.marketing-theme .mk-tb p{margin-top:5px;font-size:14px;color:var(--mk-ink-2)}
-.marketing-theme .mk-tiles-wrap{margin-top:64px}
+.marketing-theme .mk-tui{background:var(--mk-s25);border-bottom:1px solid var(--mk-line);padding:var(--mk-inset);display:grid;gap:8px;align-content:center;min-height:round(clamp(104px,7.5vw,128px),4px)}
+.marketing-theme .mk-mrow{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--mk-s0);border:1px solid var(--mk-s200);border-radius:5px;padding:8px 12px;font-size:var(--mk-fs-xs);font-weight:500;color:var(--mk-g900)}
+.marketing-theme .mk-mrow .mk-k{font-family:var(--mk-mono);font-size:var(--mk-fs-xs);font-weight:400;color:var(--mk-g500);white-space:nowrap}
+.marketing-theme .mk-mrow .mk-kk{font-family:var(--mk-mono);font-size:var(--mk-fs-xs);font-weight:500;color:var(--mk-teal);white-space:nowrap}
+.marketing-theme .mk-mrow .mk-kr{font-family:var(--mk-mono);font-size:var(--mk-fs-xs);font-weight:500;color:var(--mk-red);white-space:nowrap}
+.marketing-theme .mk-tb{padding:var(--mk-inset) var(--mk-row-x)}
+.marketing-theme .mk-tb h3{font-size:var(--mk-fs-md);letter-spacing:-.008em}
+.marketing-theme .mk-tb p{margin-top:4px;font-size:var(--mk-fs-sm);color:var(--mk-ink-2)}
+.marketing-theme .mk-tiles-wrap{margin-top:round(clamp(64px,4.4vw,96px),8px)}
 
 /* first week — ruled rows, plus its photo */
 .marketing-theme .mk-wk{display:grid;gap:0;border-top:1px solid var(--mk-line-2)}
-.marketing-theme .mk-wkr{display:grid;grid-template-columns:132px minmax(0,1fr);gap:28px;padding:22px 0;border-bottom:1px solid var(--mk-line);align-items:baseline}
-.marketing-theme .mk-wkr .mk-d{font-family:var(--mk-mono);font-size:12px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
-.marketing-theme .mk-wkr h3{font-size:17.5px;letter-spacing:-.012em}
-.marketing-theme .mk-wkr p{margin-top:6px;font-size:15px;color:var(--mk-ink-2);max-width:52ch}
-.marketing-theme .mk-wk-shot{margin-top:26px;aspect-ratio:4/3;border-radius:6px;overflow:hidden;border:1px solid var(--mk-line-2);position:relative}
+.marketing-theme .mk-wkr{display:grid;grid-template-columns:round(clamp(132px,10vw,180px),4px) minmax(0,1fr);gap:round(clamp(28px,2vw,40px),4px);padding:round(clamp(20px,1.6vw,32px),4px) 0;border-bottom:1px solid var(--mk-line);align-items:baseline}
+.marketing-theme .mk-wkr .mk-d{font-family:var(--mk-mono);font-size:var(--mk-fs-xs);font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--mk-coral-d)}
+.marketing-theme .mk-wkr h3{font-size:var(--mk-fs-md);letter-spacing:-.012em}
+.marketing-theme .mk-wkr p{margin-top:8px;color:var(--mk-ink-2);max-width:var(--mk-measure)}
+.marketing-theme .mk-wk-shot{margin-top:24px;aspect-ratio:4/3;border-radius:6px;overflow:hidden;border:1px solid var(--mk-line-2);position:relative}
 .marketing-theme .mk-wk-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 
 /* portfolio roll-up */
-.marketing-theme .mk-pf-h{font-size:clamp(30px,3.4vw,44px);margin-top:16px}
-.marketing-theme .mk-pf-lede{margin-top:20px;font-size:16.5px;max-width:40ch}
-.marketing-theme .mk-pf-cta{margin-top:26px}
-.marketing-theme .mk-stack-36{display:grid;gap:36px;min-width:0}
+.marketing-theme .mk-pf-h{font-size:var(--mk-fs-3xl);margin-top:16px}
+.marketing-theme .mk-pf-lede{margin-top:20px;max-width:44ch}
+.marketing-theme .mk-pf-cta{margin-top:24px}
+/* minmax(0,1fr), not the implicit auto track: each screen now sits in a wrapper
+   without overflow:hidden, so its nowrap URL bar would set the column min-width
+   and push the page sideways on a phone. */
+.marketing-theme .mk-stack-36{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--mk-gap-grid);min-width:0;align-items:start}
+/* The two product screens sit side by side once the column is wide enough. */
+@media(min-width:1400px){.marketing-theme .mk-stack-36{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* pricing */
 .marketing-theme .mk-incl{display:grid;grid-template-columns:1fr 1fr;gap:0 40px;border-top:1px solid var(--mk-line-2);margin:0;padding-left:0}
-.marketing-theme .mk-incl li{list-style:none;padding:13px 0;border-bottom:1px solid var(--mk-line);font-size:14.5px;display:flex;align-items:center;gap:10px}
-.marketing-theme .mk-incl li svg{width:15px;height:15px;flex:0 0 auto;color:var(--mk-teal)}
-.marketing-theme .mk-price{margin-top:48px;border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);overflow:hidden;box-shadow:0 1px 2px rgba(80,40,20,.05)}
+.marketing-theme .mk-incl li{list-style:none;padding:12px 0;border-bottom:1px solid var(--mk-line);font-size:var(--mk-fs-sm);display:flex;align-items:center;gap:8px}
+.marketing-theme .mk-incl li svg{width:16px;height:16px;flex:0 0 auto;color:var(--mk-teal)}
+.marketing-theme .mk-price{margin-top:round(clamp(48px,3.2vw,64px),8px);border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);overflow:hidden;box-shadow:0 1px 2px rgba(80,40,20,.05)}
 .marketing-theme table.mk-ptbl{width:100%;border-collapse:collapse;text-align:left}
-.marketing-theme .mk-ptbl th,.marketing-theme .mk-ptbl td{padding:17px 22px;border-bottom:1px solid var(--mk-line);vertical-align:top}
+.marketing-theme .mk-ptbl th,.marketing-theme .mk-ptbl td{padding:var(--mk-inset) round(clamp(20px,1.6vw,32px),4px);border-bottom:1px solid var(--mk-line);vertical-align:top}
 .marketing-theme .mk-ptbl thead th,.marketing-theme .mk-ptbl thead td{border-bottom:1px solid var(--mk-line-2);vertical-align:top}
-.marketing-theme .mk-ptbl thead th{position:relative;padding-top:58px}
+.marketing-theme .mk-ptbl thead th{position:relative;padding-top:56px}
 .marketing-theme .mk-ptbl tbody tr:last-child td,.marketing-theme .mk-ptbl tbody tr:last-child th{border-bottom:0}
 .marketing-theme .mk-ptbl tbody tr:hover th[scope=row],.marketing-theme .mk-ptbl tbody tr:hover td{background:color-mix(in srgb,var(--mk-cream) 55%,transparent)}
 .marketing-theme .mk-ptbl .mk-pick{background:var(--mk-coral-wash);box-shadow:inset 1px 0 0 var(--mk-coral-line),inset -1px 0 0 var(--mk-coral-line)}
 .marketing-theme .mk-ptbl tbody tr:hover td.mk-pick{background:color-mix(in srgb,var(--mk-coral-wash) 88%,var(--mk-coral-line))}
 .marketing-theme .mk-ptbl thead .mk-pick{box-shadow:inset 1px 0 0 var(--mk-coral-line),inset -1px 0 0 var(--mk-coral-line),inset 0 3px 0 var(--mk-coral)}
-.marketing-theme .mk-tier{display:block;min-height:calc(2 * 1.55em);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--mk-ink-3)}
-.marketing-theme .mk-amt{display:block;margin-top:10px;font-family:var(--mk-disp);font-weight:600;font-size:36px;letter-spacing:-.025em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
-.marketing-theme .mk-amt span{font-family:var(--mk-sans);font-size:14px;font-weight:500;color:var(--mk-ink-2);letter-spacing:0}
-.marketing-theme .mk-for{display:block;margin-top:12px;font-size:13.5px;font-weight:400;color:var(--mk-ink-2);max-width:25ch;line-height:1.45}
-.marketing-theme .mk-flag{position:absolute;top:20px;left:22px;right:22px;font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mk-coral-d);margin:0}
-.marketing-theme .mk-ptbl th[scope=row]{font-weight:500;font-size:14.5px;width:31%;color:var(--mk-ink)}
-.marketing-theme .mk-ptbl td{font-size:14.5px;color:var(--mk-ink-2)}
+.marketing-theme .mk-tier{display:block;min-height:calc(2 * 1.55em);font-size:var(--mk-fs-xs);font-weight:600;letter-spacing:.13em;text-transform:uppercase;color:var(--mk-ink-3)}
+.marketing-theme .mk-amt{display:block;margin-top:8px;font-family:var(--mk-disp);font-weight:600;font-size:var(--mk-fs-2xl);letter-spacing:-.025em;line-height:1;font-variant-numeric:tabular-nums;font-variation-settings:"opsz" 96}
+.marketing-theme .mk-amt span{font-family:var(--mk-sans);font-size:var(--mk-fs-xs);font-weight:500;color:var(--mk-ink-2);letter-spacing:0}
+.marketing-theme .mk-for{display:block;margin-top:12px;font-size:var(--mk-fs-xs);font-weight:400;color:var(--mk-ink-2);max-width:25ch;line-height:1.45}
+.marketing-theme .mk-flag{position:absolute;top:20px;left:24px;right:24px;font-size:var(--mk-fs-xs);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mk-coral-d);margin:0}
+.marketing-theme .mk-ptbl th[scope=row]{font-weight:500;font-size:var(--mk-fs-sm);width:31%;color:var(--mk-ink)}
+.marketing-theme .mk-ptbl td{font-size:var(--mk-fs-sm);color:var(--mk-ink-2)}
 .marketing-theme .mk-yes{display:inline-flex;align-items:center;gap:8px;color:var(--mk-teal);font-weight:500}
-.marketing-theme .mk-yes svg{width:15px;height:15px;flex:0 0 auto}
+.marketing-theme .mk-yes svg{width:16px;height:16px;flex:0 0 auto}
 .marketing-theme .mk-no{color:var(--mk-ink-3)}
-.marketing-theme .mk-pfoot{padding:20px 22px;background:var(--mk-cream-2);border-top:1px solid var(--mk-line-2);display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;font-size:13.5px;color:var(--mk-ink-2)}
-.marketing-theme .mk-pfoot .mk-mono{color:var(--mk-ink-3);font-size:12.5px}
+.marketing-theme .mk-pfoot{padding:20px 24px;background:var(--mk-cream-2);border-top:1px solid var(--mk-line-2);display:flex;gap:16px;flex-wrap:wrap;align-items:center;justify-content:space-between;font-size:var(--mk-fs-xs);color:var(--mk-ink-2)}
+.marketing-theme .mk-pfoot .mk-mono{color:var(--mk-ink-3);font-size:var(--mk-fs-xs)}
+/* Phone pricing: one plan at a time behind a three-way switch. The table hid two
+   of the three plans off-screen at 390px with no scroll cue. Hidden on wider
+   screens, where the table shows all three side by side. */
+.marketing-theme .mk-plans{display:none}
+.marketing-theme .mk-plan-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:7px}
+.marketing-theme .mk-plan-tabs button{min-height:44px;padding:4px 8px;border:0;border-radius:4px;background:transparent;color:var(--mk-ink-2);font-size:var(--mk-fs-sm);font-weight:600;line-height:1.2;cursor:pointer}
+.marketing-theme .mk-plan-tabs button:hover{color:var(--mk-ink);background:var(--mk-cream)}
+.marketing-theme .mk-plan-tabs button[aria-selected=true]{background:var(--mk-ink);color:var(--mk-cream)}
+.marketing-theme .mk-plan{margin-top:16px;border:1px solid var(--mk-line-2);border-radius:7px;background:var(--mk-card);padding:24px 20px}
+.marketing-theme .mk-plan[hidden]{display:none}
+.marketing-theme .mk-plan-pick{background:var(--mk-coral-wash);border-color:var(--mk-coral-line);box-shadow:inset 0 3px 0 var(--mk-coral)}
+.marketing-theme .mk-plan .mk-flag-inline{font-size:var(--mk-fs-xs);font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--mk-coral-d);margin-bottom:8px}
+.marketing-theme .mk-plan ul{margin:20px 0 0;padding:0;border-top:1px solid var(--mk-line)}
+.marketing-theme .mk-plan li{list-style:none;display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--mk-line);font-size:var(--mk-fs-sm)}
+.marketing-theme .mk-plan li>span:last-child{text-align:right;white-space:nowrap}
+.marketing-theme .mk-plan .mk-pill{margin-top:20px;width:100%}
 
 /* faq */
-.marketing-theme .mk-faq{border-top:1px solid var(--mk-line-2);max-width:74ch;min-width:0}
+.marketing-theme .mk-faq{border-top:1px solid var(--mk-line-2);max-width:68ch;min-width:0}
 .marketing-theme .mk-qa{border-bottom:1px solid var(--mk-line)}
 .marketing-theme .mk-qa h3{margin:0}
-.marketing-theme .mk-qa-toggle{display:flex;width:100%;gap:24px;align-items:baseline;justify-content:space-between;text-align:left;padding:22px 0;min-height:44px;font-size:18px;font-weight:600;letter-spacing:-.008em;background:none;border:0;cursor:pointer;transition:color .16s ease}
+.marketing-theme .mk-qa-toggle{display:flex;width:100%;gap:24px;align-items:baseline;justify-content:space-between;text-align:left;padding:round(clamp(20px,1.5vw,28px),4px) 0;min-height:44px;font-size:var(--mk-fs-md);font-weight:600;letter-spacing:-.008em;background:none;border:0;cursor:pointer;transition:color .16s ease}
 .marketing-theme .mk-qa-toggle:hover{color:var(--mk-coral-d)}
-.marketing-theme .mk-qa-toggle .mk-g{flex:none;font-family:var(--mk-mono);font-size:18px;font-weight:400;color:var(--mk-ink-3);line-height:1;transition:color .16s ease}
+.marketing-theme .mk-qa-toggle .mk-g{flex:none;font-family:var(--mk-mono);font-size:var(--mk-fs-md);font-weight:400;color:var(--mk-ink-3);line-height:1;transition:color .16s ease}
 .marketing-theme .mk-qa-toggle:hover .mk-g,.marketing-theme .mk-qa-toggle[aria-expanded=true] .mk-g{color:var(--mk-coral-d)}
-.marketing-theme .mk-qa p{padding:0 0 24px;font-size:16.5px;color:var(--mk-ink-2);max-width:66ch}
+.marketing-theme .mk-qa p{padding:0 0 round(clamp(24px,1.6vw,32px),4px);color:var(--mk-ink-2);max-width:66ch}
 
 /* close — photographic */
-.marketing-theme .mk-close{background:var(--mk-ink);color:var(--mk-onink);display:grid;grid-template-columns:1fr 1fr;align-items:stretch;min-height:520px}
-.marketing-theme .mk-close-copy{display:flex;flex-direction:column;justify-content:center;padding:88px var(--mk-gutter);max-width:calc(var(--mk-maxw)/2);margin-left:auto;width:100%}
-.marketing-theme .mk-close-copy h2{color:var(--mk-cream);font-size:clamp(31px,3.6vw,48px);max-width:21ch;margin-top:18px}
-.marketing-theme .mk-close-copy>p:not(.mk-mark){margin-top:22px;font-size:17px;color:var(--mk-onink);max-width:38ch}
-.marketing-theme .mk-close-cta{display:flex;gap:14px;flex-wrap:wrap;margin-top:34px}
-.marketing-theme .mk-close-shot{position:relative;min-height:520px;background:var(--mk-ink-soft);overflow:hidden}
+.marketing-theme .mk-close{background:var(--mk-ink);color:var(--mk-onink);display:grid;grid-template-columns:1fr 1fr;align-items:stretch;min-height:round(clamp(520px,36vw,640px),8px)}
+.marketing-theme .mk-close-copy{display:flex;flex-direction:column;justify-content:center;padding:round(clamp(88px,6vw,120px),8px) var(--mk-gutter);max-width:calc(var(--mk-maxw) / 2 + var(--mk-gutter));margin-left:auto;width:100%}
+.marketing-theme .mk-close-copy h2{color:var(--mk-cream);font-size:var(--mk-fs-3xl);max-width:21ch;margin-top:16px}
+.marketing-theme .mk-close-copy>p:not(.mk-mark){margin-top:24px;color:var(--mk-onink);max-width:38ch}
+.marketing-theme .mk-close-cta{display:flex;gap:16px;flex-wrap:wrap;margin-top:32px}
+.marketing-theme .mk-close-shot{position:relative;min-height:round(clamp(520px,36vw,640px),8px);background:var(--mk-ink-soft);overflow:hidden}
 .marketing-theme .mk-close-shot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
 
 /* footer */
 .marketing-theme .mk-footer{background:var(--mk-ink);color:var(--mk-onink-2);padding:0 0 36px}
-.marketing-theme .mk-foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:44px;padding:56px 0 44px;border-top:1px solid rgba(216,200,188,.16)}
+.marketing-theme .mk-foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;padding:round(clamp(56px,4vw,80px),8px) 0 48px;border-top:1px solid rgba(216,200,188,.16)}
 .marketing-theme .mk-footer .mk-logo{color:var(--mk-cream)}
 .marketing-theme .mk-footer .mk-logo .mk-logomark-a{fill:var(--mk-gold)}
-.marketing-theme .mk-footer h3{color:var(--mk-cream);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-bottom:16px}
-.marketing-theme .mk-footer a{display:block;color:var(--mk-onink);font-size:14.5px;margin-bottom:11px}
+.marketing-theme .mk-footer h3{color:var(--mk-cream);font-size:var(--mk-fs-xs);font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-bottom:16px}
+.marketing-theme .mk-footer a{display:block;min-height:24px;color:var(--mk-onink);font-size:var(--mk-fs-sm);margin-bottom:12px}
 .marketing-theme .mk-footer a:hover{color:#fff}
-.marketing-theme .mk-foot-blurb{margin-top:18px;max-width:27em;font-size:14.5px;color:var(--mk-onink)}
-.marketing-theme .mk-foot-bot{border-top:1px solid rgba(216,200,188,.16);padding-top:24px;font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.marketing-theme .mk-foot-blurb{margin-top:16px;max-width:30em;font-size:var(--mk-fs-sm);color:var(--mk-onink)}
+.marketing-theme .mk-foot-bot{border-top:1px solid rgba(216,200,188,.16);padding-top:24px;font-size:var(--mk-fs-xs);display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
 
 /* logo proof strip + testimonial — un-rendered, see (marketing)/page.tsx */
 .marketing-theme .mk-logo-proof{padding:22px 0 6px}
@@ -441,10 +510,8 @@
 
 /* responsive */
 @media(max-width:1200px){
-  .marketing-theme{--mk-gutter:36px}
   .marketing-theme .mk-pitem{grid-template-columns:minmax(0,1fr);gap:32px}
   .marketing-theme .mk-pitem.mk-flip>div:first-child{order:0}
-  .marketing-theme .mk-sec{grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:44px}
   .marketing-theme .mk-tiles{grid-template-columns:1fr 1fr}
 }
 @media(max-width:1040px){
@@ -469,8 +536,8 @@
   .marketing-theme .mk-checker{gap:32px;padding-top:32px}
   .marketing-theme .mk-who{gap:36px;margin-top:36px}
   .marketing-theme .mk-wshot{aspect-ratio:16/10}
-  .marketing-theme .mk-counter{gap:26px;margin-top:34px;padding-top:26px}
-  .marketing-theme .mk-facts{grid-template-columns:1fr;border-top:0;margin-top:34px}
+  .marketing-theme .mk-counter{gap:24px;margin-top:32px;padding-top:24px}
+  .marketing-theme .mk-facts{grid-template-columns:1fr;border-top:0;margin-top:32px}
   .marketing-theme .mk-fact{border-right:0;border-top:1px solid var(--mk-line);padding:16px 0 0}
   .marketing-theme .mk-close{grid-template-columns:1fr;min-height:0}
   .marketing-theme .mk-close-copy{padding:60px var(--mk-gutter);max-width:none;margin:0}
@@ -481,14 +548,27 @@
   .marketing-theme .mk-ptbl thead,.marketing-theme .mk-ptbl tbody,.marketing-theme .mk-ptbl tr{white-space:nowrap}
   .marketing-theme .mk-for{white-space:normal;min-width:21ch}
   .marketing-theme .mk-ptbl th[scope=row]{white-space:normal;min-width:17ch}
+  /* phone pricing: the plan switcher replaces the table */
+  .marketing-theme .mk-price{overflow:visible;background:transparent;border:0;box-shadow:none}
+  .marketing-theme .mk-ptbl{display:none}
+  .marketing-theme .mk-plans{display:block;margin-bottom:16px}
+  .marketing-theme .mk-pfoot{border:1px solid var(--mk-line-2);border-radius:7px}
+  /* product tiles become a ruled list: the mini previews made the section ~3.5
+     phone screens tall */
+  .marketing-theme .mk-tiles{grid-template-columns:minmax(0,1fr);gap:0;border-top:1px solid var(--mk-line-2)}
+  .marketing-theme .mk-tile{border:0;border-bottom:1px solid var(--mk-line);border-radius:0;background:transparent;box-shadow:none}
+  .marketing-theme .mk-tui{display:none}
+  .marketing-theme .mk-tb{padding:16px 0}
 }
-/* .claude/rules/design.md: 44px touch targets below 768px. These two are real
-   controls sized for desktop (36px and 40px). Nav and footer links stay as they
-   are — they clear WCAG 2.5.8 on the spacing exception (22px on a 33px pitch) and
-   reaching 44px would mean re-spacing the footer. */
+/* .claude/rules/design.md: 44px touch targets below 768px. The demo button and
+   small pills are real controls sized for desktop (36px and 40px); footer links
+   and the logo are text links that only cleared WCAG 2.5.8 on its spacing
+   exception, so they now get the full 44px too. */
 @media(max-width:768px){
   .marketing-theme .mk-resolve{min-height:44px}
   .marketing-theme .mk-pill-sm{min-height:44px}
+  .marketing-theme .mk-footer a{display:flex;align-items:center;min-height:44px;margin-bottom:0}
+  .marketing-theme .mk-logo{min-height:44px}
 }
 @media(max-width:640px){
   .marketing-theme .mk-mark{flex-wrap:wrap;width:auto}
@@ -496,8 +576,6 @@
 }
 @media(max-width:540px){
   .marketing-theme .mk-foot-grid{grid-template-columns:1fr}
-  .marketing-theme .mk-hero h1{font-size:38px}
-  .marketing-theme .mk-reck h2{font-size:36px}
 }
 
 /* ─── Shared content-page CSS below this line ────────────────────────────────
@@ -530,7 +608,8 @@
 
 /* long-form article prose — elements the legal pages never used but real
    articles do. Vars only: this file sits at its design-token baseline ceiling
-   (raw-hex 50 / raw-color-fn 12), so a literal here fails guard:design-tokens. */
+   (see its entry in scripts/design-token-baseline.json), so a literal here
+   fails guard:design-tokens. */
 .marketing-theme .mk-prose ol{margin:0 0 16px;padding-left:1.4em;list-style:decimal;color:var(--mk-ink-soft)}
 .marketing-theme .mk-prose blockquote{margin:24px 0;padding:4px 0 4px 18px;border-left:3px solid var(--mk-coral);color:var(--mk-ink-soft);font-style:italic}
 .marketing-theme .mk-prose code{background:var(--mk-cream-2);border:1px solid var(--mk-line);border-radius:6px;padding:1px 5px;font-size:.92em}

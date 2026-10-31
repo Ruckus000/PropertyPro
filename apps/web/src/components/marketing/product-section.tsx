@@ -112,73 +112,79 @@ export function ProductSection() {
         </div>
 
         <div className="mk-stack-36">
-          <div
-            className="mk-surface"
-            role="img"
-            aria-label="The compliance queue: item one, upload approved meeting minutes, five days late and blocking the public page; item two, upload the insurance declaration, two days late; item three, confirm the current rules, due June 2 with a suggested file from the library."
-          >
-            <SurfaceBar url="sunsetpalms.getpropertypro.com/compliance" />
-            <div className="mk-sbody">
-              <div className="mk-shead">
-                <div>
-                  <p className="mk-shead-title">What to do next</p>
-                  <p className="mk-shead-sub">Three open items, ordered by deadline</p>
-                </div>
-                <span className="mk-pin mk-pin-flat">3 open</span>
-              </div>
-              {QUEUE.map((row, i) => (
-                <div className={i === 0 ? 'mk-srow mk-at' : 'mk-srow'} key={row.ord}>
+          {/* Each screen and its caption stay together, so the pair can sit side
+              by side on wide screens. */}
+          <div>
+            <div
+              className="mk-surface"
+              role="img"
+              aria-label="The compliance queue: item one, upload approved meeting minutes, five days late and blocking the public page; item two, upload the insurance declaration, two days late; item three, confirm the current rules, due June 2 with a suggested file from the library."
+            >
+              <SurfaceBar url="sunsetpalms.getpropertypro.com/compliance" />
+              <div className="mk-sbody">
+                <div className="mk-shead">
                   <div>
-                    <b>
-                      <span className="mk-ord">{row.ord}</span>
-                      &nbsp;&nbsp;{row.title}
-                    </b>
-                    <small>{row.meta}</small>
+                    <p className="mk-shead-title">What to do next</p>
+                    <p className="mk-shead-sub">Three open items, ordered by deadline</p>
                   </div>
-                  <span className={`mk-pin mk-pin-${row.tone}`}>
-                    {row.tone === 'bad' ? <PinBadIcon /> : <PinWarnIcon />}
-                    {row.status}
-                  </span>
+                  <span className="mk-pin mk-pin-flat">3 open</span>
                 </div>
-              ))}
+                {QUEUE.map((row, i) => (
+                  <div className={i === 0 ? 'mk-srow mk-at' : 'mk-srow'} key={row.ord}>
+                    <div>
+                      <b>
+                        <span className="mk-ord">{row.ord}</span>
+                        &nbsp;&nbsp;{row.title}
+                      </b>
+                      <small>{row.meta}</small>
+                    </div>
+                    <span className={`mk-pin mk-pin-${row.tone}`}>
+                      {row.tone === 'bad' ? <PinBadIcon /> : <PinWarnIcon />}
+                      {row.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
+            <p className="mk-cap">
+              Every requirement carries its citation, its deadline, and the file that
+              satisfies it.
+            </p>
           </div>
-          <p className="mk-cap">
-            Every requirement carries its citation, its deadline, and the file that
-            satisfies it.
-          </p>
 
-          <div
-            className="mk-surface"
-            role="img"
-            aria-label="The public records page for Sunset Palms, listing the declaration of condominium, the annual operating budget, approved meeting minutes and the records request form, each marked published or open."
-          >
-            <SurfaceBar url="sunsetpalms.getpropertypro.com/records" />
-            <div className="mk-sbody">
-              <div className="mk-shead">
-                <div>
-                  <p className="mk-shead-title">Official records</p>
-                  <p className="mk-shead-sub">Sunset Palms Condominium Association</p>
-                </div>
-                <span className="mk-pin mk-pin-flat">9 records</span>
-              </div>
-              {RECORDS.map((row) => (
-                <div className="mk-srow" key={row.title}>
+          <div>
+            <div
+              className="mk-surface"
+              role="img"
+              aria-label="The public records page for Sunset Palms, listing the declaration of condominium, the annual operating budget, approved meeting minutes and the records request form, each marked published or open."
+            >
+              <SurfaceBar url="sunsetpalms.getpropertypro.com/records" />
+              <div className="mk-sbody">
+                <div className="mk-shead">
                   <div>
-                    <b>{row.title}</b>
-                    <small>{row.meta}</small>
+                    <p className="mk-shead-title">Official records</p>
+                    <p className="mk-shead-sub">Sunset Palms Condominium Association</p>
                   </div>
-                  <span className="mk-pin mk-pin-ok">
-                    <PinOkIcon />
-                    {row.status}
-                  </span>
+                  <span className="mk-pin mk-pin-flat">9 records</span>
                 </div>
-              ))}
+                {RECORDS.map((row) => (
+                  <div className="mk-srow" key={row.title}>
+                    <div>
+                      <b>{row.title}</b>
+                      <small>{row.meta}</small>
+                    </div>
+                    <span className="mk-pin mk-pin-ok">
+                      <PinOkIcon />
+                      {row.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
+            <p className="mk-cap">
+              Only verified records appear publicly. Board notes never leave the workspace.
+            </p>
           </div>
-          <p className="mk-cap">
-            Only verified records appear publicly. Board notes never leave the workspace.
-          </p>
         </div>
       </div>
 
