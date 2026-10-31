@@ -54,19 +54,20 @@
      margins stop growing at 64px and every extra pixel goes to the columns
      (IBM Carbon 2x Grid), so a 1728px laptop gets a 1520px column instead of
      1148px with 290px of empty cream on each side. round(…, 4px) keeps every
-     fluid space on the 4px grid (.claude/rules/design.md). */
+     fluid space on the 4px grid (.claude/rules/design.md) where the browser
+     supports it; see the @supports block after this rule. */
   --mk-maxw:1520px;
-  --mk-gutter:round(clamp(20px,3.5vw,64px),4px);
-  --mk-nav-h:round(clamp(68px,1.5vw + 48px,76px),4px);
-  --mk-rail:round(clamp(260px,21vw,400px),4px);
-  --mk-rail-gap:round(clamp(44px,4.2vw,88px),4px);
-  --mk-sec-pad:round(clamp(64px,6vw,120px),8px);
-  --mk-gap-grid:round(clamp(28px,2.2vw,48px),4px);
-  --mk-wide-gap:round(clamp(48px,4.5vw,96px),8px);
-  --mk-btn-h:round(clamp(48px,.6vw + 40px,54px),4px);
-  --mk-row-y:round(clamp(12px,.9vw,16px),4px);
-  --mk-row-x:round(clamp(16px,1.3vw,24px),4px);
-  --mk-inset:round(clamp(16px,1.2vw,24px),4px);
+  --mk-gutter:clamp(20px,3.5vw,64px);
+  --mk-nav-h:clamp(68px,1.5vw + 48px,76px);
+  --mk-rail:clamp(260px,21vw,400px);
+  --mk-rail-gap:clamp(44px,4.2vw,88px);
+  --mk-sec-pad:clamp(64px,6vw,120px);
+  --mk-gap-grid:clamp(28px,2.2vw,48px);
+  --mk-wide-gap:clamp(48px,4.5vw,96px);
+  --mk-btn-h:clamp(48px,.6vw + 40px,54px);
+  --mk-row-y:clamp(12px,.9vw,16px);
+  --mk-row-x:clamp(16px,1.3vw,24px);
+  --mk-inset:clamp(16px,1.2vw,24px);
 
   /* Measure (USWDS): 45–90 characters a line, 66 ideal. Paragraphs are capped
      in ch so the wider column goes to grids and imagery, not to line length. */
@@ -88,6 +89,28 @@
   background:var(--mk-cream); color:var(--mk-ink);
   font-family:var(--mk-sans); font-size:var(--mk-fs-md); line-height:1.55;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+
+/* round() snaps fluid spacing to the 4px grid, but Chrome < 125, Firefox < 118
+   and Safari < 15.4 do not parse it. A custom property holding an unparsed
+   round() makes every var() that reads it invalid, so the gutter fell to 0
+   there. The token block above declares plain clamp() values; this re-declares
+   them rounded where round() works. Direct round() declarations get their
+   plain values from the @supports not block before the max-width queries. */
+@supports (width:round(1px,4px)) {
+  .marketing-theme {
+    --mk-gutter:round(clamp(20px,3.5vw,64px),4px);
+    --mk-nav-h:round(clamp(68px,1.5vw + 48px,76px),4px);
+    --mk-rail:round(clamp(260px,21vw,400px),4px);
+    --mk-rail-gap:round(clamp(44px,4.2vw,88px),4px);
+    --mk-sec-pad:round(clamp(64px,6vw,120px),8px);
+    --mk-gap-grid:round(clamp(28px,2.2vw,48px),4px);
+    --mk-wide-gap:round(clamp(48px,4.5vw,96px),8px);
+    --mk-btn-h:round(clamp(48px,.6vw + 40px,54px),4px);
+    --mk-row-y:round(clamp(12px,.9vw,16px),4px);
+    --mk-row-x:round(clamp(16px,1.3vw,24px),4px);
+    --mk-inset:round(clamp(16px,1.2vw,24px),4px);
+  }
 }
 
 /* paper grain — materiality, not decoration. Scoped to the theme wrapper rather
@@ -454,6 +477,8 @@
    of the three plans off-screen at 390px with no scroll cue. Hidden on wider
    screens, where the table shows all three side by side. */
 .marketing-theme .mk-plans{display:none}
+/* one plan per panel: the two-line reserve that aligns the table's columns only adds a gap here */
+.marketing-theme .mk-plan .mk-tier{min-height:0}
 .marketing-theme .mk-plan-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;padding:4px;background:var(--mk-card);border:1px solid var(--mk-line-2);border-radius:7px}
 .marketing-theme .mk-plan-tabs button{min-height:44px;padding:4px 8px;border:0;border-radius:4px;background:transparent;color:var(--mk-ink-2);font-size:var(--mk-fs-sm);font-weight:600;line-height:1.2;cursor:pointer}
 .marketing-theme .mk-plan-tabs button:hover{color:var(--mk-ink);background:var(--mk-cream)}
@@ -509,6 +534,36 @@
 .marketing-theme .mk-quote .mk-who-c .mk-av{width:48px;height:48px;border-radius:50%;background:linear-gradient(140deg,var(--mk-coral),var(--mk-gold))}
 
 /* responsive */
+/* The plain values for every round() declaration above, for browsers without
+   round() (Chrome < 125, Firefox < 118, Safari < 15.4). They live here, not
+   inline before each rounded value, because the build minifier merges a
+   duplicate padding/margin/min-height and keeps only the rounded one. This sits
+   before the max-width queries so their phone values still win. */
+@supports not (width:round(1px,4px)) {
+  .marketing-theme .mk-nav-links{gap:clamp(28px,2vw,40px)}
+  .marketing-theme .mk-hero{padding:clamp(72px,5vw,104px) 0 clamp(80px,6vw,120px)}
+  .marketing-theme .mk-hero-lede{margin-top:clamp(24px,1.8vw,32px)}
+  .marketing-theme .mk-hero-cta{margin-top:clamp(32px,2.2vw,40px)}
+  .marketing-theme .mk-facts{margin-top:clamp(44px,3vw,60px)}
+  .marketing-theme .mk-fact+.mk-fact{padding-left:clamp(0px,1.4vw,28px)}
+  .marketing-theme .mk-hero-art{padding-top:clamp(48px,3.4vw,64px)}
+  .marketing-theme .mk-dlt{padding:clamp(24px,1.8vw,32px)}
+  .marketing-theme .mk-who{margin-top:clamp(44px,3vw,64px)}
+  .marketing-theme .mk-reck-sub{margin-top:clamp(24px,1.8vw,32px)}
+  .marketing-theme .mk-counter{margin-top:clamp(44px,3vw,64px)}
+  .marketing-theme .mk-checker{margin-top:clamp(48px,3.6vw,72px);padding-top:clamp(40px,2.8vw,56px)}
+  .marketing-theme .mk-tui{min-height:clamp(104px,7.5vw,128px)}
+  .marketing-theme .mk-tiles-wrap{margin-top:clamp(64px,4.4vw,96px)}
+  .marketing-theme .mk-wkr{grid-template-columns:clamp(132px,10vw,180px) minmax(0,1fr);gap:clamp(28px,2vw,40px);padding:clamp(20px,1.6vw,32px) 0}
+  .marketing-theme .mk-price{margin-top:clamp(48px,3.2vw,64px)}
+  .marketing-theme .mk-ptbl th,.marketing-theme .mk-ptbl td{padding:var(--mk-inset) clamp(20px,1.6vw,32px)}
+  .marketing-theme .mk-qa-toggle{padding:clamp(20px,1.5vw,28px) 0}
+  .marketing-theme .mk-qa p{padding:0 0 clamp(24px,1.6vw,32px)}
+  .marketing-theme .mk-close{min-height:clamp(520px,36vw,640px)}
+  .marketing-theme .mk-close-copy{padding:clamp(88px,6vw,120px) var(--mk-gutter)}
+  .marketing-theme .mk-close-shot{min-height:clamp(520px,36vw,640px)}
+  .marketing-theme .mk-foot-grid{padding:clamp(56px,4vw,80px) 0 48px}
+}
 @media(max-width:1200px){
   .marketing-theme .mk-pitem{grid-template-columns:minmax(0,1fr);gap:32px}
   .marketing-theme .mk-pitem.mk-flip>div:first-child{order:0}
@@ -632,7 +687,8 @@
 .marketing-theme .mk-note-legal{border-left-color:var(--mk-coral)}
 
 /* resources index */
-.marketing-theme .mk-res-list{display:grid;gap:18px;margin-top:36px}
+/* cards flow into columns instead of stretching one card across the 1520px column */
+.marketing-theme .mk-res-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,380px),1fr));gap:18px;margin-top:36px}
 .marketing-theme .mk-res-card{display:block;padding:24px 26px;text-decoration:none;color:inherit}
 .marketing-theme .mk-res-card h2{font-family:var(--font-fraunces),Georgia,serif;font-weight:600;font-size:22px;color:var(--mk-ink);margin:0 0 8px}
 .marketing-theme .mk-res-card:hover{border-color:var(--mk-coral)}
