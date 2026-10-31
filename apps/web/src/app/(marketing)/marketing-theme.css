@@ -625,6 +625,10 @@
    form hint blocks, so the three never drift apart visually */
 .marketing-theme .mk-note{background:var(--mk-cream-2);border:1px solid var(--mk-line);border-left:3px solid var(--mk-gold);border-radius:14px;padding:16px 18px;font-size:14px;line-height:1.6;color:var(--mk-ink-soft);margin:20px 0}
 .marketing-theme .mk-note strong{color:var(--mk-ink)}
+/* Underlined at rest: the base `a` rule drops the underline, and coral-d on
+   ink-soft body text is only 2.51:1, under the 3:1 colour-only bar (axe
+   link-in-text-block). Same treatment as `.mk-prose a`. */
+.marketing-theme .mk-note a{text-decoration:underline;text-underline-offset:2px}
 .marketing-theme .mk-note-legal{border-left-color:var(--mk-coral)}
 
 /* resources index */
