@@ -37,16 +37,17 @@ export function RecordsAttention({ communityId, enabled }: RecordsAttentionProps
       href={`/pm/website?communityId=${communityId}#records`}
       title={label}
       data-testid="editor-missing-records"
-      // Icon, number and words, never the colour alone. Below 1280px the bar
-      // has room for the icon and the number only; the words stay in the
-      // accessible name at every width.
+      // Icon, number and words, never the colour alone. Below 1680px the bar
+      // has room for the icon and the number only: with the area labels (from
+      // 1280px) and Help's (from 1536px), these words pushed Publish off the
+      // screen up to 1600px. The words stay in the accessible name at every width.
       className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-status-warning-border bg-status-warning-bg px-2.5 text-xs font-semibold text-status-warning hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
     >
       <TriangleAlert className="h-4 w-4" aria-hidden="true" />
-      <span aria-hidden="true" className="xl:hidden">
+      <span aria-hidden="true" className="min-[1680px]:hidden">
         {count}
       </span>
-      <span className="sr-only xl:not-sr-only">{label}</span>
+      <span className="sr-only min-[1680px]:not-sr-only">{label}</span>
     </Link>
   );
 }

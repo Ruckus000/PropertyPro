@@ -77,7 +77,7 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
             className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-status-neutral-border bg-status-neutral-bg px-2.5 text-xs font-semibold text-status-neutral focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             <Info className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden xl:inline">Not required</span>
+            <span className="hidden min-[1680px]:inline">Not required</span>
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" aria-label="Florida website rules" className="w-[340px] p-3">
@@ -124,7 +124,7 @@ export function RequirementsPill({ onGoToSection, onAddSection }: RequirementsPi
           )}
         >
           <Icon className="h-4 w-4" aria-hidden="true" />
-          <span className="hidden xl:inline">{label}</span>
+          <span className="hidden min-[1680px]:inline">{label}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" aria-label="Required by Florida law" className="w-[340px] p-3">
