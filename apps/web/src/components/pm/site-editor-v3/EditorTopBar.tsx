@@ -207,8 +207,13 @@ export function EditorTopBar({
 }: EditorTopBarProps) {
   return (
     <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
-      <span className="flex min-w-0 flex-col leading-tight">
-        <h1 className="font-display text-[0.9375rem] font-semibold text-content">Website</h1>
+      {/*
+       * The one block that gives way when the bar is full: the community name
+       * truncates. `min-w-20` keeps the page's own heading readable; without it
+       * the block shrank to nothing at 1280px.
+       */}
+      <span className="flex min-w-20 flex-col leading-tight">
+        <h1 className="whitespace-nowrap font-display text-[0.9375rem] font-semibold text-content">Website</h1>
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
 
@@ -310,8 +315,9 @@ export function EditorTopBar({
        * Never shrinks. With `min-w-0` here this group was the one flexbox
        * squeezed — below its own content — while the community name kept its
        * full width, so at iPad widths Publish was laid out past the right edge
-       * of the screen. The name block (min-w-0, truncating) is the one that
-       * gives way now; measured at 768–1440px with a long name and page name.
+       * of the screen. The name block and the page picker (both truncating, each
+       * with a floor) give way now; measured at 768–1920px with a long name and
+       * page name, the record chips loaded, in both views.
        */}
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         {records}
@@ -399,10 +405,13 @@ function PagePicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-11 items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-card px-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          // Shrinks (the page name truncates) but never below what keeps
+          // "Editing page" on one line: squeezed further, it wrapped onto two
+          // lines and spilled out of the button's 44px.
+          className="flex h-11 min-w-32 items-center gap-2.5 rounded-[var(--radius-md)] border border-edge bg-surface-card px-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
-          <span className="flex flex-col leading-tight">
-            <span className="text-xs text-content-tertiary">Editing page</span>
+          <span className="flex min-w-0 flex-col leading-tight">
+            <span className="whitespace-nowrap text-xs text-content-tertiary">Editing page</span>
             <span
               className="max-w-[9rem] truncate text-sm font-semibold text-content xl:max-w-[16rem]"
               data-testid="editing-page-name"
@@ -410,7 +419,7 @@ function PagePicker({
               {pageName ?? 'Loading pages…'}
             </span>
           </span>
-          <ChevronDown className="h-4 w-4 text-content-tertiary" aria-hidden="true" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" aria-label="Choose a page to edit" className="w-[260px] p-1.5">
