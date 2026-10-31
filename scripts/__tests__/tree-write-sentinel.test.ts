@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, inject, it, vi } from 'vitest';
 import { withoutGitEnv } from '../lib/git-env';
 import {
+  coreBareFlipMessage,
   diffSnapshots,
   formatChanges,
   listWatchedDirectories,
@@ -229,6 +230,34 @@ describe('formatChanges', () => {
     expect(message).toContain('  - ./: an entry was created and deleted again during the run');
     expect(message).toContain('  - apps/web/src/lib/: added a.ts; removed b.ts');
     expect(message).toContain('os.tmpdir()');
+  });
+});
+
+describe('coreBareFlipMessage', () => {
+  it('is silent unless core.bare went from not-true to true', () => {
+    expect(coreBareFlipMessage('false', 'false', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('true', 'true', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('true', 'false', '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('false', undefined, '/r')).toBeUndefined();
+    expect(coreBareFlipMessage('false', 'true', '/r')).toContain('core.bare became true');
+    expect(coreBareFlipMessage(undefined, 'true', '/r')).toContain('core.bare became true');
+  });
+
+  it('prints a restore command that works on a path with quotes and $(...) in it', () => {
+    const repo = join(root, "it's $(touch pwned)");
+    mkdirSync(repo);
+    gitInit(repo);
+    const git = (...args: string[]) =>
+      spawnSync('git', args, { encoding: 'utf-8', env: testGitEnv() });
+    expect(git('-C', repo, 'config', 'core.bare', 'true').status).toBe(0);
+
+    const message = coreBareFlipMessage('false', 'true', repo)!;
+    const command = message.split('\n').at(-1)!.trim();
+    const res = spawnSync('sh', ['-c', command], { cwd: root, encoding: 'utf-8', env: testGitEnv() });
+
+    expect(res.status, res.stderr).toBe(0);
+    expect(git('-C', repo, 'config', '--get', 'core.bare').stdout.trim()).toBe('false');
+    expect(existsSync(join(root, 'pwned'))).toBe(false);
   });
 });
 

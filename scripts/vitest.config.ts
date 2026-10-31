@@ -18,6 +18,10 @@ export default defineConfig({
     // guards that scan the same trees in parallel workers; see
     // lib/tree-write-sentinel.ts.
     globalSetup: ['./vitest.global-setup.ts'],
+    // Removes GIT_DIR and every other GIT_* variable, which a pre-push hook
+    // exports, from each worker. Under an inherited worktree GIT_DIR a test's
+    // `git init <tmpdir>` set core.bare = true in the shared repo config.
+    setupFiles: ['./vitest.setup.ts'],
   },
   resolve: {
     // Scripts are not a workspace package, so `@propertypro/*` specifiers have
