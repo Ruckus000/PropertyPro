@@ -18,7 +18,6 @@ import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@prop
 import {
   toInitials,
   resolvePlanId,
-  isAdminRole,
   PLAN_FEATURES,
   type CommunityRole,
   type CommunityFeatures,
@@ -33,6 +32,7 @@ import {
   getActiveItemId,
   isPmPortfolioPath,
   resolveDashboardHref,
+  resolveLapsedAdmin,
   resolveNavItemHref,
   shouldUseSlimNav,
   buildSlimNavSections,
@@ -127,17 +127,8 @@ export function AppSidebar({
   // all — render them as buttons that open the picker and keep the destination.
   const needsCommunityPicker = !isPmContext && communityId === null;
 
-  // A lapsed community locks ADMIN reads only. `requireEntitledForAdminRead`
-  // short-circuits on `!membership.isAdmin`, where isAdmin is exactly
-  // ADMIN_TIER_DB_ROLES (property_manager / root_manager) — board designation
-  // does NOT count, so a board president who is a `resident` keeps full read
-  // access on a lapsed community.
-  //
-  // Deriving this from the same predicate the guard uses (`isAdminRole`) rather
-  // than restating the role list is the point: the nav advertising a surface the
-  // API then refuses is the exact bug this flag exists to prevent, and it can
-  // only recur if these two definitions drift apart.
-  const lapsedAdmin = isLapsed && role !== null && isAdminRole(role);
+  // A lapsed community locks ADMIN reads only (see resolveLapsedAdmin).
+  const lapsedAdmin = resolveLapsedAdmin(isLapsed, role);
 
   // Badge counts — the reads and their enablement rules are shared with the
   // top tab bar (see use-nav-badges.ts).

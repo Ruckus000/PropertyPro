@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import {
   getFeaturesForCommunity,
+  isAdminRole,
   PLAN_FEATURES,
   findCheapestPlanEntryForFeature,
   type CommunityRole,
@@ -446,6 +447,16 @@ export const PM_PORTFOLIO_PATH_PREFIXES = [
   '/pm/portfolio',
   '/pm/reports',
 ] as const;
+
+/**
+ * A lapsed community locks ADMIN reads only: `requireEntitledForAdminRead` gates
+ * on the actor (`isAdminRole`), not the surface, so a resident on the same lapsed
+ * community keeps full read access. The rail and the top tabs both derive their
+ * `lapsedAdmin` input here so the two definitions cannot drift apart.
+ */
+export function resolveLapsedAdmin(isLapsed: boolean, role: CommunityRole | null): boolean {
+  return isLapsed && role !== null && isAdminRole(role);
+}
 
 /** True when `pathname` is a cross-community PM portfolio route. */
 export function isPmPortfolioPath(pathname: string): boolean {

@@ -7,6 +7,7 @@
  * while desktop collapses to a single utility row with search, notifications,
  * and the avatar profile menu.
  */
+import type { ReactNode } from 'react';
 import { CircleHelp, Menu, Search } from 'lucide-react';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
 import { NotificationBell } from '@/components/notifications/notification-bell';
@@ -18,9 +19,11 @@ interface AppTopBarProps {
   userEmail: string | null;
   communityId: number | null;
   onSearchOpen?: () => void;
+  /** Top-nav flag only: brand tile + community name + plan, first in the row at `lg`+. */
+  brand?: ReactNode;
 }
 
-export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: AppTopBarProps) {
+export function AppTopBar({ userName, userEmail, communityId, onSearchOpen, brand }: AppTopBarProps) {
   const { setMobileOpen } = useSidebar();
   const { toggle: toggleHelp } = useHelpWidget();
 
@@ -35,6 +38,8 @@ export function AppTopBar({ userName, userEmail, communityId, onSearchOpen }: Ap
         >
           <Menu size={20} aria-hidden="true" />
         </button>
+
+        {brand ? <div className="hidden shrink-0 items-center lg:flex">{brand}</div> : null}
 
         <div role="search" className="flex min-w-0 flex-1 lg:max-w-[560px]">
           <button

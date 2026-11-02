@@ -64,10 +64,11 @@ export interface TopNavInput {
   /** Query string, with or without the leading `?` (resolves finance sub-tabs). */
   search?: string | null;
   communityId: number | null;
-  role: CommunityRole;
+  /** Null before a community loads; `getVisibleItemsWithPlanGate` hides role-gated items then. */
+  role: CommunityRole | null;
   isUnitOwner: boolean;
-  features: CommunityFeatures;
-  communityType: CommunityType;
+  features: CommunityFeatures | null;
+  communityType: CommunityType | null;
   planId: PlanId | null;
   /** Already combined with `isAdminRole` by the caller — see AppSidebar. */
   lapsedAdmin: boolean;
