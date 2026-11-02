@@ -12,29 +12,43 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=heading[name=\"Recent Announcements\"]"
+          "selector": "role=heading[name=\"This week\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section[aria-labelledby=\"this-week-heading\"]"
         }
       ],
-      "clipTo": "main"
+      "clipTo": [
+        "main section:has(> h2.font-display)",
+        "section[aria-labelledby=\"this-week-heading\"]"
+      ]
     },
     {
-      "name": "dash-ann",
+      "name": "dash-board",
       "kind": "still",
       "route": "/dashboard?communityId={cid}",
-      "role": "owner",
+      "role": "board_member",
       "community": "condo",
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=heading[name=\"Recent Announcements\"]"
+          "selector": "role=heading[name=\"Needs attention\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(h3:text-is(\"Needs attention\"))"
         }
       ],
-      "clipTo": "section:has(h2:text-is(\"Recent Announcements\"))",
-      "highlight": "role=heading[name=\"Recent Announcements\"]",
+      "clipTo": [
+        "#needs-attention-heading",
+        "section[aria-labelledby=\"needs-attention-heading\"] > ul"
+      ],
+      "highlight": "role=heading[name=\"Needs attention\"]",
       "step": 1
     },
     {
-      "name": "dash-meet",
+      "name": "dash-week",
       "kind": "still",
       "route": "/dashboard?communityId={cid}",
       "role": "owner",
@@ -42,11 +56,15 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=heading[name=\"Upcoming Meetings\"]"
+          "selector": "role=heading[name=\"This week\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(h3:text-is(\"This week\"))"
         }
       ],
-      "clipTo": "section:has(h2:text-is(\"Upcoming Meetings\"))",
-      "highlight": "role=heading[name=\"Upcoming Meetings\"]",
+      "clipTo": "section:has(h3:text-is(\"This week\"))",
+      "highlight": "role=heading[name=\"This week\"]",
       "step": 2
     },
     {
@@ -68,6 +86,26 @@
       "clipTo": "section:has(h2:text-is(\"Documents to Sign\"))",
       "highlight": "role=heading[name=\"Documents to Sign\"]",
       "step": 3
+    },
+    {
+      "name": "dash-ann",
+      "kind": "still",
+      "route": "/dashboard?communityId={cid}",
+      "role": "owner",
+      "community": "condo",
+      "actions": [
+        {
+          "type": "waitFor",
+          "selector": "role=heading[name=\"Recent Announcements\"]"
+        },
+        {
+          "type": "scrollTo",
+          "selector": "section:has(h2:text-is(\"Recent Announcements\"))"
+        }
+      ],
+      "clipTo": "section:has(h2:text-is(\"Recent Announcements\"))",
+      "highlight": "role=heading[name=\"Recent Announcements\"]",
+      "step": 4
     }
   ]
 }

@@ -10,18 +10,21 @@ import {
   type ScopedClient,
 } from '@propertypro/db';
 import {
+  and,
   asc,
   desc,
   eq,
   gte,
   inArray,
   isNull,
+  lte,
   sql,
 } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { canReadAnnouncementAudience, type AnnouncementAudience } from '@/lib/announcements/read-visibility';
 import { withUnitLabels } from '@/lib/units/unit-labels';
 import { checkPermissionV2 } from '@/lib/db/access-control';
+import { HEARING_NOTICE_DAYS } from '@/lib/violations/hearing-notice-warning';
 import {
   buildViolationSummary,
   selectRecentAnnouncements,
@@ -30,6 +33,7 @@ import {
   type DashboardMeeting,
   type DashboardViolationSummary,
 } from './dashboard-selectors';
+import type { DashboardHearing } from './load-dashboard-overview';
 
 const DASHBOARD_ITEM_LIMIT = 5;
 const ANNOUNCEMENT_BATCH_SIZE = 10;
@@ -272,4 +276,48 @@ export async function getDashboardOpenMaintenanceCount(
   );
 
   return rows[0]?.count ?? 0;
+}
+
+const DAY_MS = 86_400_000;
+/** The agenda looks 30 days ahead; a hearing's notice is due HEARING_NOTICE_DAYS before it. */
+const HEARING_LOOKAHEAD_DAYS = 30 + HEARING_NOTICE_DAYS;
+
+interface DashboardHearingRow extends Record<string, unknown> {
+  id: number;
+  unitId: number;
+  hearingDate: Date | null;
+}
+
+/**
+ * Hearings scheduled in `[now, now + 44 days]` (D9): any hearing whose notice
+ * deadline can still land inside the 30-day agenda. `unitIds` is the
+ * getViolationReadUnitIds scope: `null` is community-wide.
+ */
+export async function listDashboardUpcomingHearings(
+  scoped: ScopedClient,
+  unitIds: number[] | null,
+  now: Date,
+): Promise<DashboardHearing[]> {
+  if (unitIds?.length === 0) return [];
+  const clauses = [
+    eq(violations.status, 'hearing_scheduled'),
+    gte(violations.hearingDate, now),
+    lte(violations.hearingDate, new Date(now.getTime() + HEARING_LOOKAHEAD_DAYS * DAY_MS)),
+  ];
+  if (unitIds) clauses.push(inArray(violations.unitId, unitIds));
+
+  const rows = await scoped
+    .selectFrom<DashboardHearingRow>(
+      violations,
+      { id: violations.id, unitId: violations.unitId, hearingDate: violations.hearingDate },
+      and(...clauses),
+    )
+    .orderBy(asc(violations.hearingDate), asc(violations.id));
+
+  const labelled = await withUnitLabels(scoped, rows);
+  return labelled.flatMap((row) =>
+    row.hearingDate
+      ? [{ violationId: row.id, unitLabel: row.unitLabel, hearingDate: row.hearingDate.toISOString() }]
+      : [],
+  );
 }

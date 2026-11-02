@@ -12,7 +12,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactElement, ReactNode } from 'react';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getEffectiveFeatures, getFeaturesForCommunity } from '@propertypro/shared';
 
 const {
   getSiteOnboardingCompletedAtMock,
@@ -59,6 +59,15 @@ vi.mock('@/lib/dashboard/load-dashboard-data', () => ({
     pendingSigners: [],
   })),
 }));
+// The redesigned panels read these; both would reach the DB at import or render.
+vi.mock('@/lib/dashboard/load-dashboard-overview', () => ({
+  loadDashboardOverview: vi.fn(async () => ({
+    checklist: null,
+    meetings30d: { ok: true, value: [] },
+    hearings: null,
+  })),
+}));
+vi.mock('@/components/compliance/compliance-activity-feed', () => ({ ComplianceActivityFeed: () => null }));
 vi.mock('@/lib/queries/apartment-metrics', () => ({
   loadApartmentMetrics: vi.fn(async () => ({ communityName: 'Sunset Ridge', firstName: 'Pat' })),
 }));
@@ -179,7 +188,8 @@ describe('the dashboards render the card', () => {
       publicUrl: 'https://sunset-condos.getpropertypro.com/',
     });
     expect(tree.find((e) => e.type === OnboardingChecklist)!.props).toMatchObject({ variant: 'secondary' });
-    expect(loadCardMock).toHaveBeenCalledWith(42, 'root_manager', condoFeatures);
+    // D4: the card gate reads the plan's effective features (MANAGER is on Professional).
+    expect(loadCardMock).toHaveBeenCalledWith(42, 'root_manager', getEffectiveFeatures('condo_718', 'professional'));
   });
 
   it('on the main dashboard, no card when the loader returns none', async () => {
