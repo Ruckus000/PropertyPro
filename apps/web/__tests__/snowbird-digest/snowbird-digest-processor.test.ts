@@ -7,7 +7,7 @@
  * lost the week's digest. There was also no idempotency key, so a retried
  * tick could send twice.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { sendEmailMock, scoped } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(),
@@ -78,6 +78,11 @@ beforeEach(() => {
   sendEmailMock.mockResolvedValue({ id: 'em_1' });
 });
 
+// Tests that pin NEXT_PUBLIC_APP_URL with vi.stubEnv must not leak it.
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('processSnowbirdDigests', () => {
   it('keeps sending after one recipient fails, and counts the failure', async () => {
     sendEmailMock.mockImplementation(async ({ to }: { to: string }) => {
@@ -108,6 +113,16 @@ describe('processSnowbirdDigests', () => {
 
     expect(sendEmailMock).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({ emailsSent: 0, failed: 2 });
+  });
+
+  // `/communities/{id}/dashboard` does not exist; the dashboard is
+  // `/dashboard?communityId={id}` (same shape as the notification digest).
+  it('links the digest to the community dashboard', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+    await processSnowbirdDigests(MONDAY_8AM_EASTERN);
+
+    const args = sendEmailMock.mock.calls[0]![0] as { react: { props: { portalUrl: string } } };
+    expect(args.react.props.portalUrl).toBe('https://app.example.test/dashboard?communityId=7');
   });
 
   it('keys each send by community, recipient and community-local date', async () => {
