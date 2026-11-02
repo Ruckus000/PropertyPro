@@ -360,34 +360,39 @@
     "2026-10-01"
   ],
   "manager/getting-started/your-dashboard/dash-ann": [
-    578,
-    91,
-    "2026-10-01"
+    1140,
+    216,
+    "2026-11-02"
   ],
   "manager/getting-started/your-dashboard/dash-apt": [
     1196,
     818,
     "2026-10-01"
   ],
+  "manager/getting-started/your-dashboard/dash-attn": [
+    757,
+    260,
+    "2026-11-02"
+  ],
   "manager/getting-started/your-dashboard/dash-check": [
     1132,
-    510,
-    "2026-10-01"
+    248,
+    "2026-11-02"
   ],
   "manager/getting-started/your-dashboard/dash-m": [
-    1196,
-    818,
-    "2026-10-01"
-  ],
-  "manager/getting-started/your-dashboard/dash-meet": [
-    578,
-    91,
-    "2026-10-01"
+    1132,
+    280,
+    "2026-11-02"
   ],
   "manager/getting-started/your-dashboard/dash-sign": [
-    578,
-    394,
-    "2026-10-01"
+    1140,
+    250,
+    "2026-11-02"
+  ],
+  "manager/getting-started/your-dashboard/dash-week": [
+    398,
+    534,
+    "2026-11-02"
   ],
   "manager/leases/adding-a-lease/step-1": [
     1130,
@@ -1330,24 +1335,29 @@
     "2026-10-01"
   ],
   "resident/getting-started/your-dashboard/dash-ann": [
-    578,
-    277,
-    "2026-10-01"
+    1140,
+    216,
+    "2026-11-02"
   ],
-  "resident/getting-started/your-dashboard/dash-meet": [
-    578,
-    277,
-    "2026-10-01"
+  "resident/getting-started/your-dashboard/dash-board": [
+    757,
+    216,
+    "2026-11-02"
   ],
   "resident/getting-started/your-dashboard/dash-r": [
-    1196,
-    859,
-    "2026-10-01"
+    1132,
+    709,
+    "2026-11-02"
   ],
   "resident/getting-started/your-dashboard/dash-sign": [
-    578,
-    240,
-    "2026-10-01"
+    1140,
+    250,
+    "2026-11-02"
+  ],
+  "resident/getting-started/your-dashboard/dash-week": [
+    1140,
+    514,
+    "2026-11-02"
   ],
   "resident/maintenance/maintenance-request/mr-cat": [
     481,
