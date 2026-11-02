@@ -11,24 +11,39 @@
  * escape dismissal of THIS dialog are suppressed: lightbox overlay clicks
  * land outside our DialogContent and would otherwise close everything.
  *
+ * ## Opening
+ *
+ * Opened without a specific article (the Help button, the `?` key), the modal
+ * goes straight to the page's FIRST contextual article rather than a list of
+ * them, showing a skeleton while that list loads. When the page has more than
+ * one, the footer's Next button walks them in order; back from the first one
+ * lands on the full "Help for this page" list. A page with no articles of its
+ * own, or a failed lookup, keeps the list view. An article opened by name (a
+ * `?help=` link, an in-page help link) is left alone.
+ *
  * ## Sizing
  *
  * The box is sized by its content, not by a constant. It used to be a fixed
  * 440px × 85vh panel, which left a short contextual list floating in empty
  * space and gave a long article no more room on a wide screen. Now:
  *
- *  - width follows the viewport (`min(100vw - 2rem, 30rem)`, 36rem from `xl`),
+ *  - width follows the viewport: `min(100vw - 2rem, 40rem)`, then up to
+ *    48rem from `lg` and 56rem from `xl`, never more than 90vw,
  *  - height is whatever the content needs, capped at 85dvh (90dvh for the
  *    phone sheet) with a small floor so the search view never collapses,
  *  - the body is the only scroll container, so header and Up-next stay put,
  *  - on desktop the reader can drag any edge, or the corner, to resize it.
  *    `overflow-visible` lets the edge strips reach past the border, so they
  *    stay off the body's scrollbar; the body is the scroller, not the box.
+ *
+ * The Dialog and Sheet both draw their own close X, centred 24px in from the
+ * top-right corner. The header is 48px tall with a 56px right gutter, so the X
+ * sits level with the header's controls instead of on top of the last one.
  */
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ExternalLink, Search } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Search } from 'lucide-react';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
 import { useContextualHelp, useHelpArticle, useReadArticles } from '@/hooks/use-help';
 import { HelpArticleBody } from '@/components/help/help-article-body';
@@ -41,6 +56,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { cn } from '@/lib/utils';
@@ -65,6 +81,9 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Whether this open has already decided where to land (first page article,
+  // or the list). Cleared on close so the next open decides again.
+  const [landingDecided, setLandingDecided] = useState(false);
 
   // Reset search when article changes.
   useEffect(() => {
@@ -72,7 +91,37 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
     setSearchQuery('');
   }, [selectedArticle]);
 
-  const { data: contextual } = useContextualHelp(pathname, communityId, flagEnabled && isOpen);
+  const contextualQuery = useContextualHelp(pathname, communityId, flagEnabled && isOpen);
+  const contextual = contextualQuery.data;
+
+  useEffect(() => {
+    if (!isOpen) setLandingDecided(false);
+  }, [isOpen]);
+
+  // Land on the page's first article when opened without one.
+  useEffect(() => {
+    if (!flagEnabled || !isOpen || landingDecided) return;
+    if (selectedArticle || showSearch) {
+      setLandingDecided(true);
+      return;
+    }
+    // A disabled query also reports `isPending`, but never fetches; only wait
+    // on a lookup that is actually running, or the skeleton would never clear.
+    if (contextualQuery.isPending && contextualQuery.fetchStatus !== 'idle') return;
+    setLandingDecided(true);
+    const first = contextual?.[0];
+    if (first) openArticle(first.category, first.slug);
+  }, [
+    flagEnabled,
+    isOpen,
+    landingDecided,
+    selectedArticle,
+    showSearch,
+    contextual,
+    contextualQuery.isPending,
+    contextualQuery.fetchStatus,
+    openArticle,
+  ]);
   const { data: readArticles } = useReadArticles(communityId);
   const articleQuery = useHelpArticle(
     selectedArticle?.category ?? null,
@@ -88,12 +137,28 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
 
   const upNextArticle = articleQuery.data?.upNext ?? null;
 
+  // Where the open article sits among this page's articles, if it is one.
+  const pageIndex =
+    selectedArticle && contextual
+      ? contextual.findIndex(
+          (a) => a.category === selectedArticle.category && a.slug === selectedArticle.slug,
+        )
+      : -1;
+  const nextPageArticle =
+    pageIndex >= 0 && contextual && pageIndex < contextual.length - 1
+      ? contextual[pageIndex + 1]!
+      : null;
+  const awaitingLanding = isOpen && !landingDecided && !selectedArticle && !showSearch;
+
   const isMobile = useIsMobile();
 
   if (!flagEnabled) return null;
 
   const header = (
-    <div className="flex items-center gap-2 border-b border-edge px-4 py-3">
+    <div
+      data-help-header
+      className="flex h-12 shrink-0 items-center gap-2 border-b border-edge pl-4 pr-14"
+    >
       {stackDepth > 0 && (
         <button
           type="button"
@@ -159,8 +224,15 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
     </div>
   );
 
-  const body =
-    showSearch || !selectedArticle ? (
+  const body = awaitingLanding ? (
+    <div role="status" className="space-y-4">
+      <span className="sr-only">Loading help for this page</span>
+      <Skeleton className="h-6 w-2/3" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-5/6" />
+      <Skeleton className="h-32 w-full" />
+    </div>
+  ) : showSearch || !selectedArticle ? (
       <HelpDocsModalSearchPanel
         communityId={communityId}
         query={searchQuery}
@@ -204,8 +276,25 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
       </>
     );
 
-  const footer =
-    upNextArticle && !showSearch ? (
+  const pageCount = contextual?.length ?? 0;
+  const footer = showSearch || !selectedArticle ? null : nextPageArticle ? (
+    <div className="flex items-center justify-between gap-3 border-t border-edge px-4 py-3">
+      <p className="shrink-0 text-sm text-content-tertiary">
+        {pageIndex + 1} of {pageCount}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => openArticle(nextPageArticle.category, nextPageArticle.slug)}
+        aria-label={`Next: ${nextPageArticle.title}`}
+        className="min-w-0"
+      >
+        <span className="truncate">Next: {nextPageArticle.title}</span>
+        <ChevronRight aria-hidden="true" />
+      </Button>
+    </div>
+  ) : upNextArticle ? (
       <div className="border-t border-edge px-4 py-3">
         <button
           type="button"
@@ -238,7 +327,7 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
           <SheetTitle className="sr-only">Help</SheetTitle>
           <SheetDescription className="sr-only">Help documentation panel</SheetDescription>
           {header}
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6">{body}</div>
           {footer}
         </SheetContent>
       </Sheet>
@@ -251,14 +340,14 @@ export function HelpDocsModal({ communityId, flagEnabled }: HelpDocsModalProps) 
         resizable
         minWidth={360}
         minHeight={320}
-        className="flex max-h-[85dvh] min-h-[16rem] w-[min(100vw-2rem,30rem)] overflow-visible max-w-[min(100vw-2rem,30rem)] flex-col gap-0 p-0 sm:max-w-[min(100vw-2rem,30rem)] xl:w-[36rem] xl:max-w-[36rem]"
+        className="flex max-h-[85dvh] min-h-[16rem] w-[min(100vw-2rem,40rem)] max-w-[min(100vw-2rem,40rem)] flex-col gap-0 overflow-visible p-0 sm:max-w-[min(100vw-2rem,40rem)] lg:w-[min(90vw,48rem)] lg:max-w-[min(90vw,48rem)] xl:w-[min(90vw,56rem)] xl:max-w-[min(90vw,56rem)]"
         onPointerDownOutside={lightboxOpen ? (e) => e.preventDefault() : undefined}
         onEscapeKeyDown={lightboxOpen ? (e) => e.preventDefault() : undefined}
       >
         <DialogTitle className="sr-only">Help</DialogTitle>
         <DialogDescription className="sr-only">Help documentation panel</DialogDescription>
         {header}
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{body}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6">{body}</div>
         {footer}
       </DialogContent>
     </Dialog>
