@@ -52,6 +52,35 @@ describe('AnnouncementsBlockView', () => {
     expect(screen.getByText('Resurfacing')).toBeInTheDocument();
   });
 
+  it('leads with the first notice and lists the rest beside it', () => {
+    const items = [
+      { ...item, id: 1, title: 'First', bodyHtml: '<p>One</p>' },
+      { ...item, id: 2, title: 'Second', bodyHtml: '<p>Two</p>' },
+      { ...item, id: 3, title: 'Third', bodyHtml: '<p>Three</p>' },
+    ];
+    render(<AnnouncementsBlockView blockId={1} content={content} data={items} community={COMMUNITY} />);
+    const lead = screen.getByRole('heading', { name: 'First' }).closest('li');
+    const second = screen.getByRole('heading', { name: 'Second' }).closest('li');
+    // The lead spans two of three columns; the others sit in a nested list in the third.
+    expect(lead).toHaveClass('site-md:col-span-2');
+    expect(second?.parentElement?.closest('li')).toHaveClass('site-md:border-l');
+    expect(screen.getByRole('heading', { name: 'Third' }).closest('li')?.parentElement).toBe(second?.parentElement);
+    expect(screen.getByText('Three')).toBeInTheDocument();
+  });
+
+  it('styles notice HTML itself: paragraph spacing and list bullets, since the app has no typography plugin', () => {
+    render(<AnnouncementsBlockView blockId={1} content={content} data={[item]} community={COMMUNITY} />);
+    const body = screen.getByText('Resurfacing').parentElement;
+    expect(body).toHaveClass('[&>*+*]:mt-4', '[&_ul]:list-disc', '[&_ol]:list-decimal');
+    expect(body).not.toHaveClass('prose');
+  });
+
+  it('gives a lone notice the full width and no side column', () => {
+    render(<AnnouncementsBlockView blockId={1} content={content} data={[item]} community={COMMUNITY} />);
+    expect(screen.getByRole('heading', { name: 'Pool closed Monday' }).closest('li')).toHaveClass('site-md:col-span-3');
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
+  });
+
   it('renders the empty state', () => {
     render(
       <AnnouncementsBlockView blockId={1} content={content} data={[]} community={COMMUNITY} />,
@@ -186,7 +215,25 @@ describe('MeetingsBlockView', () => {
         community={COMMUNITY}
       />,
     );
-    expect(screen.queryByText('Where')).not.toBeInTheDocument();
+    // Time and type remain; the place row is gone (a control below shows it present with a place).
+    const details = screen.getByRole('heading', { name: 'Annual Meeting' }).nextElementSibling;
+    expect(details?.querySelectorAll('li')).toHaveLength(2);
+    expect(screen.queryByText('Clubhouse')).not.toBeInTheDocument();
+  });
+
+  it('shows time, place and type as separate lines when there is a place', () => {
+    render(<MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />);
+    const details = screen.getByRole('heading', { name: 'Annual Meeting' }).nextElementSibling;
+    const lines = [...(details?.querySelectorAll('li') ?? [])].map((li) => li.textContent);
+    // 23:00Z on 1 April is 7:00 PM Wednesday in New York.
+    expect(lines).toEqual(['Wednesday 7:00 PM', 'Clubhouse', 'Board meeting']);
+  });
+
+  it('puts the date on the calendar tile, with the year for readers', () => {
+    const { container } = render(
+      <MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />,
+    );
+    expect(container.querySelector('time')?.textContent).toBe('Apr 1 2026');
   });
 
   it('renders the empty state', () => {

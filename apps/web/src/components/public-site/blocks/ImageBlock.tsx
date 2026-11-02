@@ -29,7 +29,7 @@ export function ImageBlock(props: BlockRendererProps) {
   const alt = content.decorative === true ? '' : (content.altText ?? '');
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8">
+    <section className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10">
       <figure className={`mx-auto ${variantWidth('grid', content.variant)}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

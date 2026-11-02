@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { Calendar, Lock, Megaphone, Phone, type LucideIcon } from 'lucide-react';
 import type { QuicklinksBlockContent } from '@propertypro/shared';
 import type { BlockViewProps } from './types';
+import { formatInZone } from './format-in-zone';
 
 export interface QuickLinksData {
   /** The next meeting the Meetings section lists, as an ISO timestamp; null when there is none. */
@@ -25,46 +26,37 @@ export interface QuickLinksData {
   showContact: boolean;
 }
 
+/** "Tue, Nov 17". */
 const NEXT_MEETING_OPTS: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   month: 'short',
   day: 'numeric',
 };
 
-/** "Tue, Nov 17", in the community's time zone, falling back as the Meetings view does. */
-function formatNextMeeting(value: Date, timezone: string): string {
-  try {
-    return value.toLocaleDateString('en-US', {
-      ...NEXT_MEETING_OPTS,
-      timeZone: timezone || 'America/New_York',
-    });
-  } catch {
-    // Invalid timezone (legacy DB data); fall back to default.
-    return value.toLocaleDateString('en-US', { ...NEXT_MEETING_OPTS, timeZone: 'America/New_York' });
-  }
-}
-
 const LINK_CLASS =
-  'flex min-h-11 items-center gap-3 rounded-md border border-edge bg-surface-card px-4 py-3 text-base text-content transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
+  'flex min-h-11 items-start gap-4 rounded-md py-6 text-content-inverse transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse site-md:px-6';
 
 function QuickLink({
   href,
   icon: Icon,
   label,
+  describedBy,
   children,
 }: {
   href: string;
   icon: LucideIcon;
   label: string;
-  children?: ReactNode;
+  /** The id of a hint a reader should hear after the name, as the link's description. */
+  describedBy?: string;
+  children: ReactNode;
 }) {
   return (
     <li>
       {/* A plain <a>, not next/link: the public site ships no client runtime. */}
-      <a href={href} className={LINK_CLASS}>
-        <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-        <span className="flex flex-col">
-          <span className="font-medium">{label}</span>
+      <a href={href} className={LINK_CLASS} aria-describedby={describedBy}>
+        <Icon className="mt-1 h-5 w-5 shrink-0" aria-hidden="true" />
+        <span className="flex flex-col gap-1">
+          <span className="text-base font-semibold">{label}</span>
           {children}
         </span>
       </a>
@@ -72,8 +64,26 @@ function QuickLink({
   );
 }
 
+/**
+ * A line under a link's name. It is left out of the name, so assistive tech hears
+ * "News", not "News Notices from the board"; a hint that adds something (the
+ * sign-in) is still heard, as the link's description (`describedBy`).
+ */
+function Hint({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <span id={id} className="text-base" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
 export type QuickLinksBlockViewProps = BlockViewProps<QuicklinksBlockContent, QuickLinksData>;
 
+/**
+ * Drawn as a band in the theme's primary colour right under the welcome: the
+ * things a resident comes for first, with the next meeting's date set large.
+ * `data-band` keeps the look's section tint and accent rules off it (SiteChrome).
+ */
 export function QuickLinksBlockView({ blockId, data, community, anchorId }: QuickLinksBlockViewProps) {
   const headingId = `quicklinks-${blockId}`;
   const { nextMeeting } = data;
@@ -86,27 +96,40 @@ export function QuickLinksBlockView({ blockId, data, community, anchorId }: Quic
   return (
     <section
       id={anchorId}
-      className="px-4 py-8 site-sm:px-6 site-lg:px-8"
+      data-band="primary"
+      className="bg-primary px-6 site-sm:px-8 site-lg:px-10"
       aria-labelledby={headingId}
     >
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-6xl">
         <h2 id={headingId} className="sr-only">
           Quick links
         </h2>
-        <ul className="grid gap-3 site-sm:grid-cols-2">
+        <ul className="grid divide-y divide-white/20 site-sm:grid-cols-2 site-sm:divide-y-0 site-md:-mx-6 site-md:grid-cols-4 site-md:divide-x">
           {data.showMeetings && (
             <QuickLink href="#meetings" icon={Calendar} label="Meetings">
-              {next && (
-                <span className="text-content-secondary">
-                  {'Next: '}
-                  <time dateTime={next.iso}>{formatNextMeeting(next.date, community.timezone)}</time>
+              {next ? (
+                <span className="font-heading text-2xl leading-tight">
+                  <span className="sr-only">Next: </span>
+                  <time dateTime={next.iso}>{formatInZone(next.date, community.timezone, NEXT_MEETING_OPTS)}</time>
                 </span>
+              ) : (
+                <Hint>Dates and places</Hint>
               )}
             </QuickLink>
           )}
-          {data.showNews && <QuickLink href="#announcements" icon={Megaphone} label="News" />}
-          <QuickLink href="/auth/login" icon={Lock} label="Owner documents" />
-          {data.showContact && <QuickLink href="#contact" icon={Phone} label="Contact" />}
+          {data.showNews && (
+            <QuickLink href="#announcements" icon={Megaphone} label="News">
+              <Hint>Notices from the board</Hint>
+            </QuickLink>
+          )}
+          <QuickLink href="/auth/login" icon={Lock} label="Owner documents" describedBy={`${headingId}-sign-in`}>
+            <Hint id={`${headingId}-sign-in`}>Sign in to read the records</Hint>
+          </QuickLink>
+          {data.showContact && (
+            <QuickLink href="#contact" icon={Phone} label="Contact">
+              <Hint>Office and management</Hint>
+            </QuickLink>
+          )}
         </ul>
       </div>
     </section>

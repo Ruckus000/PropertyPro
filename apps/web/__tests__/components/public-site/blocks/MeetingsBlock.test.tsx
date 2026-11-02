@@ -109,7 +109,7 @@ describe('<MeetingsBlock>', () => {
     expect(() => render(ui as React.ReactElement)).not.toThrow();
   });
 
-  it('renders the "When" label for meeting start time', async () => {
+  it('shows the start as a calendar tile with a machine-readable time, and the place', async () => {
     listMeetingsMock.mockResolvedValueOnce([
       {
         id: 3,
@@ -121,8 +121,10 @@ describe('<MeetingsBlock>', () => {
       },
     ]);
     const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 30 }));
-    render(ui as React.ReactElement);
-    expect(screen.getByText('When')).toBeInTheDocument();
-    expect(screen.getByText('Where')).toBeInTheDocument();
+    const { container } = render(ui as React.ReactElement);
+    const time = container.querySelector('time');
+    expect(time?.getAttribute('dateTime')).toBe('2026-05-15T19:00:00.000Z');
+    expect(time?.textContent).toBe('May 15 2026');
+    expect(screen.getByText('Conference Room A')).toBeInTheDocument();
   });
 });

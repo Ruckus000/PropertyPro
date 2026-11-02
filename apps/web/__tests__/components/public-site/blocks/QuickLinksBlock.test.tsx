@@ -98,9 +98,13 @@ async function renderShell(props: BlockRendererProps) {
   return { ui, ...render(<>{ui}</>) };
 }
 
-/** The visible links, in order, by their accessible name. */
+/** Each link's text as a reader hears it: hint lines that only restate the name are aria-hidden. */
 function linkNames(): string[] {
-  return screen.queryAllByRole('link').map((link) => link.textContent ?? '');
+  return screen.queryAllByRole('link').map((link) => {
+    const copy = link.cloneNode(true) as HTMLElement;
+    copy.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+    return copy.textContent ?? '';
+  });
 }
 
 beforeEach(() => {

@@ -22,6 +22,11 @@ import { MeetingsBlockView } from '@/components/public-site/blocks/MeetingsBlock
 import { OwnerRecordsSummary } from '@/components/public-site/blocks/OwnerRecordsSummary';
 import type { BlockRendererProps, PublicCommunity } from '@/components/public-site/blocks/types';
 
+/** A records row, by what a reader hears: "Financial records · 3" (the count sits apart visually). */
+function recordRow(text: string) {
+  return screen.getByText((_, el) => el?.tagName === 'LI' && el.textContent === text);
+}
+
 const reader = vi.hoisted(() => ({
   listAnnouncements: vi.fn(),
   listDocuments: vi.fn(),
@@ -122,7 +127,7 @@ describe('the public Documents section', () => {
     expect(
       screen.getByText("Owners can sign in to see the association's official records."),
     ).toBeInTheDocument();
-    expect(screen.getByText('Financial records · 3')).toBeInTheDocument();
+    expect(recordRow('Financial records · 3')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Owner sign in' })).toHaveAttribute('href', '/auth/login');
     // The empty list's own section ("Documents" + its placeholder) is not rendered.
     expect(screen.queryByRole('heading', { name: 'Documents' })).toBeNull();
@@ -140,8 +145,8 @@ describe('the public Documents section', () => {
       'href',
       '/api/v1/public/documents/1/download?communityId=42',
     );
-    expect(screen.getByText('Financial records · 3')).toBeInTheDocument();
-    expect(screen.getByText('Governing documents · 5')).toBeInTheDocument();
+    expect(recordRow('Financial records · 3')).toBeInTheDocument();
+    expect(recordRow('Governing documents · 5')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Owner sign in' })).toHaveAttribute('href', '/auth/login');
     // Sibling sections, the list first and the summary below it.
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
@@ -187,7 +192,7 @@ describe('the public Documents section', () => {
     const ui = await DocumentsBlock(props('documents', { limit: 5 }));
     render(ui as React.ReactElement);
 
-    expect(screen.getByText('Financial records · 3')).toBeInTheDocument();
+    expect(recordRow('Financial records · 3')).toBeInTheDocument();
   });
 });
 
