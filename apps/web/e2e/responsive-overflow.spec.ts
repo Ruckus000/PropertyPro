@@ -13,6 +13,11 @@
  * that goes near layout, and it deliberately asks only one structural question
  * (no raw `<table>`), because a geometry claim belongs in a browser.
  *
+ * Since the top tabs became the default (NEXT_PUBLIC_TOP_NAV_ENABLED, 2026-11-02) the rail
+ * no longer pushes at `lg`+: it is shown there only with no community in scope
+ * (/select-community), so the content box is the viewport minus the gutter. The kill switch
+ * (`=false`) brings the 260px push back, which is the band described above.
+ *
  * The check that matters is the second one. A page-level `scrollWidth` assertion alone
  * misses the common case, where an inner box overflows and the excess is clipped by an
  * ancestor's `overflow-hidden` — text simply disappears, with no scrollbar to reveal it.

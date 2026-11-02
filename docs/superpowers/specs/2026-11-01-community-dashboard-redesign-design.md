@@ -72,6 +72,11 @@ An implementer who disagrees with an entry files a finding and does not stop to 
 
 ### Wave 2: top tabs behind `NEXT_PUBLIC_TOP_NAV_ENABLED`
 
+> **Flipped on 2026-11-02 (the flip PR after #1438).** The tabs are now the default: the
+> inline checks read `!== 'false'`, `next.config.ts` maps an unset variable to `"true"`, and
+> only the exact value `false` brings the rail back (a kill switch, still dead-code-eliminated).
+> Removing the flag and the rail branch is the `ponytail:` marker in `top-nav-flag.ts`.
+
 | # | Decision | Rung / why |
 |---|---|---|
 | D23 | **Flag:** `NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'`, the same build-time pattern as `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED`. Off: today's markup, byte for byte. On, at `lg` and up: the desktop `AppSidebar` wrapper is not rendered, and a tab row renders under `AppTopBar`. Below `lg`: the hamburger + `AppSidebar` drawer, **unchanged**. | The rail component is **never deleted**: the phone drawer and `EditorFrame` keep using it. Marker: `ponytail: two desktop navs while the flag exists. Trigger: the flag is on in production; the flip PR removes the off branch and the flag.` |

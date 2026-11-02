@@ -2,22 +2,21 @@
 /**
  * AppShell with and without the top-nav flag (D23, D29).
  *
- * Flag off must render the shell as it always did: the desktop rail wrapper, no
- * brand slot, and no pathname read (the shell called no navigation hook before
- * the flag existed). Flag on swaps that wrapper for the tab row under the top bar
- * and puts the brand (tile, community name, plan) first in the top bar. The
- * mobile hamburger is the same either way.
+ * The tabs are ON unless the variable is exactly 'false' (the kill switch). With
+ * them on, the tab row replaces the desktop rail wrapper under the top bar and the
+ * brand (tile, community name, plan) comes first in the top bar. With the kill
+ * switch the shell renders as it did before the tabs: the rail wrapper, no brand
+ * slot, and no pathname read. The mobile hamburger is the same either way.
  *
- * The flag is read inline from `process.env` at module load (so a flag-off build
- * drops the flag-on imports), so the flag-on cases stub the variable and import a
- * fresh copy of the shell. `ShellTopNav` and `AppSidebar` are stubbed: their own
+ * The flag is read inline from `process.env` at module load (so a kill-switched
+ * build drops the tab row's imports), so each case stubs the variable and imports
+ * a fresh copy of the shell. `ShellTopNav` and `AppSidebar` are stubbed: their own
  * tests cover what they render; this file covers WHERE the shell mounts them.
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { getFeaturesForCommunity } from '@propertypro/shared';
-import { AppShell as FlagOffAppShell } from '@/components/layout/app-shell';
 
 const nav = vi.hoisted(() => ({ pathname: '/dashboard' }));
 const usePathnameSpy = vi.hoisted(() => vi.fn(() => nav.pathname));
@@ -56,11 +55,11 @@ vi.mock('@/components/billing/subscription-billing-banners', () => ({
 vi.mock('@/components/demo/DemoTrialBanner', () => ({ DemoTrialBanner: () => null }));
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }));
 
-type Shell = typeof FlagOffAppShell;
+type Shell = typeof import('@/components/layout/app-shell').AppShell;
 
-/** A copy of the shell loaded with the build-time flag on. */
-async function loadFlagOnShell(): Promise<Shell> {
-  vi.stubEnv('NEXT_PUBLIC_TOP_NAV_ENABLED', 'true');
+/** A fresh copy of the shell, loaded with the variable set to `value` (undefined = unset). */
+async function loadShell(value: string | undefined): Promise<Shell> {
+  vi.stubEnv('NEXT_PUBLIC_TOP_NAV_ENABLED', value);
   vi.resetModules();
   return (await import('@/components/layout/app-shell')).AppShell;
 }
@@ -83,10 +82,17 @@ function renderShell(
   );
 }
 
-describe('AppShell — top-nav flag off', () => {
-  beforeEach(() => {
+describe('AppShell — kill switch (NEXT_PUBLIC_TOP_NAV_ENABLED=false)', () => {
+  let FlagOffAppShell: Shell;
+
+  beforeEach(async () => {
     nav.pathname = '/dashboard';
     usePathnameSpy.mockClear();
+    FlagOffAppShell = await loadShell('false');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('desktop sidebar present, no TopNav, no brand slot', () => {
@@ -107,7 +113,7 @@ describe('AppShell — top-nav flag off', () => {
     expect(usePathnameSpy).not.toHaveBeenCalled();
   });
 
-  it('topNav={true} cannot mount tabs in a flag-off build, which never loads them', () => {
+  it('topNav={true} cannot mount tabs in a kill-switched build, which never loads them', () => {
     renderShell(FlagOffAppShell, { topNav: true });
 
     expect(screen.getByTestId('desktop-sidebar').parentElement).toHaveClass('hidden', 'lg:block');
@@ -116,13 +122,14 @@ describe('AppShell — top-nav flag off', () => {
   });
 });
 
-describe('AppShell — top-nav flag on', () => {
+describe('AppShell — top tabs on (the default)', () => {
   let FlagOnAppShell: Shell;
 
   beforeEach(async () => {
     nav.pathname = '/dashboard';
     usePathnameSpy.mockClear();
-    FlagOnAppShell = await loadFlagOnShell();
+    // Unset is the default build: next.config.ts also maps unset to 'true'.
+    FlagOnAppShell = await loadShell(undefined);
   });
 
   afterEach(() => {
@@ -137,6 +144,13 @@ describe('AppShell — top-nav flag on', () => {
     // The tab row sits under the top bar, before the page content.
     const header = document.querySelector('header') as HTMLElement;
     expect(header.nextElementSibling?.contains(screen.getByTestId('top-nav'))).toBe(true);
+  });
+
+  it("an explicit 'true' also turns the tabs on", async () => {
+    const Explicit = await loadShell('true');
+    renderShell(Explicit);
+    expect(await screen.findByTestId('top-nav')).toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-sidebar')).toBeNull();
   });
 
   it('topNav={false} keeps the rail in a flag-on build', async () => {

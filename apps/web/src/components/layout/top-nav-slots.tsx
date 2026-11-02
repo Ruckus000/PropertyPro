@@ -53,7 +53,10 @@ export function ShellBrandSlot({
   return (
     <div className="flex min-w-0 items-center gap-3">
       <PropertyProTile />
-      <span className="max-w-[16rem] truncate text-sm font-semibold text-content">
+      <span
+        className="max-w-[16rem] truncate text-sm font-semibold text-content"
+        title={communityName ?? undefined}
+      >
         {communityName ?? 'PropertyPro'}
       </span>
       {planId ? <PlanBadge label={PLAN_FEATURES[planId].displayName} /> : null}
