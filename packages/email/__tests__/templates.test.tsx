@@ -7,6 +7,7 @@ import {
   ComplianceAlertEmail,
   AnnouncementEmail,
   MaintenanceUpdateEmail,
+  ResidentNoticeEmail,
   DocumentPostedEmail,
   NotificationDigestEmail,
   SignupVerificationEmail,
@@ -605,6 +606,38 @@ describe("AnnouncementEmail", () => {
 // ---------------------------------------------------------------------------
 // MaintenanceUpdateEmail
 // ---------------------------------------------------------------------------
+
+describe("ResidentNoticeEmail", () => {
+  const notice = (
+    <ResidentNoticeEmail
+      branding={brandingMinimal}
+      recipientName="Jane Doe"
+      category="Package delivery"
+      title="New package received"
+      description="UPS delivery for Jane Doe"
+      actionUrl="https://example.com/dashboard/packages?communityId=1"
+      actionLabel="View my packages"
+      severity="info"
+    />
+  );
+
+  it("renders the title, description and its own button", async () => {
+    const html = await render(notice);
+    expect(html).toContain("New package received");
+    expect(html).toContain("UPS delivery for Jane Doe");
+    expect(html).toContain("View my packages");
+    expect(html).toContain('href="https://example.com/dashboard/packages?communityId=1"');
+  });
+
+  // It replaces the compliance alert for residents; none of that email's
+  // board-only framing may come along with it.
+  it("carries no compliance-alert wording", async () => {
+    const html = await render(notice);
+    expect(html).not.toMatch(/compliance/i);
+    expect(html).not.toContain("718.111");
+    expect(html).not.toContain("Board &amp; manager");
+  });
+});
 
 describe("MaintenanceUpdateEmail", () => {
   it("renders without errors", async () => {

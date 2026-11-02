@@ -83,6 +83,7 @@ vi.mock('@propertypro/email', () => ({
   MaintenanceUpdateEmail: (props: unknown) => ({ type: 'MaintenanceUpdateEmail', props }),
   ComplianceAlertEmail: (props: unknown) => ({ type: 'ComplianceAlertEmail', props }),
   DocumentPostedEmail: (props: unknown) => ({ type: 'DocumentPostedEmail', props }),
+  ResidentNoticeEmail: (props: unknown) => ({ type: 'ResidentNoticeEmail', props }),
   sendEmail: sendEmailMock,
   sendBulkEmail: sendBulkEmailMock,
 }));
@@ -102,6 +103,7 @@ import type {
   MaintenanceUpdateEvent,
   ComplianceAlertEvent,
   DocumentPostedEvent,
+  ResidentNoticeEvent,
 } from '../../src/lib/services/notification-service';
 
 // ---------------------------------------------------------------------------
@@ -552,6 +554,111 @@ describe('notification-service', () => {
       const emailArgs = sendEmailMock.mock.calls[0]![0] as { category: string; react: { props: { items: unknown } } };
       expect(emailArgs.category).toBe('non-transactional');
       expect(emailArgs.react.props.items).toEqual(items);
+    });
+
+    // Residents used to receive these as `compliance_alert`: a board-and-manager
+    // email titled "Action Required: … is overdue" whose button opened the
+    // compliance page, which tenants cannot read and apartments do not have.
+    describe('resident notices', () => {
+      const residentRoles = [
+        { userId: 'u-tenant', role: 'resident', isAdmin: false, isUnitOwner: false, displayTitle: 'Tenant' },
+      ];
+      const residentUsers = [{ id: 'u-tenant', email: 'tenant@example.com', fullName: 'Tenant User', deletedAt: null }];
+      const digestPrefs = [
+        { userId: 'u-tenant', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
+      ];
+
+      const cases: Array<{
+        name: string;
+        event: ResidentNoticeEvent;
+        subject: string;
+        url: string;
+        actionLabel: string;
+        digestSourceType: string;
+      }> = [
+        {
+          name: 'package',
+          event: { type: 'resident_notice', topic: 'package', title: 'New package received', description: 'UPS delivery for Tenant User', severity: 'info', recordId: '31', sourceId: '31' },
+          subject: 'Palm Gardens Condo: New package received',
+          url: `https://app.example.test/dashboard/packages?communityId=${COMMUNITY_ID}`,
+          actionLabel: 'View my packages',
+          digestSourceType: 'package',
+        },
+        {
+          name: 'visitor',
+          event: { type: 'resident_notice', topic: 'visitor', title: 'Ana has checked in', description: 'Your visitor Ana was checked in successfully.', severity: 'info', recordId: '12', sourceId: '12:checked_in' },
+          subject: 'Palm Gardens Condo: Ana has checked in',
+          url: `https://app.example.test/dashboard/visitors?communityId=${COMMUNITY_ID}`,
+          actionLabel: 'View my visitors',
+          digestSourceType: 'visitor',
+        },
+        {
+          name: 'violation',
+          event: { type: 'resident_notice', topic: 'violation', title: 'Violation Notice Issued', description: 'Violation #77 has been marked as noticed.', severity: 'warning', recordId: '77', sourceId: '77' },
+          subject: 'Palm Gardens Condo: Violation Notice Issued',
+          url: `https://app.example.test/violations/77?communityId=${COMMUNITY_ID}`,
+          actionLabel: 'View violation',
+          digestSourceType: 'violation',
+        },
+        {
+          name: 'ARC decision',
+          event: { type: 'resident_notice', topic: 'arc', title: 'ARC Application Approved', description: 'Your ARC application #8 was approved.', severity: 'info', recordId: '8', sourceId: '8' },
+          subject: 'Palm Gardens Condo: ARC Application Approved',
+          url: `https://app.example.test/arc-requests?communityId=${COMMUNITY_ID}`,
+          actionLabel: 'View my ARC requests',
+          digestSourceType: 'arc',
+        },
+      ];
+
+      for (const c of cases) {
+        it(`emails a ${c.name} notice with its own subject and link`, async () => {
+          vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+          setupMock(residentRoles, residentUsers, []);
+
+          await sendNotification(COMMUNITY_ID, c.event, { type: 'specific_user', userId: 'u-tenant' }, 'actor-1');
+
+          const emailArgs = sendEmailMock.mock.calls[0]![0] as {
+            subject: string;
+            react: { type: { name: string }; props: { actionUrl: string; actionLabel: string } };
+          };
+          expect(emailArgs.subject).toBe(c.subject);
+          expect(emailArgs.react.type.name).toBe('ResidentNoticeEmail');
+          expect(emailArgs.react.props.actionUrl).toBe(c.url);
+          expect(emailArgs.react.props.actionLabel).toBe(c.actionLabel);
+        });
+
+        it(`queues a ${c.name} digest entry linking to the same page`, async () => {
+          vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+          setupMock(residentRoles, residentUsers, digestPrefs);
+          enqueueDigestItemsMock.mockResolvedValueOnce({ enqueued: 1, duplicates: 0 });
+
+          await sendNotification(COMMUNITY_ID, c.event, { type: 'specific_user', userId: 'u-tenant' }, 'actor-1');
+
+          expect(sendEmailMock).not.toHaveBeenCalled();
+          expect(enqueueDigestItemsMock).toHaveBeenCalledWith([
+            expect.objectContaining({
+              sourceType: c.digestSourceType,
+              sourceId: c.event.sourceId,
+              eventType: 'resident_notice',
+              eventTitle: c.event.title,
+              actionUrl: c.url,
+            }),
+          ]);
+        });
+      }
+
+      it('keeps a notice without a sourceId out of the digest', async () => {
+        setupMock(residentRoles, residentUsers, digestPrefs);
+
+        await sendNotification(
+          COMMUNITY_ID,
+          { type: 'resident_notice', topic: 'visitor', title: 'Ana visitor pass expires soon', description: 'x', severity: 'warning', recordId: '12' },
+          { type: 'specific_user', userId: 'u-tenant' },
+          'actor-1',
+        );
+
+        expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+      });
     });
 
     it('sends document posted emails', async () => {

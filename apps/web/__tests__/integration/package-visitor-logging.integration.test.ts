@@ -153,7 +153,7 @@ describeDb('WS71 package/visitor logging (db-backed integration)', () => {
     const packageNotifications = getCapturedNotifications().filter(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
+        && entry.event.type === 'resident_notice'
         && entry.event.sourceId === String(packageId)
         && typeof entry.recipientFilter === 'object'
         && entry.recipientFilter.type === 'specific_user'

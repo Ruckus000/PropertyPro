@@ -26,11 +26,17 @@ import {
   DocumentPostedEmail,
   MeetingNoticeEmail,
   MaintenanceUpdateEmail,
+  ResidentNoticeEmail,
   sendBulkEmail,
   type SendEmailOptions,
 } from '@propertypro/email';
 import type { CommunityBranding } from '@propertypro/email';
 import { operationsHubHref } from '@/lib/operations/routes';
+import {
+  RESIDENT_NOTICE_TOPICS,
+  residentNoticePath,
+  type ResidentNoticeTopic,
+} from './resident-notice-routes';
 import { ADMIN_TIER_DB_ROLES, hasBoardDesignation, isCommunityRole, type CommunityRole } from '@propertypro/shared';
 // Note: ADMIN_ROLES and BOARD_ROLES from shared still use legacy role names.
 // isRoleMatch below matches user_roles.role against the bilingual tier
@@ -75,7 +81,8 @@ export type NotificationEvent =
   | MeetingNoticeEvent
   | MaintenanceUpdateEvent
   | ComplianceAlertEvent
-  | DocumentPostedEvent;
+  | DocumentPostedEvent
+  | ResidentNoticeEvent;
 
 export interface MeetingNoticeEvent {
   type: 'meeting_notice';
@@ -110,6 +117,28 @@ export interface ComplianceAlertEvent {
   /** Optional per-item punch list for the email; only the checklist sweep supplies it. */
   items?: ComplianceAlertItem[];
   sourceType?: 'compliance';
+  sourceId?: string;
+}
+
+/**
+ * A notice to a resident about their own home: a package, a visitor, a
+ * violation on their unit, a decision on their ARC request. Not a compliance
+ * alert — that one goes to the board and managers, links to the compliance
+ * page (which residents cannot open) and cites the statute.
+ */
+export interface ResidentNoticeEvent {
+  type: 'resident_notice';
+  topic: ResidentNoticeTopic;
+  title: string;
+  description: string;
+  severity: 'info' | 'warning';
+  /** The package, visitor pass, violation or ARC application this is about. */
+  recordId: string;
+  /**
+   * Digest identity (`<id>` or `<id>:<key>`). Omit to keep the notice
+   * immediate-only. The digest dedupes on (topic, sourceId), so two different
+   * notices about one record need different keys.
+   */
   sourceId?: string;
 }
 
@@ -150,6 +179,8 @@ const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   maintenance_update: 'maintenance',
   compliance_alert: 'meeting',
   document_posted: 'document',
+  // Same preference the compliance_alert event these used to borrow had.
+  resident_notice: 'meeting',
 };
 
 export interface InAppNotificationEvent {
@@ -307,6 +338,11 @@ function resolveDigestSource(event: NotificationEvent): {
     };
   }
 
+  if (event.type === 'resident_notice') {
+    if (!event.sourceId) return null;
+    return { sourceType: event.topic, sourceId: event.sourceId };
+  }
+
   return null;
 }
 
@@ -354,6 +390,16 @@ function buildDigestPayload(
         ? `${event.documentCategory} · Uploaded by ${event.uploadedByName}`
         : `Uploaded by ${event.uploadedByName}`,
       actionUrl: `${baseUrl}/documents/${event.documentId}?communityId=${communityId}`,
+    };
+  }
+
+  if (event.type === 'resident_notice') {
+    return {
+      ...source,
+      eventType: event.type,
+      eventTitle: event.title,
+      eventSummary: event.description,
+      actionUrl: `${baseUrl}${residentNoticePath(event.topic, communityId, event.recordId)}`,
     };
   }
 
@@ -569,6 +615,22 @@ function renderEmailForEvent(
           dashboardUrl: `${baseUrl}/communities/${communityId}/compliance`,
           severity: event.severity,
           items: event.items,
+        }),
+      };
+    }
+    case 'resident_notice': {
+      const topic = RESIDENT_NOTICE_TOPICS[event.topic];
+      return {
+        subject: `${branding.communityName}: ${event.title}`,
+        react: createElement(ResidentNoticeEmail, {
+          branding,
+          recipientName: recipient.fullName,
+          category: topic.category,
+          title: event.title,
+          description: event.description,
+          actionUrl: `${baseUrl}${residentNoticePath(event.topic, communityId, event.recordId)}`,
+          actionLabel: topic.actionLabel,
+          severity: event.severity,
         }),
       };
     }

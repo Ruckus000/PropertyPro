@@ -155,6 +155,7 @@ function mapEventTypeToKind(eventType: string): NotificationKind | null {
   if (eventType === 'document_shared') return 'document';
   if (eventType === 'maintenance_update') return 'maintenance';
   if (eventType === 'compliance_alert') return 'meeting';
+  if (eventType === 'resident_notice') return 'meeting';
   return null;
 }
 
