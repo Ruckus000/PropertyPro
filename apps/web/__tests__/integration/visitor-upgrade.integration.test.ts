@@ -305,8 +305,8 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const checkInNotification = getCapturedNotifications().find(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
-        && entry.event.alertTitle === `One Time ${kit.runSuffix} has checked in`
+        && entry.event.type === 'resident_notice'
+        && entry.event.title === `One Time ${kit.runSuffix} has checked in`
         && typeof entry.recipientFilter === 'object'
         && entry.recipientFilter.type === 'specific_user'
         && entry.recipientFilter.userId === tenantA.id,
@@ -324,8 +324,8 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const expiryNotification = getCapturedNotifications().find(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
-        && entry.event.alertTitle === `Recurring ${kit.runSuffix} visitor pass expires soon`
+        && entry.event.type === 'resident_notice'
+        && entry.event.title === `Recurring ${kit.runSuffix} visitor pass expires soon`
         && typeof entry.recipientFilter === 'object'
         && entry.recipientFilter.type === 'specific_user'
         && entry.recipientFilter.userId === tenantA.id,
@@ -377,8 +377,8 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const revokeNotification = getCapturedNotifications().find(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
-        && entry.event.alertTitle === `Self Revoke ${kit.runSuffix} visitor pass revoked`
+        && entry.event.type === 'resident_notice'
+        && entry.event.title === `Self Revoke ${kit.runSuffix} visitor pass revoked`
         && typeof entry.recipientFilter === 'object'
         && entry.recipientFilter.type === 'specific_user'
         && entry.recipientFilter.userId === tenantA.id,

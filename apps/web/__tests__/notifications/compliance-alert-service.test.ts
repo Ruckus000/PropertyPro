@@ -59,6 +59,7 @@ import {
   checkAndAlertOverdueItems,
   processComplianceAlerts,
 } from '../../src/lib/services/compliance-alert-service';
+import { residentNoticePath } from '../../src/lib/services/resident-notice-routes';
 
 const COMMUNITY_ID = 5;
 const NOW = new Date('2026-03-15T12:00:00.000Z');
@@ -551,17 +552,22 @@ describe('processComplianceAlerts', () => {
     expect(sendNotificationMock).toHaveBeenCalledWith(
       1,
       expect.objectContaining({
-        type: 'compliance_alert',
-        alertTitle: 'Casey Guest visitor pass expires soon',
+        // A resident notice, not a compliance alert: the host is a resident,
+        // and the compliance page is closed to tenants.
+        type: 'resident_notice',
+        topic: 'visitor',
+        title: 'Casey Guest visitor pass expires soon',
         severity: 'warning',
+        recordId: '77',
       }),
       { type: 'specific_user', userId: 'resident-1' },
       undefined,
     );
 
-    const event = sendNotificationMock.mock.calls[0]?.[1] as Record<string, unknown>;
+    const event = sendNotificationMock.mock.calls[0]?.[1] as { topic: 'visitor'; recordId: string };
     expect(event).toBeDefined();
     expect('sourceId' in event).toBe(false);
+    expect(residentNoticePath(event.topic, 1, event.recordId)).toBe('/dashboard/visitors?communityId=1');
   });
 
   it('applies community filtering to expiring visitor notifications', async () => {
@@ -603,7 +609,7 @@ describe('processComplianceAlerts', () => {
     expect(sendNotificationMock).toHaveBeenCalledWith(
       2,
       expect.objectContaining({
-        alertTitle: 'Robin Guest visitor pass expires soon',
+        title: 'Robin Guest visitor pass expires soon',
       }),
       { type: 'specific_user', userId: 'resident-2' },
       undefined,

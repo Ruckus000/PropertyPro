@@ -30,6 +30,9 @@ export type { AnnouncementEmailProps } from "./templates/announcement-email";
 export { MaintenanceUpdateEmail } from "./templates/maintenance-update-email";
 export type { MaintenanceUpdateEmailProps } from "./templates/maintenance-update-email";
 
+export { ResidentNoticeEmail } from "./templates/resident-notice-email";
+export type { ResidentNoticeEmailProps } from "./templates/resident-notice-email";
+
 export { DocumentPostedEmail } from "./templates/document-posted-email";
 export type { DocumentPostedEmailProps } from "./templates/document-posted-email";
 export { DocumentSharedEmail } from "./templates/document-shared-email";

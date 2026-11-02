@@ -31,6 +31,7 @@ import { AppError, BadRequestError, ConflictError, ForbiddenError, NotFoundError
 import { parseDateOnly } from '@/lib/finance/common';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { createNotificationsForEvent, sendNotification } from '@/lib/services/notification-service';
+import { residentNoticePath } from '@/lib/services/resident-notice-routes';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import { withUnitLabels } from '@/lib/units/unit-labels';
 import {
@@ -308,11 +309,12 @@ async function notifyViolationNotice(
       await sendNotification(
         communityId,
         {
-          type: 'compliance_alert',
-          alertTitle: 'Violation Notice Issued',
-          alertDescription: `Violation #${violation.id} has been marked as noticed.`,
+          type: 'resident_notice',
+          topic: 'violation',
+          title: 'Violation Notice Issued',
+          description: `Violation #${violation.id} has been marked as noticed.`,
           severity: 'warning',
-          sourceType: 'compliance',
+          recordId: String(violation.id),
           sourceId: String(violation.id),
         },
         { type: 'specific_user', userId },
@@ -325,7 +327,7 @@ async function notifyViolationNotice(
           category: 'violation',
           title: 'Violation Notice Issued',
           body: `Violation #${violation.id} has been noticed.`,
-          actionUrl: `/violations/${violation.id}`,
+          actionUrl: residentNoticePath('violation', communityId, String(violation.id)),
           sourceType: 'violation',
           sourceId: String(violation.id),
           priority: 'high',
@@ -355,13 +357,14 @@ async function notifyArcDecision(
     await sendNotification(
       communityId,
       {
-        type: 'compliance_alert',
-        alertTitle: approved ? 'ARC Application Approved' : 'ARC Application Decision',
-        alertDescription: approved
+        type: 'resident_notice',
+        topic: 'arc',
+        title: approved ? 'ARC Application Approved' : 'ARC Application Decision',
+        description: approved
           ? `Your ARC application #${submission.id} was approved.`
           : `Your ARC application #${submission.id} was denied.`,
         severity: approved ? 'info' : 'warning',
-        sourceType: 'compliance',
+        recordId: String(submission.id),
         sourceId: String(submission.id),
       },
       { type: 'specific_user', userId: submission.submittedByUserId },
@@ -374,7 +377,7 @@ async function notifyArcDecision(
         category: 'violation',
         title: approved ? 'ARC Application Approved' : 'ARC Application Denied',
         body: `Your ARC application #${submission.id} was ${approved ? 'approved' : 'denied'}.`,
-        actionUrl: `/arc/${submission.id}`,
+        actionUrl: residentNoticePath('arc', communityId, String(submission.id)),
         sourceType: 'violation',
         sourceId: `violation-arc:${submission.id}:${submission.status}`,
         priority: approved ? 'normal' : 'high',

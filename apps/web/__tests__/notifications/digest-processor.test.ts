@@ -634,6 +634,59 @@ describe('notification digest processor', () => {
     expect(sendCall?.react.props.items.map((item) => item.title)).toEqual(['Rules 2026']);
   });
 
+  // An eventType the processor cannot map to a preference is discarded, so a
+  // new notification event that reaches the digest must be mapped here too.
+  it('delivers a queued resident notice (package) with its own link', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'tenant@example.com', fullName: 'Tenant', deletedAt: null }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest', inAppEnabled: true }],
+    });
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 21,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'package',
+        sourceId: '31',
+        eventType: 'resident_notice',
+        eventTitle: 'New package received',
+        eventSummary: 'UPS delivery for Tenant',
+        actionUrl: 'https://app.local/dashboard/packages?communityId=101',
+        attemptCount: 0,
+      },
+    ]);
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      queryIncludingDeleted: vi.fn(async () => []),
+      selectFrom: selectUsersFor(communityId),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({ now: new Date('2026-02-18T13:30:00.000Z') });
+
+    expect(summary.rowsDiscarded).toBe(0);
+    expect(summary.rowsSent).toBe(1);
+    const sendCall = sendEmailMock.mock.calls[0]?.[0] as
+      | { react: { props: { items: Array<{ title: string; actionUrl?: string }> } } }
+      | undefined;
+    expect(sendCall?.react.props.items).toEqual([
+      expect.objectContaining({
+        title: 'New package received',
+        actionUrl: 'https://app.local/dashboard/packages?communityId=101',
+      }),
+    ]);
+  });
+
   it('drops a queued document notice whose document went back to a draft', async () => {
     findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
     hasMoreDigestRowsMock.mockResolvedValue(false);

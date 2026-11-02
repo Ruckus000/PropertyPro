@@ -78,6 +78,16 @@ export const FIXTURES: Record<string, TemplateFixture> = {
     minimal: () => <E.MaintenanceUpdateEmail branding={association} recipientName="Marisol" requestTitle="Leaky faucet in Unit 412" previousStatus="open" newStatus="in_progress" portalUrl={url('maintenance/42')} />,
     rich: () => <E.MaintenanceUpdateEmail branding={bulk} recipientName="Marisol" requestTitle="Leaky faucet in Unit 412" previousStatus="open" newStatus="in_progress" notes="Plumber scheduled for Thursday morning." portalUrl={url('maintenance/42')} />,
   },
+  'resident-notice-email': {
+    accent: 'coral',
+    sender: 'association',
+    minimal: () => (
+      <E.ResidentNoticeEmail branding={association} recipientName="Marisol" category="Package delivery" title="New package received" description="UPS delivery for Marisol Reyes" actionUrl={url('dashboard/packages?communityId=1')} actionLabel="View my packages" severity="info" />
+    ),
+    rich: () => (
+      <E.ResidentNoticeEmail branding={bulk} recipientName="Marisol" category="Violation notice" title="Violation Notice Issued" description="Violation #42 has been marked as noticed." actionUrl={url('violations/42?communityId=1')} actionLabel="View violation" severity="warning" />
+    ),
+  },
   'assessment-due-reminder': {
     accent: 'amber',
     sender: 'association',

@@ -302,10 +302,12 @@ async function notifyResidentsOfPackage(
       await queueNotification(
         communityId,
         {
-          type: 'compliance_alert',
-          alertTitle: 'New package received',
-          alertDescription: `${packageEntry.carrier} delivery for ${packageEntry.recipientName}`,
+          type: 'resident_notice',
+          topic: 'package',
+          title: 'New package received',
+          description: `${packageEntry.carrier} delivery for ${packageEntry.recipientName}`,
           severity: 'info',
+          recordId: String(packageEntry.id),
           sourceId: String(packageEntry.id),
         },
         {
@@ -328,6 +330,8 @@ async function notifyHostResidentOfVisitorEvent(
   actorUserId: string,
   visitorId: number,
   hostUserId: string | null,
+  /** Digest key: check-in and revocation of one pass must not dedupe against each other. */
+  eventKey: 'checked_in' | 'revoked',
   title: string,
   description: string,
 ): Promise<void> {
@@ -337,12 +341,13 @@ async function notifyHostResidentOfVisitorEvent(
     await queueNotification(
       communityId,
       {
-        type: 'compliance_alert',
-        alertTitle: title,
-        alertDescription: description,
+        type: 'resident_notice',
+        topic: 'visitor',
+        title,
+        description,
         severity: 'info',
-        sourceType: 'compliance',
-        sourceId: String(visitorId),
+        recordId: String(visitorId),
+        sourceId: `${visitorId}:${eventKey}`,
       },
       { type: 'specific_user', userId: hostUserId },
       actorUserId,
@@ -729,6 +734,7 @@ export async function checkInVisitorForCommunity(
     actorUserId,
     visitorId,
     existing.hostUserId,
+    'checked_in',
     `${existing.visitorName} has checked in`,
     `Your visitor ${existing.visitorName} was checked in successfully.`,
   );
@@ -977,6 +983,7 @@ export async function revokeVisitorForCommunity(
     actorUserId,
     visitorId,
     existing.hostUserId,
+    'revoked',
     `${existing.visitorName} visitor pass revoked`,
     reason
       ? `The visitor pass for ${existing.visitorName} was revoked. Reason: ${reason}`

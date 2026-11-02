@@ -83,6 +83,7 @@ import {
   updateViolationForCommunity,
   withdrawArcSubmissionForCommunity,
 } from '../../src/lib/services/violations-service';
+import { residentNoticePath } from '../../src/lib/services/resident-notice-routes';
 
 function createArcSubmissionRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -286,6 +287,40 @@ describe('violations-service', () => {
       expect(update).not.toHaveBeenCalled();
     });
 
+    // There is no ARC detail page: the in-app entry used to link `/arc/7`, a
+    // 404, and the email went to the compliance page.
+    it('links the ARC decision email and in-app entry to the ARC requests page', async () => {
+      const row = createArcSubmissionRow({ reviewNotes: null });
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update: vi.fn().mockResolvedValue([{ ...row, status: 'approved' }]),
+        insert: vi.fn(),
+      });
+      createNotificationsForEventMock.mockResolvedValue(undefined);
+
+      await decideArcSubmissionForCommunity(42, 7, 'reviewer-1', { decision: 'approved', reviewNotes: null });
+
+      expect(sendNotificationMock).toHaveBeenCalledWith(
+        42,
+        {
+          type: 'resident_notice',
+          topic: 'arc',
+          title: 'ARC Application Approved',
+          description: 'Your ARC application #7 was approved.',
+          severity: 'info',
+          recordId: '7',
+          sourceId: '7',
+        },
+        { type: 'specific_user', userId: 'resident-1' },
+        'reviewer-1',
+      );
+      const event = sendNotificationMock.mock.calls[0]![1];
+      expect(residentNoticePath(event.topic, 42, event.recordId)).toBe('/arc-requests?communityId=42');
+      expect(createNotificationsForEventMock.mock.calls[0]![1]).toMatchObject({
+        actionUrl: '/arc-requests?communityId=42',
+      });
+    });
+
     it('does not require a reason to APPROVE', async () => {
       const row = createArcSubmissionRow({ reviewNotes: null });
       const update = vi.fn().mockResolvedValue([{ ...row, status: 'approved' }]);
@@ -454,6 +489,37 @@ describe('violations-service', () => {
         { type: 'specific_user', userId: 'tenant-9' },
       ]);
     }
+  });
+
+  // These used to go out as a compliance alert linking to the compliance page,
+  // which tenants cannot open; the in-app entry linked `/violations/10` with no
+  // community, which the detail page refuses.
+  it('links the violation notice email and in-app entry to the violation page', async () => {
+    const row = createViolationRow({ status: 'reported' });
+    createScopedClientMock.mockReturnValue({
+      selectFrom: vi.fn().mockResolvedValue([row]),
+      update: vi.fn().mockResolvedValue([{ ...row, status: 'noticed' }]),
+      insert: vi.fn(),
+    });
+    listUnitResidentUserIdsMock.mockResolvedValue(['tenant-9']);
+    createNotificationsForEventMock.mockResolvedValue(undefined);
+
+    await updateViolationForCommunity(42, 10, 'manager-1', { status: 'noticed' });
+
+    const event = sendNotificationMock.mock.calls[0]![1];
+    expect(event).toEqual({
+      type: 'resident_notice',
+      topic: 'violation',
+      title: 'Violation Notice Issued',
+      description: 'Violation #10 has been marked as noticed.',
+      severity: 'warning',
+      recordId: '10',
+      sourceId: '10',
+    });
+    expect(residentNoticePath(event.topic, 42, event.recordId)).toBe('/violations/10?communityId=42');
+    expect(createNotificationsForEventMock.mock.calls[0]![1]).toMatchObject({
+      actionUrl: '/violations/10?communityId=42',
+    });
   });
 
   it('sends no violation notice when the cited unit has no residents on record', async () => {

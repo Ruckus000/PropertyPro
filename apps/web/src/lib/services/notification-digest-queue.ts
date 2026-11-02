@@ -7,7 +7,13 @@ export type DigestSourceType =
   | 'maintenance'
   | 'document'
   | 'announcement'
-  | 'compliance';
+  | 'compliance'
+  // Resident notices: one source type per topic, so a violation and a package
+  // that share an id do not dedupe against each other.
+  | 'package'
+  | 'visitor'
+  | 'violation'
+  | 'arc';
 
 export interface EnqueueDigestItemInput {
   communityId: number;

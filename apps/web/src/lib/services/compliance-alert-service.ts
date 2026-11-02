@@ -90,12 +90,13 @@ async function alertExpiringVisitorsForCommunity(
     notifiedCount += await sendNotification(
       communityId,
       {
-        type: 'compliance_alert',
-        alertTitle: `${row.visitorName} visitor pass expires soon`,
-        alertDescription:
+        type: 'resident_notice',
+        topic: 'visitor',
+        title: `${row.visitorName} visitor pass expires soon`,
+        description:
           `${row.visitorName}'s ${guestTypeLabel} visitor pass expires on ${expiryDateLabel}.`,
-        dueDate: expiryDateLabel,
         severity: 'warning',
+        recordId: String(row.id),
         // Intentionally omit sourceId so this remains immediate-only.
       },
       { type: 'specific_user', userId: row.hostUserId },

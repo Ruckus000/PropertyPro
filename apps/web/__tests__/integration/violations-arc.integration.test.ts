@@ -248,7 +248,7 @@ async function enableCommunityGate(
     const noticeNotifications = getCapturedNotifications().filter(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
+        && entry.event.type === 'resident_notice'
         && entry.event.sourceId === String(violationId),
     );
     expect(noticeNotifications.length).toBeGreaterThan(0);
@@ -352,7 +352,7 @@ async function enableCommunityGate(
     const arcNotifications = getCapturedNotifications().filter(
       (entry) =>
         entry.communityId === communityA.id
-        && entry.event.type === 'compliance_alert'
+        && entry.event.type === 'resident_notice'
         && entry.event.sourceId === String(submissionId)
         && typeof entry.recipientFilter === 'object'
         && entry.recipientFilter.type === 'specific_user'
