@@ -6,7 +6,7 @@
  * Radix handles focus: it moves into the panel, Esc closes it, and focus
  * returns to the row that opened it.
  */
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,6 +47,10 @@ export function AuditDetailSheet({ communityId, item, ctx, onClose, onScope }: A
   // with nothing focused), so return focus to the row explicitly on close.
   const lastKey = useRef<string | null>(null);
   if (item) lastKey.current = item.key;
+  // Keep showing the last entry while the panel slides closed, instead of an
+  // empty panel for the length of the animation.
+  const [shown, setShown] = useState<AuditListItem | null>(item);
+  if (item && item !== shown) setShown(item);
 
   return (
     <Sheet open={item !== null} onOpenChange={(open) => !open && onClose()}>
@@ -63,7 +67,7 @@ export function AuditDetailSheet({ communityId, item, ctx, onClose, onScope }: A
           }
         }}
       >
-        {item && <SheetBody communityId={communityId} item={item} ctx={ctx} onScope={onScope} />}
+        {shown && <SheetBody communityId={communityId} item={item ?? shown} ctx={ctx} onScope={onScope} />}
       </SheetContent>
     </Sheet>
   );

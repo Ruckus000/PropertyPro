@@ -74,7 +74,7 @@ interface ResourceSpec {
   created?: string;
   updated?: string;
   deleted?: string;
-  /** Search `entityType` for narrowing to this item (see SCOPE_RESOURCE_TYPES). */
+  /** Search `entityType` for narrowing to this item (see SCOPE_SOURCES). */
   entityType?: string;
   /** For people-shaped resources, narrowing goes to the person instead. */
   personResource?: boolean;
@@ -511,7 +511,7 @@ function describeActor(entry: AuditLogEntry, ctx: Ctx): DescribedActor {
       viaSupport: false,
     };
   }
-  const name = ctx.users[entry.userId];
+  const name = knownUserName(ctx.users, entry.userId);
   return {
     kind: 'person',
     // A member who has since left still has rows; never show a raw id.
@@ -550,14 +550,26 @@ function targetPerson(entry: AuditLogEntry, ctx: Ctx): DescribedObject | null {
   ];
   const fromValues = candidates.find((v): v is string => typeof v === 'string' && v.length > 0);
   const userId = fromValues ?? (RESOURCES[entry.resourceType]?.personResource ? entry.resourceId : undefined);
-  if (userId && ctx.users[userId]) {
-    return { label: ctx.users[userId], scope: { kind: 'person', userId } };
+  const known = userId ? knownUserName(ctx.users, userId) : null;
+  if (userId && known) {
+    return { label: known, scope: { kind: 'person', userId } };
   }
   const name = str(entry.newValues?.['fullName']) ?? str(entry.newValues?.['name']) ?? str(entry.oldValues?.['fullName']);
   return name ? { label: name, scope: null } : null;
 }
 
 /** An item's name: from the server's lookup first, then from what the row recorded. */
+/**
+ * A member's name, or null when we don't know it. `resolveUserDisplayNames`
+ * fills unknown ids (people who have left) with "User <first 8 of the id>";
+ * the audit trail never shows an id, so that placeholder counts as unknown.
+ */
+export function knownUserName(users: Record<string, string>, userId: string): string | null {
+  const name = users[userId];
+  if (!name || name === `User ${userId.slice(0, 8)}`) return null;
+  return name;
+}
+
 export function itemName(entry: AuditLogEntry, ctx: Ctx): string | null {
   const looked = ctx.resources?.[resourceKey(entry.resourceType, entry.resourceId)]?.name;
   if (looked) return looked;
@@ -601,9 +613,12 @@ function noticeLeadTime(entry: AuditLogEntry, ctx: Ctx): string | null {
   if (!Number.isFinite(ms) || ms <= 0) return null;
   const hours = ms / 3_600_000;
   // A fact, not a legal judgment: how far ahead it went out.
-  if (hours < 48) return `${Math.floor(hours)} hours before the meeting`;
-  const days = Math.floor(hours / 24);
-  return `${days} days before the meeting`;
+  if (hours < 1) return 'less than an hour before the meeting';
+  if (hours < 48) {
+    const h = Math.floor(hours);
+    return `${h} ${h === 1 ? 'hour' : 'hours'} before the meeting`;
+  }
+  return `${Math.floor(hours / 24)} days before the meeting`;
 }
 
 function signerCount(entry: AuditLogEntry): string | null {
@@ -743,16 +758,24 @@ export function dayKey(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone });
 }
 
+/** A `YYYY-MM-DD` day key moved by whole calendar days. */
+function shiftDayKey(key: string, days: number): string {
+  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 /** "Today", "Yesterday", "Thursday, Oct 30", or "Oct 30, 2025" for another year. */
 export function dayHeading(iso: string, timeZone: string, now: Date = new Date()): string {
   const key = dayKey(iso, timeZone);
   const today = dayKey(now.toISOString(), timeZone);
-  const yesterday = dayKey(new Date(now.getTime() - 86_400_000).toISOString(), timeZone);
+  // Calendar arithmetic on the local date, not "now minus 24 hours": on the day
+  // after a clock change the two disagree for an hour.
+  const yesterday = shiftDayKey(today, -1);
   if (key === today) return 'Today';
   if (key === yesterday) return 'Yesterday';
   const d = new Date(iso);
   const sameYear = key.slice(0, 4) === today.slice(0, 4);
-  const sixDaysAgo = dayKey(new Date(now.getTime() - 6 * 86_400_000).toISOString(), timeZone);
+  const sixDaysAgo = shiftDayKey(today, -6);
   if (key >= sixDaysAgo) {
     return d.toLocaleDateString('en-US', { timeZone, weekday: 'long', month: 'short', day: 'numeric' });
   }

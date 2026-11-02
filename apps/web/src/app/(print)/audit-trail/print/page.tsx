@@ -8,18 +8,20 @@
  * prints. Same gate as the audit trail page: managers only.
  *
  * Producing the record writes an `audit_evidence_generated` entry
- * (buildAuditPrintRecord), because it can show who opened what.
+ * (buildAuditPrintRecord), because it can show who opened what. Everything
+ * printed comes from the server; nothing in the link is shown as text.
  */
 // responsive-geometry:exempt — print layout: the shared Table's scroll box would clip columns on paper.
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import type { SearchParams } from 'next/dist/server/request/search-params';
-import { isAdminRole } from '@propertypro/shared';
+import { isAdminRole, isEntitledState, resolveLifecycleState } from '@propertypro/shared';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { AuditQueryError, parseAuditQuery, periodStartDate } from '@/lib/audit/audit-query';
 import { AUDIT_VIEW_PHRASES, periodLabel } from '@/lib/audit/audit-catalog';
-import { describeAuditEvent, formatDateTime, type DescribeContext } from '@/lib/audit/describe-event';
+import { describeAuditEvent, formatDateTime, knownUserName, type DescribeContext } from '@/lib/audit/describe-event';
 import { AUDIT_PRINT_MAX_ENTRIES, buildAuditPrintRecord } from '@/lib/services/audit-trail-service';
 import { AuditPrintActions } from '@/components/audit/AuditPrintActions';
 
@@ -51,12 +53,30 @@ export default async function AuditPrintPage({ searchParams }: PageProps) {
   if (!isAdminRole(membership.role)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
+  // Same lapsed-subscription gate the audit trail API applies
+  // (requireEntitledForAdminRead), as a redirect: a page that throws 403
+  // renders an error boundary, the wrong answer to "your subscription lapsed".
+  const lifecycleState = resolveLifecycleState({
+    subscriptionStatus: membership.subscriptionStatus,
+    subscriptionCanceledAt: membership.subscriptionCanceledAt,
+    freeAccessExpiresAt: membership.freeAccessExpiresAt,
+  });
+  if (!isEntitledState(lifecycleState)) {
+    redirect(`/dashboard?communityId=${communityId}&reason=subscription-lapsed`);
+  }
 
   const backParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (typeof value === 'string' && key !== 'label') backParams.set(key, value);
+    if (typeof value === 'string') backParams.set(key, value);
   }
   const backHref = `/audit-trail?${backParams.toString()}`;
+
+  // Opening this page writes an audit entry, so another site must not be able
+  // to open it in a signed-in manager's browser. Browsers send Sec-Fetch-Site
+  // on navigations; a cross-site one goes back to the trail, where the manager
+  // can choose Print record themselves.
+  const fetchSite = (await headers()).get('sec-fetch-site');
+  if (fetchSite === 'cross-site') redirect(backHref);
 
   let query;
   try {
@@ -70,12 +90,11 @@ export default async function AuditPrintPage({ searchParams }: PageProps) {
     communityId,
     actorUserId: userId,
     filters: { view: query.view, scope: query.scope, startDate: periodStartDate(query.period) },
-    fallbackLabel: one(params['label']),
   });
 
   const timeZone = membership.timezone;
   const ctx: DescribeContext = { users: record.users, resources: record.resources, timeZone };
-  const generatedBy = record.users[userId] ?? 'a manager';
+  const generatedBy = knownUserName(record.users, userId) ?? 'a manager';
   const subject = record.scopeLabel ?? (query.scope ? 'the selected item' : membership.communityName);
   const described = record.entries.map((entry) => ({ entry, d: describeAuditEvent(entry, ctx) }));
   const main = described.filter((x) => !x.d.routine);

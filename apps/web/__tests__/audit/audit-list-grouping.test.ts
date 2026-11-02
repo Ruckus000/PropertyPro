@@ -60,6 +60,38 @@ describe('buildAuditListItems', () => {
     expect(items).toHaveLength(2);
   });
 
+  it('keeps role changes for different people apart, though they share the community as resource', () => {
+    // role_assigned is recorded against the community; the person is in newValues.
+    const promote = (target: string) =>
+      entry({
+        action: 'role_assigned',
+        resourceType: 'community',
+        resourceId: '7',
+        metadata: null,
+        newValues: { userId: target, role: 'property_manager' },
+      });
+    expect(buildAuditListItems([promote(ANA), promote(MARIA)], ctx)).toHaveLength(2);
+  });
+
+  it('keeps two different edits of the same item apart, so neither change is hidden', () => {
+    // The location is not part of the sentence, so only the values differ.
+    const edit = (location: string) =>
+      entry({ action: 'update', resourceType: 'meeting', resourceId: '3', metadata: null, newValues: { location } });
+    const [a, b] = [edit('Clubhouse'), edit('Pool deck')];
+    const items = buildAuditListItems([a, b], ctx);
+    expect(items).toHaveLength(2);
+    expect(items[0]!.described.sentence).toBe(items[1]!.described.sentence);
+  });
+
+  it('keeps repeats apart when their sentences differ, such as prints of different sizes', () => {
+    // Values are equal (both null); only metadata — and so the sentence — differs.
+    const items = buildAuditListItems(
+      [entry({ metadata: { scopeLabel: 'Ana Ruiz', entryCount: 5 } }), entry({ metadata: { scopeLabel: 'Ana Ruiz', entryCount: 7 } })],
+      ctx,
+    );
+    expect(items).toHaveLength(2);
+  });
+
   it('keeps repeats on different days on separate lines', () => {
     const items = buildAuditListItems([entry(), entry({ createdAt: '2026-11-01T14:00:00.000Z' })], ctx);
     expect(items).toHaveLength(2);

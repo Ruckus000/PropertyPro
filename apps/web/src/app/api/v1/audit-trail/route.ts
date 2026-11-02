@@ -59,7 +59,7 @@ import {
   type AuditQueryState,
 } from '@/lib/audit/audit-query';
 import { auditUserIds, coerceAuditRow, redactMetadata, toRedactedEntry } from '@/lib/audit/redact';
-import { describeAuditEvent } from '@/lib/audit/describe-event';
+import { describeAuditEvent, knownUserName } from '@/lib/audit/describe-event';
 import { resourceKey } from '@/lib/audit/types';
 
 /** Maximum rows for CSV export to prevent OOM on large datasets. */
@@ -219,7 +219,7 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const users = Object.fromEntries(userNames);
 
   let scopeLabel: string | null = null;
-  if (scope?.kind === 'person') scopeLabel = users[scope.userId] ?? null;
+  if (scope?.kind === 'person') scopeLabel = knownUserName(users, scope.userId) ?? 'A former member';
   if (scope?.kind === 'item') scopeLabel = resources[resourceKey(scopeResourceType(scope), scope.resourceId)]?.name ?? null;
 
   return NextResponse.json({

@@ -72,15 +72,32 @@ describe('buildAuditTrailWhere', () => {
 
   it('a document scope matches its own rows and checklist links to it', async () => {
     const q = await compiledWhere({ scope: { kind: 'item', entityType: 'document', resourceId: '482' } });
-    expect(q?.sql).toContain('"compliance_audit_log"."resource_type" in ($1)');
+    expect(q?.sql).toContain('"compliance_audit_log"."resource_type" = $1 and "compliance_audit_log"."resource_id" = $2');
     expect(q?.sql).toContain(`"compliance_audit_log"."new_values" ->> 'documentId' =`);
     expect(q?.params).toEqual(['document', '482', '482']);
   });
 
-  it('control: a meeting scope has no checklist-link clause', async () => {
+  it('a meeting scope matches attachments by the meeting they belong to, not by their own id', async () => {
     const q = await compiledWhere({ scope: { kind: 'item', entityType: 'meeting', resourceId: '9' } });
     expect(q?.sql).not.toContain('documentId');
-    expect(q?.params).toEqual(['meeting', 'meeting_document', '9']);
+    // The meeting's own rows by id; attachment rows only through meetingId
+    // in their values or a "9:<documentId>" detach id — never resource_id = 9.
+    expect(q?.params).toEqual(['meeting', '9', 'meeting_document', 'meetingId', '9', 'meetingId', '9', 'meetingId', '9', '9:%']);
+    expect(q?.sql).not.toContain('"resource_type" in');
+  });
+
+  it('a maintenance scope matches comments through requestId, with no detach-style id', async () => {
+    const q = await compiledWhere({ scope: { kind: 'item', entityType: 'maintenance', resourceId: '5' } });
+    expect(q?.params).toEqual(['maintenance_request', '5', 'maintenance_comment', 'requestId', '5', 'requestId', '5', 'requestId', '5']);
+    expect(q?.sql).not.toContain(' like ');
+  });
+
+  it("a person scope's 'about them' clause keeps each access rule's resource type", async () => {
+    const q = await compiledWhere({ scope: { kind: 'person', userId: '22222222-2222-2222-2222-222222222222' } });
+    // 'update' only counts with resource type invitation/resident, never on its own.
+    expect(q?.sql).toMatch(/"action" = \$\d+ and "compliance_audit_log"."resource_type" = \$\d+/);
+    const updateIndex = q!.params.indexOf('update');
+    expect(['invitation', 'resident']).toContain(q!.params[updateIndex + 1]);
   });
 
   it('combines a view, a scope and a date', async () => {

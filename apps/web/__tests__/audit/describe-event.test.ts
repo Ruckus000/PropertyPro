@@ -104,6 +104,13 @@ describe('describeAuditEvent', () => {
     expect(described.sentence).not.toContain('99999999');
   });
 
+  it("treats the lookup's 'User <id>' placeholder as someone who has left", () => {
+    const gone = '99999999-0000-0000-0000-000000000000';
+    const described = describeAuditEvent(entry({ userId: gone }), { ...ctx, users: { ...ctx.users, [gone]: 'User 99999999' } });
+    expect(described.actor.name).toBe('A former member');
+    expect(described.sentence).not.toContain('99999999');
+  });
+
   it('describes an access change around the person it changed', () => {
     const described = describeAuditEvent(
       entry({
@@ -154,6 +161,19 @@ describe('describeAuditEvent', () => {
     expect(described.changes).toEqual([
       { label: 'Deleted', before: 'Aug 8, 2026 at 11:56 PM EDT', after: 'No' },
     ]);
+  });
+
+  it('says "1 hour", not "1 hours", for a notice posted just over an hour ahead', () => {
+    const described = describeAuditEvent(
+      entry({
+        action: 'meeting_notice_posted',
+        resourceType: 'meeting',
+        resourceId: '9',
+        newValues: { noticePostedAt: '2026-11-01T12:00:00.000Z' },
+      }),
+      { ...ctx, resources: { 'meeting:9': { name: 'Board meeting', startsAt: '2026-11-01T13:30:00.000Z' } } },
+    );
+    expect(described.sentence).toBe('Maria Lopez posted the notice for Board meeting 1 hour before the meeting');
   });
 
   it('says how far ahead a meeting notice went out when the meeting date is known', () => {
@@ -213,6 +233,12 @@ describe('dayHeading', () => {
     expect(dayHeading('2026-10-30T14:00:00.000Z', tz, now)).toBe('Friday, Oct 30');
     expect(dayHeading('2026-10-21T14:00:00.000Z', tz, now)).toBe('Oct 21');
     expect(dayHeading('2025-12-24T14:00:00.000Z', tz, now)).toBe('Dec 24, 2025');
+  });
+
+  it('still says Yesterday in the first hour after the clocks spring forward', () => {
+    // 00:30 EDT on Mon Mar 15, 2027; 24 hours earlier was 23:30 EST on Mar 13.
+    const afterChange = new Date('2027-03-15T04:30:00.000Z');
+    expect(dayHeading('2027-03-14T15:00:00.000Z', tz, afterChange)).toBe('Yesterday');
   });
 
   it('groups by the community’s calendar day, not UTC', () => {

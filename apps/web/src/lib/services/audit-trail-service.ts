@@ -24,11 +24,11 @@ import {
   paginate,
   violations,
 } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, lte, or, sql, type SQL } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, like, lte, or, sql, type SQL } from '@propertypro/db/filters';
 import {
   ACCESS_RULES,
   ROUTINE_RULES,
-  SCOPE_RESOURCE_TYPES,
+  SCOPE_SOURCES,
   SUPPORT_METADATA_KEY,
   VIEW_RULES,
   type AuditRule,
@@ -36,6 +36,7 @@ import {
 } from '@/lib/audit/audit-catalog';
 import { resourceKey, type AuditLogEntry, type AuditResourceInfo, type AuditScope } from '@/lib/audit/types';
 import { auditUserIds, coerceAuditRow, toRedactedEntry } from '@/lib/audit/redact';
+import { itemName, knownUserName } from '@/lib/audit/describe-event';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 
 export interface AuditTrailFilters {
@@ -79,13 +80,14 @@ function viewPredicate(view: AuditView): SQL | undefined {
 
 function scopePredicate(scope: AuditScope): SQL {
   if (scope.kind === 'person') {
-    const accessActions = ACCESS_RULES.map((r) => r.action);
     return or(
       // What they did…
       eq(complianceAuditLog.userId, scope.userId),
-      // …and access changes and invitations about them.
+      // …and access changes and invitations about them. The full rules, with
+      // their resource types: a bare action list would let any generic
+      // create/update/delete that mentions their id into their record.
       and(
-        inArray(complianceAuditLog.action, accessActions),
+        rulesPredicate(ACCESS_RULES),
         or(
           sql`${complianceAuditLog.newValues} ->> 'userId' = ${scope.userId}`,
           eq(complianceAuditLog.resourceId, scope.userId),
@@ -93,13 +95,25 @@ function scopePredicate(scope: AuditScope): SQL {
       ),
     )!;
   }
-  const types = SCOPE_RESOURCE_TYPES[scope.entityType] ?? [scope.entityType];
-  const direct = and(inArray(complianceAuditLog.resourceType, [...types]), eq(complianceAuditLog.resourceId, scope.resourceId))!;
+  const source = SCOPE_SOURCES[scope.entityType] ?? { primary: scope.entityType, children: [] };
+  const clauses: SQL[] = [
+    and(eq(complianceAuditLog.resourceType, source.primary), eq(complianceAuditLog.resourceId, scope.resourceId))!,
+  ];
+  // Children (attachments, comments, fines) name the parent in their values.
+  for (const child of source.children) {
+    const parentMatches = [
+      sql`${complianceAuditLog.newValues} ->> ${child.parentKey} = ${scope.resourceId}`,
+      sql`${complianceAuditLog.oldValues} ->> ${child.parentKey} = ${scope.resourceId}`,
+      sql`${complianceAuditLog.metadata} ->> ${child.parentKey} = ${scope.resourceId}`,
+    ];
+    if (child.compoundId) parentMatches.push(like(complianceAuditLog.resourceId, `${scope.resourceId}:%`));
+    clauses.push(and(eq(complianceAuditLog.resourceType, child.resourceType), or(...parentMatches))!);
+  }
   if (scope.entityType === 'document') {
     // A document linked to a compliance checklist item is recorded against the item.
-    return or(direct, sql`${complianceAuditLog.newValues} ->> 'documentId' = ${scope.resourceId}`)!;
+    clauses.push(sql`${complianceAuditLog.newValues} ->> 'documentId' = ${scope.resourceId}`);
   }
-  return direct;
+  return clauses.length === 1 ? clauses[0]! : or(...clauses)!;
 }
 
 function buildAuditTrailWhere(filters: AuditTrailFilters): SQL | undefined {
@@ -285,7 +299,7 @@ export async function resolveAuditResourceNames(
 
 /** The searchable entity behind an item scope, as a `resource_type` the name sources know. */
 export function scopeResourceType(scope: Extract<AuditScope, { kind: 'item' }>): string {
-  return (SCOPE_RESOURCE_TYPES[scope.entityType] ?? [scope.entityType])[0]!;
+  return SCOPE_SOURCES[scope.entityType]?.primary ?? scope.entityType;
 }
 
 /** The most entries one printed record carries. A longer history is narrowed first. */
@@ -312,8 +326,6 @@ export async function buildAuditPrintRecord(params: {
   communityId: number;
   actorUserId: string;
   filters: AuditTrailFilters;
-  /** Shown when the server can't name the scope (a deleted item). */
-  fallbackLabel: string | null;
 }): Promise<AuditPrintRecord> {
   const raw = await fetchAuditTrailForCsvExport({
     communityId: params.communityId,
@@ -335,9 +347,23 @@ export async function buildAuditPrintRecord(params: {
   ]);
   const users = Object.fromEntries(names);
 
-  let scopeLabel: string | null = params.fallbackLabel;
-  if (scope?.kind === 'person') scopeLabel = users[scope.userId] ?? scopeLabel;
-  if (scope?.kind === 'item') scopeLabel = resources[resourceKey(scopeResourceType(scope), scope.resourceId)]?.name ?? scopeLabel;
+  // The name comes from the server only — never from the link. It is printed as
+  // the record's title and stored in an append-only row, so a crafted URL must
+  // not be able to put words in either. A deleted item falls back to the name
+  // its own entries recorded.
+  let scopeLabel: string | null = null;
+  if (scope?.kind === 'person') scopeLabel = knownUserName(users, scope.userId) ?? 'A former member';
+  if (scope?.kind === 'item') {
+    scopeLabel = resources[resourceKey(scopeResourceType(scope), scope.resourceId)]?.name ?? null;
+    if (!scopeLabel) {
+      const ctx = { users, resources, timeZone: 'UTC' };
+      for (const entry of entries) {
+        if (entry.resourceId !== scope.resourceId) continue;
+        scopeLabel = itemName(entry, ctx);
+        if (scopeLabel) break;
+      }
+    }
+  }
 
   await logAuditEvent({
     userId: params.actorUserId,

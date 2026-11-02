@@ -17,7 +17,7 @@ import {
   DEFAULT_AUDIT_PERIOD,
   isAuditPeriod,
   isAuditView,
-  SCOPE_RESOURCE_TYPES,
+  SCOPE_SOURCES,
   type AuditPeriod,
   type AuditView,
 } from './audit-catalog';
@@ -64,7 +64,7 @@ export function parseAuditQuery(get: Getter): AuditQueryState {
     if (!UUID.test(rawPerson)) throw new AuditQueryError('person must be a user id');
     scope = { kind: 'person', userId: rawPerson };
   } else if (rawEntity || rawItem) {
-    if (!rawEntity || !Object.prototype.hasOwnProperty.call(SCOPE_RESOURCE_TYPES, rawEntity)) {
+    if (!rawEntity || !Object.prototype.hasOwnProperty.call(SCOPE_SOURCES, rawEntity)) {
       throw new AuditQueryError('entity is not a recognised item type');
     }
     if (!rawItem || !/^[1-9]\d{0,18}$/.test(rawItem)) throw new AuditQueryError('item must be a positive id');

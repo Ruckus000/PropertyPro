@@ -35,7 +35,7 @@ export function ComplianceActivityHistoryModal({
         <DialogHeader className="shrink-0 space-y-2 px-6 pb-4 pt-6 text-left">
           <DialogTitle>Activity history</DialogTitle>
           <DialogDescription>
-            All compliance actions for this community.
+            Everything recorded in this community. Search for a document to see its history.
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">

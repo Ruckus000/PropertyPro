@@ -150,16 +150,32 @@ export function isRoutineEntry(entry: { action: string; resourceType: string }):
 export const SUPPORT_METADATA_KEY = 'support';
 
 /**
- * Which `resource_type` values one searchable item is recorded under. The
- * command-palette search returns an `entityType`; narrowing the audit trail to
- * that item matches any of these types with the same id.
+ * Where one searchable item's history lives. The command-palette search
+ * returns an `entityType`; narrowing the audit trail to that item matches its
+ * own rows (`primary` type, same id) plus rows about its children.
+ *
+ * A child row records its OWN id in `resource_id` (the attachment, comment or
+ * fine) and the parent's id under `parentKey` in its values — so children are
+ * matched on that key, never on `resource_id`. Detaching a meeting document
+ * records `"<meetingId>:<documentId>"` as its id instead (`compoundId`).
  */
-export const SCOPE_RESOURCE_TYPES: Record<string, readonly string[]> = {
-  document: ['document'],
-  announcement: ['announcement'],
-  meeting: ['meeting', 'meeting_document'],
-  maintenance: ['maintenance_request', 'maintenance_comment'],
-  violation: ['violation', 'violation_fine'],
+export interface ScopeChild {
+  resourceType: string;
+  parentKey: string;
+  compoundId?: boolean;
+}
+
+export interface ScopeSource {
+  primary: string;
+  children: readonly ScopeChild[];
+}
+
+export const SCOPE_SOURCES: Record<string, ScopeSource> = {
+  document: { primary: 'document', children: [] },
+  announcement: { primary: 'announcement', children: [] },
+  meeting: { primary: 'meeting', children: [{ resourceType: 'meeting_document', parentKey: 'meetingId', compoundId: true }] },
+  maintenance: { primary: 'maintenance_request', children: [{ resourceType: 'maintenance_comment', parentKey: 'requestId' }] },
+  violation: { primary: 'violation', children: [{ resourceType: 'violation_fine', parentKey: 'violationId' }] },
 };
 
 /** Time choices for the "When" menu, in days. `null` means no lower bound. */

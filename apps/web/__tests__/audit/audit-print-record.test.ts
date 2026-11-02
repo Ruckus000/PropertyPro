@@ -63,7 +63,6 @@ describe('buildAuditPrintRecord', () => {
       communityId: 7,
       actorUserId: MARIA,
       filters: { view: 'all', scope: { kind: 'person', userId: MARIA } },
-      fallbackLabel: null,
     });
     expect(record.entries.map((e) => e.id)).toEqual([1, 2, 3]);
     expect(record.entries[0]!.newValues).toEqual({ title: 'B', apiToken: '[REDACTED]' });
@@ -72,13 +71,15 @@ describe('buildAuditPrintRecord', () => {
   });
 
   it('logs that the record was produced, naming what it covered', async () => {
+    // The document no longer exists, so its name comes from what its own
+    // entries recorded (newValues.title = 'B'), never from the link.
     rowsRef.rows = [row(2), row(1)];
-    await buildAuditPrintRecord({
+    const record = await buildAuditPrintRecord({
       communityId: 7,
       actorUserId: MARIA,
       filters: { view: 'all', scope: { kind: 'item', entityType: 'document', resourceId: '10' } },
-      fallbackLabel: 'Budget 2026.pdf',
     });
+    expect(record.scopeLabel).toBe('B');
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: MARIA,
@@ -86,7 +87,7 @@ describe('buildAuditPrintRecord', () => {
         resourceType: 'document',
         resourceId: '10',
         communityId: 7,
-        metadata: expect.objectContaining({ scopeLabel: 'Budget 2026.pdf', entryCount: 2, truncated: false }),
+        metadata: expect.objectContaining({ scopeLabel: 'B', entryCount: 2, truncated: false }),
       }),
     );
   });
@@ -95,14 +96,14 @@ describe('buildAuditPrintRecord', () => {
     const ROBIN = '22222222-2222-4222-8222-222222222222';
     resolveUserDisplayNamesMock.mockResolvedValue(new Map([[MARIA, 'Maria Lopez'], [ROBIN, 'Robin Root']]));
     rowsRef.rows = [row(1)]; // every entry is Maria's
-    const record = await buildAuditPrintRecord({ communityId: 7, actorUserId: ROBIN, filters: {}, fallbackLabel: null });
+    const record = await buildAuditPrintRecord({ communityId: 7, actorUserId: ROBIN, filters: {} });
     expect(resolveUserDisplayNamesMock.mock.calls[0]![1]).toContain(ROBIN);
     expect(record.users[ROBIN]).toBe('Robin Root');
   });
 
   it('flags a history longer than one printout can hold', async () => {
     rowsRef.rows = Array.from({ length: AUDIT_PRINT_MAX_ENTRIES + 5 }, (_, i) => row(i + 1));
-    const record = await buildAuditPrintRecord({ communityId: 7, actorUserId: MARIA, filters: {}, fallbackLabel: null });
+    const record = await buildAuditPrintRecord({ communityId: 7, actorUserId: MARIA, filters: {} });
     expect(record.entries).toHaveLength(AUDIT_PRINT_MAX_ENTRIES);
     expect(record.truncated).toBe(true);
     expect(logAuditEventMock.mock.calls[0]![0].metadata).toMatchObject({ truncated: true, scopeLabel: 'the whole community' });

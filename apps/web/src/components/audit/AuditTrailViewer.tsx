@@ -121,7 +121,7 @@ export function AuditTrailViewer({ communityId, timeZone, syncUrl = true }: Audi
 
   const apiParams = auditTrailParams(communityId, state);
   const csvHref = `/api/v1/audit-trail?${apiParams.toString()}&format=csv`;
-  const printHref = `/audit-trail/print?${apiParams.toString()}${scopeLabel ? `&label=${encodeURIComponent(scopeLabel)}` : ''}`;
+  const printHref = `/audit-trail/print?${apiParams.toString()}`;
 
   const intro = state.scope
     ? `Everything that happened ${state.scope.kind === 'person' ? 'by or to' : 'to'} ${scopeLabel ?? `this ${state.scope.kind === 'person' ? 'person' : itemTypeLabel(state.scope.entityType).toLowerCase()}`}, newest first.`

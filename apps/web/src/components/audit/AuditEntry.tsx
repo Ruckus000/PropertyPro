@@ -36,6 +36,10 @@ export interface AuditListItem {
  * Collapses consecutive routine entries that share a day, an action and a
  * resource type into one item. Non-routine entries are never merged.
  */
+function sameValues(a: AuditLogEntry, b: AuditLogEntry): boolean {
+  return JSON.stringify([a.oldValues, a.newValues]) === JSON.stringify([b.oldValues, b.newValues]);
+}
+
 export function buildAuditListItems(entries: AuditLogEntry[], ctx: DescribeContext): AuditListItem[] {
   const items: AuditListItem[] = [];
   for (const entry of entries) {
@@ -48,10 +52,18 @@ export function buildAuditListItems(entries: AuditLogEntry[], ctx: DescribeConte
       head.resourceType === entry.resourceType &&
       dayKey(head.createdAt, ctx.timeZone) === dayKey(entry.createdAt, ctx.timeZone);
     // Routine entries collapse by kind ("12 owners opened …"). Anything else
-    // collapses only when it is an exact repeat — same person, same item —
-    // such as a record printed several times; each still has its own line in
-    // the details panel.
-    const exactRepeat = sameKind && head.userId === entry.userId && head.resourceId === entry.resourceId;
+    // collapses only when it is an exact repeat: the same sentence AND the same
+    // recorded values, such as a record printed several times. resource_id
+    // alone is not enough — role changes are recorded against the community,
+    // so three people promoted on one day share it — and an edit's diff would
+    // be hidden. Each repeat still has its own line in the details panel.
+    const exactRepeat =
+      sameKind &&
+      prev !== undefined &&
+      head.userId === entry.userId &&
+      head.resourceId === entry.resourceId &&
+      prev.described.sentence === described.sentence &&
+      sameValues(head, entry);
     if (prev && sameKind && ((described.routine && prev.described.routine) || exactRepeat)) {
       prev.entries.push(entry);
       continue;
