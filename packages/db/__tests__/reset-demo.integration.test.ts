@@ -13,6 +13,7 @@ import {
   meetings,
   siteBlocks,
   sitePages,
+  sitePublishSnapshots,
   units,
 } from '../src/schema';
 import { runDemoReset } from '../../../scripts/reset-demo';
@@ -107,6 +108,8 @@ describeDb('demo reset integration', () => {
       await db.update(communities).set({ branding: rest }).where(eq(communities.id, demo.id));
       const pack = await applyStarterPackToCommunity(demo.id, demo.communityType as CommunityType);
       if (!pack.applied) throw new Error(`No starter pack applied to demo ${demo.id}`);
+      // A publish of that site, which names its (soon deleted) home page.
+      await db.insert(sitePublishSnapshots).values({ communityId: demo.id, publishedAt: new Date(), changeCount: 1 });
     }
   }
 
@@ -203,6 +206,14 @@ describeDb('demo reset integration', () => {
         .where(and(eq(siteBlocks.communityId, community.id), eq(siteBlocks.isDraft, false), isNull(siteBlocks.deletedAt)))
         .orderBy(asc(siteBlocks.blockOrder));
       expect(live.map((row) => row.blockType)).toEqual(look?.sections.map((section) => section.blockType));
+
+      // No pre-reset version is left in the history: its pages are gone, so it
+      // could only be refused on restore.
+      const history = await db
+        .select({ id: sitePublishSnapshots.id })
+        .from(sitePublishSnapshots)
+        .where(eq(sitePublishSnapshots.communityId, community.id));
+      expect(history, `seeded demo "${community.slug}" kept a pre-reset publish`).toEqual([]);
     }
   }, 30_000);
 
