@@ -68,9 +68,11 @@ function actionDotColor(action: string): string {
 
 export interface ComplianceActivityFeedProps {
   communityId: number;
+  /** The community's IANA time zone, passed to the full history. */
+  timeZone?: string;
 }
 
-export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedProps) {
+export function ComplianceActivityFeed({ communityId, timeZone }: ComplianceActivityFeedProps) {
   const [sheetOpen, setSheetOpen] = React.useState(false);
 
   const { data, isLoading, error } = useComplianceActivityFeed(communityId);
@@ -199,6 +201,7 @@ export function ComplianceActivityFeed({ communityId }: ComplianceActivityFeedPr
 
       <ComplianceActivityHistoryModal
         communityId={communityId}
+        timeZone={timeZone}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
       />

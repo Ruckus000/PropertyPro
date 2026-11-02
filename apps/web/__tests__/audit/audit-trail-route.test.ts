@@ -37,6 +37,12 @@ vi.mock('@propertypro/db', () => ({
   complianceAuditLog: complianceAuditLogTableMock,
   userRoles: userRolesTableMock,
   paginate: paginateMock,
+  // Tables the service reads item names from (resolveAuditResourceNames).
+  documents: { id: 'documents.id', title: 'documents.title' },
+  meetings: { id: 'meetings.id', title: 'meetings.title', startsAt: 'meetings.startsAt' },
+  announcements: { id: 'announcements.id', title: 'announcements.title' },
+  maintenanceRequests: { id: 'maintenance_requests.id', title: 'maintenance_requests.title' },
+  violations: { id: 'violations.id', description: 'violations.description' },
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -54,6 +60,7 @@ vi.mock('@/lib/utils/resolve-users', () => ({
 }));
 
 import { GET } from '../../src/app/api/v1/audit-trail/route';
+import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -611,6 +618,93 @@ describe('p3-53 audit trail route', () => {
       );
       const res = await GET(req);
       expect(res.status).toBe(200);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Redesigned page vocabulary: view, period, person, entity, item
+  // -------------------------------------------------------------------------
+
+  describe('page vocabulary', () => {
+    const ANA = '22222222-2222-2222-2222-222222222222';
+
+    function countingScopedClient(hidden: number) {
+      return makeDefaultScopedClient({
+        selectFrom: vi.fn().mockImplementation((table: unknown, columns: Record<string, unknown>) => {
+          if (table === complianceAuditLogTableMock && columns && 'n' in columns) {
+            return makeChainableBuilder([{ n: hidden }]);
+          }
+          if (table && (table as { title?: string }).title === 'documents.title') {
+            return makeChainableBuilder([{ id: 10, name: 'Budget 2026.pdf' }]);
+          }
+          return makeChainableBuilder([]);
+        }),
+      });
+    }
+
+    it('returns how many routine entries Important hid, on the first page only', async () => {
+      createScopedClientMock.mockReturnValue(countingScopedClient(178));
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&view=important&period=30'));
+      const body = (await res.json()) as JsonEnvelope & { data: { hiddenRoutineCount: number | null } };
+      expect(res.status).toBe(200);
+      expect(body.data.hiddenRoutineCount).toBe(178);
+
+      const next = await GET(
+        new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&view=important&cursor=abc'),
+      );
+      const nextBody = (await next.json()) as JsonEnvelope & { data: { hiddenRoutineCount: number | null } };
+      expect(nextBody.data.hiddenRoutineCount).toBeNull();
+    });
+
+    it('control: a caller using none of the new parameters gets no count and no view filter', async () => {
+      createScopedClientMock.mockReturnValue(countingScopedClient(178));
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&limit=8'));
+      const body = (await res.json()) as JsonEnvelope & { data: { hiddenRoutineCount: number | null } };
+      expect(body.data.hiddenRoutineCount).toBeNull();
+      expect(paginateMock.mock.calls.at(-1)?.[3]?.where).toBeUndefined();
+    });
+
+    it('returns current item names keyed by type and id', async () => {
+      createScopedClientMock.mockReturnValue(countingScopedClient(0));
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&view=all'));
+      const body = (await res.json()) as JsonEnvelope & { data: { resources: Record<string, { name: string }> } };
+      expect(body.data.resources['document:10']).toEqual({ name: 'Budget 2026.pdf' });
+    });
+
+    it('names the person a page is narrowed to', async () => {
+      vi.mocked(resolveUserDisplayNames).mockResolvedValueOnce(new Map([[ANA, 'Ana Ruiz']]));
+      const res = await GET(new NextRequest(`http://localhost:3000/api/v1/audit-trail?communityId=42&person=${ANA}`));
+      const body = (await res.json()) as JsonEnvelope & { data: { scopeLabel: string | null } };
+      expect(body.data.scopeLabel).toBe('Ana Ruiz');
+      expect(vi.mocked(resolveUserDisplayNames).mock.calls.at(-1)?.[1]).toContain(ANA);
+    });
+
+    it('names the item a page is narrowed to', async () => {
+      createScopedClientMock.mockReturnValue(countingScopedClient(0));
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&entity=document&item=10'));
+      const body = (await res.json()) as JsonEnvelope & { data: { scopeLabel: string | null } };
+      expect(body.data.scopeLabel).toBe('Budget 2026.pdf');
+    });
+
+    it.each([
+      ['an unknown view', 'view=everything'],
+      ['an unknown period', 'period=14'],
+      ['a person that is not a user id', 'person=maria'],
+      ['an item without its type', 'item=10'],
+      ['an unknown item type', 'entity=vendor&item=10'],
+    ])('rejects %s with 400', async (_label, qs) => {
+      const res = await GET(new NextRequest(`http://localhost:3000/api/v1/audit-trail?communityId=42&${qs}`));
+      expect(res.status).toBe(400);
+    });
+
+    it('adds plain-language Who and What happened columns to the CSV', async () => {
+      vi.mocked(resolveUserDisplayNames).mockResolvedValueOnce(new Map([['user-abc', 'Maria Lopez']]));
+      const res = await GET(new NextRequest('http://localhost:3000/api/v1/audit-trail?communityId=42&format=csv'));
+      const csv = await res.text();
+      const [header] = csv.split('\n');
+      expect(header).toContain('Who');
+      expect(header).toContain('What happened');
+      expect(csv).toContain('Maria Lopez posted the document Test');
     });
   });
 });

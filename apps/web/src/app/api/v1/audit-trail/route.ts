@@ -44,95 +44,26 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { requirePermission } from '@/lib/db/access-control';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 import {
+  countHiddenRoutineEntries,
   fetchAuditTrailForCsvExport,
   paginateAuditTrail,
+  resolveAuditResourceNames,
+  scopeResourceType,
   type AuditTrailFilters,
 } from '@/lib/services/audit-trail-service';
+import {
+  AuditQueryError,
+  hasAuditQuery,
+  parseAuditQuery,
+  periodStartDate,
+  type AuditQueryState,
+} from '@/lib/audit/audit-query';
+import { auditUserIds, coerceAuditRow, redactMetadata, toRedactedEntry } from '@/lib/audit/redact';
+import { describeAuditEvent, knownUserName } from '@/lib/audit/describe-event';
+import { resourceKey } from '@/lib/audit/types';
 
 /** Maximum rows for CSV export to prevent OOM on large datasets. */
 const MAX_CSV_ROWS = 10_000;
-
-/**
- * Sensitive key patterns (case-insensitive) to redact from metadata before export/display.
- * Matches any key that contains these substrings.
- */
-const SENSITIVE_KEY_PATTERNS = [
-  'token',
-  'secret',
-  'password',
-  'apikey',
-  'api_key',
-  'authorization',
-  'cookie',
-  'signature',
-  'signedurl',
-  'signed_url',
-];
-
-function isSensitiveKey(key: string): boolean {
-  const lower = key.toLowerCase();
-  return SENSITIVE_KEY_PATTERNS.some((pattern) => lower.includes(pattern));
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-interface AuditLogRow {
-  id: number;
-  userId: string | null;
-  communityId: number;
-  action: string;
-  resourceType: string;
-  resourceId: string;
-  oldValues: Record<string, unknown> | null;
-  newValues: Record<string, unknown> | null;
-  metadata: Record<string, unknown> | null;
-  createdAt: Date;
-}
-
-function coerceAuditRow(row: Record<string, unknown>): AuditLogRow {
-  return {
-    id: row['id'] as number,
-    userId: (row['userId'] as string | null) ?? null,
-    communityId: row['communityId'] as number,
-    action: row['action'] as string,
-    resourceType: row['resourceType'] as string,
-    resourceId: row['resourceId'] as string,
-    oldValues: (row['oldValues'] as Record<string, unknown> | null) ?? null,
-    newValues: (row['newValues'] as Record<string, unknown> | null) ?? null,
-    metadata: (row['metadata'] as Record<string, unknown> | null) ?? null,
-    createdAt: row['createdAt'] as Date,
-  };
-}
-
-/**
- * Recursively redact sensitive keys from a metadata object before export/display.
- * Applies case-insensitive substring matching for key detection.
- */
-function redactMetadata(metadata: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!metadata) return null;
-  return redactValue(metadata) as Record<string, unknown>;
-}
-
-function redactValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(redactValue);
-  }
-  if (value !== null && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-    const redacted: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(obj)) {
-      if (isSensitiveKey(key)) {
-        redacted[key] = '[REDACTED]';
-      } else {
-        redacted[key] = redactValue(val);
-      }
-    }
-    return redacted;
-  }
-  return value;
-}
 
 // ---------------------------------------------------------------------------
 // GET — List audit trail entries with cursor pagination + CSV export
@@ -177,11 +108,27 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   }
 
   // --- Build DB-level WHERE clause from filters (cursor predicate is built by paginate) ---
+  // The page's vocabulary (view, period, person, entity, item). Callers that
+  // send none of it — the compliance activity feed — keep the old behaviour:
+  // no view filter and no date bound.
+  const get = (key: string) => searchParams.get(key) || null;
+  let query: AuditQueryState | null = null;
+  if (hasAuditQuery(get)) {
+    try {
+      query = parseAuditQuery(get);
+    } catch (err) {
+      if (err instanceof AuditQueryError) throw new BadRequestError(err.message);
+      throw err;
+    }
+  }
+
   const filters: AuditTrailFilters = {
     action: searchParams.get('action'),
     userId: searchParams.get('userId'),
-    startDate: searchParams.get('startDate'),
+    startDate: searchParams.get('startDate') ?? (query ? periodStartDate(query.period) : null),
     endDate: searchParams.get('endDate'),
+    view: query?.view ?? null,
+    scope: query?.scope ?? null,
   };
 
   // --- CSV Export: fetch all matching rows from DB (no cursor pagination) ---
@@ -202,9 +149,25 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       { key: 'resourceId', label: 'Resource ID' },
       { key: 'userId', label: 'User ID' },
       { key: 'metadata', label: 'Metadata' },
+      { key: 'who', label: 'Who' },
+      { key: 'summary', label: 'What happened' },
     ];
 
-    const csvRows = auditRows.map((row) => ({
+    // Plain-language columns, so the file reads without a data dictionary.
+    const csvEntries = auditRows.map(toRedactedEntry);
+    const [csvUsers, csvResources] = await Promise.all([
+      resolveUserDisplayNames(communityId, auditUserIds(csvEntries)),
+      resolveAuditResourceNames(communityId, csvEntries),
+    ]);
+    const describeCtx = {
+      users: Object.fromEntries(csvUsers),
+      resources: csvResources,
+      timeZone: membership.timezone,
+    };
+
+    const csvRows = auditRows.map((row, i) => {
+      const described = describeAuditEvent(csvEntries[i]!, describeCtx);
+      return {
       id: row.id,
       createdAt: row.createdAt.toISOString(),
       action: row.action,
@@ -212,7 +175,10 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
       resourceId: row.resourceId,
       userId: row.userId ?? 'System',
       metadata: row.metadata ? JSON.stringify(redactMetadata(row.metadata)) : '',
-    }));
+      who: described.actor.viaSupport ? `PropertyPro support (signed in as ${described.actor.name})` : described.actor.name,
+      summary: described.sentence,
+      };
+    });
 
     const csv = generateCSV(csvHeaders, csvRows);
 
@@ -233,22 +199,37 @@ export const GET = withErrorHandler(async (req: NextRequest) => {
   const auditRows = (result.data as unknown as Record<string, unknown>[]).map(coerceAuditRow);
 
   // Redact sensitive keys in metadata, oldValues, and newValues
-  const redactedPage = auditRows.map((row) => ({
-    ...row,
-    oldValues: redactMetadata(row.oldValues),
-    newValues: redactMetadata(row.newValues),
-    metadata: redactMetadata(row.metadata),
-  }));
+  const redactedPage = auditRows.map(toRedactedEntry);
 
-  // Load user display names for this page
-  const userIds = auditRows.flatMap((row) => (row.userId ? [row.userId] : []));
-  const userNames = await resolveUserDisplayNames(communityId, userIds);
+  const scope = filters.scope ?? null;
+  const scopeItem =
+    scope?.kind === 'item' ? [{ resourceType: scopeResourceType(scope), resourceId: scope.resourceId }] : [];
+  const userIds = auditUserIds(redactedPage);
+  if (scope?.kind === 'person') userIds.push(scope.userId);
+
+  const [userNames, resources, hiddenRoutineCount] = await Promise.all([
+    // Names for actors and for the people access changes were about
+    resolveUserDisplayNames(communityId, userIds),
+    resolveAuditResourceNames(communityId, [...redactedPage, ...scopeItem]),
+    // Only the first page carries the count; it doesn't change while paging.
+    filters.view === 'important' && !cursor
+      ? countHiddenRoutineEntries({ communityId, filters })
+      : Promise.resolve(null),
+  ]);
+  const users = Object.fromEntries(userNames);
+
+  let scopeLabel: string | null = null;
+  if (scope?.kind === 'person') scopeLabel = knownUserName(users, scope.userId) ?? 'A former member';
+  if (scope?.kind === 'item') scopeLabel = resources[resourceKey(scopeResourceType(scope), scope.resourceId)]?.name ?? null;
 
   return NextResponse.json({
     data: {
       data: redactedPage,
       pagination: result.pagination,
-      users: Object.fromEntries(userNames),
+      users,
+      resources,
+      hiddenRoutineCount,
+      scopeLabel,
     },
   });
 });
