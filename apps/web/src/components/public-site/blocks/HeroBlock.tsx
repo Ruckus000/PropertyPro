@@ -234,7 +234,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
     <>
       <h1
         className={cn(
-          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-7xl site-lg:leading-none',
+          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-7xl',
           onPhoto ? 'text-content-inverse' : 'text-primary',
         )}
       >

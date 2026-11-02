@@ -348,12 +348,12 @@ describe('the page around the hero follows LOOK_STYLES', () => {
     // Every other section on the theme's secondary colour, or hairline rules.
     const alternate = '[&>section:nth-of-type(even):not([data-band])]:bg-[var(--theme-secondary)]';
     expect(list.classList.contains(alternate)).toBe(look.sectionTint === 'alternate');
-    expect(list.classList.contains('divide-y')).toBe(look.sectionTint === 'none');
+    // Hairlines between sections, but never along a band's edges.
+    expect(list.classList.contains('[&>*:not([data-band])+*:not([data-band])]:border-t')).toBe(look.sectionTint === 'none');
 
     // A look whose accent is a background colour never sets text in it: a
     // section's accent-coloured text (an announcement's "Pinned") is redrawn in
     // the primary. A look whose accent is a text colour sets its dates in it.
-    expect(list.classList.contains('[&_.text-accent]:text-primary')).toBe(look.accentUse === 'background');
     expect(list.classList.contains('[&_section:not([data-band])_time]:text-accent')).toBe(look.accentUse === 'text');
 
     // Section headings in the theme's primary colour.

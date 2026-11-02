@@ -12,6 +12,7 @@ import { Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BlockViewProps } from './types';
 import { SiteSection, SiteSectionEmpty } from './SiteSection';
+import { formatInZone } from './format-in-zone';
 
 /**
  * An announcement with its body already sanitized.
@@ -29,17 +30,15 @@ export interface AnnouncementViewItem extends PublicAnnouncement {
   bodyHtml: string;
 }
 
-function formatDate(value: Date, timezone: string): string {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-  try {
-    return value.toLocaleString('en-US', { ...opts, timeZone: timezone || 'America/New_York' });
-  } catch {
-    // Invalid/unsupported timezone (e.g. legacy bad data in
-    // communities.timezone). Fall back to the default zone rather than
-    // crashing the whole block.
-    return value.toLocaleString('en-US', { ...opts, timeZone: 'America/New_York' });
-  }
-}
+const DATE_OPTS: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+
+/**
+ * Styles for a notice's sanitized HTML. The app has no typography plugin, so
+ * `prose` would emit nothing and Tailwind's reset would run paragraphs together
+ * and strip list bullets; these restore spacing, bullets and visible links.
+ */
+const BODY_HTML =
+  '[&>*+*]:mt-4 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_li+li]:mt-1 [&_a]:font-semibold [&_a]:text-primary [&_a]:underline';
 
 export type AnnouncementsBlockViewProps = BlockViewProps<
   AnnouncementsBlockContent,
@@ -74,7 +73,7 @@ export function AnnouncementsBlockView({
               {lead.title}
             </h3>
             <div
-              className="prose mt-4 max-w-prose text-lg leading-relaxed text-content"
+              className={cn(BODY_HTML, 'mt-4 max-w-prose text-lg leading-relaxed text-content')}
               dangerouslySetInnerHTML={{ __html: lead.bodyHtml }}
             />
           </li>
@@ -86,7 +85,7 @@ export function AnnouncementsBlockView({
                     <Meta item={item} timezone={tz} />
                     <h3 className="mt-2 text-lg font-semibold leading-snug text-content">{item.title}</h3>
                     <div
-                      className="prose mt-2 text-base text-content-secondary"
+                      className={cn(BODY_HTML, 'mt-2 text-base text-content-secondary')}
                       dangerouslySetInnerHTML={{ __html: item.bodyHtml }}
                     />
                   </li>
@@ -104,7 +103,7 @@ export function AnnouncementsBlockView({
 function Meta({ item, timezone }: { item: AnnouncementViewItem; timezone: string }) {
   return (
     <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-content-secondary">
-      <time dateTime={item.publishedAt.toISOString()}>{formatDate(item.publishedAt, timezone)}</time>
+      <time dateTime={item.publishedAt.toISOString()}>{formatInZone(item.publishedAt, timezone, DATE_OPTS)}</time>
       {item.isPinned && (
         // Body text, not the accent: on a legacy layout the accent can be a pale
         // background colour, and this word is the item's only status cue.

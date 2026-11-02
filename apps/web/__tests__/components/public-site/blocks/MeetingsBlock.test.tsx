@@ -124,7 +124,7 @@ describe('<MeetingsBlock>', () => {
     const { container } = render(ui as React.ReactElement);
     const time = container.querySelector('time');
     expect(time?.getAttribute('dateTime')).toBe('2026-05-15T19:00:00.000Z');
-    expect(time?.textContent).toBe('May15 2026');
+    expect(time?.textContent).toBe('May 15 2026');
     expect(screen.getByText('Conference Room A')).toBeInTheDocument();
   });
 });

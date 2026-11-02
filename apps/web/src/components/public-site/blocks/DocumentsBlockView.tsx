@@ -7,15 +7,9 @@ import type { DocumentsBlockContent } from '@propertypro/shared';
 import type { PublicDocument } from '@/lib/db/public-community-reader';
 import type { BlockViewProps } from './types';
 import { SiteSection, SiteSectionEmpty } from './SiteSection';
+import { formatInZone } from './format-in-zone';
 
-function formatDate(value: Date, timezone: string): string {
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-  try {
-    return value.toLocaleString('en-US', { ...opts, timeZone: timezone || 'America/New_York' });
-  } catch {
-    return value.toLocaleString('en-US', { ...opts, timeZone: 'America/New_York' });
-  }
-}
+const DATE_OPTS: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
 
 export type DocumentsBlockViewProps = BlockViewProps<DocumentsBlockContent, PublicDocument[]>;
 
@@ -42,7 +36,7 @@ export function DocumentsBlockView({
                 <p className="mt-1 text-sm text-content-secondary">
                   {doc.categoryName && <span className="mr-3 capitalize">{doc.categoryName}</span>}
                   <time dateTime={doc.createdAt.toISOString()}>
-                    {formatDate(doc.createdAt, community.timezone)}
+                    {formatInZone(doc.createdAt, community.timezone, DATE_OPTS)}
                   </time>
                 </p>
               </div>

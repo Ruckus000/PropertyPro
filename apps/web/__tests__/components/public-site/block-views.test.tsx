@@ -68,6 +68,13 @@ describe('AnnouncementsBlockView', () => {
     expect(screen.getByText('Three')).toBeInTheDocument();
   });
 
+  it('styles notice HTML itself: paragraph spacing and list bullets, since the app has no typography plugin', () => {
+    render(<AnnouncementsBlockView blockId={1} content={content} data={[item]} community={COMMUNITY} />);
+    const body = screen.getByText('Resurfacing').parentElement;
+    expect(body).toHaveClass('[&>*+*]:mt-4', '[&_ul]:list-disc', '[&_ol]:list-decimal');
+    expect(body).not.toHaveClass('prose');
+  });
+
   it('gives a lone notice the full width and no side column', () => {
     render(<AnnouncementsBlockView blockId={1} content={content} data={[item]} community={COMMUNITY} />);
     expect(screen.getByRole('heading', { name: 'Pool closed Monday' }).closest('li')).toHaveClass('site-md:col-span-3');
@@ -226,7 +233,7 @@ describe('MeetingsBlockView', () => {
     const { container } = render(
       <MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />,
     );
-    expect(container.querySelector('time')?.textContent).toBe('Apr1 2026');
+    expect(container.querySelector('time')?.textContent).toBe('Apr 1 2026');
   });
 
   it('renders the empty state', () => {

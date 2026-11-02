@@ -45,9 +45,9 @@ function PageNav({ nav }: { nav: SiteNav }) {
                 aria-current={isCurrent ? 'page' : undefined}
                 className={[
                   'inline-flex min-h-11 items-center whitespace-nowrap rounded-md px-3 text-sm font-semibold',
-                  'transition-colors hover:bg-surface-muted hover:text-primary',
+                  'transition-colors hover:bg-surface-muted hover:text-content',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  isCurrent ? 'bg-surface-muted text-primary' : 'text-content-secondary',
+                  isCurrent ? 'bg-surface-muted text-content' : 'text-content-secondary',
                 ].join(' ')}
               >
                 {item.name}

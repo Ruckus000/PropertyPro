@@ -151,21 +151,23 @@ const PAGE_BACKGROUND: Record<LookStyle['pageBackground'], string> = {
  * shows no bands; it shows the empty sections too, so it could not predict where
  * the bands fall anyway. The previews and the live site show them. A section
  * that paints its own band (`data-band`, the quick links) keeps it.
+ *
+ * `none` draws a hairline between sections, except along a band's edges, where
+ * a light line against the solid colour reads as a seam.
  */
 const SECTION_RHYTHM: Record<LookStyle['sectionTint'], string> = {
   alternate: '[&>section:nth-of-type(even):not([data-band])]:bg-[var(--theme-secondary)]',
-  none: 'divide-y divide-edge',
+  none: '[&>*:not([data-band])+*:not([data-band])]:border-t [&>*:not([data-band])+*:not([data-band])]:border-edge',
 };
 
 /**
  * Where a look's sections put the accent, by `LookStyle.accentUse`. A look whose
- * accent is a background colour (Bayfront's gold, Plain & Simple's pale yellow)
- * never sets text in it, so a section's accent-coloured text, such as an
- * announcement's "Pinned", is redrawn in the primary. A look whose accent is a
- * text colour sets its dates in it.
+ * accent is a text colour sets its dates in it. A look whose accent is a
+ * background colour (Bayfront's gold, Plain & Simple's pale yellow) sets no text
+ * in it, and no section view sets text in `text-accent`, so it needs no rule.
  */
 const ACCENT_TEXT: Record<LookStyle['accentUse'], string> = {
-  background: '[&_.text-accent]:text-primary',
+  background: '',
   text: '[&_section:not([data-band])_time]:text-accent',
 };
 

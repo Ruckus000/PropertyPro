@@ -16,6 +16,7 @@ import type { ReactNode } from 'react';
 import { Calendar, Lock, Megaphone, Phone, type LucideIcon } from 'lucide-react';
 import type { QuicklinksBlockContent } from '@propertypro/shared';
 import type { BlockViewProps } from './types';
+import { formatInZone } from './format-in-zone';
 
 export interface QuickLinksData {
   /** The next meeting the Meetings section lists, as an ISO timestamp; null when there is none. */
@@ -25,24 +26,12 @@ export interface QuickLinksData {
   showContact: boolean;
 }
 
+/** "Tue, Nov 17". */
 const NEXT_MEETING_OPTS: Intl.DateTimeFormatOptions = {
   weekday: 'short',
   month: 'short',
   day: 'numeric',
 };
-
-/** "Tue, Nov 17", in the community's time zone, falling back as the Meetings view does. */
-function formatNextMeeting(value: Date, timezone: string): string {
-  try {
-    return value.toLocaleDateString('en-US', {
-      ...NEXT_MEETING_OPTS,
-      timeZone: timezone || 'America/New_York',
-    });
-  } catch {
-    // Invalid timezone (legacy DB data); fall back to default.
-    return value.toLocaleDateString('en-US', { ...NEXT_MEETING_OPTS, timeZone: 'America/New_York' });
-  }
-}
 
 const LINK_CLASS =
   'flex min-h-11 items-start gap-4 rounded-md py-6 text-content-inverse transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse site-md:px-6';
@@ -121,7 +110,7 @@ export function QuickLinksBlockView({ blockId, data, community, anchorId }: Quic
               {next ? (
                 <span className="font-heading text-2xl leading-tight">
                   <span className="sr-only">Next: </span>
-                  <time dateTime={next.iso}>{formatNextMeeting(next.date, community.timezone)}</time>
+                  <time dateTime={next.iso}>{formatInZone(next.date, community.timezone, NEXT_MEETING_OPTS)}</time>
                 </span>
               ) : (
                 <Hint>Dates and places</Hint>
