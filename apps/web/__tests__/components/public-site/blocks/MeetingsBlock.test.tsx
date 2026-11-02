@@ -63,8 +63,8 @@ describe('<MeetingsBlock>', () => {
     const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 30 }));
     render(ui as React.ReactElement);
     expect(screen.getByText('March Board Meeting')).toBeInTheDocument();
-    // Type, time and place share one line: "Board · 2:00 PM · 123 Main St".
-    expect(screen.getByText(/^Board · .* · 123 Main St, Miami FL$/)).toBeInTheDocument();
+    expect(screen.getByText('Board')).toBeInTheDocument();
+    expect(screen.getByText('123 Main St, Miami FL')).toBeInTheDocument();
   });
 
   it('calls listMeetings with parsed limit + timeWindowDays', async () => {
@@ -86,7 +86,7 @@ describe('<MeetingsBlock>', () => {
     ]);
     const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 90 }));
     render(ui as React.ReactElement);
-    expect(screen.getByText(/^Annual general · /)).toBeInTheDocument();
+    expect(screen.getByText('Annual general')).toBeInTheDocument();
   });
 
   it('emits console.warn + renders null on invalid config', async () => {
@@ -109,7 +109,7 @@ describe('<MeetingsBlock>', () => {
     expect(() => render(ui as React.ReactElement)).not.toThrow();
   });
 
-  it('shows the start as a date column with a machine-readable time, and the place', async () => {
+  it('shows the start as a calendar tile with a machine-readable time, and the place', async () => {
     listMeetingsMock.mockResolvedValueOnce([
       {
         id: 3,
@@ -125,6 +125,6 @@ describe('<MeetingsBlock>', () => {
     const time = container.querySelector('time');
     expect(time?.getAttribute('dateTime')).toBe('2026-05-15T19:00:00.000Z');
     expect(time?.textContent).toBe('May15');
-    expect(screen.getByText(/ · Conference Room A$/)).toBeInTheDocument();
+    expect(screen.getByText('Conference Room A')).toBeInTheDocument();
   });
 });

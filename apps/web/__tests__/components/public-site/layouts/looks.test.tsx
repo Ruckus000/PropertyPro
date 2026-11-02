@@ -199,6 +199,23 @@ describe('the full-photo hero (Bayfront)', () => {
     expect(contrastRatio(white, worstBackground)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('on a wide screen the shade fades upward but stays at AA over the bottom 70%, where the words sit', () => {
+    const { container } = renderHero('bayfront', { photos: [SUNSET] });
+    const [, scrim, words] = Array.from(heroOf(container).children);
+    const cls = scrim?.className ?? '';
+    const pct = (re: RegExp) => Number(re.exec(cls)?.[1]);
+    const from = pct(/site-md:from-black\/(\d+)/) / 100;
+    const via = pct(/site-md:via-black\/(\d+)/) / 100;
+    const viaStop = pct(/site-md:via-(\d+)%/);
+    // Darkest at the bottom, and the middle stop at least as dark as the phone's flat shade.
+    expect(from).toBeGreaterThanOrEqual(via);
+    expect(viaStop).toBeGreaterThanOrEqual(70);
+    const channel = Math.round(255 * (1 - via)).toString(16).padStart(2, '0').toUpperCase();
+    expect(contrastRatio(toHex(tokenDefinitions.text.inverse), `#${channel}${channel}${channel}`)).toBeGreaterThanOrEqual(4.5);
+    // The words are anchored low: a deep top padding above them, a shallow one below.
+    expect(words).toHaveClass('site-md:pt-72', 'site-md:pb-24');
+  });
+
   it('with two or more photos, the photo behind the words is decorative and the strip shows each photo once', () => {
     const { container } = renderHero('bayfront', { photos: [SUNSET, POOL] });
     const hero = heroOf(container);
@@ -322,7 +339,7 @@ describe('the page around the hero follows LOOK_STYLES', () => {
     expect(root).toHaveAttribute('data-layout', id);
 
     // Every other section on the theme's secondary colour, or hairline rules.
-    const alternate = '[&>section:nth-of-type(even)]:bg-[var(--theme-secondary)]';
+    const alternate = '[&>section:nth-of-type(even):not([data-band])]:bg-[var(--theme-secondary)]';
     expect(list.classList.contains(alternate)).toBe(look.sectionTint === 'alternate');
     expect(list.classList.contains('divide-y')).toBe(look.sectionTint === 'none');
 
@@ -330,7 +347,7 @@ describe('the page around the hero follows LOOK_STYLES', () => {
     // section's accent-coloured text (an announcement's "Pinned") is redrawn in
     // the primary. A look whose accent is a text colour sets its dates in it.
     expect(list.classList.contains('[&_.text-accent]:text-primary')).toBe(look.accentUse === 'background');
-    expect(list.classList.contains('[&_time]:text-accent')).toBe(look.accentUse === 'text');
+    expect(list.classList.contains('[&_section:not([data-band])_time]:text-accent')).toBe(look.accentUse === 'text');
 
     // Section headings in the theme's primary colour.
     expect(list).toHaveClass('[&_h2]:text-primary');

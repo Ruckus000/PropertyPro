@@ -30,19 +30,40 @@ export function BoardBlockView({ blockId, content, data, anchorId }: BoardBlockV
   const headingId = `board-${blockId}`;
 
   return (
-    <SiteSection id={anchorId} headingId={headingId} title={content?.heading ?? DEFAULT_BOARD_HEADING}>
+    <SiteSection
+      id={anchorId}
+      headingId={headingId}
+      title={content?.heading ?? DEFAULT_BOARD_HEADING}
+      layout="stacked"
+    >
       {data.members.length === 0 ? (
         <SiteSectionEmpty>No one holds a board seat yet.</SiteSectionEmpty>
       ) : (
-        <ul className="grid gap-x-12 site-sm:grid-cols-2">
+        <ul className="grid gap-x-8 gap-y-10 site-sm:grid-cols-2 site-md:grid-cols-4">
           {data.members.map((member, index) => (
-            <li key={`${index}-${member.name}`} className="border-t border-edge py-5">
-              <p className="font-heading text-xl text-content">{member.name}</p>
-              <p className="mt-1 text-base text-content-secondary">{member.title}</p>
+            <li key={`${index}-${member.name}`} className="flex items-center gap-4">
+              <span
+                aria-hidden="true"
+                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary font-heading text-xl text-content-inverse"
+              >
+                {initials(member.name)}
+              </span>
+              <span className="min-w-0">
+                <span className="block font-heading text-xl leading-snug text-content">{member.name}</span>
+                <span className="block text-base text-content-secondary">{member.title}</span>
+              </span>
             </li>
           ))}
         </ul>
       )}
     </SiteSection>
   );
+}
+
+/** "Sam President" → "SP": the first letter of the first and last words. */
+function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.[0] ?? '';
+  const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
+  return (first + last).toUpperCase();
 }

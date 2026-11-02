@@ -45,7 +45,7 @@ function formatNextMeeting(value: Date, timezone: string): string {
 }
 
 const LINK_CLASS =
-  'flex min-h-11 items-center gap-3 rounded-md py-5 text-base text-content transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
+  'flex min-h-11 items-start gap-4 rounded-md py-6 text-content-inverse transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-content-inverse site-md:px-6';
 
 function QuickLink({
   href,
@@ -56,15 +56,15 @@ function QuickLink({
   href: string;
   icon: LucideIcon;
   label: string;
-  children?: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <li>
       {/* A plain <a>, not next/link: the public site ships no client runtime. */}
       <a href={href} className={LINK_CLASS}>
-        <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
-        <span className="flex flex-col">
-          <span className="font-semibold">{label}</span>
+        <Icon className="mt-1 h-5 w-5 shrink-0" aria-hidden="true" />
+        <span className="flex flex-col gap-1">
+          <span className="text-base font-semibold">{label}</span>
           {children}
         </span>
       </a>
@@ -72,8 +72,22 @@ function QuickLink({
   );
 }
 
+/** A line under a link's name that only restates it, so assistive tech hears the name alone. */
+function Hint({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-base" aria-hidden="true">
+      {children}
+    </span>
+  );
+}
+
 export type QuickLinksBlockViewProps = BlockViewProps<QuicklinksBlockContent, QuickLinksData>;
 
+/**
+ * Drawn as a band in the theme's primary colour right under the welcome: the
+ * things a resident comes for first, with the next meeting's date set large.
+ * `data-band` keeps the look's section tint and accent rules off it (SiteChrome).
+ */
 export function QuickLinksBlockView({ blockId, data, community, anchorId }: QuickLinksBlockViewProps) {
   const headingId = `quicklinks-${blockId}`;
   const { nextMeeting } = data;
@@ -86,27 +100,40 @@ export function QuickLinksBlockView({ blockId, data, community, anchorId }: Quic
   return (
     <section
       id={anchorId}
-      className="px-6 py-6 site-sm:px-8 site-lg:px-10"
+      data-band="primary"
+      className="bg-primary px-6 site-sm:px-8 site-lg:px-10"
       aria-labelledby={headingId}
     >
       <div className="mx-auto max-w-6xl">
         <h2 id={headingId} className="sr-only">
           Quick links
         </h2>
-        <ul className="grid gap-x-8 site-sm:grid-cols-2 site-md:grid-cols-4">
+        <ul className="grid divide-y divide-white/20 site-sm:grid-cols-2 site-sm:divide-y-0 site-md:-mx-6 site-md:grid-cols-4 site-md:divide-x">
           {data.showMeetings && (
             <QuickLink href="#meetings" icon={Calendar} label="Meetings">
-              {next && (
-                <span className="text-content-secondary">
-                  {'Next: '}
+              {next ? (
+                <span className="font-heading text-2xl leading-tight">
+                  <span className="sr-only">Next: </span>
                   <time dateTime={next.iso}>{formatNextMeeting(next.date, community.timezone)}</time>
                 </span>
+              ) : (
+                <Hint>Dates and places</Hint>
               )}
             </QuickLink>
           )}
-          {data.showNews && <QuickLink href="#announcements" icon={Megaphone} label="News" />}
-          <QuickLink href="/auth/login" icon={Lock} label="Owner documents" />
-          {data.showContact && <QuickLink href="#contact" icon={Phone} label="Contact" />}
+          {data.showNews && (
+            <QuickLink href="#announcements" icon={Megaphone} label="News">
+              <Hint>Notices from the board</Hint>
+            </QuickLink>
+          )}
+          <QuickLink href="/auth/login" icon={Lock} label="Owner documents">
+            <Hint>Sign in to read the records</Hint>
+          </QuickLink>
+          {data.showContact && (
+            <QuickLink href="#contact" icon={Phone} label="Contact">
+              <Hint>Office and management</Hint>
+            </QuickLink>
+          )}
         </ul>
       </div>
     </section>

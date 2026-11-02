@@ -169,12 +169,12 @@ describe('MeetingsBlockView', () => {
   it('renders meetings from props', () => {
     render(<MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />);
     expect(screen.getByText('Annual Meeting')).toBeInTheDocument();
-    expect(screen.getByText(/ · Clubhouse$/)).toBeInTheDocument();
+    expect(screen.getByText('Clubhouse')).toBeInTheDocument();
   });
 
   it('humanises the meeting type', () => {
     render(<MeetingsBlockView blockId={3} content={content} data={[meeting as never]} community={COMMUNITY} />);
-    expect(screen.getByText(/^Board meeting · /)).toBeInTheDocument();
+    expect(screen.getByText('Board meeting')).toBeInTheDocument();
   });
 
   it('omits the location row when there is none', () => {

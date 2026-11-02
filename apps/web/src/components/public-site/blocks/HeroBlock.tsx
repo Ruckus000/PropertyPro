@@ -133,6 +133,20 @@ export function HeroBlock(props: BlockRendererProps) {
   );
 }
 
+/**
+ * The shade over a full-bleed photo, which is what keeps white words readable
+ * over any photo a community uploads.
+ *
+ * On a phone the hero is mostly words, so the whole photo takes a flat 60% black:
+ * white on 60% black over a pure-white pixel is 5.7:1. On a wide screen the photo
+ * gets room to show: the shade is at least 60% over the bottom 70% of the hero and
+ * fades to 25% at the top. The words are anchored to the bottom (a large top
+ * padding, a small bottom one), and they would have to be taller than the hero's
+ * top padding is deep (~576px of text) before any of them left the 60% zone.
+ */
+const PHOTO_SCRIM =
+  'absolute inset-0 bg-black/60 site-md:bg-transparent site-md:bg-gradient-to-t site-md:from-black/80 site-md:via-black/60 site-md:via-70% site-md:to-black/25';
+
 /** Corners by `LookStyle.radius`, as whole class names so Tailwind sees them. */
 const CORNERS: Record<LookStyle['radius'], { button: string; photo: string }> = {
   square: { button: 'rounded-none', photo: 'rounded-none' },
@@ -218,7 +232,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
     <>
       <h1
         className={cn(
-          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-6xl',
+          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-7xl site-lg:leading-none',
           onPhoto ? 'text-content-inverse' : 'text-primary',
         )}
       >
@@ -260,8 +274,8 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           sizes="100vw"
           decorative={strip !== null}
         />
-        <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
-        <div className="relative px-6 pb-20 pt-32 site-sm:px-8 site-md:pb-28 site-md:pt-48 site-lg:px-10">
+        <div aria-hidden="true" className={PHOTO_SCRIM} />
+        <div className="relative px-6 pb-16 pt-40 site-sm:px-8 site-md:pb-24 site-md:pt-72 site-lg:px-10">
           <div className="mx-auto max-w-6xl">
             {words}
             {strip}

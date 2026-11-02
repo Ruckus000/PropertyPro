@@ -149,10 +149,11 @@ const PAGE_BACKGROUND: Record<LookStyle['pageBackground'], string> = {
  * for having nothing to show never breaks the rhythm. The editor canvas wraps
  * each section in its selection frame, which this does not match, so the canvas
  * shows no bands; it shows the empty sections too, so it could not predict where
- * the bands fall anyway. The previews and the live site show them.
+ * the bands fall anyway. The previews and the live site show them. A section
+ * that paints its own band (`data-band`, the quick links) keeps it.
  */
 const SECTION_RHYTHM: Record<LookStyle['sectionTint'], string> = {
-  alternate: '[&>section:nth-of-type(even)]:bg-[var(--theme-secondary)]',
+  alternate: '[&>section:nth-of-type(even):not([data-band])]:bg-[var(--theme-secondary)]',
   none: 'divide-y divide-edge',
 };
 
@@ -165,7 +166,7 @@ const SECTION_RHYTHM: Record<LookStyle['sectionTint'], string> = {
  */
 const ACCENT_TEXT: Record<LookStyle['accentUse'], string> = {
   background: '[&_.text-accent]:text-primary',
-  text: '[&_time]:text-accent',
+  text: '[&_section:not([data-band])_time]:text-accent',
 };
 
 /** A look's page without a hero block (a sub-page always) opens with its text hero: the heading alone. */

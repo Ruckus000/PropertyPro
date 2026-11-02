@@ -24,12 +24,13 @@
 import type { ContactBlockContent } from '@propertypro/shared';
 import type { PublicContactInfo } from '@/lib/db/public-community-reader';
 import type { BlockViewProps } from './types';
+import { Mail, Phone } from 'lucide-react';
 import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
-/** One group of contact details: a hairline above, a small title, the details. */
-const GROUP = 'border-t border-edge py-5';
-const GROUP_TITLE = 'text-sm font-semibold uppercase tracking-widest text-content-secondary';
-const LINK = 'font-semibold text-primary underline-offset-4 hover:underline';
+/** One group of contact details: a short title over the details. */
+const GROUP = 'min-w-0';
+const GROUP_TITLE = 'text-base font-semibold text-content-secondary';
+const LINK = 'inline-flex min-h-11 items-center gap-2 font-semibold text-primary underline-offset-4 hover:underline';
 
 function hasContact(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -75,22 +76,23 @@ export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewPr
       {!contactHasContent(data) ? (
         <SiteSectionEmpty>Contact information will be posted here soon.</SiteSectionEmpty>
       ) : (
-        <div className="grid gap-x-12 site-sm:grid-cols-2">
+        <div className="grid gap-10 site-sm:grid-cols-2">
           {management && (
             <section className={GROUP} aria-label="Management contact">
               <h3 className={GROUP_TITLE}>Management</h3>
-              <dl className="mt-3 space-y-3 text-base">
+              <dl className="mt-3 space-y-1 text-base">
                 {hasContact(management.name) && (
                   <div>
                     <dt className="sr-only">Name</dt>
-                    <dd className="font-semibold text-content">{management.name}</dd>
+                    <dd className="font-heading text-2xl leading-snug text-content">{management.name}</dd>
                   </div>
                 )}
                 {hasContact(management.email) && (
                   <div>
-                    <dt className="text-sm text-content-secondary">Email</dt>
+                    <dt className="sr-only">Email</dt>
                     <dd>
                       <a className={LINK} href={`mailto:${management.email}`}>
+                        <Mail className="h-4 w-4 shrink-0" aria-hidden="true" />
                         {management.email}
                       </a>
                     </dd>
@@ -98,9 +100,10 @@ export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewPr
                 )}
                 {hasContact(management.phone) && (
                   <div>
-                    <dt className="text-sm text-content-secondary">Phone</dt>
+                    <dt className="sr-only">Phone</dt>
                     <dd>
                       <a className={LINK} href={`tel:${management.phone}`}>
+                        <Phone className="h-4 w-4 shrink-0" aria-hidden="true" />
                         {management.phone}
                       </a>
                     </dd>
@@ -116,8 +119,8 @@ export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewPr
                 <dl className="mt-3 space-y-3 text-base text-content">
                   {hasAddress && (
                     <div>
-                      <dt className="text-sm text-content-secondary">Address</dt>
-                      <dd>{data.address}</dd>
+                      <dt className="sr-only">Address</dt>
+                      <dd className="font-heading text-2xl leading-snug">{data.address}</dd>
                     </div>
                   )}
                   <div>
@@ -128,7 +131,7 @@ export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewPr
                 </dl>
               ) : (
                 // Titled "Address" already, so no row label repeats it.
-                <p className="mt-3 text-base text-content">{data.address}</p>
+                <p className="mt-3 font-heading text-2xl leading-snug text-content">{data.address}</p>
               )}
             </section>
           )}

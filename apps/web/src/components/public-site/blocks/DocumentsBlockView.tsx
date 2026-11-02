@@ -31,7 +31,7 @@ export function DocumentsBlockView({
       {data.length === 0 ? (
         <SiteSectionEmpty>{content?.emptyText ?? 'No documents available.'}</SiteSectionEmpty>
       ) : (
-        <ul className="divide-y divide-edge border-y border-edge">
+        <ul className="divide-y divide-edge rounded-md bg-surface-card px-6">
           {data.map((doc) => (
             <li key={doc.id} className="flex items-start justify-between gap-6 py-5">
               <div className="min-w-0 flex-1">
@@ -40,12 +40,7 @@ export function DocumentsBlockView({
                   <p className="mt-1 text-base text-content-secondary">{doc.description}</p>
                 )}
                 <p className="mt-1 text-sm text-content-secondary">
-                  {doc.categoryName && (
-                    <>
-                      <span className="capitalize">{doc.categoryName}</span>
-                      {' · '}
-                    </>
-                  )}
+                  {doc.categoryName && <span className="mr-3 capitalize">{doc.categoryName}</span>}
                   <time dateTime={doc.createdAt.toISOString()}>
                     {formatDate(doc.createdAt, community.timezone)}
                   </time>

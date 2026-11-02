@@ -89,8 +89,14 @@ describe('<BoardBlock> shell', () => {
     expect(reader.getContactInfo).toHaveBeenCalledWith({ showBoard: true, showManagement: false });
     // Only the two fields cross into the view, whatever the roster rows carry.
     expect((ui as React.ReactElement<{ data: unknown }>).props.data).toEqual({ members: BOARD });
+    // What a reader hears: the initials circle is decoration (aria-hidden).
     const items = screen.getAllByRole('listitem');
-    expect(items.map((item) => item.textContent)).toEqual([
+    const heard = (item: HTMLElement) =>
+      [...item.childNodes]
+        .filter((node) => !(node instanceof HTMLElement && node.getAttribute('aria-hidden') === 'true'))
+        .map((node) => node.textContent)
+        .join('');
+    expect(items.map(heard)).toEqual([
       'Maria DelgadoBoard President',
       'Robert ChenTreasurer',
     ]);
