@@ -42,6 +42,8 @@ export interface ComplianceCommandCenterProps {
   designation: BoardDesignation | null;
   canWrite: boolean;
   belowPostingThreshold?: BelowPostingThreshold | null;
+  /** The community's IANA time zone, for the activity history's times. */
+  timeZone?: string;
 }
 
 function defaultView(designation: BoardDesignation | null): ViewMode {
@@ -58,6 +60,7 @@ export function ComplianceCommandCenter({
   designation,
   canWrite,
   belowPostingThreshold = null,
+  timeZone,
 }: ComplianceCommandCenterProps) {
   const storageKey = `compliance.audienceView.${communityId}`;
 
@@ -331,7 +334,7 @@ export function ComplianceCommandCenter({
       )}
 
       <section id="compliance-activity-feed">
-        <ComplianceActivityFeed communityId={communityId} />
+        <ComplianceActivityFeed communityId={communityId} timeZone={timeZone} />
       </section>
     </div>
   );

@@ -1,7 +1,9 @@
 /**
- * P3-53: Audit Trail Viewer page.
+ * Audit trail: a permanent, plain-language record of what happened in the
+ * community and who did it.
  *
- * Route: /audit-trail?communityId=X
+ * Route: /audit-trail?communityId=X (plus view, period, person, entity, item,
+ * entry — see lib/audit/audit-query.ts)
  * Auth: isAdminRole(membership.role) — the v3 admin tier, property_manager or
  *        root_manager. Board designation grants no access (ADR-006).
  * Read-only: no mutation capabilities.
@@ -13,6 +15,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole } from '@propertypro/shared';
 import { AuditTrailViewer } from '@/components/audit/AuditTrailViewer';
 import { PageHeader } from '@/components/shared/page-header';
+import { PageBody } from '@/components/shared/page-body';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -44,8 +47,9 @@ export default async function AuditTrailPage({ searchParams }: PageProps) {
   return (
     <>
       <PageHeader title="Audit Trail" />
-
-      <AuditTrailViewer communityId={communityId} />
+      <PageBody width="content">
+        <AuditTrailViewer communityId={communityId} timeZone={membership.timezone} />
+      </PageBody>
     </>
   );
 }

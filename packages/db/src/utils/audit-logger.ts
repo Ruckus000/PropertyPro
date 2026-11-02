@@ -58,6 +58,10 @@ export type AuditAction =
   // members leave the system in a file, so it is findable by name like the
   // community export. Metadata carries counts and columns, never the rows.
   | 'directory_exported'
+  // A manager printed (or saved as PDF) the audit record for one person or
+  // item. The printout can show who opened what, so like the exports above it
+  // is findable by name. Metadata names the scope and the entry count.
+  | 'audit_evidence_generated'
   // Community purge — the terminal, irreversible step of the deletion
   // lifecycle. Its own action for the same reason as the export above: the
   // audit UI filters on a free-text `action` box, and a board asking "when was

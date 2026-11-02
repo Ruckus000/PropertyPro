@@ -1261,7 +1261,8 @@ export async function markViolationFinePaidForLineItem(
       status: 'paid',
       paidAt: paidAt.toISOString(),
     },
-    metadata: { requestId: requestId ?? null },
+    // violationId lets the audit trail list this payment under its violation.
+    metadata: { requestId: requestId ?? null, violationId: fine.violationId },
   });
 
   return fine.id;
