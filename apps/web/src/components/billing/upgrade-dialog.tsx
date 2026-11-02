@@ -66,6 +66,11 @@ export interface UpgradeDialogProps {
    * the subdomain isn't community-specific (e.g. localhost dev).
    */
   communityId: number | null;
+  /**
+   * Where focus goes when the dialog closes (Radix `onCloseAutoFocus`). Needed
+   * when the control that opened it is gone by then, as a More panel item is.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export function UpgradeDialog({
@@ -79,6 +84,7 @@ export function UpgradeDialog({
   communityType = null,
   isUnitOwner,
   communityId,
+  onCloseAutoFocus,
 }: UpgradeDialogProps) {
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -154,7 +160,7 @@ export function UpgradeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" className="gap-0 p-0 overflow-hidden">
+      <DialogContent size="lg" className="gap-0 p-0 overflow-hidden" onCloseAutoFocus={onCloseAutoFocus}>
         <FeatureHero featureKey={featureKey} variant="dialog" />
 
         <div className="space-y-5 p-6">

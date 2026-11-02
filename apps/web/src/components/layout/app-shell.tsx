@@ -52,23 +52,24 @@ const HELP_DOCS_MODAL_ENABLED =
 
 // The top-nav flag (D23; see top-nav-flag.ts) is read INLINE at each site below,
 // never through the TOP_NAV_ENABLED constant, which does not fold across modules.
+// The tabs are on unless the variable is exactly 'false' (a kill switch).
 // next.config.ts always defines the variable, so each condition compares two
-// string literals that webpack folds at parse time: a flag-off build drops these
-// import()s and emits none of top-nav-shell.tsx, top-nav-slots.tsx or their
-// dependencies. Every pathname read lives in those two modules, so a flag-off
-// shell calls no hook it did not call before the flag existed.
+// string literals that webpack folds at parse time: a kill-switched build drops
+// these import()s and emits none of top-nav-shell.tsx, top-nav-slots.tsx or their
+// dependencies. Every pathname read lives in those two modules, so that shell
+// calls no hook it did not call before the flag existed.
 const ShellTopNav =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
     ? dynamic<ShellTopNavProps>(() => import('./top-nav-shell').then((m) => m.ShellTopNav), {
         loading: () => null,
       })
     : null;
 const ShellBrandSlot =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
     ? dynamic(() => import('./top-nav-slots').then((m) => m.ShellBrandSlot), { loading: () => null })
     : null;
 const DesktopNavSlot =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
     ? dynamic(() => import('./top-nav-slots').then((m) => m.DesktopNavSlot), { loading: () => null })
     : null;
 
@@ -126,7 +127,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw

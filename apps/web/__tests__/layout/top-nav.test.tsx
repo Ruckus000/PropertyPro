@@ -8,8 +8,9 @@
  */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { axe } from 'vitest-axe';
 import { TopNav } from '@/components/layout/top-nav';
 import type { TopNavLink, TopNavModel } from '@/components/layout/top-nav-model';
@@ -21,6 +22,9 @@ vi.mock('@/components/billing/upgrade-dialog', () => ({
     return props.open ? <div role="dialog" aria-label="Upgrade stub" /> : null;
   },
 }));
+
+const prefetchNavData = vi.hoisted(() => vi.fn());
+vi.mock('@/components/layout/nav-prefetch', () => ({ prefetchNavData }));
 
 function link(id: string, overrides: Partial<TopNavLink> = {}): TopNavLink {
   return {
@@ -58,8 +62,14 @@ const UPGRADE = {
   isUnitOwner: true,
 };
 
+const queryClient = new QueryClient();
+
 function renderNav(m: TopNavModel) {
-  return render(<TopNav model={m} communityId={7} upgrade={UPGRADE} />);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <TopNav model={m} communityId={7} upgrade={UPGRADE} />
+    </QueryClientProvider>,
+  );
 }
 
 describe('TopNav', () => {
@@ -223,5 +233,53 @@ describe('TopNav', () => {
     expect(await screen.findByRole('dialog', { name: 'More pages' })).toBeInTheDocument();
     const results = await axe(baseElement);
     expect(results).toHaveNoViolations();
+  });
+  it('tab and More links warm their data on hover and focus, as the rail does', async () => {
+    prefetchNavData.mockClear();
+    const user = userEvent.setup();
+    renderNav(model());
+    const meetings = screen.getByRole('link', { name: 'Meetings' });
+    fireEvent.pointerEnter(meetings);
+    expect(prefetchNavData).toHaveBeenLastCalledWith(queryClient, '/meetings?communityId=7', 7);
+    fireEvent.focus(screen.getByRole('link', { name: 'Dashboard' }));
+    expect(prefetchNavData).toHaveBeenLastCalledWith(queryClient, '/dashboard?communityId=7', 7);
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const panel = await screen.findByRole('dialog', { name: 'More pages' });
+    fireEvent.pointerEnter(within(panel).getByRole('link', { name: 'Payments' }));
+    expect(prefetchNavData).toHaveBeenLastCalledWith(queryClient, '/payments?communityId=7', 7);
+  });
+
+  it('a locked tab warms nothing (it opens a dialog, not a page)', () => {
+    prefetchNavData.mockClear();
+    renderNav(model({ tabs: [link('dashboard', { active: true }), link('reports', { planLocked: true })] }));
+    fireEvent.pointerEnter(screen.getByRole('button', { name: /Reports/ }));
+    expect(prefetchNavData).not.toHaveBeenCalled();
+  });
+
+  it('More names the current page for a screen reader when it lives inside More', () => {
+    renderNav(
+      model({
+        tabs: [link('dashboard'), link('meetings')],
+        moreHasActive: true,
+        moreGroups: [{ label: 'Community', links: [link('directory'), link('forum', { active: true })] }],
+      }),
+    );
+    const more = screen.getByRole('button', { name: 'More, current page: Forum' });
+    expect(within(more).getByText(', current page: Forum')).toHaveClass('sr-only');
+  });
+
+  it('no current-page hint on More when the active page is a tab', () => {
+    renderNav(model());
+    expect(screen.getByRole('button', { name: 'More' })).toBeInTheDocument();
+    expect(screen.queryByText(/current page/)).toBeNull();
+  });
+  it("More's aria-controls names the panel it opens (a fixed id, stable across server and client)", async () => {
+    const user = userEvent.setup();
+    renderNav(model());
+    const more = screen.getByRole('button', { name: 'More' });
+    expect(more).toHaveAttribute('aria-controls', 'top-nav-more-panel');
+    await user.click(more);
+    const panel = await screen.findByRole('dialog', { name: 'More pages' });
+    expect(panel).toHaveAttribute('id', 'top-nav-more-panel');
   });
 });
