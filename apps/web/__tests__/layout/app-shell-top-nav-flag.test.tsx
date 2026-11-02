@@ -10,13 +10,14 @@
  * them. `topNav` is the shell's test seam over the build-time constant.
  */
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { AppShell } from '@/components/layout/app-shell';
 
+const nav = vi.hoisted(() => ({ pathname: '/dashboard' }));
 vi.mock('next/navigation', () => ({
-  usePathname: () => '/dashboard',
+  usePathname: () => nav.pathname,
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/layout/app-sidebar', () => ({
@@ -48,14 +49,14 @@ vi.mock('@/components/billing/subscription-billing-banners', () => ({
 vi.mock('@/components/demo/DemoTrialBanner', () => ({ DemoTrialBanner: () => null }));
 vi.mock('@/components/command-palette', () => ({ CommandPalette: () => null }));
 
-function renderShell(topNav: boolean, plan: string | null = 'professional') {
+function renderShell(topNav: boolean, plan: string | null = 'professional', withCommunity = true) {
   return render(
     <AppShell
       topNav={topNav}
       user={{ id: 'u1', fullName: 'Pat Manager', email: 'pat@example.test' }}
-      community={{ id: 7, name: 'Sunset Condos', type: 'condo_718', plan }}
-      role="property_manager"
-      features={getFeaturesForCommunity('condo_718')}
+      community={withCommunity ? { id: 7, name: 'Sunset Condos', type: 'condo_718', plan } : null}
+      role={withCommunity ? 'property_manager' : null}
+      features={withCommunity ? getFeaturesForCommunity('condo_718') : null}
       resourceAccess={null}
     >
       <p>page body</p>
@@ -64,6 +65,10 @@ function renderShell(topNav: boolean, plan: string | null = 'professional') {
 }
 
 describe('AppShell — top-nav flag', () => {
+  beforeEach(() => {
+    nav.pathname = '/dashboard';
+  });
+
   it('flag off: desktop sidebar present, no TopNav, no brand slot', () => {
     const { container } = renderShell(false);
 
@@ -105,5 +110,26 @@ describe('AppShell — top-nav flag', () => {
     const header = document.querySelector('header') as HTMLElement;
     expect(header).toHaveTextContent('Sunset Condos');
     expect(header).not.toHaveTextContent('Professional');
+  });
+
+  it('flag on with no community falls back to the desktop sidebar', () => {
+    nav.pathname = '/select-community';
+    renderShell(true, null, false);
+
+    // No community means an empty tab model and an lg:hidden hamburger; the rail
+    // (with its community picker) is the only navigation left at lg and up.
+    const sidebar = screen.getByTestId('desktop-sidebar');
+    expect(sidebar.parentElement).toHaveClass('hidden', 'lg:block');
+    expect(screen.queryByTestId('top-nav')).toBeNull();
+    const header = document.querySelector('header') as HTMLElement;
+    expect(header).not.toHaveTextContent('PropertyPro');
+  });
+
+  it('flag on on a PM portfolio path with no community shows TopNav', async () => {
+    nav.pathname = '/pm/dashboard/communities';
+    renderShell(true, null, false);
+
+    expect(await screen.findByTestId('top-nav')).toBeInTheDocument();
+    expect(screen.queryByTestId('desktop-sidebar')).toBeNull();
   });
 });

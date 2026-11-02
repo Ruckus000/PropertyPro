@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
 import { PlanBadge } from '@propertypro/ui';
 import { PLAN_FEATURES, resolveLifecycleState, resolvePlanId } from '@propertypro/shared';
@@ -23,6 +24,7 @@ import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertyp
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
+import { isPmPortfolioPath } from './nav-config';
 import { TOP_NAV_ENABLED } from './top-nav-flag';
 import { PageContainer, PAGE_GUTTER_X } from './page-container';
 import { ShellBreadcrumbs } from './shell-breadcrumbs';
@@ -133,7 +135,7 @@ function ShellBrand({ communityName, plan }: { communityName: string | null; pla
   );
 }
 
-function ShellInner({ topNav = TOP_NAV_ENABLED, children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav: topNavFlag = TOP_NAV_ENABLED, children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw
@@ -148,6 +150,12 @@ function ShellInner({ topNav = TOP_NAV_ENABLED, children, user, community, role,
       subscriptionCanceledAt: subscriptionCanceledAt ?? null,
       freeAccessExpiresAt: freeAccessExpiresAt ?? null,
     }) === 'lapsed';
+  const pathname = usePathname();
+  // Tabs need something to list: a community, or the cross-community PM portfolio
+  // routes. With neither (e.g. /select-community) the tab model is empty and the
+  // hamburger is lg:hidden, which would leave no navigation at lg+; the rail
+  // handles that state on purpose (its community picker), so keep it there.
+  const topNav = topNavFlag && (community != null || isPmPortfolioPath(pathname ?? ''));
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);

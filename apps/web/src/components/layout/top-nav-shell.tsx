@@ -62,7 +62,7 @@ export function ShellTopNav({
   if (model.tabs.length === 0) return null;
 
   return (
-    <div className="hidden lg:block border-b border-edge bg-surface-card">
+    <div className="hidden bg-surface-card px-3 lg:block">
       <TopNav
         model={model}
         communityId={communityId}

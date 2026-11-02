@@ -186,14 +186,7 @@ function renderClient(props: Partial<Parameters<typeof DirectoryPageClient>[0]> 
     { wrapper },
   );
 }
-// Tab switches write the URL with history.replaceState, which Next syncs into
-// useSearchParams without a server render. Asserting router.replace is NOT
-// called is the point: that call re-rendered the force-dynamic page.
-const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
-
-
 beforeEach(() => {
-  historyReplace.mockClear();
   vi.clearAllMocks();
   searchState.value = '';
   isDesktopMock.mockReturnValue(true);
