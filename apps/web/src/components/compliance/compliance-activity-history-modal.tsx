@@ -12,12 +12,15 @@ import { AuditTrailViewer } from "@/components/audit/AuditTrailViewer";
 
 export interface ComplianceActivityHistoryModalProps {
   communityId: number;
+  /** The community's time zone, so times match the audit trail page. */
+  timeZone?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 export function ComplianceActivityHistoryModal({
   communityId,
+  timeZone = "America/New_York",
   open,
   onOpenChange,
 }: ComplianceActivityHistoryModalProps) {
@@ -36,7 +39,7 @@ export function ComplianceActivityHistoryModal({
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-          {open && <AuditTrailViewer communityId={communityId} />}
+          {open && <AuditTrailViewer communityId={communityId} timeZone={timeZone} syncUrl={false} />}
         </div>
       </DialogContent>
     </Dialog>
