@@ -25,6 +25,7 @@
  */
 import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
+import { clickWhenHydrated } from './helpers/hydration';
 
 /**
  * Budget for the FIRST assertion after a navigation.
@@ -228,9 +229,7 @@ test.describe('Release regression coverage', () => {
     await expect(page.getByText('Review your compliance score')).toHaveCount(0);
   });
 
-  test('a long navigation rail at desktop size remains scrollable with native scrollbar behavior', async ({
-    page,
-  }) => {
+  test('at desktop size the top tabs replace the rail, and More holds the rest', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const { communityId } = await loginAs(page, 'root_sunset', {
       communitySlug: 'sunset-condos',
@@ -238,18 +237,23 @@ test.describe('Release regression coverage', () => {
     });
 
     await page.goto(`/dashboard?communityId=${communityId}`, { waitUntil: 'domcontentloaded' });
-    const rail = page.getByRole('navigation', { name: 'Main navigation' });
-    await expect(rail).toBeVisible({ timeout: FIRST_RENDER_TIMEOUT });
-    const scrollRail = rail.locator('[role="list"]');
-    await expect(scrollRail).toBeVisible();
+    const tabs = page.getByRole('navigation', { name: 'Main navigation' });
+    await expect(tabs).toBeVisible({ timeout: FIRST_RENDER_TIMEOUT });
+    // Exactly one main navigation is showing: the tab row, not the tab row AND the rail.
+    await expect(page.locator('nav[aria-label="Main navigation"]:visible')).toHaveCount(1);
+    await expect(tabs.getByRole('link', { name: 'Dashboard', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect(tabs.getByRole('link', { name: 'Documents', exact: true })).toBeVisible();
 
-    const scrollbar = await scrollRail.evaluate((element) => ({
-      clientHeight: element.clientHeight,
-      scrollHeight: element.scrollHeight,
-      scrollbarWidth: getComputedStyle(element).scrollbarWidth,
-    }));
-    expect(scrollbar.scrollHeight).toBeGreaterThan(scrollbar.clientHeight);
-    expect(scrollbar.scrollbarWidth).toBe('auto');
+    const more = tabs.getByRole('button', { name: /^More/ });
+    await clickWhenHydrated(more);
+    const panel = page.getByRole('dialog', { name: 'More pages' });
+    await expect(panel.getByRole('link', { name: 'Audit Trail', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(more).toBeFocused();
   });
 });
 
