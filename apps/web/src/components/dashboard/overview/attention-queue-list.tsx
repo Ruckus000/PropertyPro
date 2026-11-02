@@ -9,7 +9,7 @@ const MAX_ROWS = 6;
 
 type Tier = AttentionItem['tier'];
 
-const TIER_STATUS: Record<Tier, string> = { critical: 'overdue', urgent: 'due_soon', aware: 'brand' };
+const TIER_STATUS: Record<Tier, string> = { critical: 'overdue', urgent: 'due_soon', aware: 'open' };
 const TIER_ROW_LABEL: Record<Tier, string> = { critical: 'Overdue', urgent: 'Due this week', aware: 'Coming up' };
 const TIER_CHIP_SUFFIX: Record<Tier, string> = { critical: 'overdue', urgent: 'due this week', aware: 'coming up' };
 const TIERS: Tier[] = ['critical', 'urgent', 'aware'];
@@ -62,14 +62,14 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
                   <p className="text-base font-medium text-content">{item.title}</p>
                   <p className="text-sm text-content-secondary">{item.detail}</p>
                 </div>
-                <Button asChild variant="outline" size="sm">
+                <Button asChild variant="outline" className="h-11 md:h-9">
                   <Link href={item.action.href}>{item.action.label}</Link>
                 </Button>
               </li>
             ))}
           </ul>
           {items.length > MAX_ROWS ? (
-            <Link href={complianceHref} className="text-sm font-medium text-content-link hover:underline">
+            <Link href={complianceHref} className="inline-flex min-h-11 items-center text-sm font-medium text-content-link hover:underline md:min-h-9">
               View all {items.length} in Compliance
             </Link>
           ) : null}

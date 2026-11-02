@@ -82,6 +82,34 @@ describe('AttentionQueueList', () => {
     expect(within(row).getByRole('link', { name: 'Upload' })).toHaveAttribute('href', `/communities/${COMMUNITY_ID}/compliance`);
   });
 
+  it('coming-up tag and chip use the calm info variant, never the brand (coral) variant', () => {
+    const { container } = render(
+      <AttentionQueueList items={[item(1, 'critical'), item(2, 'aware')]} communityId={COMMUNITY_ID} error={false} />,
+    );
+    const chip = screen.getByText('1 coming up').closest('span.inline-flex');
+    const tag = within(screen.getAllByRole('listitem')[1]!).getByText('Coming up').closest('span.inline-flex');
+    for (const el of [chip, tag]) {
+      expect(el).not.toBeNull();
+      expect(el!.className).toContain('text-status-info');
+      expect(el!.className).not.toContain('status-brand');
+    }
+    // The red "Overdue" tier is still distinct from the calm one.
+    expect(screen.getByText('1 overdue').closest('span.inline-flex')!.className).not.toContain('text-status-info');
+    expect(container.innerHTML).not.toContain('status-brand');
+  });
+
+  it('row action and View all link meet the touch-target minimums (44px mobile, 36px md+)', () => {
+    const items = Array.from({ length: 7 }, (_, i) => item(i + 1));
+    render(<AttentionQueueList items={items} communityId={COMMUNITY_ID} error={false} />);
+    const action = within(screen.getAllByRole('listitem')[0]!).getByRole('link', { name: 'Upload' });
+    expect(action.className).toContain('h-11');
+    expect(action.className).toContain('md:h-9');
+    const viewAll = screen.getByRole('link', { name: 'View all 7 in Compliance' });
+    expect(viewAll.className).toContain('min-h-11');
+    expect(viewAll.className).toContain('md:min-h-9');
+    expect(viewAll.className).toContain('inline-flex');
+  });
+
   it('empty queue shows the all-set preset', () => {
     render(<AttentionQueueList items={[]} communityId={COMMUNITY_ID} error={false} />);
     expect(screen.getByText("You're all set!")).toBeInTheDocument();
@@ -118,6 +146,15 @@ describe('WeekAgendaList', () => {
     expect(screen.getByText('Board meeting')).toBeInTheDocument();
     expect(screen.getAllByText('Nothing scheduled')).toHaveLength(6);
     expect(screen.queryByText(/couldn't load/i)).toBeNull();
+  });
+
+  it('entry labels and weekday labels are 16px (text-base); only metadata stays small', () => {
+    render(<WeekAgendaList days={DAYS} />);
+    expect(screen.getByText('Board meeting').className).toContain('text-base');
+    const today = screen.getAllByRole('listitem').find((li) => li.getAttribute('aria-current') === 'date')!;
+    const weekday = today.firstElementChild as HTMLElement;
+    expect(weekday.className).toContain('text-base');
+    expect(within(today).getByText('Today').className).toContain('text-xs');
   });
 
   it('error shows the danger banner above days that still render', () => {

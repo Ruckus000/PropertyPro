@@ -17,7 +17,7 @@ export function WeekAgendaList({ days, error = false }: { days: AgendaDay[]; err
             aria-current={day.isToday ? 'date' : undefined}
             className={day.isToday ? 'flex gap-4 bg-surface-muted p-4' : 'flex gap-4 p-4'}
           >
-            <span className="w-20 shrink-0 text-sm font-medium text-content">
+            <span className="w-20 shrink-0 text-base font-medium text-content">
               {day.weekdayLabel}
               {day.isToday ? <span className="block text-xs text-content-secondary">Today</span> : null}
             </span>
@@ -26,7 +26,7 @@ export function WeekAgendaList({ days, error = false }: { days: AgendaDay[]; err
             ) : (
               <ul className="space-y-1">
                 {day.entries.map((entry) => (
-                  <li key={entry.id} className="text-sm text-content">
+                  <li key={entry.id} className="text-base text-content">
                     {entry.label}
                   </li>
                 ))}
