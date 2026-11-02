@@ -198,6 +198,38 @@ describe('proposals', () => {
   });
 });
 
+describe('still needed', () => {
+  const needed = () => screen.getByRole('heading', { name: /Still needed/ }).closest('section') as HTMLElement;
+
+  it('lists every missing record, so the person knows which files to look for', () => {
+    renderDrawer();
+
+    expect(screen.getByRole('heading', { name: 'Still needed (4)' })).toBeInTheDocument();
+    const titles = within(needed()).getAllByRole('listitem').map((item) => item.textContent);
+    expect(titles).toEqual(['Annual budget', 'Annual financial report', 'Bylaws', 'Insurance policies']);
+  });
+
+  it('marks a record once a file is chosen for it, and drops it once posted', async () => {
+    const { user } = renderDrawer();
+    await drop(user, pdf('bylaws.pdf'));
+
+    const bylaws = within(needed()).getByText('Bylaws').closest('li') as HTMLElement;
+    expect(bylaws).toHaveTextContent('File chosen');
+    expect(within(needed()).getByText('Annual budget').closest('li')).not.toHaveTextContent('File chosen');
+
+    await user.click(screen.getByRole('button', { name: 'Post 1 record' }));
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Still needed (3)' })).toBeInTheDocument());
+    expect(within(needed()).queryByText('Bylaws')).toBeNull();
+  });
+
+  it('shows no list when nothing is missing', () => {
+    renderDrawer({ missing: [], conditional: [SIRS] });
+
+    expect(screen.queryByRole('heading', { name: /Still needed/ })).toBeNull();
+  });
+});
+
 describe('redaction attestation', () => {
   it('a sensitive category needs the attestation before Post is enabled', async () => {
     const { user } = renderDrawer();

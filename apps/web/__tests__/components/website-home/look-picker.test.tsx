@@ -10,7 +10,7 @@
  * server component and read the element it returns; nothing renders there.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -156,6 +156,33 @@ describe('LookPicker — what it shows', () => {
     );
     expect(screen.getByText('Nothing changes until you click Publish')).toBeInTheDocument();
     expect(screen.getByText("You also have 3 unpublished edits. They'll publish too.")).toBeInTheDocument();
+  });
+
+  it('gives a chip a green check only when it is filled, never on "0 of" or a short count', () => {
+    renderPicker(facts({ recordsPosted: 0, upcomingMeetingCount: 0, newsCount: 0 }));
+
+    const chips = within(screen.getByRole('region', { name: 'Filled in for you' })).getAllByRole('listitem');
+    const checked = (text: string) => {
+      const chip = chips.find((item) => item.textContent === text) as HTMLElement;
+      return chip.querySelector('svg.text-status-success') !== null;
+    };
+    expect(checked('0 of 12 records found in Documents')).toBe(false);
+    expect(checked('0 upcoming meetings · 0 news posts')).toBe(false);
+    expect(checked('40 units · Condominium')).toBe(true);
+    cleanup();
+
+    renderPicker(facts({ recordsPosted: 9 }));
+    const partial = within(screen.getByRole('region', { name: 'Filled in for you' }))
+      .getAllByRole('listitem')
+      .find((item) => item.textContent === '9 of 12 records found in Documents') as HTMLElement;
+    expect(partial.querySelector('svg.text-status-success')).toBeNull();
+    cleanup();
+
+    renderPicker(facts({ recordsPosted: 12 }));
+    const full = within(screen.getByRole('region', { name: 'Filled in for you' }))
+      .getAllByRole('listitem')
+      .find((item) => item.textContent === '12 of 12 records found in Documents') as HTMLElement;
+    expect(full.querySelector('svg.text-status-success')).not.toBeNull();
   });
 
   it('shows no records chip for an apartment community, and no edits line with none pending', () => {

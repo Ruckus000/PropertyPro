@@ -5,22 +5,29 @@
  * comes back to for the association's website.
  *
  * Sections, in order: the site's status (and the one-time "Email owners"
- * offer), the Florida records still missing, meetings coming up, the profile
- * details the site shows, the site itself (look, edit, restore), and the
- * transparency page switch for condos and HOAs.
+ * offer), the welcome (a preview beside Edit words and Change photo, which go
+ * live, and what the site fills in from the rest of the app), the Florida
+ * records still missing, meetings coming up, the profile details the site
+ * shows, the look and its versions (change look, restore), the transparency
+ * page switch for condos and HOAs, and last a quiet link to the full editor
+ * (option 1: everyone gets this simple home; the editor stays reachable).
  *
  * Everything comes from the page's loader (`loadWebsiteHome`, D19); nothing
  * here reads the server on render. Dates print in the community's time zone,
  * relative to the moment the page rendered, so server and browser agree.
  */
 import { useMemo } from 'react';
+import Link from 'next/link';
 import { TransparencyToggle } from '@/components/transparency/transparency-toggle';
 import type { WebsiteHomeData } from '@/lib/services/website-home-service';
 import { ComingUpCard } from './coming-up-card';
 import { MissingRecordsAlert } from './missing-records-alert';
 import { SiteDetailsCard } from './site-details-card';
 import { SiteStatusBanner } from './site-status-banner';
+import { TOUCH } from './touch';
+import { WebsiteWelcomeCard } from './website-welcome-card';
 import { YourSiteCard } from './your-site-card';
+import { cn } from '@/lib/utils';
 
 export interface WebsiteHomeProps {
   communityId: number;
@@ -72,9 +79,18 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
         published={published}
         // Owners are told once the site is public: `site_published_at`, set from creation.
         offerEmail={data.liveNotice.offerable && data.sitePublished}
+        // Only where the statute requires the records: then a missing one is a problem.
+        missingRecordCount={data.records.level === 'required' ? data.records.missing.length : 0}
       />
 
-      <MissingRecordsAlert communityId={communityId} records={data.records} formatDate={format.date} />
+      <WebsiteWelcomeCard communityId={communityId} facts={facts} liveHero={data.liveHero} />
+
+      <MissingRecordsAlert
+        communityId={communityId}
+        records={data.records}
+        progress={{ posted: facts.recordsPosted, total: facts.recordsTotal }}
+        formatDate={format.date}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <ComingUpCard communityId={communityId} meetings={data.upcomingMeetings} formatDateTime={format.dateTime} />
@@ -102,6 +118,15 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
           <TransparencyToggle communityId={communityId} subdomain={data.slug} />
         </section>
       )}
+
+      <p className="border-t border-edge-subtle pt-4">
+        <Link
+          href={`/pm/website-editor?communityId=${communityId}`}
+          className={cn('inline-flex items-center text-sm text-content-secondary underline', TOUCH)}
+        >
+          Advanced editor
+        </Link>
+      </p>
     </div>
   );
 }

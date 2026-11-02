@@ -228,14 +228,15 @@ describe('nav href generation', () => {
   });
 
   it('the Website nav item opens the website home', () => {
-    // The community item lands on /pm/website (status, looks, records), not the
-    // editor or the retired wizard. The portfolio rail has no tenant in scope,
-    // so it still goes to the editor, which bounces to the community picker.
+    // Both land on /pm/website (status, looks, records), not the editor or the
+    // retired wizard. The portfolio rail has no tenant in scope, so the home
+    // bounces it to the community picker.
     const community = new Map(NAV_ITEMS.map((item) => [item.id, item]));
     const portfolio = new Map(PM_NAV_ITEMS.map((item) => [item.id, item]));
 
     expect(community.get('website')?.href(42)).toBe('/pm/website?communityId=42');
-    expect(portfolio.get('branding')?.href(0)).toBe('/pm/website-editor');
+    // The portfolio rail opens the website home too (option 1), not the editor.
+    expect(portfolio.get('branding')?.href(0)).toBe('/pm/website');
   });
 
   it('counts the missing Florida records on the Website item', () => {
@@ -250,6 +251,7 @@ describe('nav href generation', () => {
     expect(getActiveItemId(NAV_ITEMS, '/pm/website/looks')).toBe('website');
     expect(getActiveItemId(NAV_ITEMS, '/pm/website-editor')).toBe('website');
     expect(getActiveItemId(PM_NAV_ITEMS, '/pm/website-editor')).toBe('branding');
+    expect(getActiveItemId(PM_NAV_ITEMS, '/pm/website')).toBe('branding');
   });
 
   it('never targets a compatibility redirect bridge page', () => {

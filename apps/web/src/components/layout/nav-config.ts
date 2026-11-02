@@ -393,15 +393,15 @@ export const PM_NAV_ITEMS: readonly NavItemConfig[] = [
     id: 'branding',
     label: 'Website',
     icon: Paintbrush,
-    // Branding lives in the editor's Design tool (template, colours, logos),
-    // except the email footer, which is on the community Settings page;
-    // /pm/settings/branding is a permanent redirect to the editor.
+    // The website home (/pm/website), where every manager edits the site
+    // (option 1); the full editor is a link from there. /pm/settings/branding
+    // is a permanent redirect to the editor, so it still highlights here.
     //
     // No communityId: this is the portfolio rail, which has no tenant in scope.
-    // The editor bounces to the community picker, which is the correct landing
+    // The home bounces to the community picker, which is the correct landing
     // for "Website" pressed from a cross-community context.
-    href: () => '/pm/website-editor',
-    matchPrefixes: ['/pm/website-editor', '/pm/settings'],
+    href: () => '/pm/website',
+    matchPrefixes: ['/pm/website', '/pm/website-editor', '/pm/settings'],
   },
   {
     id: 'portfolio-templates',

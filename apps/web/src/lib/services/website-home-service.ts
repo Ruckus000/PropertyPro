@@ -8,8 +8,9 @@
  *   drafted, and how many other unpublished edits a Publish would carry.
  * - `loadWebsiteHome`: the website home (`/pm/website`). The same facts, plus
  *   the last publish and the versions to restore, the "Email owners" offer, the
- *   Florida records still missing (with documents that may be them), and the
- *   meetings coming up.
+ *   Florida records still missing (with documents that may be them), the
+ *   meetings coming up, and the live welcome (hero) that Edit words and Change
+ *   photo start from.
  *
  * Read only: nothing here writes.
  *
@@ -183,6 +184,13 @@ export interface WebsiteHomeData {
   upcomingMeetings: Array<{ id: number; title: string; startsAt: string; noticePosted: boolean }>;
   /** The community's subdomain, for the transparency page's address. */
   slug: string;
+  /**
+   * The welcome section as the public site serves it now: the published hero's
+   * stored content on the home page, unparsed (tokens such as `{{name}}`
+   * included), or null when there is none. Edit words prefills from it, and
+   * Undo saves it back as it was.
+   */
+  liveHero: unknown | null;
 }
 
 export interface LoadWebsiteHomeOptions {
@@ -207,7 +215,8 @@ export async function loadWebsiteHome(
   const hasRecords = communityType !== 'apartment';
   const now = new Date();
 
-  const [checklist, candidatesByItem, historyPage, liveNotice, meetings, storedSnooze, publishToken] = await Promise.all([
+  const reader = getPublicCommunityScopedReader(communityId);
+  const [checklist, candidatesByItem, historyPage, liveNotice, meetings, storedSnooze, publishToken, liveHero] = await Promise.all([
     loadRecordsChecklist(communityId, communityType),
     hasRecords ? listRecordCandidates(communityId) : Promise.resolve<RecordCandidates>({}),
     paginateSitePublishHistory({ communityId, pageSize: HISTORY_LIMIT }),
@@ -217,7 +226,8 @@ export async function loadWebsiteHome(
       endUtcExclusive: new Date(now.getTime() + HOME_MEETINGS_WINDOW_DAYS * DAY_MS),
     }),
     getUserPreference(userId, recordsAlertSnoozeKey(communityId)),
-    getPublicCommunityScopedReader(communityId).getLatestPublishedAt(),
+    reader.getLatestPublishedAt(),
+    readLiveHero(reader),
   ]);
   const facts = await buildSiteFacts(communityId, info, checklist);
 
@@ -268,7 +278,15 @@ export async function loadWebsiteHome(
       noticePosted: meeting.noticePostedAt != null,
     })),
     slug: info.slug,
+    liveHero,
   };
+}
+
+/** The published hero on the home page (slot 1 by convention), as stored. */
+async function readLiveHero(reader: ReturnType<typeof getPublicCommunityScopedReader>): Promise<unknown | null> {
+  const homePageId = await reader.getHomePageId();
+  const blocks = await reader.listSiteBlocks(homePageId === null ? {} : { pageId: homePageId });
+  return blocks.find((block) => block.blockType === 'hero')?.content ?? null;
 }
 
 /**

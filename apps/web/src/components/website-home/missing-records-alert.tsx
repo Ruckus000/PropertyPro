@@ -10,6 +10,8 @@
  *   ("Use this one"), and lists the records that may not apply with their hint
  *   and **Doesn't apply**. It ends with **Add several at once**, **Remind me
  *   next week** and the statute line.
+ *   The records are one compact list (a row each, not a card each), under a
+ *   progress count of how many of the records owed are posted.
  * - `recommended`: one sentence, no alert.
  * - `none` (apartments): nothing.
  *
@@ -51,6 +53,8 @@ export interface MissingRecordsAlertProps {
     candidates: Record<number, Array<{ documentId: number; title: string }>>;
     snoozedUntil: string | null;
   };
+  /** Records posted and current, over all owed (`SiteFacts.recordsPosted` / `recordsTotal`). */
+  progress: { posted: number; total: number };
   /** Formats the snooze's end date, in the community's time zone. */
   formatDate: (iso: string) => string;
 }
@@ -65,7 +69,10 @@ function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
 }
 
-export function MissingRecordsAlert({ communityId, records, formatDate }: MissingRecordsAlertProps) {
+/** The list the rows sit in: one bordered box, a divider between rows. */
+const LIST = 'divide-y divide-edge-subtle rounded-md border border-edge bg-surface-card';
+
+export function MissingRecordsAlert({ communityId, records, progress, formatDate }: MissingRecordsAlertProps) {
   const router = useRouter();
   const { linkDocument } = useComplianceMutations(communityId);
   const { snooze } = useRecordsAlert(communityId, { enabled: false });
@@ -162,7 +169,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
     const linking = linkingId !== null;
     const state = STATE[item.state];
     return (
-      <li key={item.itemId} className="rounded-md border border-edge bg-surface-card p-3">
+      <li key={item.itemId} className="px-3 py-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-sm font-medium text-content">{item.title}</p>
@@ -208,7 +215,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
           </div>
         </div>
         {matches.length > 0 && (
-          <div className="mt-3 border-t border-edge-subtle pt-3">
+          <div className="mt-2">
             <p className="text-sm text-content-secondary">Possible matches in Documents:</p>
             <ul className="mt-1 space-y-1">
               {matches.map((match) => (
@@ -260,7 +267,12 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
             again on {formatDate(snoozedUntil)}.
           </span>
         </p>
-        <Button type="button" variant="link" className={cn('h-auto px-0', TOUCH)} onClick={() => setShowWhileSnoozed(true)}>
+        <Button
+          type="button"
+          variant="link"
+          className={cn('h-auto px-0 text-content-link', TOUCH)}
+          onClick={() => setShowWhileSnoozed(true)}
+        >
           Show them now
         </Button>
       </div>
@@ -284,11 +296,11 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
             </p>
           </div>
         </div>
-        <ul className="space-y-2">{missing.map((item) => renderRow(item, 'missing'))}</ul>
+        <ul className={LIST}>{missing.map((item) => renderRow(item, 'missing'))}</ul>
         {conditional.length > 0 && (
           <>
             <p className="text-sm font-semibold text-content">These may not apply to you:</p>
-            <ul className="space-y-2">{conditional.map((item) => renderRow(item, 'conditional'))}</ul>
+            <ul className={LIST}>{conditional.map((item) => renderRow(item, 'conditional'))}</ul>
           </>
         )}
         <div className="flex flex-wrap gap-2">
@@ -312,7 +324,7 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
         {conditional.length > 0 && (
           <>
             <p className="text-sm font-semibold text-content">These may apply to you:</p>
-            <ul className="space-y-2">{conditional.map((item) => renderRow(item, 'conditional'))}</ul>
+            <ul className={LIST}>{conditional.map((item) => renderRow(item, 'conditional'))}</ul>
           </>
         )}
         <p className="text-xs text-content-secondary">{STATUTE_LINE}</p>
@@ -330,6 +342,9 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
       >
         Records
       </h2>
+      {records.level === 'required' && progress.total > 0 && (
+        <RecordsProgress posted={progress.posted} total={progress.total} />
+      )}
       {body}
 
       {uploading && (
@@ -372,5 +387,23 @@ export function MissingRecordsAlert({ communityId, records, formatDate }: Missin
         />
       )}
     </section>
+  );
+}
+
+/** "9 of 12 records posted", with a bar for the eye; the sentence is what is read out. */
+function RecordsProgress({ posted, total }: { posted: number; total: number }) {
+  const percent = Math.round((Math.min(posted, total) / total) * 100);
+  return (
+    <div className="space-y-1.5">
+      <p className="text-sm text-content">
+        <span className="font-semibold">
+          {posted} of {total}
+        </span>{' '}
+        records posted
+      </p>
+      <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-surface-muted">
+        <div className="h-full rounded-full bg-status-success" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
   );
 }

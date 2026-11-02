@@ -3,9 +3,11 @@
  *
  * Route: /pm/website?communityId=X[&published=1]
  *
- * Where a manager comes back to the association's website: its status, the
- * Florida records still missing, meetings coming up, the details it shows,
- * the look with Edit, Change look and Restore, and the transparency page.
+ * Where a manager comes back to the association's website, and where every
+ * manager edits it (option 1): its status, the welcome words and photo (saved
+ * straight to the live site, with Undo), the Florida records still missing,
+ * meetings coming up, the details it shows, the look with Change look and
+ * Restore, the transparency page, and a quiet link to the full editor.
  * The look picker lands here with `published=1` after a publish.
  *
  * ## Authorization

@@ -24,6 +24,8 @@
  *   here is the person's choice, and the only one.
  * - The redaction attestation (§718.111(12)(c)) is asked once, when any record
  *   about to be posted files under a category that needs it.
+ * - "Still needed" lists the missing records, so the person knows which files to
+ *   look for, each marked once a file is chosen for it and dropped once posted.
  * - "May apply" lists the conditional records with a hint and **Doesn't apply**.
  *
  * Mount it while it is open; `onClose` is called when it closes. The caller
@@ -107,6 +109,8 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
   const [rows, setRows] = useState<DropRow[]>([]);
   const [outcomes, setOutcomes] = useState<Outcome[]>([]);
   const [markedIds, setMarkedIds] = useState<ReadonlySet<number>>(new Set());
+  // Records posted in this drawer: `missing` is the list as the page read it.
+  const [postedIds, setPostedIds] = useState<ReadonlySet<number>>(new Set());
   const [applying, setApplying] = useState<MissingRecord | null>(null);
   const [attested, setAttested] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -157,6 +161,8 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
     [categoryFor, itemById],
   );
 
+  const claimedIds = new Set(rows.flatMap((row) => (row.itemId == null ? [] : [row.itemId])));
+  const stillNeeded = missing.filter((item) => !postedIds.has(item.itemId));
   const postable = rows.filter((row) => plan(row) !== null);
   const needsAttestation = postable.some((row) => plan(row)?.sensitive === true);
   const canPost = !isSending && !categoriesLoading && postable.length > 0 && (!needsAttestation || attested);
@@ -245,6 +251,7 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
         // draft or deleted file: the person's new file replaces it on purpose.
         await linkDocument.mutateAsync({ itemId: item.itemId, documentId, replace: true });
         setRows((current) => current.filter((r) => r.key !== row.key));
+        setPostedIds((current) => new Set(current).add(item.itemId));
         record({ key: row.key, ok: true, text: `Posted ${name} as ${item.title}.` });
       } catch (error) {
         patchRow(row.key, { status: 'failed' });
@@ -353,6 +360,27 @@ export function AddRecordsDrawer({ communityId, missing, conditional, onClose }:
               PDF or Word (.docx) files, or PNG or JPG images. Nothing is posted until you press Post.
             </p>
           </div>
+
+          {stillNeeded.length > 0 && (
+            <section aria-labelledby={`${attestationId}-needed`} className="space-y-2">
+              <h3 id={`${attestationId}-needed`} className="text-sm font-semibold text-content">
+                Still needed ({stillNeeded.length})
+              </h3>
+              <ul className="divide-y divide-edge-subtle rounded-md border border-edge bg-surface-card">
+                {stillNeeded.map((item) => (
+                  <li key={item.itemId} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="min-w-0 break-words text-sm text-content">{item.title}</span>
+                    {claimedIds.has(item.itemId) && (
+                      <span className="flex shrink-0 items-center gap-1 text-sm text-content-secondary">
+                        <Check className="size-4" aria-hidden="true" />
+                        File chosen
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {categoriesError && (
             <p role="alert" className="flex items-start gap-2 text-sm text-status-danger">

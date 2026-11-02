@@ -23,7 +23,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Check, ExternalLink, Info, Monitor, Radio, Smartphone } from 'lucide-react';
+import { Check, CircleDashed, ExternalLink, Info, Monitor, Radio, Smartphone } from 'lucide-react';
 import type { CommunityType } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { useSiteLook } from '@/hooks/use-site-look';
@@ -87,22 +87,38 @@ function lookName(id: LookId | null): string | null {
   return LOOK_SUMMARIES.find((look) => look.id === id)?.name ?? null;
 }
 
-function filledInChips(facts: SiteFacts): string[] {
+/**
+ * One "Filled in for you" chip. `filled` is false when the fact is empty or
+ * short ("0 upcoming meetings", "3 of 12 records"), and the chip then says so
+ * with a neutral mark rather than a green check.
+ */
+interface FilledChip {
+  text: string;
+  filled: boolean;
+}
+
+function filledInChips(facts: SiteFacts): FilledChip[] {
   const { profile, communityType } = facts;
   const address = addressLine(profile);
   const [one, many] = UNIT_NOUN[communityType];
-  const chips = [
-    address ? `${profile.name} · ${address}` : profile.name,
+  const chips: FilledChip[] = [
+    { text: address ? `${profile.name} · ${address}` : profile.name, filled: address !== null },
     profile.unitCount != null && profile.unitCount > 0
-      ? `${profile.unitCount} ${profile.unitCount === 1 ? one : many} · ${TYPE_LABEL[communityType]}`
-      : TYPE_LABEL[communityType],
-    `${counted(facts.upcomingMeetingCount, 'upcoming meeting', 'upcoming meetings')} · ${counted(facts.newsCount, 'news post', 'news posts')}`,
+      ? { text: `${profile.unitCount} ${profile.unitCount === 1 ? one : many} · ${TYPE_LABEL[communityType]}`, filled: true }
+      : { text: TYPE_LABEL[communityType], filled: false },
+    {
+      text: `${counted(facts.upcomingMeetingCount, 'upcoming meeting', 'upcoming meetings')} · ${counted(facts.newsCount, 'news post', 'news posts')}`,
+      filled: facts.upcomingMeetingCount > 0 || facts.newsCount > 0,
+    },
   ];
   // Only condos and HOAs have records, and only once the checklist exists.
   if (communityType !== 'apartment' && facts.recordsTotal > 0) {
-    chips.push(`${facts.recordsPosted} of ${facts.recordsTotal} records found in Documents`);
+    chips.push({
+      text: `${facts.recordsPosted} of ${facts.recordsTotal} records found in Documents`,
+      filled: facts.recordsPosted >= facts.recordsTotal,
+    });
   }
-  chips.push('Welcome photo and message');
+  chips.push({ text: 'Welcome photo and message', filled: true });
   return chips;
 }
 
@@ -195,18 +211,22 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
         <ul className="flex flex-wrap gap-2">
           {filledInChips(facts).map((chip) => (
             <li
-              key={chip}
+              key={chip.text}
               className="inline-flex items-center gap-2 rounded-full border border-edge bg-surface-muted px-3 py-1 text-base text-content"
             >
-              <Check aria-hidden="true" className="size-4 shrink-0 text-status-success" />
-              {chip}
+              {chip.filled ? (
+                <Check aria-hidden="true" className="size-4 shrink-0 text-status-success" />
+              ) : (
+                <CircleDashed aria-hidden="true" className="size-4 shrink-0 text-content-secondary" />
+              )}
+              {chip.text}
             </li>
           ))}
         </ul>
         <Link
           href={`/settings?communityId=${communityId}#community-profile`}
           className={cn(
-            'inline-flex items-center text-base text-interactive underline-offset-4 hover:underline',
+            'inline-flex items-center text-base text-content-link underline-offset-4 hover:underline',
             'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
             TOUCH,
             CLEARS_BAR,
@@ -276,7 +296,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
                 {(isSelected || isLive) && (
                   <div className="flex flex-wrap gap-2" aria-hidden="true">
                     {isSelected && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-sm font-medium text-interactive">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-sm font-medium text-content-link">
                         <Check className="size-4" />
                         Selected
                       </span>
@@ -316,7 +336,7 @@ export function LookPicker({ communityId, facts }: LookPickerProps) {
                   'inline-flex items-center gap-2 rounded-sm px-3 text-base',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
                   device === value
-                    ? 'bg-interactive-subtle font-semibold text-interactive'
+                    ? 'bg-interactive-subtle font-semibold text-content-link'
                     : 'text-content-secondary hover:bg-surface-hover',
                   TOUCH,
                   CLEARS_BAR,

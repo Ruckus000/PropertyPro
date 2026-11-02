@@ -28,7 +28,11 @@ const {
   listMeetingsForCommunityMock,
   getUserPreferenceMock,
   latestPublishedAtMock,
+  listSiteBlocksMock,
+  getHomePageIdMock,
 } = vi.hoisted(() => ({
+  listSiteBlocksMock: vi.fn(),
+  getHomePageIdMock: vi.fn(),
   latestPublishedAtMock: vi.fn(),
   listRecordCandidatesMock: vi.fn(),
   historyMock: vi.fn(),
@@ -53,6 +57,8 @@ vi.mock('@/lib/db/public-community-reader', () => ({
     listMeetings: listMeetingsMock,
     listAnnouncements: listAnnouncementsMock,
     getLatestPublishedAt: latestPublishedAtMock,
+    listSiteBlocks: listSiteBlocksMock,
+    getHomePageId: getHomePageIdMock,
   }),
 }));
 vi.mock('@/lib/compliance/load-checklist-with-status', () => ({
@@ -171,6 +177,8 @@ beforeEach(() => {
   listMeetingsForCommunityMock.mockResolvedValue([]);
   getUserPreferenceMock.mockResolvedValue(null);
   latestPublishedAtMock.mockResolvedValue(null);
+  listSiteBlocksMock.mockResolvedValue([]);
+  getHomePageIdMock.mockResolvedValue(7);
   userRows = [];
 });
 
@@ -336,6 +344,24 @@ describe('loadWebsiteHome', () => {
     expect(home.facts.recordsPosted).toBe(1);
     expect(home.slug).toBe('sunset-condos');
     expect(home.liveNotice).toEqual(LIVE_NOTICE);
+  });
+
+  it('reads the live welcome from the home page, published rows only, as stored', async () => {
+    const stored = { headline: 'Welcome to {{name}}', subtitle: 'In {{city}}.' };
+    listSiteBlocksMock.mockResolvedValue([
+      { id: 3, blockType: 'announcements', blockOrder: 2, content: {}, isDraft: false, publishedAt: NOW },
+      { id: 1, blockType: 'hero', blockOrder: 1, content: stored, isDraft: false, publishedAt: NOW },
+    ]);
+
+    const home = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
+
+    // No includeDrafts: Edit words starts from what visitors see, and Undo puts that back.
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ pageId: 7 });
+    expect(home.liveHero).toEqual(stored);
+  });
+
+  it('reads no live welcome when the home page has no hero', async () => {
+    expect((await loadWebsiteHome(COMMUNITY_ID, USER_ID)).liveHero).toBeNull();
   });
 
   it('a lapsed snooze reads as none', async () => {

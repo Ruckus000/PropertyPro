@@ -29,7 +29,11 @@ const { refreshMock, lazyProps } = vi.hoisted(() => ({
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: refreshMock, push: vi.fn() }) }));
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+const { toastMock } = vi.hoisted(() => {
+  let next = 0;
+  return { toastMock: { error: vi.fn(), success: vi.fn((..._args: unknown[]) => `toast-${(next += 1)}`), dismiss: vi.fn() } };
+});
+vi.mock('sonner', () => ({ toast: toastMock }));
 vi.mock('@/components/transparency/transparency-toggle', () => ({
   TransparencyToggle: ({ subdomain }: { subdomain: string }) => <p>Transparency switch for {subdomain}</p>,
 }));
@@ -68,6 +72,19 @@ vi.mock('@/components/website-home/website-home-lazy', () => ({
   ),
 }));
 
+// The photo field has its own tests (upload, describe, reorder); here it stands
+// in for a picked file that has not uploaded yet. The axe test renders the real one.
+vi.mock('@/components/pm/site-editor-v3/inspector/forms/fields/HeroPhotosField', () => ({
+  HeroPhotosField: (props: { onPendingChange?: (pending: boolean) => void }) => (
+    <div>
+      <p>Photos</p>
+      <button type="button" onClick={() => props.onPendingChange?.(true)}>
+        Pick a file
+      </button>
+    </div>
+  ),
+}));
+
 import { WebsiteHome } from '@/components/website-home/website-home';
 
 const COMMUNITY_ID = 42;
@@ -88,6 +105,8 @@ let publishStatus: number;
 let holdLink: Promise<void> | null;
 /** Records that already hold a file: the server refuses to link over one without `replace`. */
 let recordsWithFile: Set<number>;
+/** The hero PATCH's status: 200, or a failure. */
+let heroStatus: number;
 
 function respond(status: number, body: unknown) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
@@ -144,6 +163,7 @@ function data(over: Partial<WebsiteHomeData> = {}, records: Partial<WebsiteHomeD
       { id: 8, title: 'Annual meeting', startsAt: '2026-12-01T23:00:00.000Z', noticePosted: true },
     ],
     slug: 'sunset-condos',
+    liveHero: { headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' },
     ...over,
   };
 }
@@ -175,6 +195,7 @@ beforeEach(() => {
   publishStatus = 200;
   holdLink = null;
   recordsWithFile = new Set();
+  heroStatus = 200;
   global.fetch = vi.fn(async (input: string, init?: RequestInit) => {
     const url = new URL(input, 'https://app.example.com');
     const method = init?.method ?? 'GET';
@@ -194,6 +215,9 @@ beforeEach(() => {
         }
         return respond(200, { data: {} });
       }
+      case '/api/v1/pm/site/hero':
+        if (heroStatus !== 200) return respond(heroStatus, { error: { code: 'INTERNAL_ERROR', message: 'Nope' } });
+        return respond(200, { data: { ok: true } });
       case '/api/v1/pm/site/drafts':
         return respond(200, { data: { ok: true, discardedCount: 1 } });
       case '/api/v1/pm/site/live-notice':
@@ -578,36 +602,63 @@ describe('other sections', () => {
     expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
   });
 
+  it('is not a green check while records Florida requires are missing', () => {
+    renderHome();
+
+    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
+    expect(banner).toHaveTextContent('2 records Florida requires are missing.');
+    expect(within(banner).getByRole('link', { name: 'See the records' })).toHaveAttribute('href', '#records');
+    expect(banner.querySelector('.text-status-success')).toBeNull();
+    expect(banner.querySelector('svg.text-status-warning')).not.toBeNull();
+  });
+
+  it('is a green check once nothing required is missing', () => {
+    renderHome(data({}, { missing: [] }));
+
+    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
+    expect(banner).not.toHaveTextContent(/missing/);
+    expect(banner.querySelector('svg.text-status-success')).not.toBeNull();
+    expect(banner.querySelector('svg.text-status-warning')).toBeNull();
+  });
+
+  it('does not warn about records where the statute only recommends them', () => {
+    renderHome(data({}, { level: 'recommended' }));
+
+    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
+    expect(banner).not.toHaveTextContent(/missing/);
+  });
+
   it('without it, says the website is live', () => {
     renderHome();
 
     expect(screen.getByRole('heading', { level: 2, name: 'Your website is live' })).toBeInTheDocument();
   });
 
-  it('your site shows the look, edit and change look, and who published last', () => {
+  it('your site shows the look, change look, and who published last, and no editor buttons', () => {
     renderHome();
 
     const section = screen.getByRole('heading', { name: 'Your site' }).closest('section') as HTMLElement;
     expect(within(section).getByText('Bayfront')).toBeInTheDocument();
-    expect(within(section).getByRole('link', { name: 'Edit your site' })).toHaveAttribute(
-      'href',
-      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
-    );
     expect(within(section).getByRole('link', { name: 'Change look' })).toHaveAttribute(
       'href',
       `/pm/website/looks?communityId=${COMMUNITY_ID}`,
     );
     expect(section).toHaveTextContent('Last published 3 days ago by Maria Lopez');
+    // Option 1: the full editor is only the quiet link at the end of the page.
+    expect(within(section).queryByRole('link', { name: 'Edit your site' })).toBeNull();
+    expect(within(section).queryByRole('link', { name: 'Site settings' })).toBeNull();
   });
 
-  it('your site links to Site settings on its General tab', () => {
+  it('ends with a quiet Advanced editor link, the one way into the full editor', () => {
     renderHome();
 
-    const section = screen.getByRole('heading', { name: 'Your site' }).closest('section') as HTMLElement;
-    expect(within(section).getByRole('link', { name: 'Site settings' })).toHaveAttribute(
-      'href',
-      `/pm/website-editor?communityId=${COMMUNITY_ID}&view=settings&tab=general`,
-    );
+    const links = screen.getAllByRole('link');
+    const editorLinks = links.filter((link) => link.getAttribute('href')?.startsWith('/pm/website-editor'));
+    expect(editorLinks).toHaveLength(1);
+    expect(editorLinks[0]).toHaveAccessibleName('Advanced editor');
+    expect(editorLinks[0]).toHaveAttribute('href', `/pm/website-editor?communityId=${COMMUNITY_ID}`);
+    // Last on the page, and a text link, not a button.
+    expect(links[links.length - 1]).toBe(editorLinks[0]);
   });
 
   it('a site on a legacy layout reads "An older look"', () => {
@@ -754,5 +805,253 @@ describe('restore', () => {
       'POST /api/v1/pm/site/publish',
       'DELETE /api/v1/pm/site/drafts',
     ]);
+  });
+});
+
+describe('the welcome (Edit words / Change photo)', () => {
+  const welcome = () => screen.getByRole('heading', { level: 2, name: 'Your welcome' }).closest('section') as HTMLElement;
+  const heroPatches = () => posts('/api/v1/pm/site/hero');
+
+  it('shows the welcome as visitors read it, never a {{token}}, beside a preview of the site', () => {
+    renderHome();
+
+    const section = welcome();
+    expect(section).toHaveTextContent('Welcome to Sunset Condos');
+    expect(section).toHaveTextContent('Homes in Miami.');
+    expect(section).not.toHaveTextContent('{{');
+    expect(within(section).getByTestId('look-preview-frame')).toHaveAttribute(
+      'src',
+      `/pm/site-preview?communityId=${COMMUNITY_ID}&preview=true`,
+    );
+  });
+
+  it('Edit words prefills the two fields with the resolved words', async () => {
+    const user = renderHome();
+
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+
+    expect(screen.getByLabelText(/Headline/)).toHaveValue('Welcome to Sunset Condos');
+    expect(screen.getByLabelText('Subtitle')).toHaveValue('Homes in Miami.');
+    expect(screen.getByLabelText(/Headline/)).toHaveFocus();
+  });
+
+  it('saving sends the new words live, keeping the untouched field linked, and offers Undo', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.clear(screen.getByLabelText(/Headline/));
+    await user.type(screen.getByLabelText(/Headline/), 'Hello, neighbors');
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    await waitFor(() => expect(heroPatches()).toHaveLength(1));
+    expect(heroPatches()[0]?.body).toEqual({
+      communityId: COMMUNITY_ID,
+      live: true,
+      headline: 'Hello, neighbors',
+      // Left as it was, so it keeps tracking the city.
+      subtitle: 'Homes in {{city}}.',
+    });
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(toastMock.success).toHaveBeenCalledWith(
+      'Your new welcome words are live.',
+      expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) }),
+    );
+    expect(within(welcome()).getByRole('status')).toHaveTextContent('Your new welcome words are live.');
+    // Focus goes back to the button that opened the form.
+    expect(within(welcome()).getByRole('button', { name: 'Edit words' })).toHaveFocus();
+  });
+
+  it('Undo saves the previous welcome back, exactly as it was stored', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.clear(screen.getByLabelText('Subtitle'));
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+    await waitFor(() => expect(heroPatches()).toHaveLength(1));
+    expect(heroPatches()[0]?.body).toEqual({ communityId: COMMUNITY_ID, live: true, headline: 'Welcome to {{name}}' });
+
+    await user.click(within(welcome()).getByRole('button', { name: 'Undo' }));
+
+    await waitFor(() => expect(heroPatches()).toHaveLength(2));
+    expect(heroPatches()[1]?.body).toEqual({
+      communityId: COMMUNITY_ID,
+      live: true,
+      headline: 'Welcome to {{name}}',
+      subtitle: 'Homes in {{city}}.',
+    });
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenLastCalledWith('Your previous welcome is back.'),
+    );
+    // The save's toast, with its Undo, is closed rather than left offering an undo of the undo.
+    expect(toastMock.dismiss).toHaveBeenCalledWith(toastMock.success.mock.results[0]?.value);
+  });
+
+  it('the toast Undo does the same', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.type(screen.getByLabelText(/Headline/), '!');
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalled());
+    const options = toastMock.success.mock.calls[0]?.[1] as { action: { onClick: () => void } };
+
+    options.action.onClick();
+
+    await waitFor(() => expect(heroPatches()).toHaveLength(2));
+    expect(heroPatches()[1]?.body).toMatchObject({ headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' });
+  });
+
+  it('refuses an empty headline without saving', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.clear(screen.getByLabelText(/Headline/));
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Add a headline.');
+    expect(heroPatches()).toHaveLength(0);
+  });
+
+  it('a failed save keeps the form open and says so', async () => {
+    heroStatus = 500;
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.type(screen.getByLabelText(/Headline/), '!');
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save that just now.");
+    expect(screen.getByLabelText(/Headline/)).toBeInTheDocument();
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  it('Cancel closes the form without saving', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByLabelText(/Headline/)).toBeNull();
+    expect(heroPatches()).toHaveLength(0);
+    expect(within(welcome()).getByRole('button', { name: 'Edit words' })).toHaveFocus();
+  });
+
+  it('Change photo saves the photo list live and drops the legacy single image', async () => {
+    const user = renderHome(
+      data({
+        liveHero: {
+          headline: 'Welcome to {{name}}',
+          heroImagePath: `${COMMUNITY_ID}/hero/old.webp`,
+          heroImageAlt: 'The pool',
+        },
+      }),
+    );
+    await user.click(within(welcome()).getByRole('button', { name: 'Change photo' }));
+    expect(screen.getByRole('heading', { name: 'Change photo' })).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    await waitFor(() => expect(heroPatches()).toHaveLength(1));
+    expect(heroPatches()[0]?.body).toEqual({
+      communityId: COMMUNITY_ID,
+      live: true,
+      headline: 'Welcome to {{name}}',
+      photos: [{ path: `${COMMUNITY_ID}/hero/old.webp`, alt: 'The pool' }],
+    });
+  });
+
+  it('Change photo will not save while a picked photo has not uploaded, so it is never dropped', async () => {
+    const user = renderHome();
+    await user.click(within(welcome()).getByRole('button', { name: 'Change photo' }));
+    await user.click(screen.getByRole('button', { name: 'Pick a file' }));
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Upload the photo you picked first, or remove it.');
+    expect(heroPatches()).toHaveLength(0);
+  });
+
+  it('with no welcome yet, saving words creates one and offers no Undo', async () => {
+    const user = renderHome(data({ liveHero: null }));
+    expect(welcome()).toHaveTextContent('Sunset Condos');
+    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
+    await user.type(screen.getByLabelText('Subtitle'), 'On the beach.');
+
+    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
+
+    await waitFor(() => expect(heroPatches()).toHaveLength(1));
+    expect(heroPatches()[0]?.body).toEqual({
+      communityId: COMMUNITY_ID,
+      live: true,
+      headline: '{{name}}',
+      subtitle: 'On the beach.',
+    });
+    await waitFor(() =>
+      expect(toastMock.success).toHaveBeenCalledWith('Your new welcome words are live.'),
+    );
+    expect(within(welcome()).queryByRole('button', { name: 'Undo' })).toBeNull();
+  });
+
+  it('lists what is filled in for you, what each shows, and where it comes from', () => {
+    renderHome();
+
+    const list = screen.getByRole('list', { name: 'Filled in for you' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Meetings1 upcoming meeting'),
+      expect.stringContaining('NewsNothing yet'),
+      expect.stringContaining('Records9 of 12 posted'),
+      expect.stringContaining('ContactYour address, email'),
+    ]);
+    expect(within(list).getByRole('link', { name: /Open Meetings/ })).toHaveAttribute(
+      'href',
+      `/communities/${COMMUNITY_ID}/meetings`,
+    );
+    expect(within(list).getByRole('link', { name: /Open Announcements/ })).toHaveAttribute(
+      'href',
+      `/announcements?communityId=${COMMUNITY_ID}`,
+    );
+    expect(within(list).getByRole('link', { name: /Open Documents/ })).toHaveAttribute(
+      'href',
+      `/communities/${COMMUNITY_ID}/documents`,
+    );
+    expect(within(list).getByRole('link', { name: /Open Community profile/ })).toHaveAttribute(
+      'href',
+      `/settings?communityId=${COMMUNITY_ID}#community-profile`,
+    );
+  });
+});
+
+describe('contact details', () => {
+  const details = () => screen.getByRole('heading', { name: 'Details on your site' }).closest('section') as HTMLElement;
+
+  it('asks for the missing phone in one line, and keeps the link to Settings', () => {
+    renderHome();
+
+    expect(details()).toHaveTextContent('Add a phone number so people can call the association.');
+    expect(within(details()).getByRole('link', { name: 'Edit in Community profile' })).toHaveAttribute(
+      'href',
+      `/settings?communityId=${COMMUNITY_ID}#community-profile`,
+    );
+  });
+
+  it('asks for both when phone and email are empty, and for neither when both are set', () => {
+    const profile = data().facts.profile;
+    renderHome(data({ facts: { ...data().facts, profile: { ...profile, contactEmail: null } } }));
+    expect(details()).toHaveTextContent('Add a phone number and email so people can reach the association.');
+    cleanup();
+
+    renderHome(data({ facts: { ...data().facts, profile: { ...profile, contactPhone: '305-555-0100' } } }));
+    expect(details()).not.toHaveTextContent(/Add a phone|Add an email/);
+  });
+});
+
+describe('records progress', () => {
+  it('counts the records posted of those owed, above one compact list', () => {
+    renderHome();
+
+    const section = screen.getByRole('heading', { level: 2, name: 'Records' }).closest('section') as HTMLElement;
+    expect(section).toHaveTextContent('9 of 12 records posted');
+    // One list for the missing records, a row each.
+    const missingList = within(alert()!).getAllByRole('list')[0] as HTMLElement;
+    expect(within(missingList).getAllByRole('listitem', { name: undefined }).filter((li) => li.parentElement === missingList)).toHaveLength(2);
   });
 });
