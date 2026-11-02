@@ -37,8 +37,21 @@ Found and fixed during the check:
 
 | Build | Web aggregate | Budget | Tab-row chunk |
 |---|---|---|---|
-| Default (tabs on) | **1430.7 KiB** | 1435.0 KiB | present |
-| `NEXT_PUBLIC_TOP_NAV_ENABLED=false` | 1429.3 KiB | 1435.0 KiB | absent (0 chunks) |
+| Default (tabs on), first PR head | 1430.7 KiB local · **1433.9 KiB CI** | 1435.0 KiB | present |
+| Same head, localci after merging main (#1441) | **1435.3 KiB — over** | 1435.0 KiB | present |
+| `NEXT_PUBLIC_TOP_NAV_ENABLED=false`, same tree | 1434.0 KiB local | 1435.0 KiB | absent (0 chunks) |
+| Tabs on, after the two fixes below | **1433.0 KiB local** | 1435.0 KiB | present |
+
+The tabs add ~1.3 KiB, nearly all in the `(authenticated)/layout` chunk (the shell). Two fixes:
+- **One `AppSidebar` prop set and one desktop-rail element** (checklist item 8). `topNav` is a
+  runtime prop, so both branches of the rail ternary survived the tabs-on build, three full copies
+  of ten props in all: −0.7 KiB.
+- **`NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED` defined in `next.config.ts` `env`**, like the tab flag.
+  Unset (CI, local), its `=== 'true'` check survived in ~40 first-load chunks with both branches;
+  production sets it in Vercel and was already inlined, so no environment changes behaviour: −1.6 KiB.
+
+Local and CI readings differ by about 1.5 KiB in either direction on the same commit, so the
+budget has little room left for the next shell change.
 
 ## Screenshots
 

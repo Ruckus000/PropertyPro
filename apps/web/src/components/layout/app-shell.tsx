@@ -204,42 +204,35 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
     return () => globalThis.clearTimeout(timeoutId);
   }, [searchReady]);
 
+  // One prop set for every AppSidebar the shell mounts (desktop rail, phone drawer),
+  // and one desktop rail element whichever branch shows it. The shell's chunk counts
+  // against the web aggregate perf budget, and each inline copy cost ~0.4 KiB.
+  const sidebarProps = {
+    communityId: community?.id ?? null,
+    communityName: community?.name ?? null,
+    communityType: community?.type ?? null,
+    role,
+    isUnitOwner: isUnitOwner ?? false,
+    designation: designation ?? null,
+    features,
+    isLapsed,
+    userName: user?.fullName ?? null,
+    plan: community?.plan ?? null,
+  };
+  const desktopRail = (
+    <div className="hidden lg:block">
+      <AppSidebar {...sidebarProps} />
+    </div>
+  );
+
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
       {/* Desktop sidebar */}
       {topNav && DesktopNavSlot ? (
         // Flag on: the tab row replaces the rail, except where it has nothing to list (R24).
-        <DesktopNavSlot hasCommunity={community != null}>
-          <div className="hidden lg:block">
-            <AppSidebar
-              communityId={community?.id ?? null}
-              communityName={community?.name ?? null}
-              communityType={community?.type ?? null}
-              role={role}
-              isUnitOwner={isUnitOwner ?? false}
-              designation={designation ?? null}
-              features={features}
-              isLapsed={isLapsed}
-              userName={user?.fullName ?? null}
-              plan={community?.plan ?? null}
-            />
-          </div>
-        </DesktopNavSlot>
+        <DesktopNavSlot hasCommunity={community != null}>{desktopRail}</DesktopNavSlot>
       ) : (
-        <div className="hidden lg:block">
-          <AppSidebar
-            communityId={community?.id ?? null}
-            communityName={community?.name ?? null}
-            communityType={community?.type ?? null}
-            role={role}
-            isUnitOwner={isUnitOwner ?? false}
-            designation={designation ?? null}
-            features={features}
-            isLapsed={isLapsed}
-            userName={user?.fullName ?? null}
-            plan={community?.plan ?? null}
-          />
-        </div>
+        desktopRail
       )}
 
       {/* Mobile drawer overlay */}
@@ -254,18 +247,8 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
               expandedOverride={true}
               showCollapseToggle={false}
               onNavigate={closeMobileNav}
-              communityId={community?.id ?? null}
-              communityName={community?.name ?? null}
-              communityType={community?.type ?? null}
-              role={role}
-              isUnitOwner={isUnitOwner ?? false}
-              designation={designation ?? null}
-              features={features}
-              isLapsed={isLapsed}
-              userName={user?.fullName ?? null}
-              plan={community?.plan ?? null}
+              {...sidebarProps}
             />
-
           </div>
         </SheetContent>
       </Sheet>

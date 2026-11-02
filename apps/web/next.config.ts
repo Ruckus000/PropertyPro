@@ -83,6 +83,12 @@ const nextConfig: NextConfig = {
     // undefined, the check survives to runtime and the import()s stay.
     NEXT_PUBLIC_TOP_NAV_ENABLED:
       process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === "false" ? "false" : "true",
+    // Same reason. Every read is `=== 'true'`, so this mapping changes no build's
+    // behaviour; it only lets webpack fold the check where the variable is unset
+    // (CI, local). Production sets it in Vercel and was already inlined. Unset, the
+    // check and both branches survived in ~40 first-load chunks.
+    NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED:
+      process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === "true" ? "true" : "false",
   },
   async redirects() {
     return [
