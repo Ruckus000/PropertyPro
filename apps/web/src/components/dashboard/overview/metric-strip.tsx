@@ -6,7 +6,7 @@ export function MetricStrip({ tiles }: { tiles: MetricTileData[] }) {
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {tiles.map((tile) => (
-        <KpiCard key={tile.id} title={tile.title} value={tile.value} href={tile.href} />
+        <KpiCard key={tile.id} title={tile.title} value={tile.value} {...(tile.href ? { href: tile.href } : {})} />
       ))}
     </div>
   );

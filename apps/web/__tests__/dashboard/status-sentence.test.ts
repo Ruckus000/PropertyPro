@@ -20,6 +20,7 @@ function sentence(over: Partial<Parameters<typeof buildStatusSentence>[0]> = {})
     readiness: READINESS,
     nextMeeting: null,
     timeZone: TZ,
+    incomplete: false,
     ...over,
   });
 }
@@ -64,6 +65,32 @@ describe('buildStatusSentence', () => {
       headline: "You're up to date.",
       body: `Nothing is late or due this week. ${READINESS_LINE}`,
     });
+  });
+
+  it('a failed read with nothing late or due is not an all-clear (R16)', () => {
+    for (const audience of ['manager', 'board'] as const) {
+      expect(sentence({ audience, incomplete: true })).toEqual({
+        tone: 'attention',
+        chipLabel: 'Needs attention',
+        headline: "We couldn't check everything.",
+        body: `Part of your to-do list didn't load. Please refresh the page. ${READINESS_LINE}`,
+      });
+    }
+    // Without a readiness line the body is just the notice.
+    expect(sentence({ incomplete: true, readiness: null }).body).toBe(
+      "Part of your to-do list didn't load. Please refresh the page.",
+    );
+    // Control: a complete read still says it.
+    expect(sentence({ incomplete: false }).headline).toBe("You're up to date.");
+  });
+
+  it('a failed read keeps the late/due copy when counts are non-zero', () => {
+    expect(sentence({ incomplete: true, criticalCount: 1 }).headline).toBe('1 required item is late.');
+    expect(sentence({ incomplete: true, urgentCount: 2 }).headline).toBe('Almost up to date. 2 things are due this week.');
+  });
+
+  it('a failed read does not change the resident sentence', () => {
+    expect(sentence({ audience: 'resident', incomplete: true }).headline).toBe("You're all caught up.");
   });
 
   it('board reads like the manager', () => {

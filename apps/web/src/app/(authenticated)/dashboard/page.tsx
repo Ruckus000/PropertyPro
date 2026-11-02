@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { headers } from 'next/headers';
@@ -30,7 +31,6 @@ import { DashboardEsignPending } from '@/components/dashboard/dashboard-esign-pe
 import { ClaimRootBanner } from '@/components/dashboard/ClaimRootBanner';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
-import { ComplianceActivityFeed } from '@/components/compliance/compliance-activity-feed';
 import { StatusHero } from '@/components/dashboard/overview/status-hero';
 import { AttentionQueueList } from '@/components/dashboard/overview/attention-queue-list';
 import { WeekAgendaList } from '@/components/dashboard/overview/week-agenda-list';
@@ -44,6 +44,11 @@ import { buildMetricTiles, buildQuickActions } from '@/lib/dashboard/quick-actio
 import { buildComplianceSummary } from '@/lib/utils/compliance-calculator';
 import { formatDeadlineStamp } from '@/lib/meetings/meeting-status';
 import { resolveTimezone } from '@/lib/utils/timezone';
+
+// Managers only: the feed's code ships only when one renders it.
+const ComplianceActivityFeed = dynamic(() =>
+  import('@/components/compliance/compliance-activity-feed').then((m) => m.ComplianceActivityFeed),
+);
 
 function DashboardSkeleton() {
   return (
@@ -252,6 +257,7 @@ async function DashboardPanels({
     // undefined (read failed) omits the line; null says no meetings are scheduled.
     nextMeeting: overview.meetings30d.ok ? nextMeetingSummary : undefined,
     timeZone,
+    incomplete: sourceFailed,
   });
   // Residents already read the next meeting in the sentence body.
   const facts =
@@ -293,7 +299,7 @@ async function DashboardPanels({
           <h2 className="mt-1 text-2xl font-semibold text-content">Welcome, {data.firstName}</h2>
         </div>
         {audience === 'manager' && !supportSession ? (
-          <Button asChild>
+          <Button asChild className="h-11 md:h-9">
             <Link href={`/documents?communityId=${communityId}`}>Upload document</Link>
           </Button>
         ) : null}

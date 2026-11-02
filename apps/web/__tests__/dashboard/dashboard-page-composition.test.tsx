@@ -143,7 +143,14 @@ describe('the condo dashboard composition', () => {
     expect(screen.getAllByRole('link', { name: 'New announcement' }).length).toBeGreaterThan(0);
     expect(screen.getByText('Open violations')).toBeInTheDocument();
     expect(screen.getByText('Open maintenance requests')).toBeInTheDocument();
-    expect(screen.getByTestId('activity-feed')).toBeInTheDocument();
+    expect(await screen.findByTestId('activity-feed')).toBeInTheDocument();
+    // Positive control for the "absent on failure" assertion in the checklist-failure test.
+    expect(screen.getByText(/checklist documents are posted\./)).toBeInTheDocument();
+    // The maintenance tile links for the manager.
+    expect(screen.getByText('Open maintenance requests').closest('a')).toHaveAttribute(
+      'href',
+      '/maintenance?communityId=42',
+    );
   });
 
   it('board seat sees queue but no activity feed', async () => {
@@ -152,6 +159,9 @@ describe('the condo dashboard composition', () => {
     await renderPage();
     expect(screen.getByText('Needs attention', { selector: 'h3' })).toBeInTheDocument();
     expect(screen.queryByTestId('activity-feed')).toBeNull();
+    // Board seats are residents: /maintenance lists only their own requests, so the count is not a link.
+    const tile = screen.getByText('Open maintenance requests');
+    expect(tile.closest('a')).toBeNull();
   });
 
   it('owner sees no queue and no maintenance tile', async () => {
@@ -181,6 +191,21 @@ describe('the condo dashboard composition', () => {
     expect(within(queue).getByText('Post notice for Board meeting')).toBeInTheDocument();
     const agenda = screen.getByRole('region', { name: 'This week' });
     expect(within(agenda).getByText('Board meeting')).toBeInTheDocument();
+  });
+
+  it('a failed checklist read with nothing else due is not an all-clear (R16)', async () => {
+    mocks.overview.current = overviewWith({
+      checklist: { ok: false },
+      // Notice posted, so no meeting-notice row either.
+      meetings30d: {
+        ok: true,
+        value: [{ id: 7, title: 'Board meeting', meetingType: 'board', startsAt: NEXT_WEEK, noticePostedAt: new Date(NOW.getTime() - 86_400_000) }],
+      },
+    });
+    await renderPage();
+    expect(screen.queryByText("You're up to date.")).toBeNull();
+    expect(screen.getByText("We couldn't check everything.")).toBeInTheDocument();
+    expect(screen.getByText(/Part of your to-do list didn't load/)).toBeInTheDocument();
   });
 
   it('failed meetings read never renders as "no meetings" (R11)', async () => {
@@ -218,6 +243,8 @@ describe('the condo dashboard composition', () => {
     await renderPage();
     expect(screen.getByRole('link', { name: 'Schedule meeting' })).toBeInTheDocument();
     expect(within(greetingRow()).getByRole('link', { name: 'Upload document' })).toBeInTheDocument();
+    // 44px touch target on mobile, like the queue rows.
+    expect(within(greetingRow()).getByRole('link', { name: 'Upload document' }).className).toContain('h-11');
     document.body.innerHTML = '';
     mocks.requestHeaders.current = new Headers({ 'x-support-session-id': '7', 'x-support-community-id': '42' });
     await renderPage();

@@ -33,6 +33,11 @@ export function buildStatusSentence(input: {
   /** null: no meeting is scheduled. undefined: unknown (the read failed), so no meeting line (D21). */
   nextMeeting: { title: string; startsAt: string } | null | undefined;
   timeZone: string;
+  /**
+   * A read that feeds the to-do list failed (R16). The counts then omit rows we
+   * could not load, so "nothing late or due" would be an unverified claim.
+   */
+  incomplete: boolean;
 }): StatusSentence {
   const { audience, criticalCount: o, urgentCount: u, pendingSignatures: s } = input;
 
@@ -77,6 +82,14 @@ export function buildStatusSentence(input: {
       chipLabel: 'Needs attention',
       headline: `Almost up to date. ${u} ${plural(u, 'thing is', 'things are')} due this week.`,
       body: join(''),
+    };
+  }
+  if (input.incomplete) {
+    return {
+      tone: 'attention',
+      chipLabel: 'Needs attention',
+      headline: "We couldn't check everything.",
+      body: join("Part of your to-do list didn't load. Please refresh the page. "),
     };
   }
   return {

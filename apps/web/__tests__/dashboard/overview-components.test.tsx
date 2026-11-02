@@ -58,7 +58,7 @@ describe('AttentionQueueList', () => {
     const items = Array.from({ length: 9 }, (_, i) => item(i + 1));
     render(<AttentionQueueList items={items} communityId={COMMUNITY_ID} error={false} />);
     expect(screen.getAllByRole('listitem')).toHaveLength(6);
-    const link = screen.getByRole('link', { name: 'View all 9 in Compliance' });
+    const link = screen.getByRole('link', { name: 'View all in Compliance' });
     expect(link).toHaveAttribute('href', `/communities/${COMMUNITY_ID}/compliance`);
   });
 
@@ -104,7 +104,7 @@ describe('AttentionQueueList', () => {
     const action = within(screen.getAllByRole('listitem')[0]!).getByRole('link', { name: 'Upload' });
     expect(action.className).toContain('h-11');
     expect(action.className).toContain('md:h-9');
-    const viewAll = screen.getByRole('link', { name: 'View all 7 in Compliance' });
+    const viewAll = screen.getByRole('link', { name: 'View all in Compliance' });
     expect(viewAll.className).toContain('min-h-11');
     expect(viewAll.className).toContain('md:min-h-9');
     expect(viewAll.className).toContain('inline-flex');
@@ -182,6 +182,20 @@ describe('MetricStrip', () => {
     render(<MetricStrip tiles={[{ id: 'meetings', title: 'Meetings', value: '3', href: '/meetings' }]} />);
     expect(screen.getByText('Meetings')).toBeInTheDocument();
     expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
+  it('a tile without an href renders no link; one with an href does', () => {
+    render(
+      <MetricStrip
+        tiles={[
+          { id: 'maintenance', title: 'Open maintenance requests', value: '5' },
+          { id: 'meetings', title: 'Meetings', value: '3', href: '/meetings' },
+        ]}
+      />,
+    );
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link')).toHaveAttribute('href', '/meetings');
+    expect(screen.getByText('Open maintenance requests')).toBeInTheDocument();
   });
 });
 

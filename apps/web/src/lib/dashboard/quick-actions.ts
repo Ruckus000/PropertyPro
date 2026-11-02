@@ -76,7 +76,8 @@ export interface MetricTileData {
   id: 'violations' | 'maintenance' | 'meetings';
   title: string;
   value: string;
-  href: string;
+  /** Absent: the tile renders without a link. */
+  href?: string;
 }
 
 export function buildMetricTiles(input: {
@@ -102,13 +103,15 @@ export function buildMetricTiles(input: {
       href: audience === 'resident' ? `/violations/report${cid}` : `/violations${cid}`,
     });
   }
-  // Community-wide count: managers and board seats only (D18).
+  // Community-wide count: managers and board seats only (D18). /maintenance lists
+  // only a resident's own requests, and board seats are residents, so only the
+  // manager gets a link to a list that matches the number.
   if (audience !== 'resident' && features.hasMaintenanceRequests) {
     tiles.push({
       id: 'maintenance',
       title: 'Open maintenance requests',
       value: String(input.openMaintenanceCount),
-      href: `/maintenance${cid}`,
+      ...(audience === 'manager' ? { href: `/maintenance${cid}` } : {}),
     });
   }
   if (input.meetings30d !== null) {

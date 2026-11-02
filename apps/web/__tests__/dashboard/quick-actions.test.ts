@@ -119,10 +119,11 @@ describe('buildMetricTiles', () => {
     expect(tiles({ audience: 'resident' })[0]?.href).toBe('/violations/report?communityId=7');
   });
 
-  it('board seat sees the maintenance tile and the violations list', () => {
-    expect(tiles({ audience: 'board' }).map((t) => [t.id, t.href])).toEqual([
+  it('board seat sees the maintenance count but no link (the list shows only own requests)', () => {
+    const board = tiles({ audience: 'board' });
+    expect(board.map((t) => [t.id, t.href])).toEqual([
       ['violations', '/violations?communityId=7'],
-      ['maintenance', '/maintenance?communityId=7'],
+      ['maintenance', undefined],
       ['meetings', '/meetings?communityId=7'],
     ]);
   });

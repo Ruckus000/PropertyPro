@@ -70,7 +70,7 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
           </ul>
           {items.length > MAX_ROWS ? (
             <Link href={complianceHref} className="inline-flex min-h-11 items-center text-sm font-medium text-content-link hover:underline md:min-h-9">
-              View all {items.length} in Compliance
+              View all in Compliance
             </Link>
           ) : null}
         </>
