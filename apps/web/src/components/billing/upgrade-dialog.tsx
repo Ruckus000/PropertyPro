@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * UpgradeDialog — the in-context upgrade surface, opened from the sidebar
- * (and from LockedFeatureScreen).
+ * UpgradeDialog — the in-context upgrade surface, opened from a plan-locked nav
+ * item (the top tabs, their More panel, or the phone drawer's rail) and from
+ * LockedFeatureScreen.
  *
  * Replaces the old fixed-position UpgradePrompt card. Built on the shared
  * Dialog primitive so we get focus trap, Esc-to-close, and proper a11y
