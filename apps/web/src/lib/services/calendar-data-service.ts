@@ -18,6 +18,8 @@ export interface CalendarMeetingRecord {
   startsAt: Date;
   endsAt: Date | null;
   location: string;
+  /** When the meeting notice was posted; null until it is (D16). */
+  noticePostedAt: Date | null;
 }
 
 export interface AggregateAssessmentDueRecord {
@@ -138,6 +140,7 @@ export async function listCommunityCalendarMeetings(
         startsAt: meetings.startsAt,
         endsAt: meetings.endsAt,
         location: meetings.location,
+        noticePostedAt: meetings.noticePostedAt,
       },
       whereClause,
     )
