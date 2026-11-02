@@ -95,6 +95,16 @@ describe('buildStatusSentence', () => {
     );
   });
 
+  it('unknown next meeting omits the meeting line', () => {
+    expect(sentence({ audience: 'resident', pendingSignatures: 1, nextMeeting: undefined }).body).toBe('');
+    expect(sentence({ audience: 'resident', nextMeeting: undefined })).toMatchObject({
+      headline: "You're all caught up.",
+      body: '',
+    });
+    // Control: null still means nothing is scheduled.
+    expect(sentence({ audience: 'resident', nextMeeting: null }).body).toBe('No meetings are scheduled.');
+  });
+
   it('resident with nothing pending', () => {
     expect(sentence({ audience: 'resident' })).toEqual({
       tone: 'good',

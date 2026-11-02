@@ -45,11 +45,14 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
           : null}
       </div>
 
+      {/* A failed source never blanks the rows that did load (D21); it also rules out "all clear". */}
       {error ? (
         <AlertBanner status="danger" title="We couldn't load your to-do list. Please refresh the page." />
-      ) : items && items.length === 0 ? (
+      ) : null}
+      {items && items.length === 0 && !error ? (
         <EmptyState preset="action_required_clear" size="sm" />
-      ) : items ? (
+      ) : null}
+      {items && items.length > 0 ? (
         <>
           <ul className="divide-y divide-edge rounded-md border border-edge bg-surface-card">
             {items.slice(0, MAX_ROWS).map((item) => (

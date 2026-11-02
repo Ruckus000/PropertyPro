@@ -177,7 +177,31 @@ describe('the condo dashboard composition', () => {
     const queue = screen.getByRole('region', { name: 'Needs attention' });
     expect(within(queue).getByText(/couldn't load/i)).toBeInTheDocument();
     expect(screen.getAllByText(/couldn't load/i)).toHaveLength(1);
-    expect(screen.getByRole('heading', { name: 'This week' })).toBeInTheDocument();
+    // Rows from the sources that loaded are still listed (meeting notice for the fixture meeting).
+    expect(within(queue).getByText('Post notice for Board meeting')).toBeInTheDocument();
+    const agenda = screen.getByRole('region', { name: 'This week' });
+    expect(within(agenda).getByText('Board meeting')).toBeInTheDocument();
+  });
+
+  it('failed meetings read never renders as "no meetings" (R11)', async () => {
+    mocks.membership.current = OWNER;
+    mocks.canWrite.current = () => false;
+    mocks.overview.current = overviewWith({ checklist: null, hearings: null, meetings30d: { ok: false } });
+    await renderPage();
+    expect(screen.queryByText(/No meetings are scheduled/)).toBeNull();
+    expect(screen.getByText("We couldn't load this week's schedule. Please refresh the page.")).toBeInTheDocument();
+    expect(screen.queryByText('Upcoming meetings')).toBeNull();
+    // Control: the other tile still renders.
+    expect(screen.getByText('Open violations')).toBeInTheDocument();
+  });
+
+  it('a resident with no meetings still reads "No meetings are scheduled."', async () => {
+    mocks.membership.current = OWNER;
+    mocks.canWrite.current = () => false;
+    mocks.overview.current = overviewWith({ checklist: null, hearings: null, meetings30d: { ok: true, value: [] } });
+    await renderPage();
+    expect(screen.getByText(/No meetings are scheduled/)).toBeInTheDocument();
+    expect(screen.getByText('Upcoming meetings')).toBeInTheDocument();
   });
 
   it('essentials owner sees no violations tile', async () => {

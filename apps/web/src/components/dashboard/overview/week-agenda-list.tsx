@@ -1,11 +1,15 @@
+import { AlertBanner } from '@/components/shared/alert-banner';
 import type { AgendaDay } from '@/lib/dashboard/week-agenda';
 
-export function WeekAgendaList({ days }: { days: AgendaDay[] }) {
+export function WeekAgendaList({ days, error = false }: { days: AgendaDay[]; error?: boolean }) {
   return (
     <section aria-labelledby="this-week-heading" className="space-y-4">
       <h3 id="this-week-heading" className="text-lg font-semibold text-content">
         This week
       </h3>
+      {error ? (
+        <AlertBanner status="danger" title="We couldn't load this week's schedule. Please refresh the page." />
+      ) : null}
       <ol className="divide-y divide-edge rounded-md border border-edge bg-surface-card">
         {days.map((day) => (
           <li

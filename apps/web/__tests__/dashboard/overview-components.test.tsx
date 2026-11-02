@@ -87,6 +87,19 @@ describe('AttentionQueueList', () => {
     expect(screen.getByText("You're all set!")).toBeInTheDocument();
   });
 
+  it('error keeps the rows that loaded, under the banner', () => {
+    render(<AttentionQueueList items={[item(1)]} communityId={COMMUNITY_ID} error />);
+    expect(screen.getByText(/couldn't load your to-do list/i)).toBeInTheDocument();
+    expect(screen.getByText('Post item 1')).toBeInTheDocument();
+  });
+
+  it('error with no rows never shows the all-clear empty state', () => {
+    render(<AttentionQueueList items={[]} communityId={COMMUNITY_ID} error />);
+    expect(screen.getByText(/couldn't load your to-do list/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+    expect(screen.queryByText(/all set|require your attention/i)).toBeNull();
+  });
+
   it('error shows the danger banner', () => {
     render(<AttentionQueueList items={null} communityId={COMMUNITY_ID} error />);
     expect(screen.getByText("We couldn't load your to-do list. Please refresh the page.")).toBeInTheDocument();
@@ -104,6 +117,14 @@ describe('WeekAgendaList', () => {
     expect(screen.getAllByRole('listitem').filter((li) => li.getAttribute('aria-current') === 'date')).toHaveLength(1);
     expect(screen.getByText('Board meeting')).toBeInTheDocument();
     expect(screen.getAllByText('Nothing scheduled')).toHaveLength(6);
+    expect(screen.queryByText(/couldn't load/i)).toBeNull();
+  });
+
+  it('error shows the danger banner above days that still render', () => {
+    render(<WeekAgendaList days={DAYS} error />);
+    expect(screen.getByText("We couldn't load this week's schedule. Please refresh the page.")).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem').filter((li) => li.getAttribute('aria-current') === 'date')).toHaveLength(1);
+    expect(screen.getByText('Board meeting')).toBeInTheDocument();
   });
 });
 

@@ -249,7 +249,8 @@ async function DashboardPanels({
     urgentCount: tiers.urgent,
     pendingSignatures: pendingSigners.length,
     readiness: checklist ? buildComplianceSummary(checklist, now).readiness : null,
-    nextMeeting: nextMeetingSummary,
+    // undefined (read failed) omits the line; null says no meetings are scheduled.
+    nextMeeting: overview.meetings30d.ok ? nextMeetingSummary : undefined,
     timeZone,
   });
   // Residents already read the next meeting in the sentence body.
@@ -298,7 +299,8 @@ async function DashboardPanels({
         ) : null}
       </div>
       <StatusHero sentence={sentence} facts={facts} />
-      <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      {/* Residents have no queue: This week takes the row alone. Two full literal class strings. */}
+      <div className={attention === null ? 'grid gap-6' : 'grid gap-6 lg:grid-cols-[2fr_1fr]'}>
         <AttentionQueueList
           items={attention}
           communityId={communityId}
@@ -306,6 +308,7 @@ async function DashboardPanels({
         />
         <WeekAgendaList
           days={buildWeekAgenda({ meetings30d, attention: attention ?? [], hearings, now, timeZone })}
+          error={!overview.meetings30d.ok}
         />
       </div>
       <QuickActions
@@ -324,7 +327,7 @@ async function DashboardPanels({
           features,
           violationOpenCount,
           openMaintenanceCount: data.openMaintenanceCount,
-          meetings30d,
+          meetings30d: overview.meetings30d.ok ? meetings30d : null,
           communityId,
           timeZone,
         })}

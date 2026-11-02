@@ -30,15 +30,19 @@ export function buildStatusSentence(input: {
   urgentCount: number;
   pendingSignatures: number;
   readiness: { satisfied: number; applicableTotal: number } | null;
-  nextMeeting: { title: string; startsAt: string } | null;
+  /** null: no meeting is scheduled. undefined: unknown (the read failed), so no meeting line (D21). */
+  nextMeeting: { title: string; startsAt: string } | null | undefined;
   timeZone: string;
 }): StatusSentence {
   const { audience, criticalCount: o, urgentCount: u, pendingSignatures: s } = input;
 
   if (audience === 'resident') {
-    const meetingLine = input.nextMeeting
-      ? `The next meeting is ${input.nextMeeting.title} on ${formatDeadlineStamp(input.nextMeeting.startsAt, input.timeZone)}.`
-      : 'No meetings are scheduled.';
+    const meetingLine =
+      input.nextMeeting === undefined
+        ? ''
+        : input.nextMeeting
+          ? `The next meeting is ${input.nextMeeting.title} on ${formatDeadlineStamp(input.nextMeeting.startsAt, input.timeZone)}.`
+          : 'No meetings are scheduled.';
     return s > 0
       ? {
           tone: 'attention',

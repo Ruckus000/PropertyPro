@@ -132,6 +132,10 @@ describe('buildMetricTiles', () => {
     expect(tiles({ violationOpenCount: null }).map((t) => t.id)).not.toContain('violations');
   });
 
+  it('a failed meetings read omits the meetings tile; the rest stay', () => {
+    expect(tiles({ meetings30d: null }).map((t) => t.id)).toEqual(['violations', 'maintenance']);
+  });
+
   it('zero is a value, not a missing tile', () => {
     expect(tiles({ violationOpenCount: 0, meetings30d: [] }).map((t) => t.value)).toEqual(['0', '5', '0']);
   });

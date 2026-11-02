@@ -84,7 +84,8 @@ export function buildMetricTiles(input: {
   features: CommunityFeatures;
   violationOpenCount: number | null;
   openMaintenanceCount: number;
-  meetings30d: CalendarMeetingRecord[];
+  /** null: the read failed, so the meetings tile is omitted rather than shown as 0 (D21). */
+  meetings30d: CalendarMeetingRecord[] | null;
   communityId: number;
   timeZone: string;
 }): MetricTileData[] {
@@ -110,11 +111,13 @@ export function buildMetricTiles(input: {
       href: `/maintenance${cid}`,
     });
   }
-  tiles.push({
-    id: 'meetings',
-    title: 'Upcoming meetings',
-    value: String(input.meetings30d.length),
-    href: `/meetings${cid}`,
-  });
+  if (input.meetings30d !== null) {
+    tiles.push({
+      id: 'meetings',
+      title: 'Upcoming meetings',
+      value: String(input.meetings30d.length),
+      href: `/meetings${cid}`,
+    });
+  }
   return tiles;
 }
