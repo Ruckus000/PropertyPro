@@ -53,9 +53,9 @@ export function PaymentsBlock(props: BlockRendererProps) {
   const headingId = `payments-${props.block.id}`;
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={headingId}>
+    <section className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10" aria-labelledby={headingId}>
       <div className="mx-auto max-w-3xl rounded-md border border-edge bg-surface-card p-8 text-center">
-        <h2 id={headingId} className="font-heading text-2xl font-semibold text-content">
+        <h2 id={headingId} className="font-heading text-3xl font-semibold leading-tight tracking-tight text-content site-md:text-4xl">
           {content.heading ?? DEFAULT_HEADING}
         </h2>
         {content.body && (

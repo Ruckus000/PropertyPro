@@ -15,10 +15,10 @@ export function TextBlock(props: BlockRendererProps) {
   const paragraphs = content.body.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8">
+    <section className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10">
       <div className={`mx-auto ${variantWidth('prose', content.variant)}`}>
         {content.heading && (
-          <h2 className="font-heading text-2xl font-semibold text-content mb-4">
+          <h2 className="font-heading text-3xl font-semibold leading-tight tracking-tight text-content site-md:text-4xl mb-4">
             {content.heading}
           </h2>
         )}

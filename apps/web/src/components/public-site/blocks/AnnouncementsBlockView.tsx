@@ -9,6 +9,7 @@
 import type { AnnouncementsBlockContent } from '@propertypro/shared';
 import type { PublicAnnouncement } from '@/lib/db/public-community-reader';
 import type { BlockViewProps } from './types';
+import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
 /**
  * An announcement with its body already sanitized.
@@ -51,51 +52,35 @@ export function AnnouncementsBlockView({
   anchorId,
 }: AnnouncementsBlockViewProps) {
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={`announcements-${blockId}`}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2
-          id={`announcements-${blockId}`}
-          className="font-heading text-2xl font-semibold text-content mb-6"
-        >
-          Announcements
-        </h2>
-        {data.length === 0 ? (
-          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
-            {content?.emptyText ?? "No announcements yet."}
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {data.map((item) => (
-              <li key={item.id} className="rounded-md border border-edge bg-surface-card p-5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-lg font-medium text-content">
-                    {item.isPinned && (
-                      <span className="text-xs font-semibold uppercase tracking-wide text-accent mr-2">
-                        Pinned
-                      </span>
-                    )}
-                    {item.title}
-                  </h3>
-                  <time
-                    className="text-xs text-content-secondary whitespace-nowrap"
-                    dateTime={item.publishedAt.toISOString()}
-                  >
-                    {formatDate(item.publishedAt, community.timezone)}
-                  </time>
-                </div>
-                <div
-                  className="mt-3 text-sm text-content prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: item.bodyHtml }}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+    <SiteSection id={anchorId} headingId={`announcements-${blockId}`} title="Announcements">
+      {data.length === 0 ? (
+        <SiteSectionEmpty>{content?.emptyText ?? 'No announcements yet.'}</SiteSectionEmpty>
+      ) : (
+        <ul className="divide-y divide-edge border-y border-edge">
+          {data.map((item) => (
+            <li key={item.id} className="py-6">
+              <time
+                className="text-sm text-content-secondary"
+                dateTime={item.publishedAt.toISOString()}
+              >
+                {formatDate(item.publishedAt, community.timezone)}
+              </time>
+              <h3 className="mt-1 text-xl font-semibold text-content">
+                {item.isPinned && (
+                  <span className="mr-2 text-sm font-semibold uppercase tracking-widest text-accent">
+                    Pinned
+                  </span>
+                )}
+                {item.title}
+              </h3>
+              <div
+                className="prose mt-2 max-w-prose text-base text-content"
+                dangerouslySetInnerHTML={{ __html: item.bodyHtml }}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </SiteSection>
   );
 }

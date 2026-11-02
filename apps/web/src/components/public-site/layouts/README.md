@@ -8,7 +8,7 @@ that use them, and four looks (website builder Phase 2B) are what managers pick 
 | tidewater    | `Tidewater.tsx`   | **Shipped (PR #1b)** | Coastal editorial — golden-hour palette, Fraunces italic display, hairline rules.          |
 | boulevard    | `Boulevard.tsx`   | **Shipped (PR #7)**  | Mid-century Floridian — MiMo geometry, Newsreader italic, ochre accents.                   |
 | sable        | `Sable.tsx`       | **Shipped (PR #7)**  | Refined contemporary — linen and oxidized bronze, Cormorant Garamond hairline italic.      |
-| bayfront     | `Bayfront.tsx`    | Look                 | Photo-led and modern — full-bleed photo hero, alternating section bands, pill buttons.     |
+| bayfront     | `Bayfront.tsx`    | Look                 | Photo-led and modern — full-bleed photo hero, alternating section bands, rounded buttons.  |
 | heritage     | `Heritage.tsx`    | Look                 | Formal and official — words beside a framed photo, ruled headings, square corners.         |
 | palm-grove   | `PalmGrove.tsx`   | Look                 | Warm and friendly — the welcome on a card over a wide photo, alternating bands, rounded.   |
 | plain-simple | `PlainSimple.tsx` | Look                 | No photos needed — a text hero, every text size one step up, hairline rules.               |

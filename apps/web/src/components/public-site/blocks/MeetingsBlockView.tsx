@@ -6,24 +6,17 @@
 import type { MeetingsBlockContent } from '@propertypro/shared';
 import type { PublicMeeting } from '@/lib/db/public-community-reader';
 import type { BlockViewProps } from './types';
+import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
-const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-};
-
-function formatDateTime(value: Date, timezone: string): string {
+/**
+ * One part of a meeting's start, in the community's own time zone. An invalid
+ * zone (legacy data) falls back to Eastern rather than breaking the section.
+ */
+function formatPart(value: Date, timezone: string, opts: Intl.DateTimeFormatOptions): string {
   try {
-    return value.toLocaleString('en-US', {
-      ...DATE_TIME_OPTS,
-      timeZone: timezone || 'America/New_York',
-    });
+    return value.toLocaleString('en-US', { ...opts, timeZone: timezone || 'America/New_York' });
   } catch {
-    // Invalid timezone (legacy DB data); fall back to default.
-    return value.toLocaleString('en-US', { ...DATE_TIME_OPTS, timeZone: 'America/New_York' });
+    return value.toLocaleString('en-US', { ...opts, timeZone: 'America/New_York' });
   }
 }
 
@@ -42,57 +35,42 @@ export function MeetingsBlockView({
   anchorId,
 }: MeetingsBlockViewProps) {
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={`meetings-${blockId}`}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2
-          id={`meetings-${blockId}`}
-          className="font-heading text-2xl font-semibold text-content mb-6"
-        >
-          Upcoming Meetings
-        </h2>
-        {data.length === 0 ? (
-          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
-            {content?.emptyText ?? "No upcoming meetings."}
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {data.map((meeting) => (
-              <li key={meeting.id} className="rounded-md border border-edge bg-surface-card p-5">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-medium text-content">{meeting.title}</h3>
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
-                        {formatMeetingType(meeting.meetingType)}
-                      </span>
-                    </div>
-                  </div>
+    <SiteSection id={anchorId} headingId={`meetings-${blockId}`} title="Upcoming Meetings">
+      {data.length === 0 ? (
+        <SiteSectionEmpty>{content?.emptyText ?? 'No upcoming meetings.'}</SiteSectionEmpty>
+      ) : (
+        <ul className="divide-y divide-edge border-y border-edge">
+          {data.map((meeting) => {
+            const tz = community.timezone;
+            const details = [
+              formatMeetingType(meeting.meetingType),
+              formatPart(meeting.startsAt, tz, { hour: 'numeric', minute: '2-digit' }),
+              meeting.location,
+            ].filter(Boolean);
+            return (
+              <li key={meeting.id} className="flex gap-6 py-6">
+                {/* The date column. Its colour comes from the look: a look that
+                    sets dates in its accent colours this <time> (SiteChrome). */}
+                <time
+                  dateTime={meeting.startsAt.toISOString()}
+                  className="flex w-14 shrink-0 flex-col items-center text-content"
+                >
+                  <span className="text-sm font-semibold uppercase tracking-widest">
+                    {formatPart(meeting.startsAt, tz, { month: 'short' })}
+                  </span>
+                  <span className="font-heading text-4xl leading-none">
+                    {formatPart(meeting.startsAt, tz, { day: 'numeric' })}
+                  </span>
+                </time>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-semibold text-content">{meeting.title}</h3>
+                  <p className="mt-1 text-base text-content-secondary">{details.join(' · ')}</p>
                 </div>
-                <dl className="mt-3 space-y-1 text-sm text-content-secondary">
-                  <div className="flex items-baseline gap-2">
-                    <dt className="font-medium text-content-secondary shrink-0">When</dt>
-                    <dd>
-                      <time dateTime={meeting.startsAt.toISOString()}>
-                        {formatDateTime(meeting.startsAt, community.timezone)}
-                      </time>
-                    </dd>
-                  </div>
-                  {meeting.location && (
-                    <div className="flex items-baseline gap-2">
-                      <dt className="font-medium text-content-secondary shrink-0">Where</dt>
-                      <dd>{meeting.location}</dd>
-                    </div>
-                  )}
-                </dl>
               </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+            );
+          })}
+        </ul>
+      )}
+    </SiteSection>
   );
 }

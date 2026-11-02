@@ -45,7 +45,7 @@ function formatNextMeeting(value: Date, timezone: string): string {
 }
 
 const LINK_CLASS =
-  'flex min-h-11 items-center gap-3 rounded-md border border-edge bg-surface-card px-4 py-3 text-base text-content transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
+  'flex min-h-11 items-center gap-3 rounded-md py-5 text-base text-content transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive';
 
 function QuickLink({
   href,
@@ -64,7 +64,7 @@ function QuickLink({
       <a href={href} className={LINK_CLASS}>
         <Icon className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
         <span className="flex flex-col">
-          <span className="font-medium">{label}</span>
+          <span className="font-semibold">{label}</span>
           {children}
         </span>
       </a>
@@ -86,14 +86,14 @@ export function QuickLinksBlockView({ blockId, data, community, anchorId }: Quic
   return (
     <section
       id={anchorId}
-      className="px-4 py-8 site-sm:px-6 site-lg:px-8"
+      className="px-6 py-6 site-sm:px-8 site-lg:px-10"
       aria-labelledby={headingId}
     >
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-6xl">
         <h2 id={headingId} className="sr-only">
           Quick links
         </h2>
-        <ul className="grid gap-3 site-sm:grid-cols-2">
+        <ul className="grid gap-x-8 site-sm:grid-cols-2 site-md:grid-cols-4">
           {data.showMeetings && (
             <QuickLink href="#meetings" icon={Calendar} label="Meetings">
               {next && (

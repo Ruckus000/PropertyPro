@@ -31,7 +31,7 @@ export interface LookStyle {
   /** `alternate`: every other section on the theme's secondary colour; `none`: hairline rules between sections. */
   sectionTint: 'alternate' | 'none';
   /** The corners of the hero's button, photo and card. */
-  radius: 'square' | 'rounded' | 'pill';
+  radius: 'square' | 'rounded';
   /** How the layout paints the accent colour. */
   accentUse: 'text' | 'background';
   /** Text colour on an accent background: `inverse` (white) or `text` (the body text colour). */
@@ -46,7 +46,7 @@ export const LOOK_STYLES: Readonly<Record<LookLayoutId, LookStyle>> = {
     heroStyle: 'photo-full',
     pageBackground: 'white',
     sectionTint: 'alternate',
-    radius: 'pill',
+    radius: 'rounded',
     accentUse: 'background',
     onAccent: 'text',
   },

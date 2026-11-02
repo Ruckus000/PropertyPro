@@ -7,6 +7,7 @@
  * sign in. It never names a record: a title, date or file would put the owners'
  * records on the public site, which is exactly what the sign-in is for.
  */
+import { SiteSection } from './SiteSection';
 
 export interface OwnerRecordsSummaryProps {
   /** One entry per group of records. A group with nothing posted is skipped. */
@@ -29,36 +30,27 @@ export function OwnerRecordsSummary({ groups, blockId, anchorId }: OwnerRecordsS
   const posted = groups.filter((group) => group.postedCount > 0);
 
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={headingId}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2 id={headingId} className="font-heading text-2xl font-semibold text-content mb-6">
-          Association documents
-        </h2>
-        <p className="text-base text-content-secondary">
-          {"Owners can sign in to see the association's official records."}
-        </p>
-        <ul className="mt-4 space-y-3">
-          {posted.map((group) => (
-            <li
-              key={group.label}
-              className="rounded-md border border-edge bg-surface-card p-4 text-base font-medium text-content"
-            >
-              {`${group.label} · ${group.postedCount}`}
-            </li>
-          ))}
-        </ul>
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- the public site ships no client runtime, and next/link is a client component; SiteChrome links here the same way */}
-        <a
-          href="/auth/login"
-          className="mt-6 inline-flex items-center rounded-md bg-primary px-6 py-3 text-base font-medium text-content-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-        >
-          Owner sign in
-        </a>
-      </div>
-    </section>
+    <SiteSection id={anchorId} headingId={headingId} title="Association documents">
+      <p className="max-w-prose text-base text-content-secondary">
+        {"Owners can sign in to see the association's official records."}
+      </p>
+      <ul className="mt-6 divide-y divide-edge border-y border-edge">
+        {posted.map((group) => (
+          <li key={group.label} className="flex items-baseline justify-between gap-6 py-4 text-base">
+            <span className="font-semibold text-content">{group.label}</span>
+            {/* Heard as "Financial records · 3", as it read before the count moved right. */}
+            <span className="sr-only"> · </span>
+            <span className="text-content-secondary">{group.postedCount}</span>
+          </li>
+        ))}
+      </ul>
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- the public site ships no client runtime, and next/link is a client component; SiteChrome links here the same way */}
+      <a
+        href="/auth/login"
+        className="mt-8 inline-flex min-h-11 items-center rounded-md bg-primary px-6 py-3 text-base font-semibold text-content-inverse transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive focus-visible:ring-offset-2"
+      >
+        Owner sign in
+      </a>
+    </SiteSection>
   );
 }

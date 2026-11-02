@@ -22,10 +22,10 @@ export function AmenitiesBlock(props: BlockRendererProps) {
   const headingId = content.heading ? `amenities-${props.block.id}` : undefined;
 
   return (
-    <section className="px-4 py-12 site-sm:px-6 site-lg:px-8" aria-labelledby={headingId}>
+    <section className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10" aria-labelledby={headingId}>
       <div className={`mx-auto ${variantWidth('grid', content.variant)}`}>
         {content.heading && (
-          <h2 id={headingId} className="mb-6 font-heading text-2xl font-semibold text-content">
+          <h2 id={headingId} className="mb-6 font-heading text-3xl font-semibold leading-tight tracking-tight text-content site-md:text-4xl">
             {content.heading}
           </h2>
         )}

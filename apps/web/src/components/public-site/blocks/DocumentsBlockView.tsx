@@ -6,6 +6,7 @@
 import type { DocumentsBlockContent } from '@propertypro/shared';
 import type { PublicDocument } from '@/lib/db/public-community-reader';
 import type { BlockViewProps } from './types';
+import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
 function formatDate(value: Date, timezone: string): string {
   const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
@@ -26,59 +27,41 @@ export function DocumentsBlockView({
   anchorId,
 }: DocumentsBlockViewProps) {
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={`documents-${blockId}`}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2
-          id={`documents-${blockId}`}
-          className="font-heading text-2xl font-semibold text-content mb-6"
-        >
-          Documents
-        </h2>
-        {data.length === 0 ? (
-          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
-            {content?.emptyText ?? "No documents available."}
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {data.map((doc) => (
-              <li key={doc.id} className="rounded-md border border-edge bg-surface-card p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-base font-medium text-content truncate">{doc.title}</p>
-                    {doc.description && (
-                      <p className="mt-1 text-sm text-content-secondary">{doc.description}</p>
-                    )}
-                    <div className="mt-1 flex items-center gap-3 flex-wrap">
-                      {doc.categoryName && (
-                        <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary capitalize">
-                          {doc.categoryName}
-                        </span>
-                      )}
-                      <time
-                        className="text-xs text-content-secondary"
-                        dateTime={doc.createdAt.toISOString()}
-                      >
-                        {formatDate(doc.createdAt, community.timezone)}
-                      </time>
-                    </div>
-                  </div>
-                  <a
-                    href={`/api/v1/public/documents/${doc.id}/download?communityId=${community.id}`}
-                    className="shrink-0 inline-flex items-center rounded-md border border-edge px-3 py-1.5 text-sm font-medium text-content hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
-                    aria-label={`Download ${doc.title}`}
-                  >
-                    Download
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+    <SiteSection id={anchorId} headingId={`documents-${blockId}`} title="Documents">
+      {data.length === 0 ? (
+        <SiteSectionEmpty>{content?.emptyText ?? 'No documents available.'}</SiteSectionEmpty>
+      ) : (
+        <ul className="divide-y divide-edge border-y border-edge">
+          {data.map((doc) => (
+            <li key={doc.id} className="flex items-start justify-between gap-6 py-5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-semibold text-content">{doc.title}</p>
+                {doc.description && (
+                  <p className="mt-1 text-base text-content-secondary">{doc.description}</p>
+                )}
+                <p className="mt-1 text-sm text-content-secondary">
+                  {doc.categoryName && (
+                    <>
+                      <span className="capitalize">{doc.categoryName}</span>
+                      {' · '}
+                    </>
+                  )}
+                  <time dateTime={doc.createdAt.toISOString()}>
+                    {formatDate(doc.createdAt, community.timezone)}
+                  </time>
+                </p>
+              </div>
+              <a
+                href={`/api/v1/public/documents/${doc.id}/download?communityId=${community.id}`}
+                className="inline-flex min-h-11 shrink-0 items-center text-base font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+                aria-label={`Download ${doc.title}`}
+              >
+                Download
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SiteSection>
   );
 }

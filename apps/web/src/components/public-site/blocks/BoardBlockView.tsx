@@ -13,6 +13,7 @@
  */
 import { DEFAULT_BOARD_HEADING, type BoardBlockContent } from '@propertypro/shared';
 import type { BlockViewProps } from './types';
+import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
 export interface BoardMember {
   name: string;
@@ -29,33 +30,19 @@ export function BoardBlockView({ blockId, content, data, anchorId }: BoardBlockV
   const headingId = `board-${blockId}`;
 
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={headingId}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2 id={headingId} className="mb-6 font-heading text-2xl font-semibold text-content">
-          {content?.heading ?? DEFAULT_BOARD_HEADING}
-        </h2>
-        {data.members.length === 0 ? (
-          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
-            No one holds a board seat yet.
-          </p>
-        ) : (
-          <ul className="grid gap-4 site-sm:grid-cols-2">
-            {data.members.map((member, index) => (
-              <li
-                key={`${index}-${member.name}`}
-                className="rounded-md border border-edge bg-surface-card p-5"
-              >
-                <p className="text-base font-medium text-content">{member.name}</p>
-                <p className="text-base text-content-secondary">{member.title}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+    <SiteSection id={anchorId} headingId={headingId} title={content?.heading ?? DEFAULT_BOARD_HEADING}>
+      {data.members.length === 0 ? (
+        <SiteSectionEmpty>No one holds a board seat yet.</SiteSectionEmpty>
+      ) : (
+        <ul className="grid gap-x-12 site-sm:grid-cols-2">
+          {data.members.map((member, index) => (
+            <li key={`${index}-${member.name}`} className="border-t border-edge py-5">
+              <p className="font-heading text-xl text-content">{member.name}</p>
+              <p className="mt-1 text-base text-content-secondary">{member.title}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SiteSection>
   );
 }

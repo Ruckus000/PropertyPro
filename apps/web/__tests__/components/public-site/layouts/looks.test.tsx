@@ -136,7 +136,7 @@ afterEach(() => {
 describe('LOOK_STYLES', () => {
   it('is the table the plan gives each look, with the colour of each page', () => {
     expect(LOOK_STYLES).toEqual({
-      bayfront: { heroStyle: 'photo-full', pageBackground: 'white', sectionTint: 'alternate', radius: 'pill', accentUse: 'background', onAccent: 'text' },
+      bayfront: { heroStyle: 'photo-full', pageBackground: 'white', sectionTint: 'alternate', radius: 'rounded', accentUse: 'background', onAccent: 'text' },
       heritage: { heroStyle: 'photo-split', pageBackground: 'secondary', sectionTint: 'none', radius: 'square', accentUse: 'text', onAccent: 'inverse' },
       'palm-grove': { heroStyle: 'photo-card', pageBackground: 'white', sectionTint: 'alternate', radius: 'rounded', accentUse: 'background', onAccent: 'inverse' },
       'plain-simple': { heroStyle: 'text', pageBackground: 'white', sectionTint: 'none', radius: 'rounded', accentUse: 'background', onAccent: 'text' },
@@ -244,7 +244,7 @@ describe.each([
 });
 
 describe("the hero's button follows LOOK_STYLES", () => {
-  const RADIUS = { square: 'rounded-none', rounded: 'rounded-md', pill: 'rounded-full' } as const;
+  const RADIUS = { square: 'rounded-none', rounded: 'rounded-md' } as const;
 
   it.each(LOOKS)('%s', (id) => {
     renderHero(id, { photos: [SUNSET], ...CTA });

@@ -53,51 +53,35 @@ export function PublicSiteFooter({
   const ownerSentence = owner.endsWith('.') ? owner : `${owner}.`;
 
   return (
-    <footer className="w-full border-t border-edge bg-surface-page px-4 py-6 site-sm:px-6 site-lg:px-8">
-      <div className="max-w-7xl mx-auto flex flex-col gap-2 text-sm text-content-tertiary">
-        <div className="flex flex-col site-sm:flex-row items-center justify-between gap-2">
-          <span>
-            &copy; {currentYear} {ownerSentence} All rights reserved.
-          </span>
-          <span>
-            Powered by{' '}
-            <a
-              href="https://getpropertypro.com"
-              className="text-content-link hover:text-content-link font-medium"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              PropertyPro
-            </a>
-          </span>
+    <footer className="w-full border-t border-edge bg-surface-page px-6 py-12 site-sm:px-8 site-lg:px-10">
+      <div className="mx-auto flex max-w-6xl flex-col gap-8 site-md:flex-row site-md:justify-between">
+        <div className="max-w-prose space-y-2">
+          <div className="font-heading text-xl font-semibold text-content">{communityName}</div>
+          {noteText ? <p className="text-base text-content-secondary">{noteText}</p> : null}
+          {showStatutoryLine ? (
+            <p className="text-sm text-content-secondary">{STATUTORY_FOOTER_LINE}</p>
+          ) : null}
         </div>
+        <p className="text-sm">
+          {/*
+            Accessibility statement — NOT opt-in, unlike the statutory line.
 
-        {noteText ? <p className="text-center site-sm:text-left">{noteText}</p> : null}
+            A public association website is the surface an ADA demand letter
+            actually targets, and the single most protective thing on it is a
+            documented channel for requesting an accommodation: it changes the
+            posture of a negotiation from "no response mechanism existed" to "here
+            is where you ask and what we commit to". A PM toggle would mean the
+            sites most likely to need it are the ones that switch it off.
 
-        {showStatutoryLine ? (
-          <p className="text-center site-sm:text-left">{STATUTORY_FOOTER_LINE}</p>
-        ) : null}
+            Absolute path, not the tenant host: the statement lives on the
+            PropertyPro marketing domain because the commitment it describes — the
+            five-business-day response — is ours to keep, not the association's.
 
-        {/*
-          Accessibility statement — NOT opt-in, unlike the statutory line above.
-
-          A public association website is the surface an ADA demand letter
-          actually targets, and the single most protective thing on it is a
-          documented channel for requesting an accommodation: it changes the
-          posture of a negotiation from "no response mechanism existed" to "here
-          is where you ask and what we commit to". A PM toggle would mean the
-          sites most likely to need it are the ones that switch it off.
-
-          Absolute path, not the tenant host: the statement lives on the
-          PropertyPro marketing domain because the commitment it describes — the
-          five-business-day response — is ours to keep, not the association's.
-
-          See docs/audits/2026-08-09-legal-risk-audit.md F-12.
-        */}
-        <p className="text-center site-sm:text-left">
+            See docs/audits/2026-08-09-legal-risk-audit.md F-12.
+          */}
           <a
             href="https://getpropertypro.com/legal/accessibility"
-            className="text-content-link hover:text-content-link font-medium"
+            className={FOOTER_LINK}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -105,6 +89,26 @@ export function PublicSiteFooter({
           </a>
         </p>
       </div>
+      <div className="mx-auto mt-10 flex max-w-6xl flex-col gap-2 border-t border-edge pt-6 text-sm text-content-secondary site-sm:flex-row site-sm:justify-between">
+        <span>
+          &copy; {currentYear} {ownerSentence} All rights reserved.
+        </span>
+        <span>
+          Powered by{' '}
+          <a
+            href="https://getpropertypro.com"
+            className="font-semibold text-primary underline-offset-4 hover:underline"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            PropertyPro
+          </a>
+        </span>
+      </div>
     </footer>
   );
 }
+
+/** A footer link: the theme's primary, with room for a finger. */
+const FOOTER_LINK =
+  'inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';

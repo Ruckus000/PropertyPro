@@ -137,7 +137,6 @@ export function HeroBlock(props: BlockRendererProps) {
 const CORNERS: Record<LookStyle['radius'], { button: string; photo: string }> = {
   square: { button: 'rounded-none', photo: 'rounded-none' },
   rounded: { button: 'rounded-md', photo: 'rounded-2xl' },
-  pill: { button: 'rounded-full', photo: 'rounded-2xl' },
 };
 
 /** The button in the accent when the look paints its accent as a background, else in the primary. */
@@ -219,19 +218,24 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
     <>
       <h1
         className={cn(
-          'font-heading text-4xl font-bold site-sm:text-5xl',
+          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-6xl',
           onPhoto ? 'text-content-inverse' : 'text-primary',
         )}
       >
         {headline}
       </h1>
       {subtitle && (
-        <p className={cn('mt-4 text-lg', onPhoto ? 'text-content-inverse' : 'text-content')}>
+        <p
+          className={cn(
+            'mt-6 max-w-2xl text-lg leading-relaxed site-md:text-xl',
+            onPhoto ? 'text-content-inverse' : 'text-content',
+          )}
+        >
           {subtitle}
         </p>
       )}
       {cta && (
-        <div className="mt-8">
+        <div className="mt-10">
           <a
             href={cta.href}
             className={cn(
@@ -257,9 +261,11 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           decorative={strip !== null}
         />
         <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
-        <div className="relative mx-auto max-w-5xl px-4 py-24 site-sm:px-6 site-md:py-32 site-lg:px-8">
-          {words}
-          {strip}
+        <div className="relative px-6 pb-20 pt-32 site-sm:px-8 site-md:pb-28 site-md:pt-48 site-lg:px-10">
+          <div className="mx-auto max-w-6xl">
+            {words}
+            {strip}
+          </div>
         </div>
       </section>
     );
@@ -267,8 +273,8 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
 
   if (style === 'photo-split') {
     return (
-      <section data-hero-style={style} className="px-4 py-16 site-sm:px-6 site-lg:px-8">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 site-md:grid-cols-2">
+      <section data-hero-style={style} className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 site-md:grid-cols-2">
           <div>{words}</div>
           {strip ?? (
             <div className="relative">
@@ -290,7 +296,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
 
   if (style === 'photo-card') {
     return (
-      <section data-hero-style={style} className="px-4 pb-16 pt-8 site-sm:px-6 site-lg:px-8">
+      <section data-hero-style={style} className="px-6 pb-16 pt-8 site-sm:px-8 site-md:pb-24 site-lg:px-10">
         <div className="mx-auto max-w-6xl">
           {strip ?? (
             <HeroImg
@@ -301,7 +307,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           )}
           <div
             className={cn(
-              'relative mx-4 max-w-2xl border border-edge bg-surface-card p-6 shadow-e1 site-sm:mx-10 site-sm:p-10',
+              'relative mx-4 max-w-2xl border border-edge bg-surface-card p-8 site-sm:mx-12 site-sm:p-12',
               corners.photo,
               strip ? 'mt-6' : '-mt-16',
             )}
@@ -314,8 +320,8 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
   }
 
   return (
-    <section data-hero-style={style} className="px-4 py-16 site-sm:px-6 site-lg:px-8">
-      <div className="mx-auto max-w-3xl">
+    <section data-hero-style={style} className="px-6 py-20 site-sm:px-8 site-md:py-28 site-lg:px-10">
+      <div className="mx-auto max-w-6xl">
         {words}
         {strip ??
           (photos[0] && <HeroImg photo={photos[0]} className={cn('mt-10 w-full', corners.photo)} />)}

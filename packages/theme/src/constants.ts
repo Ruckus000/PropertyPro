@@ -35,6 +35,7 @@ export function darkenHex(hex: string, percent: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
+// ponytail: the legacy colour sets (migration 0004) name Fraunces, Newsreader, Cormorant Garamond and Bricolage Grotesque, which are not here, so they render Inter. Trigger: any non-demo community is on a legacy layout or picks a legacy colour set.
 export const ALLOWED_FONTS = [
   'Inter', 'Open Sans', 'Lato', 'Roboto', 'Source Sans 3',
   'Nunito', 'Nunito Sans', 'Poppins', 'Raleway', 'Montserrat',
