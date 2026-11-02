@@ -205,10 +205,10 @@ export async function applyLookAtCreation(
 /**
  * A prospect demo's website, on entry: the suggested look for its type, the
  * same as a new community's (D6), kept in the prospect's own colours and fonts
- * (`keepBrand`). Demo communities are built by `seedCommunity` (the admin app's
- * demo creation and the local demo seed), which, unlike `createCommunityForPm`,
- * gives them no site at all: a prospect opening the website editor found an
- * empty page.
+ * (`keepBrand`). Prospect demos are built by `seedCommunity` (the admin app's
+ * demo creation), which, unlike `createCommunityForPm`, gives them no site at
+ * all: a prospect opening the website editor found an empty page. (The seeded
+ * demos, `pnpm seed:demo`, get their look from the seed itself.)
  *
  * The admin app cannot import this service, so the web app's demo entry routes
  * call it instead, which also fills demos created before this existed. A no-op

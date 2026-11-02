@@ -63,6 +63,18 @@ const DEMO_RESET_TABLE_DELETION_ORDER = [
   'meetings',
   'units',
   'provisioning_jobs',
+  // The website, so the seed's applyLookAtCreation (a no-op on a site with
+  // published sections) puts the demo back on its suggested look every night.
+  // Its publish history and schedules go too: they name the deleted pages, so
+  // a pre-reset version could only be refused on restore.
+  // ponytail: a drafted look loses its look fields to the look's live write,
+  // but drafted custom CSS survives the reset. Trigger: a demo shows custom CSS
+  // it did not reset to.
+  'site_blocks',
+  'site_page_redirects',
+  'site_pages',
+  'site_publish_snapshots',
+  'site_publish_schedules',
 
   // Phase 3 — standalone metadata
   'demo_seed_registry',

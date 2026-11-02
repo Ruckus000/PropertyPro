@@ -51,7 +51,7 @@ import {
 } from '@propertypro/shared';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { DEMO_COMMUNITIES, DEMO_USERS } from './config/demo-data';
-import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { applyLookAtCreation } from '@/lib/services/site-look-service';
 import { runSeedSafetyChecks } from './lib/seed-safety';
 import {
   getOrCreateBillingGroupForPm,
@@ -1762,11 +1762,12 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
 
     communityIdsBySlug[community.slug] = result.communityId;
     communitySeedResults.push(result);
-    // seedCommunity builds no website, so the demo's editor would open empty.
-    // These seeded fixtures stay on starter packs: they are shared test data
-    // with their own consumers. A new community (createCommunityForPm) gets its
-    // suggested look instead, and a prospect demo gets it on first entry.
-    await applyStarterPackToCommunity(result.communityId, community.communityType);
+    // seedCommunity builds no website. The seeded demos get their type's
+    // suggested look, as a new community (createCommunityForPm) does and a
+    // prospect demo does on first entry: they are what sales shows, and until
+    // the first customer the only sites production renders. A no-op when the
+    // demo has published sections, so the reset deletes its site first.
+    await applyLookAtCreation(result.communityId, community.communityType);
   }
   debugSeed('communities seeded via seedCommunity');
 

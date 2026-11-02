@@ -56,11 +56,8 @@ thread (`fr-list`), reserve assets (`rv-list`), a storm report (`st-list`), a
 condo maintenance request (`wo-inbox`, `mr-list`) and a wind-mitigation report
 (`ins-wind`). The demo seed itself is unchanged.
 
-For the website editor shots it also adds Sunset Condos' starter sections (the
-seed builds no website; a real new community now starts with its suggested look
-instead, so these shots show a starter-pack site). Run the fixtures before
-anyone opens the editor: the first visit creates an unpublished Home page, and
-the starter sections then land on a page marked Draft.
+The website editor shots need no fixture: the demo seed puts Sunset Condos on
+its suggested look (Bayfront), the same site a real new condominium starts with.
 
 ## Date-sensitive fills
 

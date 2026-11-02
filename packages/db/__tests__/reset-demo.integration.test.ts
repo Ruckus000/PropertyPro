@@ -1,13 +1,19 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import type { CommunityType } from '@propertypro/shared';
+import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
+import { getLook, lookIdForLayout, suggestedLookFor } from '@/lib/site-looks/looks';
 import * as schema from '../src/schema';
 import {
   announcements,
   communities,
   documents,
   meetings,
+  siteBlocks,
+  sitePages,
+  sitePublishSnapshots,
   units,
 } from '../src/schema';
 import { runDemoReset } from '../../../scripts/reset-demo';
@@ -81,8 +87,31 @@ describeDb('demo reset integration', () => {
     process.env.DEMO_DEFAULT_PASSWORD ??= 'reset-demo-test-password';
 
     await runDemoReset();
+    await putDemosOnLegacySites();
     await runDemoReset();
   }, 300_000);
+
+  /**
+   * The state production's seeded demos were in before the seed gave them a
+   * look: starter-pack sections, and a branding with no `layoutId`, which the
+   * public site falls back to the type's legacy layout for. The second reset
+   * above has to move them off it, as the first nightly reset in production does.
+   */
+  async function putDemosOnLegacySites(): Promise<void> {
+    const demos = await db
+      .select({ id: communities.id, communityType: communities.communityType, branding: communities.branding })
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+    for (const demo of demos) {
+      await db.delete(sitePages).where(eq(sitePages.communityId, demo.id));
+      const { layoutId: _layout, themePresetSlug: _preset, ...rest } = (demo.branding ?? {}) as Record<string, unknown>;
+      await db.update(communities).set({ branding: rest }).where(eq(communities.id, demo.id));
+      const pack = await applyStarterPackToCommunity(demo.id, demo.communityType as CommunityType);
+      if (!pack.applied) throw new Error(`No starter pack applied to demo ${demo.id}`);
+      // A publish of that site, which names its (soon deleted) home page.
+      await db.insert(sitePublishSnapshots).values({ communityId: demo.id, publishedAt: new Date(), changeCount: 1 });
+    }
+  }
 
   afterAll(async () => {
     await sql?.end();
@@ -155,6 +184,36 @@ describeDb('demo reset integration', () => {
       const expected = EXPECTED_DOCS_PER_SLUG[community.slug];
       expect(expected, `No expected doc count for slug "${community.slug}"`).toBeDefined();
       expect(docs.length).toBe(expected);
+    }
+  }, 30_000);
+
+  it('puts every demo on its suggested look, replacing a legacy site', async () => {
+    const seededCommunities = await db
+      .select({ id: communities.id, slug: communities.slug, communityType: communities.communityType, branding: communities.branding })
+      .from(communities)
+      .where(inArray(communities.slug, [...DEMO_SLUGS]));
+    expect(seededCommunities).toHaveLength(3);
+
+    for (const community of seededCommunities) {
+      const look = getLook(suggestedLookFor(community.communityType as CommunityType));
+      const layoutId = (community.branding as { layoutId?: string } | null)?.layoutId ?? null;
+      expect(lookIdForLayout(layoutId), `seeded demo "${community.slug}" has no look layoutId`).not.toBeNull();
+      expect(layoutId).toBe(look?.layoutId);
+
+      const live = await db
+        .select({ blockType: siteBlocks.blockType })
+        .from(siteBlocks)
+        .where(and(eq(siteBlocks.communityId, community.id), eq(siteBlocks.isDraft, false), isNull(siteBlocks.deletedAt)))
+        .orderBy(asc(siteBlocks.blockOrder));
+      expect(live.map((row) => row.blockType)).toEqual(look?.sections.map((section) => section.blockType));
+
+      // No pre-reset version is left in the history: its pages are gone, so it
+      // could only be refused on restore.
+      const history = await db
+        .select({ id: sitePublishSnapshots.id })
+        .from(sitePublishSnapshots)
+        .where(eq(sitePublishSnapshots.communityId, community.id));
+      expect(history, `seeded demo "${community.slug}" kept a pre-reset publish`).toEqual([]);
     }
   }, 30_000);
 
