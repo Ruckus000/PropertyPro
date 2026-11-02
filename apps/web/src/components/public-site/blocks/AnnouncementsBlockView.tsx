@@ -9,6 +9,7 @@
 import type { AnnouncementsBlockContent } from '@propertypro/shared';
 import type { PublicAnnouncement } from '@/lib/db/public-community-reader';
 import { Pin } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { BlockViewProps } from './types';
 import { SiteSection, SiteSectionEmpty } from './SiteSection';
 
@@ -65,9 +66,9 @@ export function AnnouncementsBlockView({
       {lead === undefined ? (
         <SiteSectionEmpty>{content?.emptyText ?? 'No announcements yet.'}</SiteSectionEmpty>
       ) : (
-        <ul className="grid gap-12 site-md:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-12 site-md:grid-cols-3">
           {/* The newest notice (a pinned one comes first) leads, at reading size. */}
-          <li className={rest.length > 0 ? 'site-md:col-span-2' : 'site-md:col-span-3'}>
+          <li className={cn('min-w-0 break-words', rest.length > 0 ? 'site-md:col-span-2' : 'site-md:col-span-3')}>
             <Meta item={lead} timezone={tz} />
             <h3 className="mt-3 font-heading text-2xl font-semibold leading-snug text-content site-md:text-3xl">
               {lead.title}
@@ -78,7 +79,7 @@ export function AnnouncementsBlockView({
             />
           </li>
           {rest.length > 0 && (
-            <li className="site-md:border-l site-md:border-edge site-md:pl-12">
+            <li className="min-w-0 break-words site-md:border-l site-md:border-edge site-md:pl-12">
               <ul className="space-y-8">
                 {rest.map((item) => (
                   <li key={item.id}>
@@ -105,7 +106,9 @@ function Meta({ item, timezone }: { item: AnnouncementViewItem; timezone: string
     <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-content-secondary">
       <time dateTime={item.publishedAt.toISOString()}>{formatDate(item.publishedAt, timezone)}</time>
       {item.isPinned && (
-        <span className="inline-flex items-center gap-1 font-semibold text-accent">
+        // Body text, not the accent: on a legacy layout the accent can be a pale
+        // background colour, and this word is the item's only status cue.
+        <span className="inline-flex items-center gap-1 font-semibold text-content">
           <Pin className="h-4 w-4" aria-hidden="true" />
           Pinned
         </span>

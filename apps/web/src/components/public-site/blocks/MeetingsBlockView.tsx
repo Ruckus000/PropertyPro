@@ -44,7 +44,7 @@ export function MeetingsBlockView({
           {data.map((meeting) => {
             const tz = community.timezone;
             return (
-              <li key={meeting.id} className="flex gap-4 rounded-md bg-surface-card p-4 site-sm:gap-6 site-sm:p-6">
+              <li key={meeting.id} className="flex gap-4 rounded-md border border-edge bg-surface-card p-4 site-sm:gap-6 site-sm:p-6">
                 {/* A calendar page. Its colour comes from the look: a look that
                     sets dates in its accent colours this <time> (SiteChrome). */}
                 <time
@@ -57,6 +57,8 @@ export function MeetingsBlockView({
                   <span className="font-heading text-3xl leading-none site-sm:text-4xl">
                     {formatPart(meeting.startsAt, tz, { day: 'numeric' })}
                   </span>
+                  {/* The tile has no room for the year; a reader still hears it. */}
+                  <span className="sr-only"> {formatPart(meeting.startsAt, tz, { year: 'numeric' })}</span>
                 </time>
                 <div className="min-w-0 self-center">
                   <h3 className="text-lg font-semibold leading-snug text-content site-sm:text-xl">{meeting.title}</h3>

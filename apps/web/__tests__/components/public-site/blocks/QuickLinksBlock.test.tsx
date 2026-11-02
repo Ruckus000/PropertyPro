@@ -98,7 +98,6 @@ async function renderShell(props: BlockRendererProps) {
   return { ui, ...render(<>{ui}</>) };
 }
 
-/** The visible links, in order, by their accessible name. */
 /** Each link's text as a reader hears it: hint lines that only restate the name are aria-hidden. */
 function linkNames(): string[] {
   return screen.queryAllByRole('link').map((link) => {

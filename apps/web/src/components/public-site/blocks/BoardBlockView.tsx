@@ -3,7 +3,7 @@
  *
  * Pure, synchronous, prop-driven. See `BlockViewProps` in ./types.
  *
- * One card per seat holder, with a name and a title and nothing else: no email,
+ * One entry per seat holder (initials, name and title) and nothing else: no email,
  * no phone, no link. The shell hands over exactly those two fields, but do not
  * widen what this renders either.
  *
@@ -61,9 +61,11 @@ export function BoardBlockView({ blockId, content, data, anchorId }: BoardBlockV
 }
 
 /** "Sam President" → "SP": the first letter of the first and last words. */
-function initials(name: string): string {
+export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
-  const first = words[0]?.[0] ?? '';
-  const last = words.length > 1 ? (words[words.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
+  // Array.from splits by character, so a name that opens with an astral
+  // character never leaves half a surrogate pair in the circle.
+  const firstChar = (word: string | undefined) => (word ? (Array.from(word)[0] ?? '') : '');
+  const last = words.length > 1 ? firstChar(words[words.length - 1]) : '';
+  return (firstChar(words[0]) + last).toUpperCase();
 }

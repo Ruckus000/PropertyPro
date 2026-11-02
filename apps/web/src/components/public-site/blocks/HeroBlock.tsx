@@ -143,6 +143,8 @@ export function HeroBlock(props: BlockRendererProps) {
  * fades to 25% at the top. The words are anchored to the bottom (a large top
  * padding, a small bottom one), and they would have to be taller than the hero's
  * top padding is deep (~576px of text) before any of them left the 60% zone.
+ * That holds for words alone. With two or more photos the strip sits in the same
+ * band and makes it far taller, so that hero keeps the flat shade at every width.
  */
 const PHOTO_SCRIM =
   'absolute inset-0 bg-black/60 site-md:bg-transparent site-md:bg-gradient-to-t site-md:from-black/80 site-md:via-black/60 site-md:via-70% site-md:to-black/25';
@@ -274,7 +276,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           sizes="100vw"
           decorative={strip !== null}
         />
-        <div aria-hidden="true" className={PHOTO_SCRIM} />
+        <div aria-hidden="true" className={strip ? 'absolute inset-0 bg-black/60' : PHOTO_SCRIM} />
         <div className="relative px-6 pb-16 pt-40 site-sm:px-8 site-md:pb-24 site-md:pt-72 site-lg:px-10">
           <div className="mx-auto max-w-6xl">
             {words}

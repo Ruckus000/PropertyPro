@@ -216,6 +216,13 @@ describe('the full-photo hero (Bayfront)', () => {
     expect(words).toHaveClass('site-md:pt-72', 'site-md:pb-24');
   });
 
+  it('with the photo strip in the shaded band, keeps the flat 60% shade at every width', () => {
+    const { container } = renderHero('bayfront', { photos: [SUNSET, POOL] });
+    const [, scrim] = Array.from(heroOf(container).children);
+    expect(scrim).toHaveClass('bg-black/60');
+    expect(scrim?.className).not.toMatch(/site-md:/);
+  });
+
   it('with two or more photos, the photo behind the words is decorative and the strip shows each photo once', () => {
     const { container } = renderHero('bayfront', { photos: [SUNSET, POOL] });
     const hero = heroOf(container);

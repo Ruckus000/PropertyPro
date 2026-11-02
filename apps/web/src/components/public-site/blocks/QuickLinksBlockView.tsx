@@ -51,17 +51,20 @@ function QuickLink({
   href,
   icon: Icon,
   label,
+  describedBy,
   children,
 }: {
   href: string;
   icon: LucideIcon;
   label: string;
+  /** The id of a hint a reader should hear after the name, as the link's description. */
+  describedBy?: string;
   children: ReactNode;
 }) {
   return (
     <li>
       {/* A plain <a>, not next/link: the public site ships no client runtime. */}
-      <a href={href} className={LINK_CLASS}>
+      <a href={href} className={LINK_CLASS} aria-describedby={describedBy}>
         <Icon className="mt-1 h-5 w-5 shrink-0" aria-hidden="true" />
         <span className="flex flex-col gap-1">
           <span className="text-base font-semibold">{label}</span>
@@ -72,10 +75,14 @@ function QuickLink({
   );
 }
 
-/** A line under a link's name that only restates it, so assistive tech hears the name alone. */
-function Hint({ children }: { children: ReactNode }) {
+/**
+ * A line under a link's name. It is left out of the name, so assistive tech hears
+ * "News", not "News Notices from the board"; a hint that adds something (the
+ * sign-in) is still heard, as the link's description (`describedBy`).
+ */
+function Hint({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <span className="text-base" aria-hidden="true">
+    <span id={id} className="text-base" aria-hidden="true">
       {children}
     </span>
   );
@@ -126,8 +133,8 @@ export function QuickLinksBlockView({ blockId, data, community, anchorId }: Quic
               <Hint>Notices from the board</Hint>
             </QuickLink>
           )}
-          <QuickLink href="/auth/login" icon={Lock} label="Owner documents">
-            <Hint>Sign in to read the records</Hint>
+          <QuickLink href="/auth/login" icon={Lock} label="Owner documents" describedBy={`${headingId}-sign-in`}>
+            <Hint id={`${headingId}-sign-in`}>Sign in to read the records</Hint>
           </QuickLink>
           {data.showContact && (
             <QuickLink href="#contact" icon={Phone} label="Contact">

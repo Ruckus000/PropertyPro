@@ -31,7 +31,7 @@ export function DocumentsBlockView({
       {data.length === 0 ? (
         <SiteSectionEmpty>{content?.emptyText ?? 'No documents available.'}</SiteSectionEmpty>
       ) : (
-        <ul className="divide-y divide-edge rounded-md bg-surface-card px-6">
+        <ul className="divide-y divide-edge rounded-md border border-edge bg-surface-card px-6">
           {data.map((doc) => (
             <li key={doc.id} className="flex items-start justify-between gap-6 py-5">
               <div className="min-w-0 flex-1">

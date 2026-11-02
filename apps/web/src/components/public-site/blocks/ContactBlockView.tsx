@@ -3,14 +3,14 @@
  *
  * Pure, synchronous, prop-driven. See `BlockViewProps` in ./types.
  *
- * Three cards, each shown only when it has something to say:
+ * Up to three groups, each shown only when it has something to say:
  *   - Management: the name, email and phone from `communities.contact_*`;
  *   - Address, or Office once office hours are set: the address and hours from the
- *     Community profile. The address on file is the property's location, and a card
+ *     Community profile. The address on file is the property's location, and a group
  *     called "Office" can read as "there is an office here"; hours are what make it
  *     one;
  *   - Board: the roster.
- * Every row inside a card is left out when its value is blank. The management
+ * Every row inside a group is left out when its value is blank. The management
  * section shows only `communities.contact_*` fields (`contact_email` is the only
  * email this section may ever show) and the board roster intentionally exposes
  * names and public titles only — that boundary is enforced by the reader, not
@@ -30,7 +30,8 @@ import { SiteSection, SiteSectionEmpty } from './SiteSection';
 /** One group of contact details: a short title over the details. */
 const GROUP = 'min-w-0';
 const GROUP_TITLE = 'text-base font-semibold text-content-secondary';
-const LINK = 'inline-flex min-h-11 items-center gap-2 font-semibold text-primary underline-offset-4 hover:underline';
+const LINK =
+  'inline-flex min-h-11 items-center gap-2 font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary';
 
 function hasContact(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -68,7 +69,7 @@ export function ContactBlockView({ blockId, data, anchorId }: ContactBlockViewPr
   const hasOfficeHours = hasContact(data.officeHours);
   const hasOffice = hasAddress || hasOfficeHours;
   const hasBoard = data.board.length > 0;
-  // "Office" only once there are hours; until then the card is just the address.
+  // "Office" only once there are hours; until then the group is just the address.
   const officeTitle = hasOfficeHours ? 'Office' : 'Address';
 
   return (

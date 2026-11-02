@@ -101,6 +101,9 @@ describe('view registry — client-safety invariants', () => {
     'FaqBlock.tsx',
     'GalleryBlock.tsx',
     'AmenitiesBlock.tsx',
+    // Every titled view renders through these, so they carry the same constraints.
+    'SiteSection.tsx',
+    'OwnerRecordsSummary.tsx',
     // Reached from HeroBlock, so it inherits every one of these constraints
     // even though it is not itself a registry entry.
     'HeroPhotoStrip.tsx',
