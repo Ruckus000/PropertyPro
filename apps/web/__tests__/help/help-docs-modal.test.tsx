@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // jsdom doesn't implement window.matchMedia — stub it so useIsMobile and
@@ -163,6 +163,176 @@ describe('<HelpDocsModal/>', () => {
   });
 
   /**
+   * The Help button opens the page's first article straight away, and a Next
+   * button walks the rest of the page's articles in order.
+   */
+  describe('page articles', () => {
+    const PAGE_ARTICLES = [
+      { category: 'operations', slug: 'review-requests', title: 'Review requests', description: 'd1' },
+      { category: 'operations', slug: 'dispatch-work-orders', title: 'Dispatch work orders', description: 'd2' },
+      { category: 'operations', slug: 'close-out', title: 'Close out a request', description: 'd3' },
+    ];
+
+    beforeEach(() => {
+      useContextualHelpMock.mockReturnValue({ data: PAGE_ARTICLES, isPending: false, isError: false });
+      useHelpArticleMock.mockImplementation((category: string | null, slug: string | null) =>
+        slug
+          ? {
+              data: {
+                html: '<p>content</p>',
+                toc: [],
+                metadata: { title: `Article ${slug}`, slug, category },
+                related: [],
+                upNext: null,
+              },
+              isPending: false,
+              isError: false,
+            }
+          : { data: null, isPending: false, isError: false },
+      );
+    });
+
+    async function openHelp() {
+      render(
+        withProviders(
+          <>
+            <Opener />
+            <HelpDocsModal communityId={1} flagEnabled />
+          </>,
+        ),
+      );
+      screen.getByText('open help').click();
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument());
+    }
+
+    it('opens the first article for the page instead of the list', async () => {
+      await openHelp();
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article review-requests'),
+      );
+      expect(screen.queryByTestId('search-panel')).not.toBeInTheDocument();
+    });
+
+    it('offers the next page article, with its position', async () => {
+      await openHelp();
+      const next = await screen.findByRole('button', { name: /next: dispatch work orders/i });
+      expect(next).toBeInTheDocument();
+      expect(screen.getByText('1 of 3')).toBeInTheDocument();
+    });
+
+    it('walks every page article with Next, and drops the button on the last one', async () => {
+      await openHelp();
+      fireEvent.click(await screen.findByRole('button', { name: /next: dispatch work orders/i }));
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article dispatch-work-orders'),
+      );
+      expect(screen.getByText('2 of 3')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /next: close out a request/i }));
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article close-out'),
+      );
+      expect(screen.queryByRole('button', { name: /^next:/i })).not.toBeInTheDocument();
+    });
+
+    it('goes back from the first article to the list of page articles', async () => {
+      await openHelp();
+      await screen.findByTestId('article-body');
+      fireEvent.click(screen.getByRole('button', { name: 'Go back' }));
+      await waitFor(() => expect(screen.getByTestId('search-panel')).toBeInTheDocument());
+      expect(screen.queryByTestId('article-body')).not.toBeInTheDocument();
+    });
+
+    it('shows no Next button when the page has a single article', async () => {
+      useContextualHelpMock.mockReturnValue({ data: [PAGE_ARTICLES[0]], isPending: false, isError: false });
+      await openHelp();
+      await screen.findByTestId('article-body');
+      expect(screen.queryByRole('button', { name: /^next:/i })).not.toBeInTheDocument();
+    });
+
+    it('shows a loading skeleton, not the list, while the page articles load', async () => {
+      useContextualHelpMock.mockReturnValue({ data: undefined, isPending: true, isError: false, fetchStatus: 'fetching' });
+      await openHelp();
+      expect(screen.queryByTestId('search-panel')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Loading help for this page');
+    });
+
+    it('lands on the first article once the page articles finish loading', async () => {
+      useContextualHelpMock.mockReturnValue({
+        data: undefined,
+        isPending: true,
+        isError: false,
+        fetchStatus: 'fetching',
+      });
+      const ui = (
+        <>
+          <Opener />
+          <HelpDocsModal communityId={1} flagEnabled />
+        </>
+      );
+      const { rerender } = render(withProviders(ui));
+      screen.getByText('open help').click();
+      await waitFor(() => expect(screen.getByRole('status')).toBeInTheDocument());
+      useContextualHelpMock.mockReturnValue({
+        data: PAGE_ARTICLES,
+        isPending: false,
+        isError: false,
+        fetchStatus: 'idle',
+      });
+      rerender(withProviders(ui));
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article review-requests'),
+      );
+    });
+
+    it('lands on the first article again after closing and reopening', async () => {
+      await openHelp();
+      fireEvent.click(await screen.findByRole('button', { name: /next: dispatch work orders/i }));
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article dispatch-work-orders'),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      screen.getByText('open help').click();
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article review-requests'),
+      );
+    });
+
+    it('does not wait on a page-article lookup that never runs', async () => {
+      // A disabled TanStack query reports isPending with fetchStatus 'idle'.
+      useContextualHelpMock.mockReturnValue({
+        data: undefined,
+        isPending: true,
+        isError: false,
+        fetchStatus: 'idle',
+      });
+      await openHelp();
+      await waitFor(() => expect(screen.getByTestId('search-panel')).toBeInTheDocument());
+    });
+
+    it('falls back to the list when the page articles fail to load', async () => {
+      useContextualHelpMock.mockReturnValue({ data: undefined, isPending: false, isError: true, fetchStatus: 'idle' });
+      await openHelp();
+      await waitFor(() => expect(screen.getByTestId('search-panel')).toBeInTheDocument());
+    });
+
+    it('keeps a specific article opened by a link, rather than jumping to the first', async () => {
+      render(
+        withProviders(
+          <>
+            <ArticleOpener category="operations" slug="close-out" />
+            <HelpDocsModal communityId={1} flagEnabled />
+          </>,
+        ),
+      );
+      screen.getByText('open article').click();
+      await waitFor(() =>
+        expect(screen.getByTestId('article-body')).toHaveTextContent('Article close-out'),
+      );
+    });
+  });
+
+  /**
    * The modal used to be a fixed 440×85vh box, so a three-line contextual list
    * floated in a tall empty panel and a long article got no more room on a wide
    * screen. jsdom lays nothing out, so these pin the CLASSES that decide the
@@ -229,6 +399,25 @@ describe('<HelpDocsModal/>', () => {
       const dialog = await openedDialog();
       expect(dialog.className).toMatch(/\boverflow-visible\b/);
       expect(dialog.className).not.toMatch(/\boverflow-y-auto\b/);
+    });
+
+    it('keeps the header controls clear of the close button in the corner', async () => {
+      // The Dialog draws its own X centred 24px in from the top and right edges.
+      // The header leaves a 56px right gutter for it and is 48px tall, so the X
+      // sits level with the header controls and never on top of one.
+      reportViewport('desktop');
+      const dialog = await openedDialog();
+      const header = dialog.querySelector('[data-help-header]') as HTMLElement;
+      expect(header).not.toBeNull();
+      expect(header.className).toMatch(/\bpr-14\b/);
+      expect(header.className).toMatch(/\bh-12\b/);
+    });
+
+    it('on desktop, grows wider on larger screens', async () => {
+      reportViewport('desktop');
+      const dialog = await openedDialog();
+      expect(dialog.className).toMatch(/\blg:w-\[min\(90vw,48rem\)\]/);
+      expect(dialog.className).toMatch(/\bxl:w-\[min\(90vw,56rem\)\]/);
     });
 
     it('on mobile, the bottom sheet is as tall as its content up to a viewport cap', async () => {

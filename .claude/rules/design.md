@@ -22,6 +22,12 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Page layout: `section`/`page` semantic spacing. Dashboard sections: `space-y-6`, grids: `gap-6 lg:grid-cols-2`
 - Macro spacing is constant across viewports. Only micro spacing adapts.
 - NEVER use ad-hoc spacing values.
+- **Exception: the public association site** (`components/public-site`) is a
+  marketing-style page, not app UI. Its page rhythm uses Tailwind's larger
+  standard steps, single-sourced in `blocks/SiteSection.tsx` (section padding up
+  to `py-24`, column gaps up to `gap-12`) and `blocks/HeroBlock.tsx` (hero padding
+  up to `pt-72`). Component internals there still keep to the scale above, and
+  arbitrary `p-[13px]`-style values stay banned everywhere.
 - **Page gutter is the shell's job, not the page's.** The authenticated page gutter
   (horizontal `px`, vertical `py`, centred max-width) is single-sourced in
   `PageContainer` (`components/layout/page-container.tsx`, rendered by the app shell:

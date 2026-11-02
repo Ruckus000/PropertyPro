@@ -133,11 +133,26 @@ export function HeroBlock(props: BlockRendererProps) {
   );
 }
 
+/**
+ * The shade over a full-bleed photo, which is what keeps white words readable
+ * over any photo a community uploads.
+ *
+ * On a phone the hero is mostly words, so the whole photo takes a flat 60% black:
+ * white on 60% black over a pure-white pixel is 5.7:1. On a wide screen the photo
+ * gets room to show: the shade is at least 60% over the bottom 70% of the hero and
+ * fades to 25% at the top. The words are anchored to the bottom (a large top
+ * padding, a small bottom one), and they would have to be taller than the hero's
+ * top padding is deep (~576px of text) before any of them left the 60% zone.
+ * That holds for words alone. With two or more photos the strip sits in the same
+ * band and makes it far taller, so that hero keeps the flat shade at every width.
+ */
+const PHOTO_SCRIM =
+  'absolute inset-0 bg-black/60 site-md:bg-transparent site-md:bg-gradient-to-t site-md:from-black/80 site-md:via-black/60 site-md:via-70% site-md:to-black/25';
+
 /** Corners by `LookStyle.radius`, as whole class names so Tailwind sees them. */
 const CORNERS: Record<LookStyle['radius'], { button: string; photo: string }> = {
   square: { button: 'rounded-none', photo: 'rounded-none' },
   rounded: { button: 'rounded-md', photo: 'rounded-2xl' },
-  pill: { button: 'rounded-full', photo: 'rounded-2xl' },
 };
 
 /** The button in the accent when the look paints its accent as a background, else in the primary. */
@@ -219,19 +234,24 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
     <>
       <h1
         className={cn(
-          'font-heading text-4xl font-bold site-sm:text-5xl',
+          'max-w-4xl font-heading text-4xl font-semibold leading-tight tracking-tight site-sm:text-5xl site-lg:text-7xl',
           onPhoto ? 'text-content-inverse' : 'text-primary',
         )}
       >
         {headline}
       </h1>
       {subtitle && (
-        <p className={cn('mt-4 text-lg', onPhoto ? 'text-content-inverse' : 'text-content')}>
+        <p
+          className={cn(
+            'mt-6 max-w-2xl text-lg leading-relaxed site-md:text-xl',
+            onPhoto ? 'text-content-inverse' : 'text-content',
+          )}
+        >
           {subtitle}
         </p>
       )}
       {cta && (
-        <div className="mt-8">
+        <div className="mt-10">
           <a
             href={cta.href}
             className={cn(
@@ -256,10 +276,12 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           sizes="100vw"
           decorative={strip !== null}
         />
-        <div aria-hidden="true" className="absolute inset-0 bg-black/60" />
-        <div className="relative mx-auto max-w-5xl px-4 py-24 site-sm:px-6 site-md:py-32 site-lg:px-8">
-          {words}
-          {strip}
+        <div aria-hidden="true" className={strip ? 'absolute inset-0 bg-black/60' : PHOTO_SCRIM} />
+        <div className="relative px-6 pb-16 pt-40 site-sm:px-8 site-md:pb-24 site-md:pt-72 site-lg:px-10">
+          <div className="mx-auto max-w-6xl">
+            {words}
+            {strip}
+          </div>
         </div>
       </section>
     );
@@ -267,8 +289,8 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
 
   if (style === 'photo-split') {
     return (
-      <section data-hero-style={style} className="px-4 py-16 site-sm:px-6 site-lg:px-8">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 site-md:grid-cols-2">
+      <section data-hero-style={style} className="px-6 py-16 site-sm:px-8 site-md:py-24 site-lg:px-10">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 site-md:grid-cols-2">
           <div>{words}</div>
           {strip ?? (
             <div className="relative">
@@ -290,7 +312,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
 
   if (style === 'photo-card') {
     return (
-      <section data-hero-style={style} className="px-4 pb-16 pt-8 site-sm:px-6 site-lg:px-8">
+      <section data-hero-style={style} className="px-6 pb-16 pt-8 site-sm:px-8 site-md:pb-24 site-lg:px-10">
         <div className="mx-auto max-w-6xl">
           {strip ?? (
             <HeroImg
@@ -301,7 +323,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
           )}
           <div
             className={cn(
-              'relative mx-4 max-w-2xl border border-edge bg-surface-card p-6 shadow-e1 site-sm:mx-10 site-sm:p-10',
+              'relative mx-4 max-w-2xl border border-edge bg-surface-card p-8 site-sm:mx-12 site-sm:p-12',
               corners.photo,
               strip ? 'mt-6' : '-mt-16',
             )}
@@ -314,8 +336,8 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
   }
 
   return (
-    <section data-hero-style={style} className="px-4 py-16 site-sm:px-6 site-lg:px-8">
-      <div className="mx-auto max-w-3xl">
+    <section data-hero-style={style} className="px-6 py-20 site-sm:px-8 site-md:py-28 site-lg:px-10">
+      <div className="mx-auto max-w-6xl">
         {words}
         {strip ??
           (photos[0] && <HeroImg photo={photos[0]} className={cn('mt-10 w-full', corners.photo)} />)}

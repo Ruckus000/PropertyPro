@@ -13,6 +13,7 @@
  * Miami association could mistake for its own building, so it is not offered.
  */
 
+// ponytail: two stock photos only. Trigger: in the volunteer test a look has no photo that fits their community, or a customer asks.
 export const STOCK_PHOTO_IDS = ['sunset', 'palms'] as const;
 
 export type StockPhotoId = (typeof STOCK_PHOTO_IDS)[number];

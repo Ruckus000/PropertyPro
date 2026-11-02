@@ -5,27 +5,10 @@
  */
 import type { MeetingsBlockContent } from '@propertypro/shared';
 import type { PublicMeeting } from '@/lib/db/public-community-reader';
+import { Clock, MapPin, Users } from 'lucide-react';
 import type { BlockViewProps } from './types';
-
-const DATE_TIME_OPTS: Intl.DateTimeFormatOptions = {
-  month: 'short',
-  day: 'numeric',
-  year: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-};
-
-function formatDateTime(value: Date, timezone: string): string {
-  try {
-    return value.toLocaleString('en-US', {
-      ...DATE_TIME_OPTS,
-      timeZone: timezone || 'America/New_York',
-    });
-  } catch {
-    // Invalid timezone (legacy DB data); fall back to default.
-    return value.toLocaleString('en-US', { ...DATE_TIME_OPTS, timeZone: 'America/New_York' });
-  }
-}
+import { SiteSection, SiteSectionEmpty } from './SiteSection';
+import { formatInZone } from './format-in-zone';
 
 /** Capitalises the first letter and replaces underscores with spaces. */
 function formatMeetingType(meetingType: string): string {
@@ -42,57 +25,56 @@ export function MeetingsBlockView({
   anchorId,
 }: MeetingsBlockViewProps) {
   return (
-    <section
-      id={anchorId}
-      className="px-4 py-12 site-sm:px-6 site-lg:px-8"
-      aria-labelledby={`meetings-${blockId}`}
-    >
-      <div className="mx-auto max-w-3xl">
-        <h2
-          id={`meetings-${blockId}`}
-          className="font-heading text-2xl font-semibold text-content mb-6"
-        >
-          Upcoming Meetings
-        </h2>
-        {data.length === 0 ? (
-          <p className="rounded-md border border-edge bg-surface-card p-4 text-sm text-content-secondary">
-            {content?.emptyText ?? "No upcoming meetings."}
-          </p>
-        ) : (
-          <ul className="space-y-4">
-            {data.map((meeting) => (
-              <li key={meeting.id} className="rounded-md border border-edge bg-surface-card p-5">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <h3 className="text-lg font-medium text-content">{meeting.title}</h3>
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="inline-flex items-center rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
-                        {formatMeetingType(meeting.meetingType)}
-                      </span>
-                    </div>
-                  </div>
+    <SiteSection id={anchorId} headingId={`meetings-${blockId}`} title="Upcoming Meetings">
+      {data.length === 0 ? (
+        <SiteSectionEmpty>{content?.emptyText ?? 'No upcoming meetings.'}</SiteSectionEmpty>
+      ) : (
+        <ul className="space-y-4">
+          {data.map((meeting) => {
+            const tz = community.timezone;
+            return (
+              <li key={meeting.id} className="flex gap-4 rounded-md border border-edge bg-surface-card p-4 site-sm:gap-6 site-sm:p-6">
+                {/* A calendar page. Its colour comes from the look: a look that
+                    sets dates in its accent colours this <time> (SiteChrome). */}
+                <time
+                  dateTime={meeting.startsAt.toISOString()}
+                  className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md border border-edge text-content site-sm:h-20 site-sm:w-20"
+                >
+                  <span className="text-sm font-semibold">
+                    {formatInZone(meeting.startsAt, tz, { month: 'short' })}
+                  </span>
+                  {/* Collapsed in the column, but keeps "Apr 1" apart for readers. */}
+                  {' '}
+                  <span className="font-heading text-3xl leading-none site-sm:text-4xl">
+                    {formatInZone(meeting.startsAt, tz, { day: 'numeric' })}
+                  </span>
+                  {/* The tile has no room for the year; a reader still hears it. */}
+                  <span className="sr-only"> {formatInZone(meeting.startsAt, tz, { year: 'numeric' })}</span>
+                </time>
+                <div className="min-w-0 self-center">
+                  <h3 className="text-lg font-semibold leading-snug text-content site-sm:text-xl">{meeting.title}</h3>
+                  <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-base text-content-secondary">
+                    <li className="inline-flex items-center gap-2">
+                      <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {formatInZone(meeting.startsAt, tz, { weekday: 'long', hour: 'numeric', minute: '2-digit' })}
+                    </li>
+                    {meeting.location && (
+                      <li className="inline-flex items-center gap-2">
+                        <MapPin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        {meeting.location}
+                      </li>
+                    )}
+                    <li className="inline-flex items-center gap-2">
+                      <Users className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {formatMeetingType(meeting.meetingType)}
+                    </li>
+                  </ul>
                 </div>
-                <dl className="mt-3 space-y-1 text-sm text-content-secondary">
-                  <div className="flex items-baseline gap-2">
-                    <dt className="font-medium text-content-secondary shrink-0">When</dt>
-                    <dd>
-                      <time dateTime={meeting.startsAt.toISOString()}>
-                        {formatDateTime(meeting.startsAt, community.timezone)}
-                      </time>
-                    </dd>
-                  </div>
-                  {meeting.location && (
-                    <div className="flex items-baseline gap-2">
-                      <dt className="font-medium text-content-secondary shrink-0">Where</dt>
-                      <dd>{meeting.location}</dd>
-                    </div>
-                  )}
-                </dl>
               </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+            );
+          })}
+        </ul>
+      )}
+    </SiteSection>
   );
 }

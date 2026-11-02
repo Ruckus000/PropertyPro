@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { BoardBlock } from '@/components/public-site/blocks/BoardBlock';
-import { BoardBlockView } from '@/components/public-site/blocks/BoardBlockView';
+import { BoardBlockView, initials } from '@/components/public-site/blocks/BoardBlockView';
 import type { BlockRendererProps, PublicCommunity } from '@/components/public-site/blocks/types';
 import type { PublicContactInfo } from '@/lib/db/public-community-reader';
 
@@ -89,8 +89,14 @@ describe('<BoardBlock> shell', () => {
     expect(reader.getContactInfo).toHaveBeenCalledWith({ showBoard: true, showManagement: false });
     // Only the two fields cross into the view, whatever the roster rows carry.
     expect((ui as React.ReactElement<{ data: unknown }>).props.data).toEqual({ members: BOARD });
+    // What a reader hears: the initials circle is decoration (aria-hidden).
     const items = screen.getAllByRole('listitem');
-    expect(items.map((item) => item.textContent)).toEqual([
+    const heard = (item: HTMLElement) =>
+      [...item.childNodes]
+        .filter((node) => !(node instanceof HTMLElement && node.getAttribute('aria-hidden') === 'true'))
+        .map((node) => node.textContent)
+        .join('');
+    expect(items.map(heard)).toEqual([
       'Maria DelgadoBoard President',
       'Robert ChenTreasurer',
     ]);
@@ -164,5 +170,18 @@ describe('<BoardBlockView>', () => {
     render(<BoardBlockView blockId={8} content={{}} data={{ members: [] }} community={community} />);
     expect(screen.getByText('No one holds a board seat yet.')).toBeInTheDocument();
     expect(screen.queryByRole('list')).not.toBeInTheDocument();
+  });
+});
+
+describe('initials', () => {
+  it.each([
+    ['Sam President', 'SP'],
+    ['  Maria   del  Carmen  Delgado ', 'MD'],
+    ['Cher', 'C'],
+    ['', ''],
+    ['jane smith jr.', 'JJ'],
+    ['𠀋田 Ken', '𠀋K'],
+  ])('%j → %j', (name, expected) => {
+    expect(initials(name)).toBe(expected);
   });
 });
