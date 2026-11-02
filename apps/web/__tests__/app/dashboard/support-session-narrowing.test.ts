@@ -48,6 +48,15 @@ vi.mock('@/lib/api/user-communities', () => ({
 // Render-path dependencies of the dashboard page — never reached here.
 vi.mock('@/lib/dashboard/load-dashboard-data', () => ({ loadDashboardData: vi.fn() }));
 vi.mock('@/lib/db/access-control', () => ({ checkPermissionV2: vi.fn(() => true) }));
+// The redesigned panels read these; both would reach the DB at import or render.
+vi.mock('@/lib/dashboard/load-dashboard-overview', () => ({
+  loadDashboardOverview: vi.fn(async () => ({
+    checklist: null,
+    meetings30d: { ok: true, value: [] },
+    hearings: null,
+  })),
+}));
+vi.mock('@/components/compliance/compliance-activity-feed', () => ({ ComplianceActivityFeed: () => null }));
 vi.mock('@/lib/api/branding', () => ({ getCommunityPublicInfo: vi.fn() }));
 vi.mock('@/components/website-home/website-live-card', () => ({ WebsiteLiveCard: () => null }));
 vi.mock('@/lib/dashboard/load-website-live-card', () => ({ loadWebsiteLiveCard: vi.fn() }));

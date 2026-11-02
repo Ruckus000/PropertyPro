@@ -10,7 +10,7 @@ interface DashboardEsignPendingProps {
 
 export function DashboardEsignPending({ items }: DashboardEsignPendingProps) {
   return (
-    <section className="rounded-md border border-edge bg-surface-card p-5">
+    <section id="documents-to-sign" className="rounded-md border border-edge bg-surface-card p-5">
       <h2 className="text-lg font-semibold text-content">Documents to Sign</h2>
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
