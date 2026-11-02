@@ -12,7 +12,9 @@ describe('getCookieOptions', () => {
   });
 
   afterEach(() => {
-    // Restore original env
+    // Restore original env. NODE_ENV is stubbed, not assigned: next's global
+    // types (reached through the seed tests' apps/web imports) make it read-only.
+    vi.unstubAllEnvs();
     process.env = { ...originalEnv };
   });
 
@@ -23,7 +25,7 @@ describe('getCookieOptions', () => {
 
   it('returns domain and secure when NEXT_PUBLIC_COOKIE_DOMAIN is set in production', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     const getCookieOptions = await importGetCookieOptions();
 
     const result = getCookieOptions();
@@ -32,7 +34,7 @@ describe('getCookieOptions', () => {
 
   it('returns domain without secure in development', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     const getCookieOptions = await importGetCookieOptions();
 
     const result = getCookieOptions();
@@ -55,7 +57,7 @@ describe('getCookieOptions', () => {
 
   it('trims whitespace from NEXT_PUBLIC_COOKIE_DOMAIN', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '  .example.com  ';
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     const getCookieOptions = await importGetCookieOptions();
 
     const result = getCookieOptions();
@@ -71,7 +73,7 @@ describe('getCookieOptions', () => {
 
   it('logs a warning when domain does not start with "."', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = 'example.com';
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getCookieOptions = await importGetCookieOptions();
 
@@ -87,7 +89,7 @@ describe('getCookieOptions', () => {
 
   it('does not log a warning when domain starts with "."', async () => {
     process.env.NEXT_PUBLIC_COOKIE_DOMAIN = '.getpropertypro.com';
-    process.env.NODE_ENV = 'development';
+    vi.stubEnv('NODE_ENV', 'development');
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const getCookieOptions = await importGetCookieOptions();
 

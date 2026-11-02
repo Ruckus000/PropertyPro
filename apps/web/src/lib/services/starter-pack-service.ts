@@ -1,12 +1,11 @@
 /**
  * PR #5: Apply a community-type-matched starter pack to a community.
  *
- * No longer how a new community gets its site: `seedNewCommunitySite` publishes
- * the suggested look instead (`site-look-service`'s `applyLookAtCreation`), and a
- * prospect demo gets the same on entry (`fillDemoCommunitySite`). This still
- * serves the seeded fixtures (`scripts/seed-demo.ts`,
- * `scripts/help-capture/fixtures.ts`), which are shared test data with their own
- * consumers, and the tests that need a site on a type's legacy layout. Admin's
+ * No longer how any community gets its site: `seedNewCommunitySite` publishes
+ * the suggested look instead (`site-look-service`'s `applyLookAtCreation`), a
+ * prospect demo gets the same on entry (`fillDemoCommunitySite`), and so do the
+ * seeded demos (`scripts/seed-demo.ts`). This still serves the tests that
+ * need a site on a type's legacy layout. Admin's
  * "reset to starter" has its own implementation in apps/admin. A site on a
  * legacy layout can still be holding any version of a pack, which is why a look
  * switch reads every version (`site-look-service`).
@@ -19,9 +18,8 @@
  * Idempotent: if the community already has any published site_blocks,
  * skip the apply.
  *
- * AUTHZ: caller MUST have just created the community, or be seeding a fixture:
- * the demo seed and the help-capture fixtures write only to the communities
- * they create. Reads platform-level catalog via unscoped client, inserts via
+ * AUTHZ: caller MUST have just created the community, or be seeding a test
+ * fixture it created. Reads platform-level catalog via unscoped client, inserts via
  * scoped client.
  */
 import { communities, createScopedClient, siteBlocks, sitePages, siteStarterPacks } from '@propertypro/db';

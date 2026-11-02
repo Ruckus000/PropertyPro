@@ -54,7 +54,6 @@ import { createInsurancePolicy } from '@/lib/services/insurance-service';
 import { createMoveChecklist } from '@/lib/services/move-checklist-service';
 import { createVisitorForCommunity } from '@/lib/services/package-visitor-service';
 import { createPollForCommunity } from '@/lib/services/polls-service';
-import { applyStarterPackToCommunity } from '@/lib/services/starter-pack-service';
 import { setCommunitySnowbirdEnabled } from '@/lib/services/snowbird-digest-subscription-service';
 import { createArcSubmissionForCommunity } from '@/lib/services/violations-service';
 import { CAPTURE_COMMUNITIES } from './manifest-schema';
@@ -146,14 +145,8 @@ async function main(): Promise<void> {
     done.push(`${created ? '+' : '='} ${label}`);
   };
 
-  // Website editor shots (manager/website/*). The demo seed builds no website,
-  // so its editor opens on an empty page; this gives Sunset Condos the starter
-  // pack, idempotently (it skips a community that already has published
-  // sections). A real new community now starts with its suggested look instead
-  // (Bayfront for a condo), so these shots show a starter-pack site.
-  await step('website starter sections (Sunset Condos)', async () =>
-    (await applyStarterPackToCommunity(condoId, 'condo_718')).applied,
-  );
+  // Website editor shots (manager/website/*) need nothing here: the demo seed
+  // puts Sunset Condos on its suggested look (Bayfront), as a new community is.
 
   // pk-pending, pk-pickup (site manager) and pk-mine (tenant). Inserted
   // directly: createPackageForCommunity notifies the unit's residents.
