@@ -2,8 +2,10 @@
 
 /**
  * The website home's "Your site" (spec C2, corrections 3 and 4): the look,
- * **Edit your site**, **Change look**, when the site was last published and by
- * whom, and Restore.
+ * **Change look**, when the site was last published and by whom, and Restore.
+ *
+ * The full editor is not offered here (option 1): the welcome card edits the
+ * words and photo, and the home ends with a quiet "Advanced editor" link.
  *
  * A look chosen in the picker but not published yet is said in one line, with
  * a link back to the picker to publish it or keep the live one.
@@ -174,16 +176,8 @@ export function YourSiteCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button asChild className={TOUCH}>
-          <Link href={`/pm/website-editor?communityId=${communityId}`}>Edit your site</Link>
-        </Button>
         <Button asChild variant="outline" className={TOUCH}>
           <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
-        </Button>
-        <Button asChild variant="outline" className={TOUCH}>
-          <Link href={`/pm/website-editor?communityId=${communityId}&view=settings&tab=general`}>
-            Site settings
-          </Link>
         </Button>
         {previousSnapshotId !== null && (
           <Button

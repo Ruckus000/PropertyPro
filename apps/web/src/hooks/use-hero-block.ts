@@ -12,6 +12,10 @@
  *                      invalidates the GET query on success so the form
  *                      reflects the newly-saved state.
  *
+ * useSaveLiveHero   — the same PATCH with `live: true`: the website home's
+ *                     Edit words / Change photo, which go straight to the
+ *                     public site. Undo calls it again with the old content.
+ *
  * Both routes use the canonical { data: T } success envelope and
  * { error: { code, message } } error envelope (B1 canonical). Raw fetch is
  * kept to preserve the exact error-literal behaviour; migration to
@@ -52,19 +56,31 @@ export function useHeroBlock(communityId: number) {
   });
 }
 
+async function patchHero(communityId: number, content: HeroBlockContent, live: boolean): Promise<void> {
+  const res = await fetch('/api/v1/pm/site/hero', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ communityId, ...content, ...(live ? { live: true } : {}) }),
+  });
+  if (!res.ok) {
+    throw new Error(await readJsonError(res));
+  }
+}
+
+export function useSaveLiveHero(communityId: number) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, HeroBlockContent>({
+    mutationFn: (content) => patchHero(communityId, content, true),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['pm', 'site'] });
+    },
+  });
+}
+
 export function useUpdateHeroBlock(communityId: number) {
   const qc = useQueryClient();
   return useMutation<void, Error, HeroBlockContent>({
-    mutationFn: async (content) => {
-      const res = await fetch('/api/v1/pm/site/hero', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId, ...content }),
-      });
-      if (!res.ok) {
-        throw new Error(await readJsonError(res));
-      }
-    },
+    mutationFn: (content) => patchHero(communityId, content, false),
     onSuccess: async () => {
       // Invalidate the whole ['pm','site'] subtree, not just the hero query.
       //

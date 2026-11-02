@@ -98,6 +98,12 @@ export interface HeroPhotosFieldProps {
    * rather than failing it. Same reason and same shape as `HeroImageField`.
    */
   readDimensions?: (file: Blob) => Promise<ImageDimensions>;
+  /**
+   * Told whether a picked file has not reached `photos` yet: staged but not
+   * uploaded, or uploading. A caller with its own Save (the website home's
+   * Change photo) holds it while this is true, or the file would be dropped.
+   */
+  onPendingChange?: (pending: boolean) => void;
 }
 
 /**
@@ -123,6 +129,7 @@ export function HeroPhotosField({
   photos,
   onChange,
   readDimensions = readImageDimensions,
+  onPendingChange,
 }: HeroPhotosFieldProps) {
   // ONE live region for the whole field, matching SiteEditorProvider's
   // discipline. Two regions announce the same move twice.
@@ -193,6 +200,11 @@ export function HeroPhotosField({
   // it takes that photo's place, so the list ends the same length. Which ones do
   // is read from the list as it is now, not remembered, so an edit from outside
   // the field cannot leave a file counted as free.
+  const pending = staged.length > 0 || isUploading;
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
   const replacing = replacingRows(staged, photos);
   const remaining = MAX_HERO_PHOTOS - photos.length - (staged.length - replacing.size);
   const allDescribed = staged.every((row) => row.decorative || row.alt.trim().length > 0);

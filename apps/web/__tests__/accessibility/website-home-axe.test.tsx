@@ -90,6 +90,7 @@ const DATA: WebsiteHomeData = {
     { id: 8, title: 'Annual meeting', startsAt: '2026-12-01T23:00:00.000Z', noticePosted: true },
   ],
   slug: 'sunset-condos',
+  liveHero: { headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' },
 };
 
 beforeEach(() => {
@@ -132,6 +133,7 @@ describe('website home — axe', () => {
     const { container } = renderHome(DATA);
     await expectSections([
       'Your website is live',
+      'Your welcome',
       'Records',
       'Coming up',
       'Details on your site',
@@ -145,6 +147,33 @@ describe('website home — axe', () => {
     expect(screen.getByRole('button', { name: 'Email owners' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'See earlier versions' }));
     expect(screen.getByText('Live now')).toBeInTheDocument();
+
+    const results = await axe(container);
+
+    expect(results).toHaveNoViolations();
+  });
+
+  it('has none with the Edit words form open', async () => {
+    const user = userEvent.setup();
+    const { container } = renderHome(DATA);
+    await expectSections(['Your welcome']);
+    await user.click(screen.getByRole('button', { name: 'Edit words' }));
+    // The form itself, with its labelled fields, is what is audited.
+    expect(screen.getByLabelText(/Headline/)).toHaveValue('Welcome to Sunset Condos');
+    expect(screen.getByLabelText('Subtitle')).toBeInTheDocument();
+
+    const results = await axe(container);
+
+    expect(results).toHaveNoViolations();
+  });
+
+  it('has none with the Change photo form open', async () => {
+    const user = userEvent.setup();
+    const { container } = renderHome(DATA);
+    await expectSections(['Your welcome']);
+    await user.click(screen.getByRole('button', { name: 'Change photo' }));
+    expect(screen.getByRole('heading', { name: 'Change photo' })).toBeInTheDocument();
+    expect(screen.getByText('Photos')).toBeInTheDocument();
 
     const results = await axe(container);
 

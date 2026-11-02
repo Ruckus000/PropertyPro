@@ -6,6 +6,9 @@
  * After a publish from the look picker (`?published=1`) it says the site has
  * been updated instead. Both show the address, **View site** and **Copy link**.
  *
+ * While records the statute requires are missing it is not a green check: it
+ * says how many, in the warning tone, with a link down to the Records list.
+ *
  * While the one-time "Email owners" offer stands (D10: not sent, not dismissed,
  * at least one owner) and the site is public (`site_published_at`, set from the
  * day the community is created), it asks whether to tell owners. **Email owners** sends once; a refusal from the
@@ -15,7 +18,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CircleAlert, CircleCheck, Copy, ExternalLink } from 'lucide-react';
+import { CircleAlert, CircleCheck, Copy, ExternalLink, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSiteLiveNotice, type SendSiteLiveNoticeResult } from '@/hooks/use-site-live-notice';
 import { ApiRequestError } from '@/lib/api/request-json';
@@ -29,6 +32,8 @@ export interface SiteStatusBannerProps {
   published: boolean;
   /** Show the "Email owners" offer: offerable, and the site is public. */
   offerEmail: boolean;
+  /** Records the statute requires that the site is missing; 0 when none are required. */
+  missingRecordCount: number;
 }
 
 type Note = { tone: 'ok' | 'error'; text: string };
@@ -47,7 +52,14 @@ function sentNote(result: SendSiteLiveNoticeResult): Note {
   return { tone: 'error', text: "We couldn't send the email just now. Please try again." };
 }
 
-export function SiteStatusBanner({ communityId, communityName, siteUrl, published, offerEmail }: SiteStatusBannerProps) {
+export function SiteStatusBanner({
+  communityId,
+  communityName,
+  siteUrl,
+  published,
+  offerEmail,
+  missingRecordCount,
+}: SiteStatusBannerProps) {
   const router = useRouter();
   const { send, dismiss } = useSiteLiveNotice(communityId);
   const [offerClosed, setOfferClosed] = useState(false);
@@ -104,12 +116,26 @@ export function SiteStatusBanner({ communityId, communityName, siteUrl, publishe
       className="space-y-4 rounded-md border border-edge bg-surface-card p-5 shadow-sm"
     >
       <div className="flex items-start gap-3">
-        <CircleCheck className="mt-0.5 size-5 shrink-0 text-status-success" aria-hidden="true" />
+        {missingRecordCount > 0 ? (
+          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-status-warning" aria-hidden="true" />
+        ) : (
+          <CircleCheck className="mt-0.5 size-5 shrink-0 text-status-success" aria-hidden="true" />
+        )}
         <div className="min-w-0 space-y-1">
           <h2 id="site-status-heading" className="text-lg font-semibold text-content">
             {published ? `${communityName}'s website has been updated` : 'Your website is live'}
           </h2>
           <p className="break-all text-sm text-content-secondary">{address}</p>
+          {missingRecordCount > 0 && (
+            <p className="text-sm text-content">
+              {missingRecordCount === 1
+                ? '1 record Florida requires is missing.'
+                : `${missingRecordCount} records Florida requires are missing.`}{' '}
+              <a href="#records" className="font-medium text-content-link underline">
+                See the records
+              </a>
+            </p>
+          )}
         </div>
       </div>
 

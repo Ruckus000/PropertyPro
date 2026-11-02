@@ -3,9 +3,15 @@
  * fields the public site shows, as it shows them. A field not added yet is
  * left off the site, and says so, with a link to the Community profile in
  * Settings (ruling R10).
+ *
+ * When the public phone or email is missing, one line above the list says so,
+ * because those are how a visitor reaches the association.
+ *
+ * ponytail: contact is edited in Settings, not inline. Trigger: in the volunteer
+ * test, a participant can't add a phone number without help.
  */
 import Link from 'next/link';
-import { EyeOff } from 'lucide-react';
+import { CircleAlert, EyeOff } from 'lucide-react';
 import type { CommunityProfile } from '@/lib/services/community-profile-service';
 import { cn } from '@/lib/utils';
 import { TOUCH } from './touch';
@@ -15,6 +21,16 @@ export const NOT_ADDED = "Not added yet, so it's hidden on the site";
 export interface SiteDetailsCardProps {
   communityId: number;
   profile: CommunityProfile;
+}
+
+/** The prompt for a missing public phone or email, or null when both are set. */
+export function contactPrompt(profile: CommunityProfile): string | null {
+  const noPhone = !profile.contactPhone?.trim();
+  const noEmail = !profile.contactEmail?.trim();
+  if (noPhone && noEmail) return 'Add a phone number and email so people can reach the association.';
+  if (noPhone) return 'Add a phone number so people can call the association.';
+  if (noEmail) return 'Add an email so people can email the association.';
+  return null;
 }
 
 function addressOf(profile: CommunityProfile): string | null {
@@ -31,6 +47,7 @@ export function SiteDetailsCard({ communityId, profile }: SiteDetailsCardProps) 
     { label: 'Public email', value: profile.contactEmail },
     { label: 'Office hours', value: profile.officeHours },
   ];
+  const prompt = contactPrompt(profile);
   return (
     <section
       aria-labelledby="site-details-heading"
@@ -39,6 +56,12 @@ export function SiteDetailsCard({ communityId, profile }: SiteDetailsCardProps) 
       <h2 id="site-details-heading" className="text-lg font-semibold text-content">
         Details on your site
       </h2>
+      {prompt && (
+        <p className="flex items-start gap-2 text-sm text-content">
+          <CircleAlert className="mt-0.5 size-4 shrink-0 text-status-warning" aria-hidden="true" />
+          <span>{prompt}</span>
+        </p>
+      )}
       <dl className="divide-y divide-edge-subtle">
         {fields.map(({ label, value }) => (
           <div key={label} className="grid gap-1 py-2 first:pt-0 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-3">
