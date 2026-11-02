@@ -73,6 +73,7 @@ import { ResidentsTable } from './residents-table';
 import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 import type { DirectoryTab } from '@/lib/directory/directory-href';
+import { TOP_NAV_ENABLED } from '@/components/layout/top-nav-flag';
 
 // ponytail: this route sits ~35 KiB under the 1160 KiB hard per-route budget
 // (perf:check on a local production build, 2026-10-13; enforced on this
@@ -855,7 +856,8 @@ export function DirectoryPageClient({
                   onToggleBuilding={toggleBuilding}
                 />
               ) : (
-                <div className="grid h-[calc(100dvh-16rem)] min-h-[32rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]">
+                // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it. Trigger: the top-nav flag is removed.
+                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-16rem)]'} min-h-[32rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
                   <UnitsSplitList
                     units={filteredUnits}
                     hasOwnerRole={hasOwnerRole}

@@ -81,6 +81,7 @@ export function ProfileMenu({ userName, userEmail, communityId }: ProfileMenuPro
           </Link>
         </DropdownMenuItem>
 
+        {/* ponytail: switching takes two clicks via the profile menu. Trigger: multi-community users ask for one-click switching. */}
         {hasMultipleCommunities && (
           <DropdownMenuItem asChild>
             <Link href="/select-community" onClick={() => setOpen(false)}>

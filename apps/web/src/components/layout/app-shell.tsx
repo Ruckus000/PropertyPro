@@ -35,6 +35,7 @@ import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import type { ShellTopNavProps } from './top-nav-shell';
 
 interface HelpDocsModalProps {
   communityId: number;
@@ -48,6 +49,28 @@ const HelpDocsModal = dynamic<HelpDocsModalProps>(
 
 const HELP_DOCS_MODAL_ENABLED =
   process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
+
+// The top-nav flag (D23; see top-nav-flag.ts) is read INLINE at each site below,
+// never through the TOP_NAV_ENABLED constant, which does not fold across modules.
+// next.config.ts always defines the variable, so each condition compares two
+// string literals that webpack folds at parse time: a flag-off build drops these
+// import()s and emits none of top-nav-shell.tsx, top-nav-slots.tsx or their
+// dependencies. Every pathname read lives in those two modules, so a flag-off
+// shell calls no hook it did not call before the flag existed.
+const ShellTopNav =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic<ShellTopNavProps>(() => import('./top-nav-shell').then((m) => m.ShellTopNav), {
+        loading: () => null,
+      })
+    : null;
+const ShellBrandSlot =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic(() => import('./top-nav-slots').then((m) => m.ShellBrandSlot), { loading: () => null })
+    : null;
+const DesktopNavSlot =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic(() => import('./top-nav-slots').then((m) => m.DesktopNavSlot), { loading: () => null })
+    : null;
 
 interface LazyCommandPaletteProps {
   open: boolean;
@@ -81,6 +104,12 @@ export interface AppShellCommunity {
 }
 
 interface AppShellProps {
+  /**
+   * Tab row instead of the desktop rail. Defaults to the build-time flag. Tests
+   * can turn it off in a flag-on module; it cannot turn the tabs on in a flag-off
+   * build, which never loads them.
+   */
+  topNav?: boolean;
   children: ReactNode;
   user: AppShellUser | null;
   community: AppShellCommunity | null;
@@ -97,7 +126,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw
@@ -177,20 +206,40 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
       {/* Desktop sidebar */}
-      <div className="hidden lg:block">
-        <AppSidebar
-          communityId={community?.id ?? null}
-          communityName={community?.name ?? null}
-          communityType={community?.type ?? null}
-          role={role}
-          isUnitOwner={isUnitOwner ?? false}
-          designation={designation ?? null}
-          features={features}
-          isLapsed={isLapsed}
-          userName={user?.fullName ?? null}
-          plan={community?.plan ?? null}
-        />
-      </div>
+      {topNav && DesktopNavSlot ? (
+        // Flag on: the tab row replaces the rail, except where it has nothing to list (R24).
+        <DesktopNavSlot hasCommunity={community != null}>
+          <div className="hidden lg:block">
+            <AppSidebar
+              communityId={community?.id ?? null}
+              communityName={community?.name ?? null}
+              communityType={community?.type ?? null}
+              role={role}
+              isUnitOwner={isUnitOwner ?? false}
+              designation={designation ?? null}
+              features={features}
+              isLapsed={isLapsed}
+              userName={user?.fullName ?? null}
+              plan={community?.plan ?? null}
+            />
+          </div>
+        </DesktopNavSlot>
+      ) : (
+        <div className="hidden lg:block">
+          <AppSidebar
+            communityId={community?.id ?? null}
+            communityName={community?.name ?? null}
+            communityType={community?.type ?? null}
+            role={role}
+            isUnitOwner={isUnitOwner ?? false}
+            designation={designation ?? null}
+            features={features}
+            isLapsed={isLapsed}
+            userName={user?.fullName ?? null}
+            plan={community?.plan ?? null}
+          />
+        </div>
+      )}
 
       {/* Mobile drawer overlay */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -227,7 +276,27 @@ function ShellInner({ children, user, community, role, isUnitOwner, designation,
           userEmail={user?.email ?? null}
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
+          brand={
+            topNav && ShellBrandSlot ? (
+              <ShellBrandSlot
+                hasCommunity={community != null}
+                communityName={community?.name ?? null}
+                plan={community?.plan ?? null}
+              />
+            ) : undefined
+          }
         />
+        {topNav && ShellTopNav && (
+          <ShellTopNav
+            communityId={community?.id ?? null}
+            communityType={community?.type ?? null}
+            role={role}
+            isUnitOwner={isUnitOwner ?? false}
+            features={features}
+            isLapsed={isLapsed}
+            plan={community?.plan ?? null}
+          />
+        )}
         <ShellBreadcrumbs role={role} community={community} features={features} />
         <SubscriptionBillingBanners
           role={role}

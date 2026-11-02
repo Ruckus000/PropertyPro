@@ -75,6 +75,13 @@ const nextConfig: NextConfig = {
   },
   env: {
     NEXT_PUBLIC_APP_ROLE: "web",
+    // Always defined, so `process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'` is
+    // inlined as two string literals that webpack folds and the flag-off build
+    // drops the tab row's import()s (see app-shell.tsx). Next inlines a
+    // NEXT_PUBLIC_ variable only when it is set, and CI and production set none:
+    // left undefined, the check survives to runtime and the import()s stay.
+    NEXT_PUBLIC_TOP_NAV_ENABLED:
+      process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === "true" ? "true" : "false",
   },
   async redirects() {
     return [
