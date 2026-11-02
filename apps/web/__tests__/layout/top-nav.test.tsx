@@ -85,7 +85,7 @@ describe('TopNav', () => {
     renderNav(model());
     const more = screen.getByRole('button', { name: 'More' });
     expect(more).toHaveAttribute('aria-expanded', 'false');
-    expect(more).toHaveAttribute('aria-haspopup', 'true');
+    expect(more).toHaveAttribute('aria-haspopup', 'dialog');
     await user.click(more);
     expect(more).toHaveAttribute('aria-expanded', 'true');
     const panel = await screen.findByRole('dialog', { name: 'More pages' });
@@ -165,6 +165,23 @@ describe('TopNav', () => {
     await user.click(within(panel).getByRole('button', { name: /Payments/ }));
     expect(screen.queryByRole('dialog', { name: 'More pages' })).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Upgrade stub' })).toBeInTheDocument();
+  });
+
+  it('locked tabs and locked More items announce the dialog they open, as the rail does', async () => {
+    const user = userEvent.setup();
+    renderNav(
+      model({
+        tabs: [link('dashboard', { active: true }), link('reports', { planLocked: true })],
+        moreGroups: [{ label: 'Finance', links: [link('payments', { planLocked: true }), link('ledger')] }],
+      }),
+    );
+    expect(screen.getByRole('button', { name: /Reports/ })).toHaveAttribute('aria-haspopup', 'dialog');
+    // Unlocked tabs are plain links, with no popup.
+    expect(screen.getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-haspopup');
+    await user.click(screen.getByRole('button', { name: 'More' }));
+    const panel = await screen.findByRole('dialog', { name: 'More pages' });
+    expect(within(panel).getByRole('button', { name: /Payments/ })).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(within(panel).getByRole('link', { name: 'Ledger' })).not.toHaveAttribute('aria-haspopup');
   });
 
   it('badge dot has an accessible label', () => {

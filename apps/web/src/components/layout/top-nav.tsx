@@ -43,6 +43,7 @@ export function TopNav({ model, communityId, upgrade }: TopNavProps) {
             <button
               key={tab.id}
               type="button"
+              aria-haspopup="dialog"
               className={cn(TAB_CLASS, 'border-transparent text-content-secondary hover:text-content')}
               onClick={() => setUpgradeFor(tab)}
             >

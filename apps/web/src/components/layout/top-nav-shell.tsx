@@ -5,7 +5,8 @@
  *
  * Feeds `buildTopNavModel` the same inputs `AppSidebar` derives for the rail:
  * pathname + search, `lapsedAdmin`, the plan, and the shared nav badges. Loaded
- * with `next/dynamic` by the shell so a build with the flag off never ships it.
+ * with `next/dynamic` by the shell behind an inline flag check, so a build with
+ * the flag off never emits it.
  */
 import { usePathname, useSearchParams } from 'next/navigation';
 import {

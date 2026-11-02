@@ -16,16 +16,12 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
-import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
-import { PlanBadge } from '@propertypro/ui';
-import { PLAN_FEATURES, resolveLifecycleState, resolvePlanId } from '@propertypro/shared';
+import { resolveLifecycleState } from '@propertypro/shared';
 import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
-import { isPmPortfolioPath } from './nav-config';
-import { TOP_NAV_ENABLED } from './top-nav-flag';
 import { PageContainer, PAGE_GUTTER_X } from './page-container';
 import { ShellBreadcrumbs } from './shell-breadcrumbs';
 import { SidebarProvider, useSidebar } from './sidebar-context';
@@ -39,7 +35,6 @@ import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
 import type { DemoDetectionResult } from '@/lib/demo/detect-demo-info';
 import { isSearchShortcut } from '@/lib/utils/search-shortcut';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
-import { PropertyProTile } from '@/components/brand/property-pro-mark';
 import type { ShellTopNavProps } from './top-nav-shell';
 
 interface HelpDocsModalProps {
@@ -55,18 +50,27 @@ const HelpDocsModal = dynamic<HelpDocsModalProps>(
 const HELP_DOCS_MODAL_ENABLED =
   process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
 
-// Beside the help-modal flag, and read the same way: build-time. Defined in its
-// own module (top-nav-flag.ts) so the Directory can read it without importing
-// this client shell; re-exported here for callers that already import the shell.
-// ponytail: two desktop navs while the flag exists. Trigger: the flag is on in production; the flip PR removes the off branch and the flag.
-export { TOP_NAV_ENABLED };
-
-// Loaded only when the flag renders it, so a flag-off build never ships the
-// tab row (the web app's first-load JS ceiling has little headroom).
-const ShellTopNav = dynamic<ShellTopNavProps>(
-  () => import('./top-nav-shell').then((m) => m.ShellTopNav),
-  { loading: () => null },
-);
+// The top-nav flag (D23; see top-nav-flag.ts) is read INLINE at each site below,
+// never through the TOP_NAV_ENABLED constant, which does not fold across modules.
+// next.config.ts always defines the variable, so each condition compares two
+// string literals that webpack folds at parse time: a flag-off build drops these
+// import()s and emits none of top-nav-shell.tsx, top-nav-slots.tsx or their
+// dependencies. Every pathname read lives in those two modules, so a flag-off
+// shell calls no hook it did not call before the flag existed.
+const ShellTopNav =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic<ShellTopNavProps>(() => import('./top-nav-shell').then((m) => m.ShellTopNav), {
+        loading: () => null,
+      })
+    : null;
+const ShellBrandSlot =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic(() => import('./top-nav-slots').then((m) => m.ShellBrandSlot), { loading: () => null })
+    : null;
+const DesktopNavSlot =
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
+    ? dynamic(() => import('./top-nav-slots').then((m) => m.DesktopNavSlot), { loading: () => null })
+    : null;
 
 interface LazyCommandPaletteProps {
   open: boolean;
@@ -100,7 +104,11 @@ export interface AppShellCommunity {
 }
 
 interface AppShellProps {
-  /** Tab row instead of the desktop rail. Defaults to the build-time flag; tests toggle it. */
+  /**
+   * Tab row instead of the desktop rail. Defaults to the build-time flag. Tests
+   * can turn it off in a flag-on module; it cannot turn the tabs on in a flag-off
+   * build, which never loads them.
+   */
   topNav?: boolean;
   children: ReactNode;
   user: AppShellUser | null;
@@ -118,24 +126,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-/**
- * Top-bar brand (D29): the rail header's tile, the community name and the plan.
- * Not a switcher — switching stays in ProfileMenu's "Switch Community".
- */
-function ShellBrand({ communityName, plan }: { communityName: string | null; plan: string | null }) {
-  const planId = plan ? resolvePlanId(plan) : null;
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <PropertyProTile />
-      <span className="max-w-[16rem] truncate text-sm font-semibold text-content">
-        {communityName ?? 'PropertyPro'}
-      </span>
-      {planId ? <PlanBadge label={PLAN_FEATURES[planId].displayName} /> : null}
-    </div>
-  );
-}
-
-function ShellInner({ topNav: topNavFlag = TOP_NAV_ENABLED, children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw
@@ -150,12 +141,6 @@ function ShellInner({ topNav: topNavFlag = TOP_NAV_ENABLED, children, user, comm
       subscriptionCanceledAt: subscriptionCanceledAt ?? null,
       freeAccessExpiresAt: freeAccessExpiresAt ?? null,
     }) === 'lapsed';
-  const pathname = usePathname();
-  // Tabs need something to list: a community, or the cross-community PM portfolio
-  // routes. With neither (e.g. /select-community) the tab model is empty and the
-  // hamburger is lg:hidden, which would leave no navigation at lg+; the rail
-  // handles that state on purpose (its community picker), so keep it there.
-  const topNav = topNavFlag && (community != null || isPmPortfolioPath(pathname ?? ''));
   const { mobileOpen, setMobileOpen } = useSidebar();
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
@@ -220,8 +205,26 @@ function ShellInner({ topNav: topNavFlag = TOP_NAV_ENABLED, children, user, comm
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface-page">
-      {/* Desktop sidebar — replaced by the tab row under the top bar when the top-nav flag is on */}
-      {!topNav && (
+      {/* Desktop sidebar */}
+      {topNav && DesktopNavSlot ? (
+        // Flag on: the tab row replaces the rail, except where it has nothing to list (R24).
+        <DesktopNavSlot hasCommunity={community != null}>
+          <div className="hidden lg:block">
+            <AppSidebar
+              communityId={community?.id ?? null}
+              communityName={community?.name ?? null}
+              communityType={community?.type ?? null}
+              role={role}
+              isUnitOwner={isUnitOwner ?? false}
+              designation={designation ?? null}
+              features={features}
+              isLapsed={isLapsed}
+              userName={user?.fullName ?? null}
+              plan={community?.plan ?? null}
+            />
+          </div>
+        </DesktopNavSlot>
+      ) : (
         <div className="hidden lg:block">
           <AppSidebar
             communityId={community?.id ?? null}
@@ -274,12 +277,16 @@ function ShellInner({ topNav: topNavFlag = TOP_NAV_ENABLED, children, user, comm
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
           brand={
-            topNav ? (
-              <ShellBrand communityName={community?.name ?? null} plan={community?.plan ?? null} />
+            topNav && ShellBrandSlot ? (
+              <ShellBrandSlot
+                hasCommunity={community != null}
+                communityName={community?.name ?? null}
+                plan={community?.plan ?? null}
+              />
             ) : undefined
           }
         />
-        {topNav && (
+        {topNav && ShellTopNav && (
           <ShellTopNav
             communityId={community?.id ?? null}
             communityType={community?.type ?? null}

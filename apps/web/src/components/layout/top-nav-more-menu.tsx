@@ -2,7 +2,8 @@
 
 /**
  * "More" — the grouped overflow of the top tab bar. A disclosure button over
- * the Radix Popover (Escape closes it and returns focus to the trigger).
+ * the Radix Popover (Escape closes it and returns focus to the trigger); the
+ * trigger's `aria-haspopup="dialog"` comes from Radix, so it is not restated.
  */
 import { useState } from 'react';
 import Link from 'next/link';
@@ -34,7 +35,6 @@ export function TopNavMoreMenu({ groups, hasActive, hasBadge, onLockedSelect }: 
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-haspopup="true"
           className={cn(
             'inline-flex min-h-11 items-center gap-1 border-b-2 px-3 text-sm font-medium',
             hasActive
@@ -67,6 +67,7 @@ export function TopNavMoreMenu({ groups, hasActive, hasBadge, onLockedSelect }: 
                       {link.planLocked ? (
                         <button
                           type="button"
+                          aria-haspopup="dialog"
                           className={ITEM_CLASS}
                           onClick={() => {
                             setOpen(false);
