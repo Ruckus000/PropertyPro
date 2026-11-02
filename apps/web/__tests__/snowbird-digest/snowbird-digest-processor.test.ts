@@ -110,6 +110,20 @@ describe('processSnowbirdDigests', () => {
     expect(result).toMatchObject({ emailsSent: 0, failed: 2 });
   });
 
+  // `/communities/{id}/dashboard` does not exist; the dashboard is
+  // `/dashboard?communityId={id}` (same shape as the notification digest).
+  it('links the digest to the community dashboard', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+    try {
+      await processSnowbirdDigests(MONDAY_8AM_EASTERN);
+
+      const args = sendEmailMock.mock.calls[0]![0] as { react: { props: { portalUrl: string } } };
+      expect(args.react.props.portalUrl).toBe('https://app.example.test/dashboard?communityId=7');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('keys each send by community, recipient and community-local date', async () => {
     await processSnowbirdDigests(MONDAY_8AM_EASTERN);
 

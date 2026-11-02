@@ -470,6 +470,70 @@ describe('notification-service', () => {
       );
     });
 
+    // There is no top-level /compliance page; the email used to link
+    // `/compliance?communityId=…`, which 404s.
+    it('links the compliance alert email to the community compliance page', async () => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+      try {
+        setupMock(
+          [{ userId: 'u-cam', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager' }],
+          [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
+          [],
+        );
+
+        await sendNotification(
+          COMMUNITY_ID,
+          { type: 'compliance_alert', alertTitle: 'Missing Financial Report', alertDescription: 'x', severity: 'critical' },
+          'community_admins',
+          'actor-1',
+        );
+
+        const emailArgs = sendEmailMock.mock.calls[0]![0] as { react: { props: { dashboardUrl: string } } };
+        expect(emailArgs.react.props.dashboardUrl).toBe(
+          `https://app.example.test/communities/${COMMUNITY_ID}/compliance`,
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('links a digest-queued compliance alert to the community compliance page', async () => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+      try {
+        setupMock(
+          [{ userId: 'u-cam', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager' }],
+          [{ id: 'u-cam', email: 'cam@example.com', fullName: 'CAM User', deletedAt: null }],
+          [{ userId: 'u-cam', emailFrequency: 'daily_digest', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true }],
+        );
+        enqueueDigestItemsMock.mockResolvedValueOnce({ enqueued: 1, duplicates: 0 });
+
+        await sendNotification(
+          COMMUNITY_ID,
+          {
+            type: 'compliance_alert',
+            alertTitle: 'Missing Financial Report',
+            alertDescription: 'x',
+            severity: 'warning',
+            sourceType: 'compliance',
+            sourceId: 'checklist-1',
+          },
+          'community_admins',
+          'actor-1',
+        );
+
+        expect(sendEmailMock).not.toHaveBeenCalled();
+        expect(enqueueDigestItemsMock).toHaveBeenCalledWith([
+          expect.objectContaining({
+            sourceType: 'compliance',
+            sourceId: 'checklist-1',
+            actionUrl: `https://app.example.test/communities/${COMMUNITY_ID}/compliance`,
+          }),
+        ]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('passes the compliance punch list through to the email', async () => {
       setupMock(
         [{ userId: 'u-cam', role: 'property_manager', isAdmin: true, isUnitOwner: false, displayTitle: 'Community Manager' }],

@@ -222,7 +222,7 @@ export async function processSnowbirdDigests(
             newDocuments: sections.newDocuments,
             upcoming: sections.upcoming,
             complianceNote: sections.complianceNote,
-            portalUrl: `${baseUrl}/communities/${communityId}/dashboard`,
+            portalUrl: `${baseUrl}/dashboard?communityId=${communityId}`,
             unsubscribeUrl,
           }),
           category: 'non-transactional',

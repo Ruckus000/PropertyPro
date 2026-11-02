@@ -362,7 +362,7 @@ function buildDigestPayload(
     eventType: event.type,
     eventTitle: event.alertTitle,
     eventSummary: event.alertDescription,
-    actionUrl: `${baseUrl}/compliance?communityId=${communityId}`,
+    actionUrl: `${baseUrl}/communities/${communityId}/compliance`,
   };
 }
 
@@ -566,7 +566,7 @@ function renderEmailForEvent(
           alertTitle: event.alertTitle,
           alertDescription: event.alertDescription,
           dueDate: event.dueDate,
-          dashboardUrl: `${baseUrl}/compliance?communityId=${communityId}`,
+          dashboardUrl: `${baseUrl}/communities/${communityId}/compliance`,
           severity: event.severity,
           items: event.items,
         }),
