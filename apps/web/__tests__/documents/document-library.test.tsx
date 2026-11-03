@@ -210,6 +210,22 @@ describe('DocumentLibrary', () => {
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('image/png');
   });
 
+  it('gives the list the full width until a document is opened', () => {
+    renderLibrary();
+    // The inspector's column: the nearest p-6 column around the viewer.
+    const column = () => screen.getByTestId('viewer-mime').closest('.min-w-0.p-6')!;
+    const tokens = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/);
+
+    // Hidden at every width: `xl:block` is what used to show an empty pane.
+    expect(tokens(column())).toContain('hidden');
+    expect(tokens(column()).filter((t) => /^\w+:block$/.test(t))).toEqual([]);
+    expect(tokens(column().parentElement!).join(' ')).not.toMatch(/xl:grid-cols-/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select Document' }));
+    expect(tokens(column())).not.toContain('hidden');
+    expect(tokens(column().parentElement!).join(' ')).toMatch(/xl:grid-cols-/);
+  });
+
   it('shows the statutory reading to a viewer who can read compliance', () => {
     renderLibrary();
 
