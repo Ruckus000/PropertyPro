@@ -49,7 +49,7 @@ export function PlanBadge({
     <span
       aria-label={`${text} plan feature`}
       className={[
-        "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[10px] font-semibold uppercase tracking-[0.08em]",
+        "inline-flex h-5 shrink-0 items-center rounded-full px-2 text-xs leading-none font-semibold uppercase tracking-[0.08em]",
         classes(tone),
         className ?? "",
       ]
