@@ -50,6 +50,7 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { resolveTheme, toFontLinks } from '@propertypro/theme';
 import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 import { effectiveLook, type CommunityType } from '@propertypro/shared';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
@@ -211,7 +212,7 @@ export default async function SitePreviewPage({ searchParams }: PageProps) {
         Same attribute the shell uses on its main column behind the mobile
         drawer (`components/layout/app-shell.tsx`).
       */}
-      <div inert style={cssVars} className="site-frame" data-testid="site-preview-root">
+      <div inert style={cssVars} className={`site-frame ${SITE_FONT_CLASS}`} data-testid="site-preview-root">
         <Layout
           community={{
             id: community!.id,

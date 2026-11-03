@@ -13,6 +13,7 @@ import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { canvasThemeVars } from '@/lib/site-editor/canvas-theme';
 import { preventLinkNavigation } from '@/lib/site-editor/inert-links';
 import { SiteChrome } from '@/components/public-site/layouts/SiteChrome';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 import type {
   SiteFooter,
   SiteNav,
@@ -278,6 +279,7 @@ export function Canvas({
         onClickCapture={preventLinkNavigation}
         className={cn(
           'site-frame overflow-hidden border bg-surface-card',
+          SITE_FONT_CLASS,
           device === 'phone'
             ? 'rounded-[var(--radius-lg)] border-4 border-edge-strong'
             : 'rounded-[var(--radius-md)] border-edge',

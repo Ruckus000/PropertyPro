@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolveTheme, toFontLinks } from '@propertypro/theme';
 import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -83,7 +84,7 @@ export default async function PreviewPage({
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <div style={cssVars} className="site-frame min-h-screen flex flex-col font-body">
+      <div style={cssVars} className={`site-frame min-h-screen flex flex-col font-body ${SITE_FONT_CLASS}`}>
         {/* Dev banner */}
         <div className="bg-status-warning-bg border-b border-status-warning-border px-4 py-2 text-center text-xs text-status-warning">
           Preview Mode — Community: <strong>{community.name}</strong> (ID: {community.id})

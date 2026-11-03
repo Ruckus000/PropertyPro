@@ -60,7 +60,8 @@ const fraunces = localFont({
   adjustFontFallback: "Times New Roman",
 });
 
-// NOTE: `next/font/local` derives the CSS family name from the FILE name, so
+// NOTE: `next/font/local` names the @font-face family after the CONST the call
+// is assigned to (measured: `const geistMono` emits `geistMono`), so
 // the Fraunces call here and the one in `(marketing)/layout.tsx` both emit the
 // family `fraunces`. On a marketing page both stylesheets load and that family ends up
 // with three @font-face rules (normal here, normal + italic there). Harmless
