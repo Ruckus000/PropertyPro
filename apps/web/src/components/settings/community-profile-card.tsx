@@ -363,7 +363,7 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
         ) : null}
 
         <SettingsCardFooter note="Changes show on your website right away.">
-          <Button type="submit" disabled={!changed || saving}>
+          <Button type="submit" size="sm" disabled={!changed || saving}>
             {saving ? 'Saving…' : 'Save profile'}
           </Button>
         </SettingsCardFooter>

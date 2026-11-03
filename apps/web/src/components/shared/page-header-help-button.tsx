@@ -49,9 +49,8 @@ export function PageHeaderHelpButton() {
       aria-label="Open help for this page"
       title="Open help for this page (?)"
       // Touch target: the Button primitive is 44px below `md` and ghost+sm is
-      // 28px from `md` up, where pointer precision is finer. The `min-h-11` /
-      // `sm:min-h-0` pair below predates the primitive carrying that rule.
-      className="min-h-11 text-content-secondary hover:bg-transparent hover:text-interactive sm:min-h-0"
+      // 28px from `md` up, where pointer precision is finer.
+      className="text-content-secondary hover:bg-transparent hover:text-interactive"
     >
       <HelpCircle aria-hidden="true" />
       Help

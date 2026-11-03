@@ -25,7 +25,7 @@
 1. Never rely on color alone. Always pair with icon + text label.
 2. Status escalation follows the 4-tier system (`calm`/`aware`/`urgent`/`critical`).
 3. Critical (overdue) items must be visible without scrolling on the dashboard.
-4. All interactive elements meet 44px touch target on mobile, 36px on desktop.
+4. All interactive elements meet 44px touch target on mobile, 32px on desktop (Button `sm`, 28px, is the one dense exception).
 5. All focus states use the focus ring system. No element may suppress `focus-visible`.
 
 ## Motion

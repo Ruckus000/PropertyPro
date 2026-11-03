@@ -192,7 +192,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - NEVER suppress `:focus-visible`. All interactive elements must show the focus ring.
 - All decorative icons: `aria-hidden="true"`. Collapsible sections: `aria-expanded`. Alerts: `role="alert"`.
 - Respect `prefers-reduced-motion`. Motion must be functional (feedback/orientation/attention), never decorative.
-- Body text minimum: `base` (16px). Caption (`xs`/12px) is metadata-only, never primary content.
+- Body text minimum: 16px in both text modes, i.e. `sm` and up with large text (the default) and `base` and up in standard mode. Caption (`xs`, 12px standard / 14px large) is metadata-only, never primary content.
 
 ## UX Writing
 

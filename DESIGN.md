@@ -111,7 +111,7 @@ Those are the standard-mode token values. Large text is on by default and the ro
 
 Interface text (`text-sm`) is 16px in the default experience and prose (`text-base`) is 18px; standard mode gives 14px and 16px. Values come from the `.large-text` block in `packages/ui/src/styles/tokens.css`.
 
-**Rules:** Body text floor is 16px (`base`). Compliance document content uses `base` or `lg` minimum. Caption (`xs`) is metadata-only, never primary content. Large text mode available via `.large-text` class on `<html>`.
+**Rules:** Body text floor is 16px in both modes: `sm` and up with large text (the default), `base` and up in standard mode. Compliance document content uses `base` or `lg` minimum. Caption (`xs`) is metadata-only, never primary content. Large text is the `.large-text` class the root layout puts on `<html>`; choosing standard text size removes it before first paint (`LARGE_TEXT_INIT_SCRIPT`).
 
 ---
 
@@ -229,7 +229,7 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 - **Color:** Never rely on color alone. Always icon + text + color for status.
 - **Forced colors:** `@media (forced-colors: active)` fallback (3px solid CanvasText) for focus ring
 - **ARIA:** `role="alert"` on AlertBanner, `aria-expanded` on collapsible sections, `aria-hidden="true"` on decorative icons
-- **Large text:** `.large-text` class on `<html>` scales all type sizes up for readability
+- **Large text:** on by default (`.large-text` on `<html>`), one type step up; users can switch to standard size
 
 Source: `packages/ui/src/styles/tokens.css` (focus ring + motion + forced-colors sections)
 

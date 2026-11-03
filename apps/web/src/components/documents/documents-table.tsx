@@ -46,7 +46,7 @@ function StateBadge({ state }: { state: DocumentState }) {
     <span
       data-testid="document-state"
       data-state={state}
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
     >
       {display.label}
     </span>
