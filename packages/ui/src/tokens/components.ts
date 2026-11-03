@@ -61,9 +61,9 @@ export const componentTokens = {
   },
   card: {
     padding: {
-      sm: primitiveSpace[4],
-      md: primitiveSpace[5],
-      lg: primitiveSpace[6],
+      sm: primitiveSpace[3],
+      md: primitiveSpace[4],
+      lg: primitiveSpace[5],
     },
     radius: primitiveRadius.md,
     gap: primitiveSpace[4],

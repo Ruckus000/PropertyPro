@@ -34,7 +34,7 @@ interface KpiCardProps {
 function KpiCardSkeleton() {
   return (
     <Card>
-      <CardContent className="p-6">
+      <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-8 w-8 rounded-md" />
@@ -77,7 +77,7 @@ function KpiCard({
 
   const content = (
     <Card>
-      <CardContent className="p-6">
+      <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium text-content-secondary">{title}</p>
           {Icon && (

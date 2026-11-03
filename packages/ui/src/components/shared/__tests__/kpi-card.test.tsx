@@ -32,4 +32,16 @@ describe('KpiCard', () => {
     expect(link.tagName).toBe('A');
     expect(link.getAttribute('href')).toBe('/billing');
   });
+  it('pads its content wrapper 16px, not 24px', () => {
+    const { container } = render(<KpiCard title="MRR" value="$1" />);
+    const content = container.querySelector('p')!.parentElement!.parentElement as HTMLElement;
+    expect(content.classList.contains('p-4')).toBe(true);
+    expect(content.classList.contains('p-6')).toBe(false);
+  });
+  it('pads its loading skeleton 16px, not 24px', () => {
+    const { container } = render(<KpiCard title="MRR" value="$1" isLoading />);
+    const content = container.firstElementChild!.firstElementChild as HTMLElement;
+    expect(content.classList.contains('p-4')).toBe(true);
+    expect(content.classList.contains('p-6')).toBe(false);
+  });
 });
