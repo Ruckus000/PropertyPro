@@ -59,8 +59,14 @@ describe('public-site Inter loader', () => {
     expect(siteFont).toMatch(/\bconst inter\s*=\s*localFont\(/);
   });
 
-  it('exposes the class the roots apply', () => {
-    expect(siteFont).toMatch(/export const SITE_FONT_CLASS\s*=\s*inter\.variable/);
+  it('exposes a class that sets font-family (className), not only the variable', () => {
+    // `.variable` only defines a custom property. Sunset Condos' theme writes
+    // `--theme-font-body:Source Sans 3` unquoted, which is invalid at
+    // computed-value time, so its text inherits from the frame; only a real
+    // `font-family` on the frame keeps that inheritance on Inter, not Geist.
+    const decl = siteFont.match(/export const SITE_FONT_CLASS\s*=\s*([^;]+);/)?.[1] ?? '';
+    expect(decl).toContain('inter.className');
+    expect(decl).toContain('inter.variable');
   });
 
   it('is needed: the theme default body font is the family Inter', () => {
@@ -76,5 +82,15 @@ describe('every site-frame render root loads it', () => {
     // Used on the element, not just imported.
     expect(text.replace(/import \{ SITE_FONT_CLASS \}[^\n]*\n/, '')).toContain('SITE_FONT_CLASS');
     expect(text).toContain('site-frame');
+  });
+
+  it.each(SITE_FRAME_ROOTS)('%s never puts it on an element that also has font-body', (file) => {
+    // Two font-family classes of equal specificity resolve by stylesheet order,
+    // which could let Inter beat a valid theme font. Put it on a wrapper.
+    for (const line of read(file).split('\n')) {
+      if (line.includes('SITE_FONT_CLASS') && !line.includes('import ')) {
+        expect(line).not.toContain('font-body');
+      }
+    }
   });
 });
