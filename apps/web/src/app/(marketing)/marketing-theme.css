@@ -46,7 +46,7 @@
   --mk-shadow:0 18px 40px -20px rgba(80,40,20,.35);
   --mk-shadow-sm:0 8px 24px -12px rgba(80,40,20,.28);
 
-  --mk-sans:var(--font-sans),Inter,system-ui,sans-serif;
+  --mk-sans:var(--font-marketing-sans),Inter,system-ui,sans-serif;
   --mk-disp:var(--font-fraunces),Georgia,"Times New Roman",serif;
   --mk-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
 

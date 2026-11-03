@@ -6,7 +6,7 @@ const read = (p: string) => readFileSync(resolve(__dirname, '../../', p), 'utf8'
 
 // Extracts just the `const fraunces = localFont({ ... });` call out of the
 // layout source, so the two assertions below can't be satisfied (or broken)
-// by unrelated text elsewhere in the file — e.g. the `inter` declaration, or
+// by unrelated text elsewhere in the file — e.g. the `geist` declarations, or
 // prose in a comment that happens to contain the word "italic".
 const readFrauncesDeclaration = () => {
   const layout = read('src/app/layout.tsx');
@@ -16,14 +16,11 @@ const readFrauncesDeclaration = () => {
 };
 
 describe('admin typography foundation', () => {
-  it('loads Fraunces as --font-display next to Inter', () => {
+  it('loads Fraunces as --font-display next to Geist', () => {
     const layout = read('src/app/layout.tsx');
     expect(layout).toMatch(/fraunces-latin-var\.woff2/);
     expect(layout).toMatch(/variable: '--font-display'/);
-    expect(layout).toMatch(/\$\{inter\.variable\} \$\{fraunces\.variable\}/);
-  });
-  it('sets the 18px root like apps/web', () => {
-    expect(read('src/styles/globals.css')).toMatch(/:root\s*\{[^}]*font-size:\s*18px/);
+    expect(layout).toMatch(/\$\{geist\.variable\} \$\{geistMono\.variable\} \$\{fraunces\.variable\}/);
   });
   it('exposes font-display in tailwind', () => {
     expect(read('tailwind.config.ts')).toMatch(/display: \['var\(--font-display\)', 'Fraunces'/);

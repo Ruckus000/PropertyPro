@@ -132,7 +132,7 @@ export async function findOverflows(page: Page): Promise<Overflow[]> {
       // than my parent": `-mx-1 w-full overflow-x-auto` is the standard way to
       // stop a horizontal scroller clipping the focus ring on its first and
       // last child, and the 4px it gains on each side lands in the page gutter
-      // (`PageContainer` is `px-6 sm:px-8 lg:px-10`), clipping nothing.
+      // (`PageContainer` is `px-4 sm:px-6`), clipping nothing.
       // Measured on `/esign` at 768px: `parentPaddingRight` is 0 there, so a
       // padding-box comparison would report the same +4 — the element's own
       // `margin-right: -4px` is the whole story.

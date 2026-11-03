@@ -54,15 +54,15 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
       ) : null}
       {items && items.length > 0 ? (
         <>
-          <ul className="divide-y divide-edge rounded-md border border-edge bg-surface-card">
+          <ul className="cq divide-y divide-edge rounded-md border border-edge bg-surface-card">
             {items.slice(0, MAX_ROWS).map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <li key={item.id} className="flex flex-col gap-3 p-3 cq-sm:flex-row cq-sm:items-center cq-sm:justify-between">
                 <div className="min-w-0 space-y-1">
                   <StatusBadge status={TIER_STATUS[item.tier]} label={TIER_ROW_LABEL[item.tier]} size="sm" subtle />
                   <p className="text-base font-medium text-content">{item.title}</p>
                   <p className="text-sm text-content-secondary">{item.detail}</p>
                 </div>
-                <Button asChild variant="outline" className="h-11 md:h-9">
+                <Button asChild variant="outline">
                   <Link href={item.action.href}>{item.action.label}</Link>
                 </Button>
               </li>

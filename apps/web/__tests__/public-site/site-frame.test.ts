@@ -123,6 +123,6 @@ describe('every public-site render root carries the frame', () => {
   });
 
   it.each([...FRAME_PROVIDERS, ...RENDER_ROOTS])('%s renders inside site-frame', (root) => {
-    expect(readFileSync(join(WEB_SRC, root), 'utf8')).toMatch(/className="[^"]*\bsite-frame\b|'site-frame\b/);
+    expect(readFileSync(join(WEB_SRC, root), 'utf8')).toMatch(/className=(?:\{`|")[^"`]*\bsite-frame\b|'site-frame\b/);
   });
 });

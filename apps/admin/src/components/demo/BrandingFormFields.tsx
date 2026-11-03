@@ -229,7 +229,7 @@ export function BrandingFormFields({
                   onChange={(e) => handleFieldChange(key, e.target.value)}
                   pattern="^#[0-9a-fA-F]{6}$"
                   maxLength={7}
-                  className="h-7 py-1 font-mono text-xs"
+                  className="h-11 md:h-7 py-1 font-mono text-xs"
                 />
               </div>
             </div>

@@ -31,7 +31,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - **Page gutter is the shell's job, not the page's.** The authenticated page gutter
   (horizontal `px`, vertical `py`, centred max-width) is single-sourced in
   `PageContainer` (`components/layout/page-container.tsx`, rendered by the app shell:
-  `px-6 sm:px-8 lg:px-10 py-8`, `max-w-[1400px]`). Author pages with `PageBody`
+  `px-4 sm:px-6 py-5`, `max-w-[1600px]`, fluid). Author pages with `PageBody`
   (`components/shared/page-body.tsx`) as the content root — it owns vertical rhythm
   (`space-y-6`) and optional narrower centred columns
   (`width="prose|form|content|reading|narrow"`), and applies NO horizontal padding.
@@ -45,9 +45,9 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 - ALWAYS use semantic CSS variables: `--text-primary`, `--surface-card`, `--border-default`, `--interactive-primary`. Never raw hex.
 - Borders first, shadows second. Use `--border-default` before reaching for elevation.
-- Elevation: E0 (cards) → E1 (hover/sticky) → E2 (dropdowns/popovers) → E3 (modals). E2/E3 are ONLY for overlays. Shadows are slate-tinted and single-sourced from `--elevation-*`; Tailwind `shadow-sm`/`shadow`→E1, `shadow-md`→E2, `shadow-lg`/`xl`/`2xl`→E3.
+- Elevation: E0 (flat — cards at rest, no shadow) → E1 (sticky bars; card hover only where a call site opts in) → E2 (dropdowns/popovers) → E3 (modals). E2/E3 are ONLY for overlays. Buttons carry no shadow in any variant. Shadows are slate-tinted and single-sourced from `--elevation-*`; Tailwind `shadow-sm`/`shadow`→E1, `shadow-md`→E2, `shadow-lg`/`xl`/`2xl`→E3.
 - One filled primary button per view region (card/modal/page header/form footer); everything else `outline`/`ghost`/`link`.
-- Radius: sm(6px) inputs, md(10px) cards/buttons, lg(16px) modals, full badges/avatars.
+- Radius (Geist scale, adopted 2026-11-03): xs(4px), sm(6px) inputs, md(8px) cards/buttons, lg(12px) modals, full badges/avatars. Tailwind `rounded-*` read `var(--radius-*)`, so a radius edit is a token edit.
 - Status: NEVER color alone. Always icon + text + color. Use `getStatusConfig()` from `packages/ui/src/constants/status.ts` (re-exported via `apps/web/src/lib/constants/status.ts`).
 
 ## Token enforcement
@@ -168,12 +168,16 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 ## Component Dimensions
 
-- Buttons: sm(32px) default(36px) lg(40px) icon(36px). Radius md. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
-- Inputs: sm(36px) md(40px) lg(48px). Radius sm. 1px border, 2px on focus.
-- Cards: radius md. Padding sm(16) md(20) lg(24). E0 rest, E1 hover.
+- Geist density, adopted 2026-11-03. The root font size is the browser default (16px; no 18px override). Large text is on by default, so default-mode interface text (`text-sm`) renders 16px and prose (`text-base`) 18px; standard mode gives 14/16. `apps/admin` is at parity: no root font-size override, Geist + Geist Mono loaded from its own `apps/admin/src/app/fonts/` copies (byte-identical to web's; `apps/admin/__tests__/styles/` pins both), Fraunces kept for `AdminPageHeader`.
+- Buttons: every size is 44px below `md` (768px). From `md` up: sm(28px) default(32px) lg(40px) icon(32px). Radius md. No shadow on any variant. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
+- Overriding a control's height or width: write the `md:` twin too. tailwind-merge only drops a class in the SAME variant, so `className="h-auto"` on a Button replaces `h-11` but leaves the primitive's `md:h-8` standing, and the button is fixed-height again from 768px up. Use `h-auto md:h-auto` (and `w-auto md:w-auto` on an icon button); pinned in `packages/ui/src/components/ui/__tests__/button.test.tsx`.
+- Inputs and Select triggers (`SelectTrigger`, which sits beside Input in every form): 44px below `md`, 32px from `md` up. Radius sm. `border-edge-strong`, no shadow, 1px border, 2px on focus.
+- Textareas: a multi-line field with a 60px minimum height at every width (not a 44/32 control). Radius sm, `border-edge-strong`, no shadow.
+- Cards: radius md, flat at rest (E0, no shadow). Padding 16 (`CardHeader` `p-4`, `CardContent`/`CardFooter` `p-4 pt-0`). E1 on hover only where a call site opts in.
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).
-- Table rows: 52px body, 40px header, 12px cell padding.
-- Touch targets: 44px mobile (<768px), 36px desktop (>=768px).
+- Table rows: 40px body (`py-2`), 32px header (`h-8`), 12px cell padding.
+- Page frame: `PageContainer` gutter `px-4 sm:px-6`, `py-5`, `max-w-[1600px]` (fluid, centred above that). Components that must lay out by the width of their own box (the sidebar and top nav change how much of the viewport a page gets) use the `cq` container-query vocabulary: mark the box `cq`, then `cq-sm`/`cq-md`/`cq-lg:` apply from 480/720/960px of that box (named container `cq`, `apps/web/tailwind.config.ts`). Touch heights (44px vs 32px) stay on the viewport `md:` breakpoint, never on `cq-*`.
+- Touch targets: 44px below 768px; on desktop (>=768px) the floor for a control is 32px. Button `sm` (28px) is the single dense exception, still above WCAG 2.5.8's 24px minimum. Dialog/Sheet close buttons are `md:h-9` (36px), which meets the floor.
 
 ## State Handling
 
@@ -188,7 +192,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - NEVER suppress `:focus-visible`. All interactive elements must show the focus ring.
 - All decorative icons: `aria-hidden="true"`. Collapsible sections: `aria-expanded`. Alerts: `role="alert"`.
 - Respect `prefers-reduced-motion`. Motion must be functional (feedback/orientation/attention), never decorative.
-- Body text minimum: `base` (16px). Caption (`xs`/11px) is metadata-only, never primary content.
+- Body text minimum: `base` (16px). Caption (`xs`/12px) is metadata-only, never primary content.
 
 ## UX Writing
 

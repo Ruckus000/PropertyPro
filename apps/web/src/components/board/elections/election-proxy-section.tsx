@@ -8,7 +8,6 @@ import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserNames } from '@/hooks/use-user-names';
-import { cn } from '@/lib/utils';
 import {
   useApproveElectionProxy,
   useBoardElectionProxies,
@@ -113,7 +112,6 @@ export function ElectionProxySection({
           </p>
           <Button
             type="button"
-            className="h-11 md:h-9"
             disabled={!selectedProxyHolderUserId}
             loading={createProxy.isPending}
             onClick={() => void handleCreateProxy()}
@@ -163,7 +161,6 @@ export function ElectionProxySection({
                       <Button
                         type="button"
                         variant="secondary"
-                        className="h-11 md:h-9"
                         disabled={isMutating}
                         loading={approveProxy.isPending}
                         onClick={() => void approveProxy.mutateAsync(proxy.id)}
@@ -173,7 +170,6 @@ export function ElectionProxySection({
                       <Button
                         type="button"
                         variant="destructive"
-                        className="h-11 md:h-9"
                         disabled={isMutating}
                         loading={rejectProxy.isPending}
                         onClick={() => void rejectProxy.mutateAsync(proxy.id)}
@@ -187,7 +183,6 @@ export function ElectionProxySection({
                     <Button
                       type="button"
                       variant="outline"
-                      className={cn('h-11 md:h-9')}
                       disabled={isMutating}
                       loading={revokeProxy.isPending}
                       onClick={() => void revokeProxy.mutateAsync(proxy.id)}

@@ -131,7 +131,7 @@ export function AuditTrailViewer({ communityId, timeZone, syncUrl = true }: Audi
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
-          {state.scope && <p className="truncate font-display text-2xl text-content">{scopeLabel ?? 'Selected'}</p>}
+          {state.scope && <p className="truncate font-semibold tracking-tight text-2xl text-content">{scopeLabel ?? 'Selected'}</p>}
           <p className="text-base text-content-secondary">{intro}</p>
         </div>
         {state.scope ? (

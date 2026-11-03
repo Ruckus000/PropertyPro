@@ -454,7 +454,7 @@ function QueueRowItem({
                   <Button
                     variant="link"
                     size="sm"
-                    className="h-auto px-0"
+                    className="h-auto md:h-auto px-0"
                     disabled={disabled}
                     onClick={() => setShowDescription(true)}
                   >

@@ -20,6 +20,7 @@ import type { CanvasContext } from '@/lib/site-editor/load-canvas-context';
 import { canvasThemeVars } from '@/lib/site-editor/canvas-theme';
 import { preventLinkNavigation } from '@/lib/site-editor/inert-links';
 import { SiteChrome } from '@/components/public-site/layouts/SiteChrome';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 import type {
   SiteFooter,
   SiteNav,
@@ -232,7 +233,7 @@ function PreviewBody({ communityId, context, now, nav, footer, page }: PreviewBo
       data-testid="preview-frame"
       // Read-only means the site's links must not navigate the editor either.
       onClickCapture={preventLinkNavigation}
-      className="site-frame overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card"
+      className={`site-frame ${SITE_FONT_CLASS} overflow-hidden rounded-[var(--radius-md)] border border-edge bg-surface-card`}
     >
       {fontLinks.map((href) => (
         <link key={href} rel="stylesheet" href={href} precedence="site-fonts" />

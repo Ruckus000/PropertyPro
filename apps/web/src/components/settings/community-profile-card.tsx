@@ -324,7 +324,7 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
               }}
               aria-invalid={errors.unitCount ? true : undefined}
               aria-describedby={countDescribedBy}
-              className={cn('h-11 w-full sm:w-32 md:h-9', errors.unitCount && 'border-edge-error')}
+              className={cn('w-full sm:w-32', errors.unitCount && 'border-edge-error')}
             />
           }
         >
@@ -363,7 +363,7 @@ function ProfileForm({ communityId, communityType, profile }: FormProps) {
         ) : null}
 
         <SettingsCardFooter note="Changes show on your website right away.">
-          <Button type="submit" size="sm" className="h-11 md:h-8" disabled={!changed || saving}>
+          <Button type="submit" disabled={!changed || saving}>
             {saving ? 'Saving…' : 'Save profile'}
           </Button>
         </SettingsCardFooter>
@@ -472,7 +472,7 @@ function ProfileField({
       {multiline ? (
         <Textarea {...shared} rows={3} className={cn(error && 'border-edge-error')} />
       ) : (
-        <Input {...shared} ref={inputRef} type={type} className={cn('h-11 md:h-9', error && 'border-edge-error')} />
+        <Input {...shared} ref={inputRef} type={type} className={cn(error && 'border-edge-error')} />
       )}
       {help ? (
         <p id={`${id}-help`} className="text-sm text-content-secondary">

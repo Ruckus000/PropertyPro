@@ -37,6 +37,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // `next/font/local` is rewritten by Next's compiler at build time; under
+      // vitest the call throws at module load. Same stub as apps/web.
+      'next/font/local': resolve(import.meta.dirname, './__tests__/stubs/next-font-local.ts'),
       '@': resolve(import.meta.dirname, './src'),
       '@propertypro/db': resolve(import.meta.dirname, '../../packages/db/src'),
       // Source, not dist: @propertypro/email's package entry points at a build

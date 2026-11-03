@@ -77,7 +77,7 @@ export function ElectionAdminActions({
       <div className="flex flex-wrap gap-2">
         {status === 'draft' ? (
           <>
-            <Button type="button" className="h-11 md:h-9" onClick={() => setOpenDialog(true)}>
+            <Button type="button" onClick={() => setOpenDialog(true)}>
               Open Election
             </Button>
             <AlertDialog open={openDialog} onOpenChange={setOpenDialog}>
@@ -111,7 +111,7 @@ export function ElectionAdminActions({
 
         {status === 'open' ? (
           <>
-            <Button type="button" variant="secondary" className="h-11 md:h-9" onClick={() => setCloseDialog(true)}>
+            <Button type="button" variant="secondary" onClick={() => setCloseDialog(true)}>
               Close Election
             </Button>
             <AlertDialog open={closeDialog} onOpenChange={setCloseDialog}>
@@ -145,7 +145,7 @@ export function ElectionAdminActions({
 
         {status === 'closed' ? (
           <>
-            <Button type="button" className="h-11 md:h-9" onClick={() => setCertifyDialog(true)}>
+            <Button type="button" onClick={() => setCertifyDialog(true)}>
               Certify Results
             </Button>
             <AlertDialog open={certifyDialog} onOpenChange={setCertifyDialog}>
@@ -163,7 +163,6 @@ export function ElectionAdminActions({
                   value={resultsDocumentId}
                   onChange={(event) => setResultsDocumentId(event.target.value)}
                   placeholder="Results document ID (optional)"
-                  className="h-11 md:h-9"
                 />
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={certifyElection.isPending}>Cancel</AlertDialogCancel>
@@ -191,7 +190,7 @@ export function ElectionAdminActions({
 
         {cancelable ? (
           <>
-            <Button type="button" variant="destructive" className="h-11 md:h-9" onClick={() => setCancelDialog(true)}>
+            <Button type="button" variant="destructive" onClick={() => setCancelDialog(true)}>
               Cancel Election
             </Button>
             <AlertDialog open={cancelDialog} onOpenChange={setCancelDialog}>

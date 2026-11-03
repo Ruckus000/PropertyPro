@@ -8,7 +8,7 @@ import './marketing-theme.css';
 // (`marketing-theme.css:67`) and blockquotes (`:226`) are italic.
 //
 // Shares the CSS family name `fraunces` with the loader in `app/layout.tsx` —
-// `next/font/local` derives it from the file name. See the note there before
+// `next/font/local` derives it from the const name. See the note there before
 // changing either one.
 const fraunces = localFont({
   src: [
@@ -18,6 +18,22 @@ const fraunces = localFont({
   display: 'swap',
   variable: '--font-fraunces',
   adjustFontFallback: 'Times New Roman',
+});
+
+// Inter stays the marketing sans. The app shell moved to Geist, and
+// `--mk-sans` used to read `--font-sans`, so marketing loads Inter itself under
+// its own variable rather than inheriting whatever the app uses. Same file the
+// app shell used to load, so no new bytes and no change to the landing page.
+// Like the root layout's Inter before it, no `adjustFontFallback` (default).
+// next/font emits the generated family as `inter` (the const's name). The public
+// site's loader, `lib/public-site/site-font.ts`, emits the same family from the
+// same file; the two never share a page. Keep their descriptors identical.
+const inter = localFont({
+  src: '../fonts/inter-latin-var.woff2',
+  weight: '100 900',
+  style: 'normal',
+  display: 'swap',
+  variable: '--font-marketing-sans',
 });
 
 export const metadata: Metadata = {
@@ -52,6 +68,8 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`${fraunces.variable} marketing-theme`}>{children}</div>
+    <div className={`${inter.variable} ${fraunces.variable} marketing-theme`}>
+      {children}
+    </div>
   );
 }

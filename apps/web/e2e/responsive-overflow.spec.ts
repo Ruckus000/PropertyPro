@@ -3,9 +3,9 @@
  *
  * Why this exists: the authenticated sidebar is a static flex sibling that PUSHES
  * (`app-shell.tsx:182`, `NavRail` `w-[260px]`), so the content column is 260px narrower
- * than the viewport, plus 80px of `PageContainer` gutter. But every breakpoint in page
- * content keys off the VIEWPORT. Crossing 1024px the content box drops from ~959px to
- * ~684px at the exact pixel where every `lg:` layout switches on. Three screens shipped
+ * than the viewport, plus 48px of `PageContainer` gutter. But every breakpoint in page
+ * content keys off the VIEWPORT. Crossing 1024px the content box drops from ~975px to
+ * ~716px at the exact pixel where every `lg:` layout switches on. Three screens shipped
  * visibly broken in that band and no gate could see it: Playwright runs one project
  * (`devices['Desktop Chrome']` = 1280x720 — squarely inside the band) and asserts nothing
  * about layout, jsdom does no layout at all, and the lint guards check colour and
@@ -36,8 +36,8 @@ import { findOverflows } from './helpers/overflow';
  * *below* 768px, and `/mobile/` covers 16 routes with no equivalent for finance,
  * contracts, violations, esign, compliance or PM portfolio, so a phone user on
  * any of those gets this shell. Below 1024 the 260px rail becomes a drawer
- * (`app-shell.tsx`, `hidden lg:block`), so at 375 the content column is 327px:
- * viewport minus PageContainer's `px-6` gutter.
+ * (`app-shell.tsx`, `hidden lg:block`), so at 375 the content column is 343px:
+ * viewport minus PageContainer's `px-4` gutter.
  *
  * Both new widths were measured offline before being added here, against the
  * real compiled CSS in the real shell geometry, so this is not a speculative

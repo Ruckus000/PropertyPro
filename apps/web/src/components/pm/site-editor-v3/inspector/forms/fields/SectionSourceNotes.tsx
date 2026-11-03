@@ -52,7 +52,7 @@ export function SectionSourceNote({ communityId, blockType }: SectionSourceNoteP
         {blockType === 'documents' ? " Only documents you've made public are listed here." : null}
       </p>
       {blockType === 'announcements' && (
-        <Button asChild variant="outline" className="min-h-11 md:min-h-9">
+        <Button asChild variant="outline">
           <Link href={newAnnouncementHref(communityId)}>Write an announcement</Link>
         </Button>
       )}

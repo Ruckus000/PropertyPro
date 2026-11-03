@@ -8,9 +8,9 @@ import { primitiveRadius } from "./radius";
 export const componentTokens = {
   button: {
     height: {
-      sm: 36,
-      md: 40,
-      lg: 48,
+      sm: 28,
+      md: 32,
+      lg: 40,
     },
     padding: {
       sm: primitiveSpace[3],
@@ -46,9 +46,9 @@ export const componentTokens = {
   },
   input: {
     height: {
-      sm: 36,
-      md: 40,
-      lg: 48,
+      sm: 32,
+      md: 32,
+      lg: 40,
     },
     padding: {
       sm: primitiveSpace[2],
@@ -61,9 +61,9 @@ export const componentTokens = {
   },
   card: {
     padding: {
-      sm: primitiveSpace[4],
-      md: primitiveSpace[5],
-      lg: primitiveSpace[6],
+      sm: primitiveSpace[3],
+      md: primitiveSpace[4],
+      lg: primitiveSpace[5],
     },
     radius: primitiveRadius.md,
     gap: primitiveSpace[4],
@@ -88,12 +88,12 @@ export const componentTokens = {
   },
   table: {
     row: {
-      height: 52,
-      padding: primitiveSpace[4],
+      height: 40,
+      padding: primitiveSpace[3],
     },
     header: {
-      height: 40,
-      padding: primitiveSpace[4],
+      height: 32,
+      padding: primitiveSpace[3],
     },
     cell: {
       padding: primitiveSpace[3],

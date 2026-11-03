@@ -22,16 +22,17 @@ export const staticTokens = {
     "20": "80px",
   },
   radius: {
+    xs: "4px",
     sm: "6px",
-    md: "10px",
-    lg: "16px",
+    md: "8px",
+    lg: "12px",
     xl: "20px",
     "2xl": "24px",
     full: "9999px",
   },
   fontFamily: {
-    sans: `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
-    mono: `"JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+    sans: `"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
+    mono: `"Geist Mono", "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
     // "Florida Modern" display serif for page titles. next/font sets the real
     // --font-display at runtime (app/layout.tsx); this is the static fallback.
     display: `"Fraunces", Georgia, "Times New Roman", serif`,
@@ -70,18 +71,18 @@ export const staticTokens = {
   },
   sizing: {
     "touch-target-min": "44px",
-    "pointer-target-min": "36px",
+    "pointer-target-min": "32px",
     "component-padding": "var(--space-4)",
     "component-gap": "var(--space-3)",
-    "input-height": "48px",
-    "button-height": "48px",
+    "input-height": "44px",
+    "button-height": "44px",
   },
   sizingDesktop: {
     "component-padding": "var(--space-3)",
     "component-gap": "var(--space-2)",
-    "input-height": "40px",
-    "button-height": "40px",
-    "touch-target-min": "36px",
+    "input-height": "32px",
+    "button-height": "32px",
+    "touch-target-min": "32px",
   },
   focus: {
     "focus-ring-color": "var(--coral-500)",

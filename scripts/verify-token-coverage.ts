@@ -26,6 +26,12 @@ const DYNAMIC_ALLOWLIST = new Set<string>([
   // apps/web/src/app/(marketing)/marketing-theme.css.
   '--font-fraunces',
 
+  // `next/font/local` injects this the same way, from the Inter loader in
+  // `(marketing)/layout.tsx` (`variable: '--font-marketing-sans'`). It is not
+  // `--font-sans`: that one is the app's Geist and is defined in packages/tokens.
+  // Consumed by `--mk-sans` in apps/web/src/app/(marketing)/marketing-theme.css.
+  '--font-marketing-sans',
+
   // shadcn/ui `ChartStyle` (apps/web/src/components/ui/chart.tsx, emits
   // `  --color-${key}: ${color};` per series key from a chart's
   // `ChartConfig`) injects these into a `<style>` tag at render time — there

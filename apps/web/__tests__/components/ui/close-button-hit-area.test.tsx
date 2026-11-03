@@ -1,7 +1,7 @@
 /**
  * The Sheet and Dialog close buttons must meet the touch-target rule in
- * `.claude/rules/design.md` ("Component Dimensions"): 44px below `md`, 36px at
- * `md` and up.
+ * `.claude/rules/design.md` ("Component Dimensions"): 44px below `md`, with a
+ * 32px floor at `md` and up (these close buttons are `md:h-9`, 36px, above it).
  *
  * Both used to be `absolute right-4 top-4` with no padding around a 16px icon,
  * so the hit area WAS the icon: measured live on 2026-10-14, the Operations

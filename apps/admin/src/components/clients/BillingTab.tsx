@@ -277,14 +277,14 @@ export function BillingTab({ communityId }: BillingTabProps) {
               <Button
                 key={tile.action}
                 variant="outline"
-                className="min-h-11 justify-start md:min-h-9"
+                className="justify-start"
                 onClick={() => setOpenAction(tile.action)}
               >
                 {tile.label}
               </Button>
             ))}
 
-            <Button asChild variant="outline" className="min-h-11 justify-start md:min-h-9">
+            <Button asChild variant="outline" className="justify-start">
               <a href={stripeDashboardUrl} target="_blank" rel="noreferrer">
                 Open in Stripe
                 <ExternalLink size={14} aria-hidden="true" className="ml-1" />
@@ -298,7 +298,7 @@ export function BillingTab({ communityId }: BillingTabProps) {
               a refund is not reversible.
             */}
             {refundUrl && (
-              <Button asChild variant="outline" className="min-h-11 justify-start md:min-h-9">
+              <Button asChild variant="outline" className="justify-start">
                 <a href={refundUrl} target="_blank" rel="noreferrer">
                   Issue refund
                   <ExternalLink size={14} aria-hidden="true" className="ml-1" />

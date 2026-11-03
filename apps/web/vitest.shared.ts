@@ -26,6 +26,9 @@ const resolveConfig = {
     // module in node_modules; alias it to a no-op stub so files guarded with
     // `import 'server-only'` remain importable under vitest.
     'server-only': path.resolve(__dirname, '__tests__/stubs/server-only.ts'),
+    // `next/font/local` is rewritten by Next's compiler at build time; under vitest
+    // the call throws at module load, so alias it to a stub (see the stub's header).
+    'next/font/local': path.resolve(__dirname, '__tests__/stubs/next-font-local.ts'),
     '@': path.resolve(__dirname, 'src'),
     '@propertypro/db': path.resolve(__dirname, '../../packages/db/src'),
     '@propertypro/email': path.resolve(__dirname, '../../packages/email/src'),

@@ -1,5 +1,6 @@
 import type { Config } from 'tailwindcss';
 import colors from 'tailwindcss/colors';
+import plugin from 'tailwindcss/plugin';
 
 const config: Config = {
   // KEEP. An earlier pass removed this on the grounds that "apps/admin has zero
@@ -277,11 +278,12 @@ const config: Config = {
         '20': '80px',
       },
       borderRadius: {
-        sm: '6px',
-        md: '10px',
-        lg: '16px',
-        xl: '20px',
-        '2xl': '24px',
+        xs: 'var(--radius-xs)',
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
       },
       // Focus-ring utilities (`ring-focus`, `ring-error`), matching web.
       // Drains need these — never suppress :focus-visible to avoid a raw ring color.
@@ -315,7 +317,29 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    /*
+     * Container-query variants. `.cq` makes an element a size container named
+     * `cq`; `cq-sm|md|lg:` then apply from 480 / 720 / 960px of THAT element's
+     * width, not the window's. Use them for components whose room depends on
+     * the shell (sidebar, top nav) rather than the device. Touch heights stay
+     * on viewport `md:` — touch size follows the device, not the box.
+     *
+     * The name is `cq`, never `site`, so these cannot match the public site's
+     * `.site-frame` container. A `cq-*` variant with no `.cq` ancestor never
+     * matches; `__tests__/styles/container-queries.test.ts` enforces that every
+     * consumer carries one. KEEP IDENTICAL to the matching block in
+     * `apps/web/tailwind.config.ts`.
+     */
+    plugin(({ addUtilities, addVariant }) => {
+      addUtilities({
+        '.cq': { 'container-type': 'inline-size', 'container-name': 'cq' },
+      });
+      addVariant('cq-sm', '@container cq (min-width: 480px)');
+      addVariant('cq-md', '@container cq (min-width: 720px)');
+      addVariant('cq-lg', '@container cq (min-width: 960px)');
+    }),
+  ],
 };
 
 export default config;

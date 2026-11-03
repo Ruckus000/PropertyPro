@@ -378,8 +378,8 @@ pnpm guard:call-ceilings        # Shrink-only per-file counts of createUnscopedC
 > **Page padding (`guard:page-padding`):** the authenticated page gutter (horizontal
 > `px`, vertical `py`, and centred max-width) is single-sourced in **one** place —
 > `PageContainer` (`apps/web/src/components/layout/page-container.tsx`), rendered by
-> the app shell around every authenticated route (`px-6 sm:px-8 lg:px-10 py-8`,
-> `max-w-[1400px]`). Pages render only their content and inherit that gutter. Use
+> the app shell around every authenticated route (`px-4 sm:px-6 py-5`,
+> `max-w-[1600px]`, fluid). Pages render only their content and inherit that gutter. Use
 > `PageBody` (`apps/web/src/components/shared/page-body.tsx`) as the content root —
 > it standardises vertical rhythm (`space-y-6`) and offers narrower centred columns
 > (`width="prose|form|content|reading|narrow"`) **without** horizontal padding.

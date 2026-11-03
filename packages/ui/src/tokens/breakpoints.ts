@@ -19,7 +19,7 @@ export const interactionSizing = {
     comfortable: 48,
   },
   pointerTarget: {
-    minimum: 36,
+    minimum: 32,
     comfortable: 40,
   },
 } as const;
@@ -31,13 +31,13 @@ export const responsiveDensity = {
   spacious: {
     componentPadding: "inset.md",
     componentGap: "inline.md",
-    buttonHeight: 48,
-    inputHeight: 48,
+    buttonHeight: 44,
+    inputHeight: 44,
   },
   default: {
     componentPadding: "inset.sm",
     componentGap: "inline.sm",
-    buttonHeight: 40,
-    inputHeight: 40,
+    buttonHeight: 32,
+    inputHeight: 32,
   },
 } as const;

@@ -213,7 +213,7 @@ export function EditorTopBar({
        * the block shrank to nothing at 1280px.
        */}
       <span className="flex min-w-20 flex-col leading-tight">
-        <h1 className="whitespace-nowrap font-display text-[0.9375rem] font-semibold text-content">Website</h1>
+        <h1 className="whitespace-nowrap font-sans text-[0.9375rem] font-semibold tracking-tight text-content">Website</h1>
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
 

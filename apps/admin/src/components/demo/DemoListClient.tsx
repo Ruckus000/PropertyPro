@@ -167,7 +167,7 @@ export function DemoListClient({ initialDemos }: DemoListClientProps) {
                             type="button"
                             variant="link"
                             size="sm"
-                            className="h-auto self-start px-0 py-0 text-xs"
+                            className="h-auto md:h-auto self-start px-0 py-0 text-xs"
                             onClick={() => { void copyClientLink(demo.slug); }}
                           >
                             {copiedSlug === demo.slug

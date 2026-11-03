@@ -664,7 +664,7 @@ function FileRowItem({
                   ref={changeButton}
                   variant="link"
                   size="sm"
-                  className={cn('h-auto p-0', TOUCH)}
+                  className={cn('h-auto md:h-auto p-0', TOUCH)}
                   aria-expanded={picking}
                   aria-label={`Change record for ${row.file.name}`}
                   disabled={disabled}

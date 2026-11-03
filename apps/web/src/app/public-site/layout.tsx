@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 
 /**
  * Public site layout — minimal wrapper for the community public site.
@@ -8,7 +9,7 @@ import type { ReactNode } from 'react';
  */
 export default function PublicSiteLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="site-frame min-h-screen flex flex-col">
+    <div className={`site-frame min-h-screen flex flex-col ${SITE_FONT_CLASS}`}>
       {children}
     </div>
   );

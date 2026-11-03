@@ -48,9 +48,9 @@ export function PageHeaderHelpButton() {
       onClick={widget.toggle}
       aria-label="Open help for this page"
       title="Open help for this page (?)"
-      // Touch target: ghost+sm is 32px tall, below the 44px mobile rule.
-      // Promote to 44px via `min-h` on smaller viewports; keep the compact
-      // 32px treatment from sm-and-up where pointer precision is finer.
+      // Touch target: the Button primitive is 44px below `md` and ghost+sm is
+      // 28px from `md` up, where pointer precision is finer. The `min-h-11` /
+      // `sm:min-h-0` pair below predates the primitive carrying that rule.
       className="min-h-11 text-content-secondary hover:bg-transparent hover:text-interactive sm:min-h-0"
     >
       <HelpCircle aria-hidden="true" />

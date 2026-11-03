@@ -3,8 +3,9 @@
 /**
  * Toolbar — mode-aware editor toolbar.
  *
- * Buttons are sized to the design system (36px desktop / 44px mobile touch
- * target). Every icon button carries aria-label; :focus-visible is never
+ * Buttons are a fixed 36px, above the design system's 32px desktop floor (44px
+ * below 768px is the rule for controls; these inline-styled buttons do not yet
+ * switch to it). Every icon button carries aria-label; :focus-visible is never
  * suppressed. The toolbar exposes only the controls whose output tags are
  * inside the consumer's sanitizer allowlist.
  */

@@ -34,15 +34,23 @@ without a commit.
 | `inter-latin-var.woff2` | Inter | `wght 100..900` | `3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62` | 48,256 |
 | `fraunces-latin-var.woff2` | Fraunces (normal) | `opsz 9..144`, `wght 100..900` | `7234ed860a9cc83045413c4faee63c960a8f2d1917adcf728119307d56e0d783` | 67,304 |
 | `fraunces-latin-var-italic.woff2` | Fraunces (italic) | `opsz 9..144`, `wght 100..900` | `066710ce7ed235a339d3d6cdcc8b55c0bea5632232662d83aacea25852108271` | 81,520 |
+| `geist-latin-var.woff2` | Geist | `wght 100..900` | `19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1` | 29,400 |
+| `geist-mono-latin-var.woff2` | Geist Mono | `wght 100..900` | `684ad5b531f81d43c1e8c7038262d5db7cdc1f68006e04d6c7769efa8d33c8cc` | 23,128 |
 
 Sources (all `/* latin */`, from the URLs in "Refreshing them" below):
 
 - `fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2`
 - `fonts.gstatic.com/s/fraunces/v38/6NU78FyLNQOQZAnv9bYEvDiIdE9Ea92uemAk_WBq8U_9v0c2Wa0KxC9TeA.woff2`
 - `fonts.gstatic.com/s/fraunces/v38/6NU58FyLNQOQZAnv9ZwNjucMHVn85Ni7emAe9lKqZTnbB-gzTK0K1ChjeveQ.woff2`
+- `fonts.gstatic.com/s/geist/v5/gyByhwUxId8gMEwcGFU.woff2`
+- `fonts.gstatic.com/s/geistmono/v6/or3nQ6H-1_WfwkMZI_qYFrcdmg.woff2`
 
-`apps/admin/src/app/fonts/inter-latin-var.woff2` is a byte-identical copy of the
-Inter file above (same sha256).
+Which app loads which: the authenticated app loads Geist (`--font-sans`), Geist
+Mono (`--font-mono`) and Fraunces (`--font-display`, the surfaces that keep a
+serif) in `app/layout.tsx`. Inter is loaded only by the marketing layout
+(`--font-marketing-sans`). `apps/admin` loads the same Geist and Geist Mono
+(plus Fraunces) from byte-identical copies in `apps/admin/src/app/fonts/`, with
+its own README and a test that checks the hashes against this one.
 
 ## What actually changed visually
 
@@ -76,11 +84,11 @@ for Inter and, in the app shell, 500/600/700 for Fraunces; the marketing layout
 requested Fraunces 400–700 in both normal and italic. Total bytes are roughly
 unchanged: 47K + 66K + 80K.
 
-`apps/admin/src/app/fonts/inter-latin-var.woff2` is a **copy of the same file**.
-The duplication is deliberate: `next/font/local` needs a literal path relative
-to the importing file, so a shared `packages/` location would mean a
-`../../../../` traversal that breaks the moment either app moves. Two identical
-47K files is the cheaper failure mode.
+`apps/admin/src/app/fonts/` holds **copies of the same files** (Geist, Geist
+Mono, Fraunces, and Inter for the branding preview only, which is not loaded by admin's root layout). The duplication is deliberate:
+`next/font/local` needs a literal path relative to the importing file, so a shared `packages/` location would mean a
+`../../../../` traversal that breaks the moment either app moves. Identical
+duplicate files are the cheaper failure mode.
 
 ## Refreshing them
 
@@ -101,7 +109,15 @@ the same for Fraunces with:
 family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900
 ```
 
-Then copy `inter-latin-var.woff2` to `apps/admin/src/app/fonts/`.
+Geist and Geist Mono come from one request, and each has a single `/* latin */`
+block (no `ital`/`opsz` axes):
+
+```
+family=Geist:wght@100..900&family=Geist+Mono:wght@100..900
+```
+
+Then copy any refreshed Geist, Geist Mono or Fraunces file to
+`apps/admin/src/app/fonts/` and update the hashes in that README too.
 
 **Use `curl --fail`.** Bare `curl` writes an HTTP error body to the output file
 and still exits 0 — so a rate-limit or captcha page saves happily as a
@@ -134,10 +150,16 @@ fetch — a half-downloaded font still starts with `wOF2`.
 
 ## Licence
 
-Both families are under the **SIL Open Font License 1.1**, which permits
+All four families are under the **SIL Open Font License 1.1**, which permits
 redistribution including bundling with an application.
 
 `OFL-Inter.txt` and `OFL-Fraunces.txt` are each family's licence file copied
 verbatim from `github.com/google/fonts`. They are kept separate rather than
 merged into one: the two texts are not byte-identical (they differ in the scheme
 of one SIL URL), and a single file would have had to misattribute one of them.
+
+`OFL-Geist.txt` is `LICENSE.txt` from `github.com/vercel/geist-font`, copied
+verbatim. One file covers both Geist and Geist Mono: they ship from the same
+repository under the same licence text. (That repository also carries an
+`OFL.txt` with a newer copyright line and different wording in two places; the
+file named `LICENSE.txt` is the one vendored here.)

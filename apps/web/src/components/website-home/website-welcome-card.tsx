@@ -424,7 +424,7 @@ export function WebsiteWelcomeCard({ communityId, facts, liveHero }: WebsiteWelc
                   <Button
                     type="button"
                     variant="link"
-                    className={cn('h-auto px-0 text-content-link', TOUCH)}
+                    className={cn('h-auto md:h-auto px-0 text-content-link', TOUCH)}
                     disabled={saving}
                     onClick={() => done.previous && void undo(done.previous)}
                   >

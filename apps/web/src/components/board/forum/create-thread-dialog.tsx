@@ -62,7 +62,7 @@ export function CreateThreadDialog({
 
           <div className="space-y-2">
             <Label htmlFor="thread-title">Title</Label>
-            <Input id="thread-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={240} className="h-11 md:h-9" />
+            <Input id="thread-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={240} />
           </div>
 
           <div className="space-y-2">
@@ -72,12 +72,11 @@ export function CreateThreadDialog({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" className="h-11 md:h-9" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             type="button"
-            className="h-11 md:h-9"
             disabled={title.trim().length === 0 || body.trim().length === 0}
             loading={createThread.isPending}
             onClick={() => void handleSubmit()}

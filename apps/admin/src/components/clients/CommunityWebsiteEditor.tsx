@@ -36,6 +36,7 @@ import {
   Input,
   Label,
 } from '@propertypro/ui';
+import { BRANDING_PREVIEW_FONT_CLASS } from './branding-preview-font';
 
 /** How each drafted look field is named in the pending-changes notice. */
 const LOOK_FIELD_LABELS: Record<SiteLookField, string> = {
@@ -460,7 +461,7 @@ export function CommunityWebsiteEditor({
                       variant="link"
                       size="sm"
                       onClick={handleRemoveLogo}
-                      className="h-auto p-0 text-status-danger hover:text-status-danger"
+                      className="h-auto md:h-auto p-0 text-status-danger hover:text-status-danger"
                     >
                       <X size={12} aria-hidden="true" /> Remove
                     </Button>
@@ -492,7 +493,9 @@ export function CommunityWebsiteEditor({
             </p>
 
             {/* Miniature landing page mockup */}
-            <div className="overflow-hidden rounded-md border border-edge bg-surface-card shadow-e1">
+            <div
+              className={`overflow-hidden rounded-md border border-edge bg-surface-card shadow-e1 ${BRANDING_PREVIEW_FONT_CLASS}`}
+            >
               {/* Header */}
               <div
                 className="flex items-center gap-2 px-4 py-3"

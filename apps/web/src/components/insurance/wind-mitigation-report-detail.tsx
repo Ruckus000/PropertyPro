@@ -70,7 +70,7 @@ export function WindMitigationReportDetail({
   if (!report) {
     return (
       <Card>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3 pt-4">
           <p className="text-sm text-content-secondary">
             This wind-mitigation report is no longer available — it may have been removed.
           </p>

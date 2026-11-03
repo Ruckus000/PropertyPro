@@ -8,9 +8,25 @@ describe("static tokens", () => {
     expect(staticTokens.spacing["20"]).toBe("80px");
   });
   it("radius scale matches DESIGN.md", () => {
+    expect(staticTokens.radius.xs).toBe("4px");
     expect(staticTokens.radius.sm).toBe("6px");
-    expect(staticTokens.radius.md).toBe("10px");
+    expect(staticTokens.radius.md).toBe("8px");
+    expect(staticTokens.radius.lg).toBe("12px");
     expect(staticTokens.radius.full).toBe("9999px");
+  });
+  it("touch sizing is 44px below md", () => {
+    expect(staticTokens.sizing["button-height"]).toBe("44px");
+    expect(staticTokens.sizing["input-height"]).toBe("44px");
+    expect(staticTokens.sizing["pointer-target-min"]).toBe("32px");
+  });
+  it("desktop sizing is 32px", () => {
+    expect(staticTokens.sizingDesktop["button-height"]).toBe("32px");
+    expect(staticTokens.sizingDesktop["input-height"]).toBe("32px");
+    expect(staticTokens.sizingDesktop["touch-target-min"]).toBe("32px");
+  });
+  it("font stacks lead with Geist", () => {
+    expect(staticTokens.fontFamily.sans.startsWith('"Geist"')).toBe(true);
+    expect(staticTokens.fontFamily.mono.startsWith('"Geist Mono"')).toBe(true);
   });
   it("focus ring references primitive vars, not raw hex", () => {
     expect(staticTokens.focus["focus-ring-color"]).toBe("var(--coral-500)");

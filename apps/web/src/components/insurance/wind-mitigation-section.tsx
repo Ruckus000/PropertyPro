@@ -284,7 +284,7 @@ export function WindMitigationSection({
 
       {!isLoading && !isError && reports && reports.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
             <EmptyState
               preset={canManage ? 'wind_mitigation_empty_admin' : 'wind_mitigation_empty_resident'}
               action={

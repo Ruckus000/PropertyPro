@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { resolveTheme, toFontLinks } from '@propertypro/theme';
 import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 import type { CommunityType } from '@propertypro/shared';
 import {
   getBrandingForCommunity,
@@ -48,7 +49,7 @@ export default async function PreviewPage({
   const communityId = Number(params.communityId);
   if (!communityId || !Number.isInteger(communityId) || communityId <= 0) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-surface-page">
+      <div className={`flex items-center justify-center min-h-screen bg-surface-page ${SITE_FONT_CLASS}`}>
         <div className="text-center">
           <h1 className="text-xl font-semibold text-content mb-2">Preview Mode</h1>
           <p className="text-content-secondary mb-4">
@@ -62,7 +63,7 @@ export default async function PreviewPage({
   const community = await getCommunityPublicInfo(communityId);
   if (!community) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className={`flex items-center justify-center min-h-screen ${SITE_FONT_CLASS}`}>
         <p className="text-content-secondary">Community {communityId} not found.</p>
       </div>
     );
@@ -83,6 +84,10 @@ export default async function PreviewPage({
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
+      {/* The Inter class goes on a wrapper, not on the frame: the frame carries
+          `font-body`, and two same-specificity font-family classes on one element
+          resolve by stylesheet order, which could make Inter beat a valid theme font. */}
+      <div className={SITE_FONT_CLASS}>
       <div style={cssVars} className="site-frame min-h-screen flex flex-col font-body">
         {/* Dev banner */}
         <div className="bg-status-warning-bg border-b border-status-warning-border px-4 py-2 text-center text-xs text-status-warning">
@@ -155,6 +160,7 @@ export default async function PreviewPage({
         </main>
 
         <PublicSiteFooter communityName={community.name} />
+      </div>
       </div>
     </>
   );

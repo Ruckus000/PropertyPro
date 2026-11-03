@@ -217,7 +217,7 @@ export function AlertPrefsSection({ initial }: AlertPrefsSectionProps) {
                       commitThreshold();
                     }
                   }}
-                  className="h-9 w-24"
+                  className="h-11 md:h-9 w-24"
                 />
               </div>
             )}
