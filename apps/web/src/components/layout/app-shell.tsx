@@ -28,7 +28,6 @@ import { SidebarProvider, useSidebar } from './sidebar-context';
 import { HelpWidgetProvider } from '@/components/help/help-widget-provider';
 import { HelpWidget } from '@/components/help/help-widget';
 import { HelpDeepLinkHandler } from '@/components/help/help-deep-link-handler';
-import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
 import { FreeAccessBanner } from '@/components/banners/free-access-banner';
 import { SubscriptionBillingBanners } from '@/components/billing/subscription-billing-banners';
 import { DemoTrialBanner } from '@/components/demo/DemoTrialBanner';
@@ -226,7 +225,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-page">
+    <div data-app-shell className="flex h-screen overflow-hidden bg-surface-page">
       {/* Desktop sidebar */}
       {topNav && DesktopNavSlot ? (
         // Flag on: the tab row replaces the rail, except where it has nothing to list (R24).
@@ -300,17 +299,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
           id="main-content"
           className="flex-1 overflow-y-auto"
         >
-          <PageContainer className="group relative">
-            {/* Per-page Help button — fallback for pages that DON'T use
-                <PageHeader/>. When PageHeader is present, it renders its
-                own inline Help button in the actions row and this absolute
-                one hides via Tailwind's `group-has-` so they don't compete
-                visually. Pages with custom h1 markup (meetings, finance,
-                payments, custom dashboards, etc.) get help discoverability
-                from this fallback. */}
-            <div className="absolute right-10 top-10 z-10 group-has-[[data-page-header]]:hidden lg:right-12 lg:top-12">
-              <PageHeaderHelpButton />
-            </div>
+          <PageContainer className="relative">
             {children}
           </PageContainer>
         </main>

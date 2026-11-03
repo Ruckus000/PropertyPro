@@ -26,6 +26,7 @@ import { WebsiteLiveCard } from '@/components/website-home/website-live-card';
 import { loadWebsiteLiveCard } from '@/lib/dashboard/load-website-live-card';
 import { ApartmentDashboard } from '@/components/dashboard/apartment-dashboard';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/shared/page-header';
 
 interface ApartmentDashboardPageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -78,16 +79,21 @@ export default async function ApartmentDashboardPage({
   const websiteCardPromise = loadWebsiteLiveCard(context.communityId, membership.role, features);
 
   return (
-    <Suspense fallback={<ApartmentDashboardSkeleton />}>
-      <ApartmentDashboardPanels
-        metricsPromise={metricsPromise}
-        websiteCardPromise={websiteCardPromise}
-        communityId={context.communityId}
-        userId={userId}
-        celebrationNextStep={celebrationNextStep}
-        canWriteAnnouncements={canWriteAnnouncements}
-      />
-    </Suspense>
+    <div className="space-y-6">
+      {/* As on the condo dashboard: names the page (sr-only) outside the Suspense
+          boundary, and shows the labelled Help when the help modal is on. */}
+      <PageHeader title="Dashboard" />
+      <Suspense fallback={<ApartmentDashboardSkeleton />}>
+        <ApartmentDashboardPanels
+          metricsPromise={metricsPromise}
+          websiteCardPromise={websiteCardPromise}
+          communityId={context.communityId}
+          userId={userId}
+          celebrationNextStep={celebrationNextStep}
+          canWriteAnnouncements={canWriteAnnouncements}
+        />
+      </Suspense>
+    </div>
   );
 }
 
@@ -124,27 +130,36 @@ async function ApartmentDashboardPanels({
   const [metrics, websiteCard] = await Promise.all([metricsPromise, websiteCardPromise]);
 
   return (
-    <div className="space-y-6">
-      {websiteCard ? (
-        <WebsiteLiveCard
+    <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+      <div className="min-w-0 flex-1 space-y-6">
+        <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
+        <ApartmentDashboard
+          metrics={metrics}
+          communityId={communityId}
+          canWriteAnnouncements={canWriteAnnouncements}
+        />
+      </div>
+      {/* Setup rail, after the main content in the DOM so the reading and tab
+          order match the screen: below it on phones and tablets, a 24rem column
+          on the right from xl. Both cards render nothing once done, dismissed or
+          still loading, so the rail collapses (empty:hidden) and the main column
+          takes the full width. */}
+      <div className="space-y-6 empty:hidden xl:w-96 xl:shrink-0">
+        {websiteCard ? (
+          <WebsiteLiveCard
+            communityId={communityId}
+            communityName={metrics.communityName}
+            publicUrl={websiteCard.publicUrl}
+          />
+        ) : null}
+        <OnboardingChecklist
           communityId={communityId}
           communityName={metrics.communityName}
-          publicUrl={websiteCard.publicUrl}
+          userId={userId}
+          nextStep={celebrationNextStep}
+          variant={websiteCard ? 'secondary' : 'primary'}
         />
-      ) : null}
-      <OnboardingChecklist
-        communityId={communityId}
-        communityName={metrics.communityName}
-        userId={userId}
-        nextStep={celebrationNextStep}
-        variant={websiteCard ? 'secondary' : 'primary'}
-      />
-      <DashboardWelcome firstName={metrics.firstName} communityName={metrics.communityName} />
-      <ApartmentDashboard
-        metrics={metrics}
-        communityId={communityId}
-        canWriteAnnouncements={canWriteAnnouncements}
-      />
+      </div>
     </div>
   );
 }

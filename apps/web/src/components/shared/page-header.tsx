@@ -15,12 +15,8 @@
  * `description` is accepted so call sites keep compiling, and is not rendered.
  *
  * The per-page Help button rides in the toolbar after any page-specific
- * actions. The AppShell-level fallback Help button hides itself via CSS
- * `group-has-[data-page-header]:hidden` when this component is present — so
- * routes that DON'T use PageHeader still get a Help button from the shell.
- * Pages can suppress the inline button via `hideHelpButton`; doing so does NOT
- * make the shell-level button reappear — the data-page-header signal is the
- * source of truth.
+ * actions, and pages can suppress it via `hideHelpButton`. Pages without a
+ * PageHeader rely on the top bar's Help icon, which opens the same widget.
  */
 
 import * as React from "react";

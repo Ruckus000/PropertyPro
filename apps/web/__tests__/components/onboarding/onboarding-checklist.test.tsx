@@ -100,6 +100,15 @@ function renderChecklist(
   );
 }
 
+describe('OnboardingChecklist — loading', () => {
+  it('renders nothing while loading, so the dashboard rail can stay collapsed', () => {
+    useOnboardingChecklistMock.mockReturnValue({ isLoading: true, isError: false, data: undefined });
+    const { container } = renderChecklist();
+    // An empty container is what lets the rail's `empty:hidden` apply.
+    expect(container).toBeEmptyDOMElement();
+  });
+});
+
 describe('OnboardingChecklist — celebration', () => {
   beforeEach(() => {
     vi.clearAllMocks();

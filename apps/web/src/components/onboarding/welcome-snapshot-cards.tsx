@@ -43,7 +43,7 @@ function SnapshotCard({
   return (
     <div
       className={cn(
-        'rounded-md border border-edge bg-surface-card p-5 shadow-sm',
+        'rounded-md border border-edge bg-surface-card p-5',
         className,
       )}
     >

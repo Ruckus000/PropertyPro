@@ -17,7 +17,7 @@ export function ChecklistCelebration({
   useConfetti({ enabled: true, duration: 3000 });
 
   return (
-    <section className="relative rounded-md border border-edge bg-surface-card p-6 shadow-sm">
+    <section className="relative rounded-md border border-edge bg-surface-card p-6">
       {/* Close button */}
       <button
         type="button"

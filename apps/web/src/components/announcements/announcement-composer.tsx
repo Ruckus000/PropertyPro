@@ -160,7 +160,7 @@ export function AnnouncementComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-6 rounded-xl border border-edge bg-surface-card p-4 shadow-sm sm:p-6"
+      className="space-y-6 rounded-md border border-edge bg-surface-card p-4 sm:p-6"
     >
       {error ? (
         <AlertBanner

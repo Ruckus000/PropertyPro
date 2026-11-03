@@ -230,3 +230,45 @@ describe('the dashboards render the card', () => {
     expect(tree.map((e) => e.type)).not.toContain(WebsiteLiveCard);
   });
 });
+
+/** The element whose own children include an element of `type`. */
+function parentOf(tree: ReactElement[], type: unknown): ReactElement<{ className?: string }> | undefined {
+  return tree.find((e) => {
+    const kids = (e.props as { children?: ReactNode }).children;
+    return (Array.isArray(kids) ? kids : [kids]).some(
+      (k) => !!k && typeof k === 'object' && 'type' in k && (k as ReactElement).type === type,
+    );
+  }) as ReactElement<{ className?: string }> | undefined;
+}
+
+describe('the setup cards sit in a side rail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthMock.mockResolvedValue('user-1');
+    loadCardMock.mockResolvedValue({ publicUrl: 'https://sunset-condos.getpropertypro.com/' });
+  });
+
+  it.each([
+    ['main', () => DashboardPage({ searchParams: Promise.resolve({}) }), 'DashboardPanels', 'condo_718'],
+    ['apartment', () => ApartmentDashboardPage({ searchParams: Promise.resolve({}) }), 'ApartmentDashboardPanels', 'apartment'],
+  ] as const)('on the %s dashboard: one rail holds the card and checklist, right of the content from xl', async (_n, page, panels, communityType) => {
+    requireMembershipMock.mockResolvedValue({ ...MANAGER, communityType });
+    const tree = await elementsOf(await page(), [panels]);
+
+    const rail = parentOf(tree, OnboardingChecklist)!;
+    expect(parentOf(tree, WebsiteLiveCard)).toBe(rail);
+    const cls = (rail.props.className ?? '').split(/\s+/);
+    // Collapses once both cards are done, dismissed or loading; 24rem from xl.
+    expect(cls).toEqual(expect.arrayContaining(['empty:hidden', 'xl:w-96']));
+    // Last in the DOM, so reading and tab order match the screen (no `order-*`).
+    const row = tree.find((e) => {
+      const kids = (e.props as { children?: ReactNode }).children;
+      return Array.isArray(kids) && kids.includes(rail);
+    })!;
+    const kids = ((row.props as { children: ReactNode[] }).children).filter(Boolean);
+    expect(kids[kids.length - 1]).toBe(rail);
+    expect(cls.filter((c) => /(^|:)order-/.test(c))).toEqual([]);
+    // Nothing else lives in the rail.
+    expect((rail.props as { children: ReactNode[] }).children.filter(Boolean)).toHaveLength(2);
+  });
+});

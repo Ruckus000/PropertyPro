@@ -278,73 +278,82 @@ async function DashboardPanels({
   }).format(now);
 
   return (
-    <div className="space-y-6">
-      {websiteCard ? (
-        <WebsiteLiveCard
+    <div className="flex flex-col gap-6 xl:flex-row xl:items-start">
+      <div className="min-w-0 flex-1 space-y-6">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-sm text-content-secondary">{today}</p>
+            <h2 className="mt-1 text-2xl font-semibold text-content">Welcome, {data.firstName}</h2>
+          </div>
+          {audience === 'manager' && !supportSession ? (
+            <Button asChild>
+              <Link href={`/documents?communityId=${communityId}`}>Upload document</Link>
+            </Button>
+          ) : null}
+        </div>
+        <StatusHero sentence={sentence} facts={facts} />
+        {/* Residents have no queue: This week takes the row alone. Two full literal class strings. */}
+        <div className={attention === null ? 'grid gap-6' : 'grid gap-6 lg:grid-cols-[2fr_1fr]'}>
+          <AttentionQueueList
+            items={attention}
+            communityId={communityId}
+            error={audience !== 'resident' && sourceFailed}
+          />
+          <WeekAgendaList
+            days={buildWeekAgenda({ meetings30d, attention: attention ?? [], hearings, now, timeZone })}
+            error={!overview.meetings30d.ok}
+          />
+        </div>
+        <QuickActions
+          actions={buildQuickActions({
+            audience,
+            communityId,
+            features,
+            canWriteAnnouncements,
+            pendingSignatures: pendingSigners.length,
+            supportSession,
+          })}
+        />
+        <MetricStrip
+          tiles={buildMetricTiles({
+            audience,
+            features,
+            violationOpenCount,
+            openMaintenanceCount: data.openMaintenanceCount,
+            meetings30d: overview.meetings30d.ok ? meetings30d : null,
+            communityId,
+            timeZone,
+          })}
+        />
+        {pendingSigners.length > 0 ? <DashboardEsignPending items={pendingSigners} /> : null}
+        <DashboardAnnouncements
+          items={data.announcements}
+          communityId={communityId}
+          canWriteAnnouncements={canWriteAnnouncements}
+        />
+        {canReadActivity ? <ComplianceActivityFeed communityId={communityId} /> : null}
+      </div>
+      {/* Setup rail, after the main content in the DOM so the reading and tab
+          order match the screen: below it on phones and tablets, a 24rem column
+          on the right from xl. Both cards render nothing once done, dismissed or
+          still loading, so the rail collapses (empty:hidden) and the main column
+          takes the full width. */}
+      <div className="space-y-6 empty:hidden xl:w-96 xl:shrink-0">
+        {websiteCard ? (
+          <WebsiteLiveCard
+            communityId={communityId}
+            communityName={data.communityName}
+            publicUrl={websiteCard.publicUrl}
+          />
+        ) : null}
+        <OnboardingChecklist
           communityId={communityId}
           communityName={data.communityName}
-          publicUrl={websiteCard.publicUrl}
-        />
-      ) : null}
-      <OnboardingChecklist
-        communityId={communityId}
-        communityName={data.communityName}
-        userId={userId}
-        nextStep={celebrationNextStep}
-        variant={websiteCard ? 'secondary' : 'primary'}
-      />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm text-content-secondary">{today}</p>
-          <h2 className="mt-1 text-2xl font-semibold text-content">Welcome, {data.firstName}</h2>
-        </div>
-        {audience === 'manager' && !supportSession ? (
-          <Button asChild>
-            <Link href={`/documents?communityId=${communityId}`}>Upload document</Link>
-          </Button>
-        ) : null}
-      </div>
-      <StatusHero sentence={sentence} facts={facts} />
-      {/* Residents have no queue: This week takes the row alone. Two full literal class strings. */}
-      <div className={attention === null ? 'grid gap-6' : 'grid gap-6 lg:grid-cols-[2fr_1fr]'}>
-        <AttentionQueueList
-          items={attention}
-          communityId={communityId}
-          error={audience !== 'resident' && sourceFailed}
-        />
-        <WeekAgendaList
-          days={buildWeekAgenda({ meetings30d, attention: attention ?? [], hearings, now, timeZone })}
-          error={!overview.meetings30d.ok}
+          userId={userId}
+          nextStep={celebrationNextStep}
+          variant={websiteCard ? 'secondary' : 'primary'}
         />
       </div>
-      <QuickActions
-        actions={buildQuickActions({
-          audience,
-          communityId,
-          features,
-          canWriteAnnouncements,
-          pendingSignatures: pendingSigners.length,
-          supportSession,
-        })}
-      />
-      <MetricStrip
-        tiles={buildMetricTiles({
-          audience,
-          features,
-          violationOpenCount,
-          openMaintenanceCount: data.openMaintenanceCount,
-          meetings30d: overview.meetings30d.ok ? meetings30d : null,
-          communityId,
-          timeZone,
-        })}
-      />
-      {pendingSigners.length > 0 ? <DashboardEsignPending items={pendingSigners} /> : null}
-      <DashboardAnnouncements
-        items={data.announcements}
-        communityId={communityId}
-        canWriteAnnouncements={canWriteAnnouncements}
-      />
-      {canReadActivity ? <ComplianceActivityFeed communityId={communityId} /> : null}
     </div>
   );
 }
