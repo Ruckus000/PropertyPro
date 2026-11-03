@@ -283,7 +283,7 @@ export function SettingsView({
       className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 py-8 lg:flex-row lg:items-start"
     >
       <div className="shrink-0 space-y-4 lg:sticky lg:top-8 lg:w-[220px]">
-        <h2 className="font-display text-xl font-semibold text-content">Site settings</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-content">Site settings</h2>
         <div
           role="tablist"
           aria-label="Site settings"

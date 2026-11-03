@@ -22,17 +22,31 @@ import "./globals.css";
  * One variable file per family replaces the previous per-weight static
  * instances, so the full 100–900 range is available and total bytes are
  * roughly unchanged.
+ *
+ * This layout loads Geist (`--font-sans`), Geist Mono (`--font-mono`) and
+ * Fraunces (`--font-display`). Inter is no longer loaded here: the marketing
+ * layout loads it for itself as `--font-marketing-sans`, so changing the app's
+ * sans face cannot restyle the landing page.
  */
-const inter = localFont({
-  src: "./fonts/inter-latin-var.woff2",
+const geist = localFont({
+  src: "./fonts/geist-latin-var.woff2",
   weight: "100 900",
   style: "normal",
   display: "swap",
   variable: "--font-sans",
 });
 
-// "Florida Modern" display serif — matches the marketing landing page. Applied
-// to page-title headings (font-display) only; body/data stay on Inter.
+const geistMono = localFont({
+  src: "./fonts/geist-mono-latin-var.woff2",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+  variable: "--font-mono",
+});
+
+// "Florida Modern" display serif — matches the marketing landing page. Kept for
+// the few surfaces that still use `font-display` (signup, the printable audit
+// record); the authenticated app's own headings are Geist semibold.
 const fraunces = localFont({
   src: "./fonts/fraunces-latin-var.woff2",
   weight: "100 900",
@@ -47,8 +61,8 @@ const fraunces = localFont({
 });
 
 // NOTE: `next/font/local` derives the CSS family name from the FILE name, so
-// this call and the one in `(marketing)/layout.tsx` both emit the family
-// `fraunces`. On a marketing page both stylesheets load and that family ends up
+// the Fraunces call here and the one in `(marketing)/layout.tsx` both emit the
+// family `fraunces`. On a marketing page both stylesheets load and that family ends up
 // with three @font-face rules (normal here, normal + italic there). Harmless
 // while every descriptor agrees — but if the two calls ever diverge (different
 // file, `display`, or `adjustFontFallback`) they will silently MERGE into one
@@ -81,7 +95,7 @@ export default function RootLayout({
       // Large text is the default; LARGE_TEXT_INIT_SCRIPT removes the class for
       // a browser that chose "standard", which is why hydration is told to
       // tolerate a className mismatch here.
-      className={`${inter.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
+      className={`${geist.variable} ${geistMono.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
       suppressHydrationWarning
     >
       <head>

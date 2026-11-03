@@ -79,23 +79,37 @@ the offending line (email-template hex, chart/canvas internals).
 
 ## Typography
 
-**Fonts:** Inter (sans-serif, body/data), JetBrains Mono (monospace), Fraunces (display serif — `--font-display`, applied to page-title `h1`s via `globals.css` to echo the marketing landing page; body, tables, and section headings stay on Inter).
+**Fonts:** Geist (sans-serif, body/data/headings — `--font-sans`) and Geist Mono (monospace — `--font-mono`), both vendored in `apps/web/src/app/fonts/` and loaded with `next/font/local`. Fraunces (display serif — `--font-display`) has left the authenticated app: the dashboard status headline, audit trail scope label, site-editor title bar and site settings heading use Geist `font-semibold tracking-tight`. Fraunces remains in four places: signup (`front-porch-shell.tsx`), the printable audit record, the marketing landing page, and `apps/admin`'s `AdminPageHeader`. The marketing page keeps Inter, loaded by its own layout as `--font-marketing-sans`, so the app's sans face cannot restyle it.
 
-> **Page titles are not painted — in `apps/web`.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: Fraunces now shows only on pages that still render a standalone visible `h1`, until those migrate onto `PageHeader`.
+> **Page titles are not painted — in `apps/web`.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: a standalone visible `h1` in web still picks up Fraunces from the global `h1` rule in `globals.css`, until it migrates onto `PageHeader` or opts out with `font-sans`.
 >
 > **`apps/admin` made the opposite decision, on purpose.** The console has no breadcrumb trail, so a screen's `h1` is the only thing that names it: `apps/admin/src/components/shell/AdminPageHeader.tsx` paints a visible Fraunces `h1` (`font-display text-2xl md:text-3xl`) plus an optional `description`, `eyebrow`, `backHref` and `actions`. Do not reconcile the two components or mimic one in the other app — they answer different questions. (`guard:page-header` polices only web's `(authenticated)/**`, so nothing stops admin painting its titles.)
 
 | Token | Size | Usage |
 |-------|------|-------|
-| `xs` | 11px | Metadata labels only — never primary content |
-| `sm` | 13px | Captions, helper text |
+| `xs` | 12px | Metadata labels only — never primary content |
+| `sm` | 14px | Captions, helper text |
 | `base` | 16px | Body text (minimum for readable content) |
 | `lg` | 18px | Emphasized body, subheadings |
 | `xl` | 20px | Section headings |
 | `2xl` | 24px | Page headings |
 | `3xl` | 30px | Hero/display text |
 
-**Rules:** Body text floor is 16px (`base`). Compliance document content uses `base` or `lg` minimum. Caption (11px/`xs`) is metadata-only, never primary content. Large text mode available via `.large-text` class on `<html>`.
+Those are the standard-mode token values. Large text is on by default and the root font size is the browser default (no 18px override), so the sizes the default experience renders are one step up:
+
+| Token | Default (large text) | Standard |
+|-------|----------------------|----------|
+| `xs` | 14px | 12px |
+| `sm` | 16px | 14px |
+| `base` | 18px | 16px |
+| `lg` | 20px | 18px |
+| `xl` | 24px | 20px |
+| `2xl` | 28px | 24px |
+| `3xl` | 34px | 30px |
+
+Interface text (`text-sm`) is 16px in the default experience and prose (`text-base`) is 18px; standard mode gives 14px and 16px. Values come from the `.large-text` block in `packages/ui/src/styles/tokens.css`.
+
+**Rules:** Body text floor is 16px (`base`). Compliance document content uses `base` or `lg` minimum. Caption (`xs`) is metadata-only, never primary content. Large text mode available via `.large-text` class on `<html>`.
 
 ---
 

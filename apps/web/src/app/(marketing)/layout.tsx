@@ -20,6 +20,21 @@ const fraunces = localFont({
   adjustFontFallback: 'Times New Roman',
 });
 
+// Inter stays the marketing sans. The app shell moved to Geist, and
+// `--mk-sans` used to read `--font-sans`, so marketing loads Inter itself under
+// its own variable rather than inheriting whatever the app uses. Same file the
+// app shell used to load, so no new bytes and no change to the landing page.
+// Like the root layout's Inter before it, no `adjustFontFallback` (default).
+// The CSS family name is `inter-latin-var`, derived from the file name — it
+// collides with nothing, because no other loader in apps/web uses this file.
+const inter = localFont({
+  src: '../fonts/inter-latin-var.woff2',
+  weight: '100 900',
+  style: 'normal',
+  display: 'swap',
+  variable: '--font-marketing-sans',
+});
+
 export const metadata: Metadata = {
   title: 'PropertyPro — Florida condo & HOA records, kept to statute',
   description:
@@ -52,6 +67,8 @@ export default function MarketingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`${fraunces.variable} marketing-theme`}>{children}</div>
+    <div className={`${inter.variable} ${fraunces.variable} marketing-theme`}>
+      {children}
+    </div>
   );
 }
