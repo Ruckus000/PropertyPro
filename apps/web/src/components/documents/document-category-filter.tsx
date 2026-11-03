@@ -35,7 +35,7 @@ export function DocumentCategoryFilter({
         <button
           type="button"
           onClick={() => onCategoryChange(null)}
-          className="w-fit rounded-full bg-interactive px-4 py-1.5 text-sm font-medium text-white"
+          className="min-h-11 md:min-h-0 w-fit rounded-full bg-interactive px-4 py-1.5 text-sm font-medium text-white"
         >
           All
         </button>
@@ -51,7 +51,7 @@ export function DocumentCategoryFilter({
       <button
         type="button"
         onClick={() => onCategoryChange(null)}
-        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+        className={`min-h-11 md:min-h-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
           selectedCategoryId === null
             ? 'bg-interactive text-white'
             : 'bg-surface-muted text-content-secondary hover:bg-surface-muted'
@@ -64,7 +64,7 @@ export function DocumentCategoryFilter({
           key={category.id}
           type="button"
           onClick={() => onCategoryChange(category.id)}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`min-h-11 md:min-h-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
             selectedCategoryId === category.id
               ? 'bg-interactive text-white'
               : 'bg-surface-muted text-content-secondary hover:bg-surface-muted'

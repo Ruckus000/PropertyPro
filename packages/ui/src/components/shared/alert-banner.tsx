@@ -168,7 +168,8 @@ export function AlertBanner({
       {/* Action */}
       {action && actionPlacement === "inline" && <div className="shrink-0">{action}</div>}
 
-      {/* Dismiss */}
+      {/* Dismiss. The 16px icon gets a 44px hit area below md and 32px above it;
+          the negative margin keeps the banner's layout at the old 20px box. */}
       {dismissible && onDismiss && (
         <button
           type="button"
@@ -176,7 +177,7 @@ export function AlertBanner({
           aria-label="Dismiss"
           {...dismissButtonProps}
           className={cn(
-            "shrink-0 rounded-sm p-0.5 opacity-70 transition-opacity duration-micro hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
+            "-m-3 shrink-0 rounded-sm p-3.5 opacity-70 md:-m-1.5 md:p-2 transition-opacity duration-micro hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:opacity-50",
             dismissButtonProps?.className
           )}
         >

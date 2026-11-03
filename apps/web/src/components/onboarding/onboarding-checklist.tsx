@@ -109,7 +109,7 @@ export function OnboardingChecklist({
           <button
             type="button"
             onClick={() => refetch()}
-            className="shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            className="min-h-11 md:min-h-0 shrink-0 rounded-md border border-current px-3 py-1 text-sm font-medium transition-opacity duration-micro hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           >
             Retry
           </button>
@@ -172,7 +172,7 @@ export function OnboardingChecklist({
         <button
           type="button"
           onClick={handleDismiss}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+          className="flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
           aria-label="Dismiss checklist"
         >
           <svg
@@ -269,7 +269,7 @@ export function OnboardingChecklist({
                       router.push(actionHref);
                     }
                   }}
-                  className="flex-shrink-0 text-sm font-medium text-interactive hover:text-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+                  className="min-h-11 md:min-h-0 flex-shrink-0 text-sm font-medium text-interactive hover:text-interactive-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
                 >
                   {action.label}
                 </button>
@@ -284,7 +284,7 @@ export function OnboardingChecklist({
         <button
           type="button"
           onClick={handleDismiss}
-          className="text-sm text-content-tertiary hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+          className="min-h-11 md:min-h-0 text-sm text-content-tertiary hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
         >
           I&apos;ll handle this later
         </button>

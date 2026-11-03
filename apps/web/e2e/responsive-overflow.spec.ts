@@ -26,14 +26,15 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { loginAs } from './helpers/dev-login';
 import { findOverflows } from './helpers/overflow';
+import { findSmallTargets } from './helpers/target-size';
 
 /**
  * 375 and 414 are the two common phone widths; 768 is tablet portrait; 1024 and
  * 1280 are the two cliff edges; 1440 is a large laptop.
  *
  * The floor moved from 768 to 375 on 2026-09-14. The old floor was never a
- * product decision — `DESIGN.md:207` has always required 44px touch targets
- * *below* 768px, and `/mobile/` covers 16 routes with no equivalent for finance,
+ * product decision — the touch-target rule (`.claude/rules/design.md`, Component
+ * Dimensions) has always required 44px targets *below* 768px, and `/mobile/` covers 16 routes with no equivalent for finance,
  * contracts, violations, esign, compliance or PM portfolio, so a phone user on
  * any of those gets this shell. Below 1024 the 260px rail becomes a drawer
  * (`app-shell.tsx`, `hidden lg:block`), so at 375 the content column is 343px:
@@ -120,6 +121,16 @@ test.describe('responsive overflow', () => {
         await page.locator('main').waitFor({ state: 'visible' });
         await page.evaluate(() => document.fonts.ready);
         await expectNoBleed(page, `${label} @ ${width}px`);
+        // WCAG 2.5.8 (AA) floor at phone width. The project's 44px rule is pinned
+        // by class tests on the shared primitives; this catches anything under 24.
+        if (width === 375) {
+          const small = await findSmallTargets(page);
+          expect(
+            small,
+            `${label} @ 375px: controls under the 24px AA target size, with no spacing to spare —\n` +
+              small.map((t) => `  ${t.selector}  ${t.width}x${t.height}`).join('\n'),
+          ).toEqual([]);
+        }
       }
     });
   }

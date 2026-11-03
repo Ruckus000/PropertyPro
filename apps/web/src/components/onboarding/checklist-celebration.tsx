@@ -22,7 +22,7 @@ export function ChecklistCelebration({
       <button
         type="button"
         onClick={onDismiss}
-        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
+        className="absolute right-4 top-4 flex h-11 w-11 md:h-9 md:w-9 items-center justify-center rounded-md text-content-tertiary transition-colors hover:text-content-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-interactive"
         aria-label="Dismiss setup celebration"
       >
         <svg

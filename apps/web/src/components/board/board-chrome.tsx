@@ -72,7 +72,7 @@ export function BoardChrome({
               href={href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'rounded-full px-4 py-2 text-sm font-medium transition-colors duration-quick',
+                'inline-flex min-h-11 md:min-h-0 items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-quick',
                 active
                   ? 'bg-interactive text-content-inverse shadow-sm'
                   : 'bg-surface-muted text-content-secondary hover:bg-surface-hover hover:text-content',
