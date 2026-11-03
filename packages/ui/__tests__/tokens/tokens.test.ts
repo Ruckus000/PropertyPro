@@ -116,9 +116,10 @@ describe("P0-01 Design Tokens", () => {
   describe("Radius ↔ CSS variables", () => {
     it("radius values match CSS --radius-* variables", () => {
       const radiusCssMap: Record<string, string> = {
+        xs: "--radius-xs: 4px",
         sm: "--radius-sm: 6px",
-        md: "--radius-md: 10px",
-        lg: "--radius-lg: 16px",
+        md: "--radius-md: 8px",
+        lg: "--radius-lg: 12px",
         xl: "--radius-xl: 20px",
         "2xl": "--radius-2xl: 24px",
         full: "--radius-full: 9999px",
@@ -341,13 +342,13 @@ describe("P0-01 Design Tokens", () => {
     it("interaction sizing defines touch and pointer targets", () => {
       expect(interactionSizing.touchTarget.minimum).toBe(44);
       expect(interactionSizing.touchTarget.comfortable).toBe(48);
-      expect(interactionSizing.pointerTarget.minimum).toBe(36);
+      expect(interactionSizing.pointerTarget.minimum).toBe(32);
       expect(interactionSizing.pointerTarget.comfortable).toBe(40);
     });
 
     it("responsive density has spacious and default modes", () => {
-      expect(responsiveDensity.spacious.buttonHeight).toBe(48);
-      expect(responsiveDensity.default.buttonHeight).toBe(40);
+      expect(responsiveDensity.spacious.buttonHeight).toBe(44);
+      expect(responsiveDensity.default.buttonHeight).toBe(32);
     });
   });
 

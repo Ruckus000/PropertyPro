@@ -43,11 +43,12 @@ const config: Config = {
         "20": "80px",
       },
       borderRadius: {
-        sm: "6px",
-        md: "10px",
-        lg: "16px",
-        xl: "20px",
-        "2xl": "24px",
+        xs: "var(--radius-xs)",
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
+        xl: "var(--radius-xl)",
+        "2xl": "var(--radius-2xl)",
       },
       boxShadow: {
         // Elevation ladder — values live in packages/tokens (static.ts) and are

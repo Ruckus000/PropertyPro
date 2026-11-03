@@ -277,11 +277,12 @@ const config: Config = {
         '20': '80px',
       },
       borderRadius: {
-        sm: '6px',
-        md: '10px',
-        lg: '16px',
-        xl: '20px',
-        '2xl': '24px',
+        xs: 'var(--radius-xs)',
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
       },
       // Focus-ring utilities (`ring-focus`, `ring-error`), matching web.
       // Drains need these — never suppress :focus-visible to avoid a raw ring color.
