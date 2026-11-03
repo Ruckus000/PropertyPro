@@ -8,9 +8,9 @@ import { primitiveRadius } from "./radius";
 export const componentTokens = {
   button: {
     height: {
-      sm: 36,
-      md: 40,
-      lg: 48,
+      sm: 28,
+      md: 32,
+      lg: 40,
     },
     padding: {
       sm: primitiveSpace[3],
@@ -46,9 +46,9 @@ export const componentTokens = {
   },
   input: {
     height: {
-      sm: 36,
-      md: 40,
-      lg: 48,
+      sm: 32,
+      md: 32,
+      lg: 40,
     },
     padding: {
       sm: primitiveSpace[2],
