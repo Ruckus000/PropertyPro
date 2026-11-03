@@ -141,7 +141,7 @@ V2 accessibility baseline includes:
 
 - global `:focus-visible` ring tokens
 - skip-link pattern support
-- touch target minimums: 44px mobile, 36px desktop
+- touch target minimums: 44px mobile (<768px), 32px desktop (>=768px)
 - color + icon + text for all status presentation
 - `prefers-reduced-motion` support across transition and animation durations
 

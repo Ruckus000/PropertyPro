@@ -218,7 +218,7 @@ export function InsuranceSummarySection({ communityId, canManage, ownUnitLabel }
 
       {!isLoading && !isError && policies && policies.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
             <EmptyState
               preset={canManage ? 'insurance_policy_empty_admin' : 'insurance_policy_empty_resident'}
               action={

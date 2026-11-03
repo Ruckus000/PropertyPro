@@ -159,7 +159,7 @@ export function StormDamageSection({ communityId, canManage }: Props) {
 
       {!isLoading && !isError && reports && reports.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
             <EmptyState
               preset={canManage ? 'storm_damage_empty_admin' : 'storm_damage_empty_resident'}
               action={

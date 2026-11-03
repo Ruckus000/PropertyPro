@@ -220,7 +220,7 @@ export function ReserveTransparencySection({ communityId, canManage }: ReserveTr
 
       {!isLoading && !isError && assets && assets.length === 0 && (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4">
             <EmptyState
               preset={
                 canManage ? 'reserve_transparency_empty_admin' : 'reserve_transparency_empty_resident'
