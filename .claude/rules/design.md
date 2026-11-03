@@ -31,7 +31,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - **Page gutter is the shell's job, not the page's.** The authenticated page gutter
   (horizontal `px`, vertical `py`, centred max-width) is single-sourced in
   `PageContainer` (`components/layout/page-container.tsx`, rendered by the app shell:
-  `px-6 sm:px-8 lg:px-10 py-8`, `max-w-[1400px]`). Author pages with `PageBody`
+  `px-4 sm:px-6 py-5`, `max-w-[1600px]`, fluid). Author pages with `PageBody`
   (`components/shared/page-body.tsx`) as the content root — it owns vertical rhythm
   (`space-y-6`) and optional narrower centred columns
   (`width="prose|form|content|reading|narrow"`), and applies NO horizontal padding.

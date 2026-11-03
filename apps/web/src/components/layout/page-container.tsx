@@ -11,22 +11,22 @@ import { cn } from '@/lib/utils';
  * app is a one-line change here. Pages must NOT re-add their own `px-*`/`py-*` at the
  * page root — that double-pads on top of this gutter (enforced by `guard:page-padding`).
  *
- * The gutter scales gently with viewport (24 → 32 → 40px) so content keeps comfortable
- * breathing room from the sidebar and the viewport edge on laptops without wasting space
- * on wide monitors, where content is centred and capped at `max-w-[1400px]`.
+ * The gutter is 16px under `sm` (640px) and 24px from there up, with 20px of top/bottom
+ * padding. Content is fluid and capped at `max-w-[1600px]`, centred on wider monitors.
+ * Components that must lay out by the width of their own box rather than the window's
+ * (the sidebar and top nav change how much of the viewport a page gets) use the `cq`
+ * container-query vocabulary — see `cq` in `tailwind.config.ts`.
  */
 
 const WIDTHS = {
   /** Full app width — standard for dashboards, lists, hubs. */
-  default: 'max-w-[1400px]',
-  /** Roomier full-bleed feeds that still want a cap. */
-  wide: 'max-w-[1600px]',
+  default: 'max-w-[1600px]',
 } as const;
 
 export type PageContainerWidth = keyof typeof WIDTHS;
 
 /** The horizontal gutter — single-sourced so the banner strip in the shell can reuse it. */
-export const PAGE_GUTTER_X = 'px-6 sm:px-8 lg:px-10';
+export const PAGE_GUTTER_X = 'px-4 sm:px-6';
 
 interface PageContainerProps extends React.HTMLAttributes<HTMLDivElement> {
   width?: PageContainerWidth;
@@ -40,7 +40,7 @@ export function PageContainer({
 }: PageContainerProps) {
   return (
     <div
-      className={cn('mx-auto w-full py-8', PAGE_GUTTER_X, WIDTHS[width], className)}
+      className={cn('mx-auto w-full py-5', PAGE_GUTTER_X, WIDTHS[width], className)}
       {...props}
     >
       {children}

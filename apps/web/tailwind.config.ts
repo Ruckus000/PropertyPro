@@ -286,6 +286,27 @@ const config: Config = {
         addVariant(`site-${name}`, `@container site (min-width: ${width})`);
       }
     }),
+    /*
+     * Container-query variants. `.cq` makes an element a size container named
+     * `cq`; `cq-sm|md|lg:` then apply from 480 / 720 / 960px of THAT element's
+     * width, not the window's. Use them for components whose room depends on
+     * the shell (sidebar, top nav) rather than the device. Touch heights stay
+     * on viewport `md:` — touch size follows the device, not the box.
+     *
+     * The name is `cq`, never `site`, so these cannot match the public site's
+     * `.site-frame` container. A `cq-*` variant with no `.cq` ancestor never
+     * matches; `__tests__/styles/container-queries.test.ts` enforces that every
+     * consumer carries one. KEEP IDENTICAL to the matching block in
+     * `apps/admin/tailwind.config.ts`.
+     */
+    plugin(({ addUtilities, addVariant }) => {
+      addUtilities({
+        ".cq": { "container-type": "inline-size", "container-name": "cq" },
+      });
+      addVariant("cq-sm", "@container cq (min-width: 480px)");
+      addVariant("cq-md", "@container cq (min-width: 720px)");
+      addVariant("cq-lg", "@container cq (min-width: 960px)");
+    }),
   ],
 };
 
