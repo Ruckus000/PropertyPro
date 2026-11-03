@@ -50,10 +50,12 @@ const dialogContentVariants = cva(
   {
     variants: {
       size: {
-        sm: "sm:max-w-[400px]",
-        md: "sm:max-w-[560px]",
-        lg: "sm:max-w-[720px]",
-        xl: "sm:max-w-[960px]",
+        // rem, so a dialog widens with the web app's fluid root along with the
+        // text inside it (400 / 560 / 720 / 960px at a 16px root).
+        sm: "sm:max-w-[25rem]",
+        md: "sm:max-w-[35rem]",
+        lg: "sm:max-w-[45rem]",
+        xl: "sm:max-w-[60rem]",
       },
     },
     defaultVariants: {

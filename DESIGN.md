@@ -81,7 +81,7 @@ the offending line (email-template hex, chart/canvas internals).
 
 ## Typography
 
-**Fonts:** Geist (sans-serif, body/data/headings — `--font-sans`) and Geist Mono (monospace — `--font-mono`), both vendored in `apps/web/src/app/fonts/` and loaded with `next/font/local`. `apps/admin` loads the same two faces from byte-identical copies in `apps/admin/src/app/fonts/` (as `--font-sans` / `--font-mono`) and, like web, sets no root font size. Fraunces (display serif — `--font-display`) was removed from four authenticated components, which moved to Geist `font-semibold tracking-tight`: the dashboard status headline, the audit trail scope label, the site-editor title bar and the site settings heading. Fraunces is kept for signup (`front-porch-shell.tsx`), the printable audit record, the marketing landing page and `apps/admin`'s `AdminPageHeader`. It also still reaches any standalone visible `<h1>` in web through the global `h1` rule in `apps/web/src/app/globals.css` (for example payments/success, select-community, the auth pages, help pages and the error/not-found pages) — see the page-titles note below. The marketing page keeps Inter, loaded by its own layout as `--font-marketing-sans`, so the app's sans face cannot restyle it.
+**Fonts:** Geist (sans-serif, body/data/headings — `--font-sans`) and Geist Mono (monospace — `--font-mono`), both vendored in `apps/web/src/app/fonts/` and loaded with `next/font/local`. `apps/admin` loads the same two faces from byte-identical copies in `apps/admin/src/app/fonts/` (as `--font-sans` / `--font-mono`) and sets no root font size; web scales its app-shell root with the viewport (see Type scale). Fraunces (display serif — `--font-display`) was removed from four authenticated components, which moved to Geist `font-semibold tracking-tight`: the dashboard status headline, the audit trail scope label, the site-editor title bar and the site settings heading. Fraunces is kept for signup (`front-porch-shell.tsx`), the printable audit record, the marketing landing page and `apps/admin`'s `AdminPageHeader`. It also still reaches any standalone visible `<h1>` in web through the global `h1` rule in `apps/web/src/app/globals.css` (for example payments/success, select-community, the auth pages, help pages and the error/not-found pages) — see the page-titles note below. The marketing page keeps Inter, loaded by its own layout as `--font-marketing-sans`, so the app's sans face cannot restyle it.
 
 > **Page titles are not painted — in `apps/web`.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: a standalone visible `h1` in web still picks up Fraunces from the global `h1` rule in `globals.css`, until it migrates onto `PageHeader` or opts out with `font-sans`.
 >
@@ -97,7 +97,17 @@ the offending line (email-template hex, chart/canvas internals).
 | `2xl` | 24px | Page headings |
 | `3xl` | 30px | Hero/display text |
 
-Those are the standard-mode token values. Large text is on by default and the root font size is the browser default (no 18px override), so the sizes the default experience renders are one step up:
+Those are the standard-mode token values. Large text is on by default, so the sizes the default experience renders are one step up. The tables give sizes at the browser default root of 16px.
+
+**The signed-in app scales with the screen.** Inside the app shell (`[data-app-shell]`), `apps/web/src/app/globals.css` sets a fluid root: `clamp(100%, 69.23% + 0.4808vw, 125%)`. Type and Tailwind spacing are both rem, so text, control heights, padding and gaps all grow together, by the same factor:
+
+| Viewport | Root | Default `text-sm` | Default button |
+|---|---|---|---|
+| up to 1024px | 16px | 16px | 32px |
+| 1440px | 18px | 18px | 36px |
+| 1856px and up | 20px | 20px | 40px |
+
+Phones and tablets are unchanged, and the 44px touch heights below `md` are untouched because the root is 16px there. Percentages keep a user's own browser font-size setting. Marketing, the public site and `apps/admin` keep a fixed root. Values written in px (`text-[Npx]`, `size={18}` icon props, `min-h-[500px]`) do not scale, so new code uses the rem scale. Pinned by `apps/web/__tests__/styles/root-font-size.test.ts`.
 
 | Token | Default (large text) | Standard |
 |-------|----------------------|----------|
