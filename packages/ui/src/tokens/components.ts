@@ -88,12 +88,12 @@ export const componentTokens = {
   },
   table: {
     row: {
-      height: 52,
-      padding: primitiveSpace[4],
+      height: 40,
+      padding: primitiveSpace[3],
     },
     header: {
-      height: 40,
-      padding: primitiveSpace[4],
+      height: 32,
+      padding: primitiveSpace[3],
     },
     cell: {
       padding: primitiveSpace[3],
