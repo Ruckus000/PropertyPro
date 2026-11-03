@@ -443,7 +443,7 @@ export function HeroPhotosField({
                         // the row, so let it wrap rather than run off the edge. The
                         // height is a floor for that reason: 44px below 768px and
                         // 36px from there up (the touch-target rule in design.md).
-                        className="h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
+                        className="h-auto md:h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
                         onClick={() => swapStock(index)}
                       >
                         {`Use the ${STOCK_PHOTO_NAME[swapTo]} photo instead`}

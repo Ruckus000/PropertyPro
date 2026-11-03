@@ -362,9 +362,10 @@ describe('HeroPhotosField — stock photos', () => {
       // the classes that carry it. The label wraps in the narrow column, so the
       // height is a floor (`min-h`), not a fixed height.
       renderField([SUNSET]);
-      expect(
-        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-      ).toHaveClass('min-h-11', 'md:min-h-8');
+      const swap = screen.getByRole('button', { name: 'Use the palm-lined street photo instead' });
+      expect(swap).toHaveClass('min-h-11', 'md:min-h-8', 'h-auto', 'md:h-auto');
+      // size="sm" carries `md:h-7`; only `md:h-auto` cancels it, so the wrapping label can grow.
+      expect(swap).not.toHaveClass('md:h-7');
     });
 
     it('is not offered for an uploaded photo', () => {
