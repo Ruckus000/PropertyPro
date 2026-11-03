@@ -170,7 +170,8 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 - Geist density, adopted 2026-11-03. The root font size is the browser default (16px; no 18px override). Large text is on by default, so default-mode interface text (`text-sm`) renders 16px and prose (`text-base`) 18px; standard mode gives 14/16.
 - Buttons: every size is 44px below `md` (768px). From `md` up: sm(28px) default(32px) lg(40px) icon(32px). Radius md. No shadow on any variant. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
-- Inputs and Textareas: 44px below `md`, 32px from `md` up. Radius sm. `border-edge-strong`, no shadow, 1px border, 2px on focus.
+- Inputs: 44px below `md`, 32px from `md` up. Radius sm. `border-edge-strong`, no shadow, 1px border, 2px on focus.
+- Textareas: a multi-line field with a 60px minimum height at every width (not a 44/32 control). Radius sm, `border-edge-strong`, no shadow.
 - Cards: radius md, flat at rest (E0, no shadow). Padding 16 (`CardHeader` `p-4`, `CardContent`/`CardFooter` `p-4 pt-0`). E1 on hover only where a call site opts in.
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).
 - Table rows: 40px body (`py-2`), 32px header (`h-8`), 12px cell padding.

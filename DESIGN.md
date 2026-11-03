@@ -133,7 +133,8 @@ Four layers, each with a specific role:
 | Component | Heights | Radius | Notes |
 |-----------|---------|--------|-------|
 | Button | 44 below 768px; from 768px sm 28 / default 32 / lg 40 / icon 32 | md (8px) | Geist density adopted 2026-11-03; every size is 44px below `md`. No shadow on any variant. Canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
-| Input / Textarea | 44 below 768px, 32 from 768px | sm (6px) | `border-edge-strong`, no shadow; 1px border, 2px on focus |
+| Input | 44 below 768px, 32 from 768px | sm (6px) | `border-edge-strong`, no shadow; 1px border, 2px on focus |
+| Textarea | min 60 at every width | sm (6px) | Multi-line field, not a 44/32 control. `border-edge-strong`, no shadow |
 | Card | — | md (8px) | Flat at rest (no shadow). Padding 16px (header `p-4`, content/footer `p-4 pt-0`). E1 on hover only where a call site opts in |
 | Modal | — | lg (12px) | E3. Widths: 400/560/720/960px |
 | Badge | 20 / 24 / 28 | full | Status indicators |
