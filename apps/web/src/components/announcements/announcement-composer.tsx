@@ -203,7 +203,7 @@ export function AnnouncementComposer({
         <div className="space-y-2">
           <Label htmlFor="announcement-audience">Audience</Label>
           <Select value={audience} onValueChange={(value) => setAudience(value as AnnouncementAudience)}>
-            <SelectTrigger id="announcement-audience" className="h-11 md:h-9">
+            <SelectTrigger id="announcement-audience">
               <SelectValue placeholder="Select audience" />
             </SelectTrigger>
             <SelectContent>

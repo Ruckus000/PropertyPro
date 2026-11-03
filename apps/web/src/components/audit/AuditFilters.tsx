@@ -241,7 +241,7 @@ export function AuditPeriodPicker({ period, onPeriod }: AuditPeriodPickerProps) 
     <Select value={period} onValueChange={(v) => onPeriod(v as AuditPeriod)}>
       <SelectTrigger
         aria-label="When"
-        className="h-11 w-full shrink-0 justify-start gap-2 border-edge-strong sm:w-44 [&>svg:last-child]:ml-auto"
+        className="w-full shrink-0 justify-start gap-2 sm:w-44 [&>svg:last-child]:ml-auto"
       >
         <CalendarDays className="size-4 text-content-tertiary" aria-hidden="true" />
         {/* Children, so the label is in the server HTML instead of blank until hydration. */}

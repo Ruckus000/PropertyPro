@@ -93,7 +93,7 @@ export function CreatePollDialog({
           <div className="space-y-2">
             <Label>Poll type</Label>
             <Select value={pollType} onValueChange={(value) => setPollType(value as 'single_choice' | 'multiple_choice')}>
-              <SelectTrigger className="h-11 md:h-9">
+              <SelectTrigger>
                 <SelectValue placeholder="Select poll type" />
               </SelectTrigger>
               <SelectContent>
