@@ -65,12 +65,34 @@ test.describe('findSmallTargets', () => {
     expect(await findSmallTargets(page)).toHaveLength(2);
   });
 
+  test('catches an undersized target whose circle touches a wide undersized neighbour', async ({ page }) => {
+    // Centres are ~61px apart, but the 24px circle overlaps the text button's box.
+    await page.setContent(page1(`
+      <div class="row" style="gap: 1px; align-items: center">
+        <button aria-label="icon" style="width: 20px; height: 20px"></button>
+        <button aria-label="wide" style="width: 100px; height: 16px"></button>
+      </div>
+    `));
+    const found = await findSmallTargets(page);
+    expect(found.map((f) => f.selector), JSON.stringify(found)).toContain('button "icon"');
+  });
+
+  test('treats a target nested in another as one target', async ({ page }) => {
+    await page.setContent(page1(`
+      <div role="tab" aria-label="outer" style="display: inline-block; width: 44px; height: 44px">
+        <button aria-label="inner" style="width: 16px; height: 16px"></button>
+      </div>
+    `));
+    expect(await findSmallTargets(page)).toEqual([]);
+  });
+
   test('ignores hidden, sr-only and aria-hidden controls', async ({ page }) => {
     await page.setContent(page1(`
       <div class="row">
         <button style="width: 44px; height: 44px">b</button>
         <button class="sr-only">skip</button>
         <button style="display: none">gone</button>
+        <button style="visibility: hidden; width: 10px; height: 10px"></button>
         <span aria-hidden="true"><button style="width: 10px; height: 10px"></button></span>
         <input type="checkbox" style="position: absolute; opacity: 0; pointer-events: none">
       </div>

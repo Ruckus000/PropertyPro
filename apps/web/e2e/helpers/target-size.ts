@@ -54,13 +54,14 @@ export async function findSmallTargets(page: Page, min = 24): Promise<SmallTarge
         const crowded = rects.some((o, j) => {
           // A target nested in another (a button inside a role=tab) is one target.
           if (j === i || els[j]!.contains(els[i]!) || els[i]!.contains(els[j]!)) return false;
-          if (small[j]) {
-            const [ox, oy] = centre(o);
-            return Math.hypot(cx - ox, cy - oy) < min;
-          }
+          // The circle may not touch another target's box, nor another undersized
+          // target's circle.
           const nx = Math.max(o.left, Math.min(cx, o.right));
           const ny = Math.max(o.top, Math.min(cy, o.bottom));
-          return Math.hypot(cx - nx, cy - ny) < min / 2;
+          if (Math.hypot(cx - nx, cy - ny) < min / 2) return true;
+          if (!small[j]) return false;
+          const [ox, oy] = centre(o);
+          return Math.hypot(cx - ox, cy - oy) < min;
         });
         if (crowded) {
           found.push({ selector: describe(els[i]!), width: Math.round(r.width), height: Math.round(r.height) });

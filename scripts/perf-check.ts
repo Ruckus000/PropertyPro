@@ -235,14 +235,18 @@ function firstLoadChunks(pages: Record<string, string[]>, pageKey: string): stri
  * The font manifest keyed like the build manifest: `/abs/apps/web/src/app/(marketing)/layout`
  * becomes `/(marketing)/layout`, and the root layout `/layout`.
  */
-function readFontManifest(nextRoot: string): Record<string, string[]> | null {
+function readFontManifest(nextRoot: string, app: string): Record<string, string[]> | null {
   const path = join(nextRoot, 'server', 'next-font-manifest.json');
   if (!existsSync(path)) return null;
-  const app = (JSON.parse(readFileSync(path, 'utf8')) as FontManifest).app ?? {};
+  const entries = (JSON.parse(readFileSync(path, 'utf8')) as FontManifest).app ?? {};
+  // Anchored on the app's own directory, so a checkout under some other `src/app/`
+  // cannot cut the key in the wrong place. Separators normalised for Windows paths.
+  const anchor = `/apps/${app}/src/app`;
   const out: Record<string, string[]> = {};
-  for (const [key, files] of Object.entries(app)) {
-    const at = key.indexOf('/src/app/');
-    out[at === -1 ? key : key.slice(at + '/src/app'.length)] = files;
+  for (const [key, files] of Object.entries(entries)) {
+    const posix = key.replaceAll('\\', '/');
+    const at = posix.lastIndexOf(`${anchor}/`);
+    if (at !== -1) out[posix.slice(at + anchor.length)] = files;
   }
   return out;
 }
@@ -379,7 +383,8 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
     return false;
   }
 
-  const fonts = readFontManifest(spec.nextRoot);
+  const fonts = readFontManifest(spec.nextRoot, spec.app);
+  let routesWithFonts = 0;
   if (!fonts) {
     // The build manifest exists, so this is a real build that should have one.
     failures.push(`${spec.app}: no server/next-font-manifest.json, so font preloads could not be checked.`);
@@ -397,6 +402,7 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
       const fontFiles = preloadedFonts(fonts, routeKey);
       const fontBytes = fontFiles.reduce((sum, file) => sum + fileSizeOrZero(join(spec.nextRoot, file)), 0);
       console.log(`[${spec.app}:${group}] ${routeKey} preloads ${fontFiles.length} fonts, ${formatKiB(fontBytes)}`);
+      if (fontFiles.length > 0) routesWithFonts++;
       if (fontBytes > HARD_FONT_PRELOAD_BYTES) {
         failures.push(
           `${spec.app} ${group} route ${routeKey} preloads too many font bytes (${formatKiB(fontBytes)} > ${formatKiB(HARD_FONT_PRELOAD_BYTES)})`,
@@ -413,6 +419,12 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
         `${spec.app} ${group} route ${routeKey} is above target (${formatKiB(totalBytes)} > ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)})`,
       );
     }
+  }
+
+  // Every app's root layout preloads its sans face, so zero fonts on every route means
+  // the manifest's keys matched nothing, not that nothing is preloaded.
+  if (fonts && routesWithFonts === 0) {
+    failures.push(`${spec.app}: the font manifest matched no budgeted route, so font preloads could not be checked.`);
   }
 
   checkUnbudgetedRoutes(spec, pages, failures);
