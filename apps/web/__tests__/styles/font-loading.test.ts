@@ -47,6 +47,8 @@ describe('root layout font loading', () => {
     const call = localFontCallFor(rootLayout, './fonts/geist-mono-latin-var.woff2');
     expect(call).not.toBe('');
     expect(call).toMatch(/variable:\s*["']--font-mono["']/);
+    // 23 KB that no route renders at first paint; `perf:check` budgets preloads.
+    expect(call).toMatch(/preload:\s*false/);
   });
 
   it('no longer loads Inter', () => {

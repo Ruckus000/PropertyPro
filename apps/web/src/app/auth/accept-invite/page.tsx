@@ -49,9 +49,6 @@ export default async function AcceptInvitePage({
 
   return (
     <>
-      {branding.fontLinks.map((href) => (
-        <link key={href} rel="stylesheet" href={href} />
-      ))}
       <div
         className="mx-auto max-w-md"
         style={branding.cssVars as React.CSSProperties}

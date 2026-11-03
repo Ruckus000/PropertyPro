@@ -10,7 +10,7 @@
  * to a branding fetch failure.
  */
 import { headers } from 'next/headers';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars } from '@propertypro/theme';
 import type { CommunityTheme } from '@propertypro/theme';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { getCommunityPublicInfo, getBrandingForCommunity } from '@/lib/api/branding';
@@ -22,7 +22,6 @@ export interface AuthPageBranding {
   logoUrl: string | null;
   theme: CommunityTheme;
   cssVars: Record<string, string>;
-  fontLinks: string[];
   hasTenantContext: boolean;
 }
 
@@ -35,7 +34,6 @@ const GENERIC_BRANDING: AuthPageBranding = (() => {
     logoUrl: null,
     theme,
     cssVars: toCssVars(theme),
-    fontLinks: toFontLinks(theme),
     hasTenantContext: false,
   };
 })();
@@ -77,7 +75,6 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
       logoUrl,
       theme,
       cssVars: toCssVars(theme),
-      fontLinks: toFontLinks(theme),
       hasTenantContext: true,
     };
   } catch {

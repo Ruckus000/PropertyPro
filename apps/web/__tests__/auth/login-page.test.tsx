@@ -38,7 +38,6 @@ describe('login page', () => {
       communityName: null,
       hasTenantContext: false,
       logoUrl: null,
-      fontLinks: [],
       cssVars: {},
     });
 

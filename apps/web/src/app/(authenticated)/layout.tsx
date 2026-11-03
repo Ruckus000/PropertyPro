@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars } from '@propertypro/theme';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppShell } from '@/components/layout/app-shell';
@@ -50,13 +50,9 @@ export default async function AuthenticatedLayout({
     ? resolveTheme(branding, community.name, community.type)
     : resolveTheme(null, '', 'condo_718');
   const cssVars = toCssVars(theme);
-  const fontLinks = toFontLinks(theme);
 
   return (
     <>
-      {fontLinks.map((href) => (
-        <link key={href} rel="stylesheet" href={href} />
-      ))}
       <div style={cssVars as React.CSSProperties}>
         <AuthSessionSync />
         <IdleSessionManager role={role} />

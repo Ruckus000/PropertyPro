@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars } from '@propertypro/theme';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppQueryProvider } from '@/components/providers/query-provider';
@@ -36,9 +36,6 @@ export default async function HelpCenterLayout({ children }: { children: ReactNo
 
   return (
     <>
-      {toFontLinks(theme).map((href) => (
-        <link key={href} rel="stylesheet" href={href} />
-      ))}
       <div style={toCssVars(theme) as React.CSSProperties}>
         <AuthSessionSync />
         <IdleSessionManager role={role} />

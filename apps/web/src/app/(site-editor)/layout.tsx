@@ -30,7 +30,7 @@
  * (apps/web/src/lib/middleware/public-host-routes.ts).
  */
 import type { ReactNode } from 'react';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars } from '@propertypro/theme';
 import { AuthSessionSync } from '@/components/auth/auth-session-sync';
 import { IdleSessionManager } from '@/components/auth/idle-session-manager';
 import { AppQueryProvider } from '@/components/providers/query-provider';
@@ -50,13 +50,9 @@ export default async function SiteEditorLayout({ children }: { children: ReactNo
     ? resolveTheme(branding, community.name, community.type)
     : resolveTheme(null, '', 'condo_718');
   const cssVars = toCssVars(theme);
-  const fontLinks = toFontLinks(theme);
 
   return (
     <>
-      {fontLinks.map((href) => (
-        <link key={href} rel="stylesheet" href={href} />
-      ))}
       <AuthSessionSync />
       <IdleSessionManager role={shellContext.role} />
       <AppQueryProvider>

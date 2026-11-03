@@ -6,6 +6,11 @@ type AppBuildManifest = {
   pages?: Record<string, string[]>;
 };
 
+/** `.next/server/next-font-manifest.json`; `app` is keyed by ABSOLUTE segment path. */
+type FontManifest = {
+  app?: Record<string, string[]>;
+};
+
 /**
  * Budget baselines — derived from Phase 2 production build (2026-02-21):
  *
@@ -15,8 +20,10 @@ type AppBuildManifest = {
  * AGGREGATE HARD sits close to the per-route ceiling, not a multiple of it: every
  * route's first load includes the same root and shell chunks, counted once here.
  *
- * NOTE: These budgets cover JavaScript bundles only (static/chunks/*.js).
- * CSS and font payloads are not measured.
+ * NOTE: These budgets cover JavaScript bundles (static/chunks/*.js) and, since
+ * 2026-11-03, the fonts each route PRELOADS (from next-font-manifest.json; see
+ * `HARD_FONT_PRELOAD_BYTES`). CSS, images and fonts fetched without a preload are
+ * not measured.
  */
 const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // Re-based 2026-09-13 from 700 KiB, because the NUMBER changed, not the payload.
@@ -56,6 +63,19 @@ const TARGET_ROUTE_BUDGET_BYTES = 200 * 1024;
 // under 1210.
 const HARD_ROUTE_BUDGET_BYTES = Number(process.env.PERF_BUDGET_HARD_BYTES ?? 1160 * 1024);
 const HARD_TOTAL_BUDGET_BYTES = Number(process.env.PERF_BUDGET_TOTAL_HARD_BYTES ?? 1435 * 1024);
+
+// Fonts a route preloads: `<link rel=preload>` tags next/font emits for every
+// loader in the route's layouts and page, which the browser fetches at high
+// priority alongside first paint. Measured 2026-11-03 on a production build after
+// Geist Mono stopped preloading: the marketing landing page is the largest at
+// 221.2 KiB (Geist, Fraunces roman + italic, Inter), so the ceiling
+// is that plus the ~30 KiB ratchet margin this file uses.
+//
+// ponytail: Geist (29 KB) still preloads on marketing routes, which render
+// Inter, because the root layout loads it for every route; only a per-route-group
+// font loader removes it. Trigger: this budget fails on /(marketing)/page, or a
+// landing-page LCP regression.
+const HARD_FONT_PRELOAD_BYTES = Number(process.env.PERF_BUDGET_FONT_HARD_BYTES ?? 250 * 1024);
 
 interface AppSpec {
   app: string;
@@ -195,17 +215,41 @@ function fileSizeOrZero(path: string): number {
  */
 const SEGMENT_FILES = ['layout', 'loading', 'error', 'not-found', 'global-error'] as const;
 
-/** A page's own chunks plus every ancestor segment file's, each file once. */
-function firstLoadChunks(pages: Record<string, string[]>, pageKey: string): string[] {
+/** The page key plus every ancestor segment file's key, in manifest form. */
+function segmentKeys(pageKey: string): string[] {
   const segments = pageKey.slice(0, -'/page'.length).split('/');
-  const chunks = new Set(pages[pageKey] ?? []);
+  const keys = [pageKey];
   for (let depth = 1; depth <= segments.length; depth++) {
     const prefix = segments.slice(0, depth).join('/');
-    for (const file of SEGMENT_FILES) {
-      for (const chunk of pages[`${prefix}/${file}`] ?? []) chunks.add(chunk);
-    }
+    for (const file of SEGMENT_FILES) keys.push(`${prefix}/${file}`);
   }
-  return [...chunks];
+  return keys;
+}
+
+/** A page's own chunks plus every ancestor segment file's, each file once. */
+function firstLoadChunks(pages: Record<string, string[]>, pageKey: string): string[] {
+  return [...new Set(segmentKeys(pageKey).flatMap((key) => pages[key] ?? []))];
+}
+
+/**
+ * The font manifest keyed like the build manifest: `/abs/apps/web/src/app/(marketing)/layout`
+ * becomes `/(marketing)/layout`, and the root layout `/layout`.
+ */
+function readFontManifest(nextRoot: string): Record<string, string[]> | null {
+  const path = join(nextRoot, 'server', 'next-font-manifest.json');
+  if (!existsSync(path)) return null;
+  const app = (JSON.parse(readFileSync(path, 'utf8')) as FontManifest).app ?? {};
+  const out: Record<string, string[]> = {};
+  for (const [key, files] of Object.entries(app)) {
+    const at = key.indexOf('/src/app/');
+    out[at === -1 ? key : key.slice(at + '/src/app'.length)] = files;
+  }
+  return out;
+}
+
+/** The fonts a page preloads: its own plus every ancestor layout's, each file once. */
+function preloadedFonts(fonts: Record<string, string[]>, pageKey: string): string[] {
+  return [...new Set(segmentKeys(pageKey).flatMap((key) => fonts[key] ?? []))];
 }
 
 function bytesForRoute(nextRoot: string, chunks: readonly string[]): { totalBytes: number; files: string[] } {
@@ -335,6 +379,12 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
     return false;
   }
 
+  const fonts = readFontManifest(spec.nextRoot);
+  if (!fonts) {
+    // The build manifest exists, so this is a real build that should have one.
+    failures.push(`${spec.app}: no server/next-font-manifest.json, so font preloads could not be checked.`);
+  }
+
   const uniqueFiles = new Set<string>();
 
   for (const [group, routeKey] of selected) {
@@ -342,6 +392,17 @@ function checkApp(spec: AppSpec, warnings: string[], failures: string[]): boolea
     files.forEach((file) => uniqueFiles.add(file));
 
     console.log(`[${spec.app}:${group}] ${routeKey} -> ${formatKiB(totalBytes)}`);
+
+    if (fonts) {
+      const fontFiles = preloadedFonts(fonts, routeKey);
+      const fontBytes = fontFiles.reduce((sum, file) => sum + fileSizeOrZero(join(spec.nextRoot, file)), 0);
+      console.log(`[${spec.app}:${group}] ${routeKey} preloads ${fontFiles.length} fonts, ${formatKiB(fontBytes)}`);
+      if (fontBytes > HARD_FONT_PRELOAD_BYTES) {
+        failures.push(
+          `${spec.app} ${group} route ${routeKey} preloads too many font bytes (${formatKiB(fontBytes)} > ${formatKiB(HARD_FONT_PRELOAD_BYTES)})`,
+        );
+      }
+    }
 
     if (totalBytes > HARD_ROUTE_BUDGET_BYTES) {
       failures.push(
@@ -381,6 +442,7 @@ function main(): void {
   console.log(`- Target per-route budget: ${formatKiB(TARGET_ROUTE_BUDGET_BYTES)}`);
   console.log(`- Hard per-route budget: ${formatKiB(HARD_ROUTE_BUDGET_BYTES)}`);
   console.log(`- Hard aggregate budget (web): ${formatKiB(HARD_TOTAL_BUDGET_BYTES)}`);
+  console.log(`- Hard per-route font preload budget: ${formatKiB(HARD_FONT_PRELOAD_BYTES)}`);
   console.log('');
 
   let anyChecked = false;

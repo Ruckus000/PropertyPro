@@ -42,6 +42,9 @@ const geistMono = localFont({
   style: "normal",
   display: "swap",
   variable: "--font-mono",
+  // Not preloaded: mono only sets IDs, table columns and tooltips, never first-paint
+  // text, and a preload competes with the page's real first-paint resources.
+  preload: false,
 });
 
 // "Florida Modern" display serif — matches the marketing landing page. Kept for
