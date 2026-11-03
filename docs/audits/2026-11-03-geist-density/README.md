@@ -68,7 +68,7 @@ in **Geist** instead of Inter. Headings stay Playfair Display.
 
 ## Defects and observations (not fixed here)
 
-1. **Public association site body font changed Inter -> Geist.** `/pm/site-preview` at all three
+1. **Public association site body font changed Inter -> Geist.** (Re-measured after the fix at e1e11e459: see the section below; only partly resolved.) `/pm/site-preview` at all three
    widths. The site inherits the root layout's body font. Marketing keeps Inter because its layout
    loads it. The brief expected the public site to differ only in rem-based sizes.
 2. **Plan chip is 10 px** (`PlanBadge.tsx:52`, arbitrary `text-[10px]`) on every authenticated page
@@ -86,3 +86,29 @@ in **Geist** instead of Inter. Headings stay Playfair Display.
 - `pnpm typecheck`, run as its two halves so the turbo cache could be forced: `turbo run typecheck --force` (15/15 tasks, 0 cached) then `tsc -p scripts/tsconfig.json`; both exit 0.
 - `pnpm lint`: ESLint plus all 34 guards passed, exit 0.
 - `pnpm test`: 1390 files passed, 1 skipped; 18679 tests passed, 33 skipped; exit 0.
+
+## Public-site font, re-measured after e1e11e459
+
+Same sandbox, restarted on the fix commit. Rendered face from Chrome's own record
+(`CSS.getPlatformFontsForNode`) plus `document.fonts`, not the computed string. Widths 1440 / 1024 / 375.
+
+| Surface | Before (a88cdf795) | After a1d173e59 | After e1e11e459 |
+|---|---|---|---|
+| Sunset Condos site (theme body `Source Sans 3`, heading Playfair Display), body | Inter | Geist | **Geist** (996 chars, all widths) |
+| Same, heading | Playfair Display | Playfair Display | Playfair Display |
+| Fixture community with the Inter theme (the `THEME_DEFAULTS` case), body and headings | not measured | Geist (by the cause below) | **Inter** (269 chars, all three widths; h1/h2 Inter SemiBold) |
+| Editor canvas (`/pm/website-editor`, 1440), Inter-themed fixture | not measured | not measured | Inter |
+| Marketing `/` | Inter | Inter | Inter (5528 chars; headings Fraunces) |
+| Authenticated app (dashboard) | Inter | Geist | Geist (1794 chars) |
+
+The fix works where the theme names Inter: the `inter` face is now in the document and wins.
+It does **not** restore Inter for Sunset Condos. Cause, measured in the page: `toCssVars` writes
+`--theme-font-body:Source Sans 3` (unquoted) and `Source Sans 3` is not a valid unquoted font-family
+(`3` is not an identifier), so `.font-body` (`var(--theme-font-body, Inter), var(--font-sans), sans-serif`)
+is invalid at computed-value time and the element inherits the root font. Even
+`style.fontFamily = 'Source Sans 3'` falls back to the inherited face. The body font a community
+picked, and Google's Source Sans 3 stylesheet, were therefore never applied; the site showed the
+root font, which used to be Inter by accident and is now Geist. Playfair Display, Lora and Nunito
+Sans apply because they are plain identifiers. This predates the Geist work; the redesign only made
+it visible. Presets affected: any family name with a bare number token (`Source Sans 3`, and
+`Warm Earth` and `Bayfront` use it). Fix would be to quote family names in `toCssVars`; not done here.
