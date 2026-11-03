@@ -1,0 +1,105 @@
+/*
+ * The PropertyPro loader: the house mark draws itself (roof, then walls),
+ * the two bars fill in, it holds, then fades and starts again. Every element
+ * runs the same 2.8s cycle so they never drift apart.
+ *
+ * Under prefers-reduced-motion nothing moves: the mark sits fully drawn and
+ * the progress track is hidden.
+ */
+.pp-loader-stroke {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.pp-loader-roof {
+  animation: pp-loader-roof 2.8s var(--ease-standard) infinite;
+}
+
+.pp-loader-walls {
+  animation: pp-loader-walls 2.8s var(--ease-standard) infinite;
+}
+
+.pp-loader-bar {
+  transform-box: fill-box;
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+.pp-loader-bar-long {
+  animation: pp-loader-bar-long 2.8s var(--ease-enter) infinite;
+}
+
+.pp-loader-bar-short {
+  animation: pp-loader-bar-short 2.8s var(--ease-enter) infinite;
+}
+
+.pp-loader-mark {
+  animation: pp-loader-fade 2.8s linear infinite;
+}
+
+.pp-loader-track-fill {
+  animation: pp-loader-track 1.6s var(--ease-standard) infinite;
+}
+
+.pp-loader-overlay {
+  animation: pp-loader-overlay-in var(--duration-standard) var(--ease-enter) both;
+}
+
+@keyframes pp-loader-roof {
+  0% { stroke-dashoffset: 1; }
+  22%, 100% { stroke-dashoffset: 0; }
+}
+
+@keyframes pp-loader-walls {
+  0%, 16% { stroke-dashoffset: 1; }
+  44%, 100% { stroke-dashoffset: 0; }
+}
+
+@keyframes pp-loader-bar-long {
+  0%, 42% { transform: scaleX(0); }
+  58%, 100% { transform: scaleX(1); }
+}
+
+@keyframes pp-loader-bar-short {
+  0%, 52% { transform: scaleX(0); }
+  66%, 100% { transform: scaleX(1); }
+}
+
+@keyframes pp-loader-fade {
+  0%, 86% { opacity: 1; }
+  96% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes pp-loader-track {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+@keyframes pp-loader-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-loader-roof,
+  .pp-loader-walls,
+  .pp-loader-bar-long,
+  .pp-loader-bar-short,
+  .pp-loader-mark,
+  .pp-loader-overlay {
+    animation: none;
+  }
+
+  .pp-loader-stroke {
+    stroke-dashoffset: 0;
+  }
+
+  .pp-loader-bar {
+    transform: none;
+  }
+
+  .pp-loader-track {
+    display: none;
+  }
+}

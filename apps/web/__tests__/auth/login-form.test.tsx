@@ -15,6 +15,14 @@ vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
 }));
 
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  ),
+}));
+
 vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: createBrowserClientMock }));
 
 import { LoginForm } from '../../src/components/auth/login-form';
@@ -79,5 +87,57 @@ describe('LoginForm', () => {
     });
     expect(screen.getByRole('button', { name: 'Sign In' })).not.toBeDisabled();
     expect(routerMock.replace).not.toHaveBeenCalled();
+  });
+
+  it('links to forgot-password next to the password field', () => {
+    render(<LoginForm returnTo="/dashboard" />);
+    expect(screen.getByRole('link', { name: 'Forgot password?' })).toHaveAttribute(
+      'href',
+      '/auth/forgot-password',
+    );
+  });
+
+  it('toggles password visibility', () => {
+    render(<LoginForm returnTo="/dashboard" />);
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  it('shows the full-screen loader naming the community after a successful sign-in', async () => {
+    const { container } = render(<LoginForm returnTo="/dashboard" destinationName="Sunset Condos" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+
+    await act(async () => {
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Opening Sunset Condos');
+    });
+    expect(routerMock.replace).toHaveBeenCalledWith('/dashboard');
+    expect(screen.getByRole('button', { name: /Sign In/ })).toBeDisabled();
+  });
+
+  it('does not show the loader when sign-in fails', async () => {
+    signInWithPasswordMock.mockResolvedValueOnce({ error: { message: 'Invalid login credentials' } });
+    const { container } = render(<LoginForm returnTo="/dashboard" destinationName="Sunset Condos" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'bad' } });
+
+    await act(async () => {
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Invalid login credentials');
+    });
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });
