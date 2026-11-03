@@ -228,7 +228,7 @@ export function PlatformSettings({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-auto px-2 py-1 text-status-danger hover:bg-status-danger-bg hover:text-status-danger"
+                        className="h-auto md:h-auto px-2 py-1 text-status-danger hover:bg-status-danger-bg hover:text-status-danger"
                         disabled={removeLoading}
                         onClick={() => handleRemove(admin.userId)}
                       >
@@ -237,7 +237,7 @@ export function PlatformSettings({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-auto px-2 py-1"
+                        className="h-auto md:h-auto px-2 py-1"
                         onClick={() => setRemoveId(null)}
                       >
                         No

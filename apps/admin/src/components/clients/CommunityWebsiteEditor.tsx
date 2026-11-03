@@ -461,7 +461,7 @@ export function CommunityWebsiteEditor({
                       variant="link"
                       size="sm"
                       onClick={handleRemoveLogo}
-                      className="h-auto p-0 text-status-danger hover:text-status-danger"
+                      className="h-auto md:h-auto p-0 text-status-danger hover:text-status-danger"
                     >
                       <X size={12} aria-hidden="true" /> Remove
                     </Button>

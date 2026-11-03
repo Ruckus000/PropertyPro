@@ -43,4 +43,30 @@ describe("Button (lifted shadcn)", () => {
     expect(classes).toContain("md:h-9");
     expect(classes).not.toContain("md:h-8");
   });
+
+  // twMerge only drops a conflicting class in the SAME variant. The primitive's
+  // desktop height is `md:h-7` / `md:h-8`, so an unprefixed `h-auto` replaces
+  // `h-11` and leaves the `md:` one standing: the button snaps back to a fixed
+  // 28px/32px from md up and clips whatever the caller wanted auto-sized.
+  it("an unprefixed h-auto leaves the primitive's md: height standing", () => {
+    const classes = classesOf(cn(buttonVariants({ size: "sm" }), "h-auto"));
+    expect(classes).toContain("h-auto");
+    expect(classes).toContain("md:h-7");
+  });
+
+  it("h-auto with a matching md:h-auto wins the merge at every width", () => {
+    const classes = classesOf(cn(buttonVariants({ size: "sm" }), "h-auto md:h-auto"));
+    expect(classes).toContain("md:h-auto");
+    expect(classes).not.toContain("md:h-7");
+  });
+
+  it("w-auto on an icon button needs md:w-auto for the same reason", () => {
+    const classes = classesOf(
+      cn(buttonVariants({ size: "icon" }), "h-auto w-auto md:h-auto md:w-auto"),
+    );
+    expect(classes).toContain("md:h-auto");
+    expect(classes).toContain("md:w-auto");
+    expect(classes).not.toContain("md:h-8");
+    expect(classes).not.toContain("md:w-8");
+  });
 });

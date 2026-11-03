@@ -270,7 +270,7 @@ export function MissingRecordsAlert({ communityId, records, progress, formatDate
         <Button
           type="button"
           variant="link"
-          className={cn('h-auto px-0 text-content-link', TOUCH)}
+          className={cn('h-auto md:h-auto px-0 text-content-link', TOUCH)}
           onClick={() => setShowWhileSnoozed(true)}
         >
           Show them now

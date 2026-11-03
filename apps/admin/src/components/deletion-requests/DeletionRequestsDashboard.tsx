@@ -474,7 +474,7 @@ function DialogOverlay({
           size="icon"
           onClick={onClose}
           aria-label="Close dialog"
-          className="absolute right-3 top-3 h-auto w-auto p-1 text-content-disabled hover:text-content-secondary"
+          className="absolute right-3 top-3 h-auto w-auto md:h-auto md:w-auto p-1 text-content-disabled hover:text-content-secondary"
         >
           <X size={16} aria-hidden="true" />
         </Button>
