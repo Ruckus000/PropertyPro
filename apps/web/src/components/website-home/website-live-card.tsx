@@ -89,48 +89,52 @@ export function WebsiteLiveCard({ communityId, communityName, publicUrl }: Websi
       ref={card}
       aria-labelledby="website-live-heading"
       data-testid="website-live-card"
-      className="grid gap-5 rounded-md border border-edge bg-surface-card p-5 shadow-sm md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:items-center"
+      className="cq rounded-md border border-edge bg-surface-card p-5"
     >
-      <div className="space-y-4">
-        <div className="space-y-1">
-          <h2 id="website-live-heading" className="text-lg font-semibold text-content">
-            Your website is live
-          </h2>
-          <p className="text-sm text-content-secondary">
-            {communityName}&apos;s site is public now, at {address}. Pick a different look
-            whenever you like; your text and records stay.
-          </p>
+      {/* Laid out by the card's own width: side by side when the card spans the
+          page, stacked when the dashboard puts it in its narrow setup rail. */}
+      <div className="grid gap-5 cq-md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] cq-md:items-center">
+        <div className="space-y-4">
+          <div className="space-y-1">
+            <h2 id="website-live-heading" className="text-lg font-semibold text-content">
+              Your website is live
+            </h2>
+            <p className="text-sm text-content-secondary">
+              {communityName}&apos;s site is public now, at {address}. Pick a different look
+              whenever you like; your text and records stay.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild>
+              <Link href={`/pm/website?communityId=${communityId}`}>Open website home</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <a href={publicUrl} target="_blank" rel="noreferrer">
+                View site
+                <ExternalLink className="size-4" aria-hidden="true" />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/pm/website/looks?communityId=${communityId}`}>Pick a different look</Link>
+            </Button>
+            <Button type="button" variant="ghost" onClick={dismiss} aria-disabled={keepCurrent.isPending}>
+              Dismiss
+            </Button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Button asChild>
-            <Link href={`/pm/website?communityId=${communityId}`}>Open website home</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <a href={publicUrl} target="_blank" rel="noreferrer">
-              View site
-              <ExternalLink className="size-4" aria-hidden="true" />
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href={`/pm/website/looks?communityId=${communityId}`}>Pick a different look</Link>
-          </Button>
-          <Button type="button" variant="ghost" onClick={dismiss} aria-disabled={keepCurrent.isPending}>
-            Dismiss
-          </Button>
-        </div>
+        <LookPreviewFrame
+          communityId={communityId}
+          lookId={null}
+          title={`${communityName} website preview`}
+          width={PREVIEW.width}
+          height={PREVIEW.height}
+          fit
+          className="rounded-sm border border-edge"
+        />
       </div>
-
-      <LookPreviewFrame
-        communityId={communityId}
-        lookId={null}
-        title={`${communityName} website preview`}
-        width={PREVIEW.width}
-        height={PREVIEW.height}
-        fit
-        className="rounded-sm border border-edge"
-      />
     </section>
   );
 }

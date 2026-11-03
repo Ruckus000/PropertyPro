@@ -25,22 +25,24 @@ const config: Config = {
         "2xl": "var(--font-size-2xl, 1.5rem)",
         "3xl": "var(--font-size-3xl, 1.875rem)",
       },
+      // rem, so the fluid app root (globals.css, [data-app-shell]) scales spacing
+      // with text. Identical to the old px values wherever the root is 16px.
       spacing: {
-        "1": "4px",
-        "2": "8px",
-        "3": "12px",
-        "4": "16px",
-        "5": "20px",
-        "6": "24px",
-        "7": "28px",
-        "8": "32px",
-        "9": "36px",
-        "10": "40px",
-        "11": "44px",
-        "12": "48px",
-        "14": "56px",
-        "16": "64px",
-        "20": "80px",
+        "1": "0.25rem", // 4px at a 16px root
+        "2": "0.5rem", // 8px at a 16px root
+        "3": "0.75rem", // 12px at a 16px root
+        "4": "1rem", // 16px at a 16px root
+        "5": "1.25rem", // 20px at a 16px root
+        "6": "1.5rem", // 24px at a 16px root
+        "7": "1.75rem", // 28px at a 16px root
+        "8": "2rem", // 32px at a 16px root
+        "9": "2.25rem", // 36px at a 16px root
+        "10": "2.5rem", // 40px at a 16px root
+        "11": "2.75rem", // 44px at a 16px root
+        "12": "3rem", // 48px at a 16px root
+        "14": "3.5rem", // 56px at a 16px root
+        "16": "4rem", // 64px at a 16px root
+        "20": "5rem", // 80px at a 16px root
       },
       borderRadius: {
         xs: "var(--radius-xs)",

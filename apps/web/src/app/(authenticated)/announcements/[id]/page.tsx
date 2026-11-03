@@ -119,7 +119,7 @@ export default async function AnnouncementDetailPage({ params, searchParams }: P
       </PageHeader>
 
       <article
-        className={`rounded-2xl border border-edge bg-surface-card p-6 shadow-sm ${
+        className={`rounded-md border border-edge bg-surface-card p-6 ${
           isDeleted ? 'opacity-60' : ''
         }`}
       >

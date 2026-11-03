@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useOnboardingChecklist } from '@/hooks/use-onboarding-checklist';
 import { ChecklistCelebration } from './checklist-celebration';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { directoryHref } from '@/lib/directory/directory-href';
 import {
@@ -75,27 +74,13 @@ export function OnboardingChecklist({
   };
   const handleDismiss = () => close('dismissed');
 
-  // B3: distinct loading / error affordances (previously all collapsed to null).
-  // A dismissed card stays hidden through loading/error — it only reappears for
-  // the celebration once data loads below.
-  if (isLoading) {
-    if (dismissed) return null;
-    return (
-      <section
-        role="status"
-        aria-label="Loading setup checklist"
-        className="rounded-md border border-edge bg-surface-card p-5 shadow-sm"
-      >
-        <Skeleton className="h-5 w-56" />
-        <Skeleton className="mt-3 h-2 w-full" />
-        <div className="mt-4 space-y-3">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      </section>
-    );
-  }
+  // Nothing while loading. The dashboards put this card in a side rail that
+  // collapses when empty, so a loading skeleton would hold the rail open and
+  // then let it collapse, reflowing the whole page for every user whose
+  // checklist is done or dismissed. The error state below still shows.
+  // shortcut: an open checklist pops in once loaded; prefetch it on the server
+  // (and keep dismissal in a cookie) if that pop-in draws complaints.
+  if (isLoading) return null;
 
   if (isError) {
     if (dismissed) return null;
@@ -157,7 +142,7 @@ export function OnboardingChecklist({
     <section
       aria-label={`Setup checklist for ${communityName}`}
       className={cn(
-        'rounded-md border border-edge bg-surface-card shadow-sm',
+        'rounded-md border border-edge bg-surface-card',
         variant === 'secondary' && 'border-dashed',
       )}
     >

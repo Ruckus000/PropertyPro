@@ -86,7 +86,7 @@ describe('DialogContent rendering', () => {
         </DialogContent>
       </Dialog>
     );
-    expect(screen.getByRole('dialog').className).toContain('sm:max-w-[960px]');
+    expect(screen.getByRole('dialog').className).toContain('sm:max-w-[60rem]');
   });
 
   it('renders resize handles when resizable on desktop', () => {

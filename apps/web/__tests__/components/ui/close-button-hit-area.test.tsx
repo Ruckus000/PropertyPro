@@ -47,10 +47,12 @@ function expectTouchTarget(el: HTMLElement, label: string) {
 
 describe('Sheet/Dialog close buttons meet the touch-target rule', () => {
   it('the size classes resolve to 44px and 36px in the web Tailwind config', () => {
-    expect(spacing['11']).toBe('44px');
-    expect(spacing['9']).toBe('36px');
+    // rem, so the fluid app root scales them; 44px / 36px at the 16px root
+    // phones and tablets get.
+    expect(spacing['11']).toBe('2.75rem');
+    expect(spacing['9']).toBe('2.25rem');
     // The anchor: the icon's centre sat at right-4 (16px) + half of h-4 (8px).
-    expect(spacing['6']).toBe('24px');
+    expect(spacing['6']).toBe('1.5rem');
   });
 
   it('DialogContent close button has a 44px / 36px hit area', () => {

@@ -500,9 +500,13 @@ export function DocumentLibrary({
           />
         </div>
 
-        <div className="grid min-h-[500px] xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        {/* The preview column exists only while a document is open; until then
+            the list takes the full width rather than half a screen of blank pane. */}
+        <div
+          className={`grid min-h-[500px] ${selectedDocument ? 'xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]' : ''}`}
+        >
           <div
-            className={`min-w-0 p-6 xl:border-r xl:border-edge ${selectedDocument ? 'hidden xl:block' : ''}`}
+            className={`min-w-0 p-6 ${selectedDocument ? 'hidden xl:block xl:border-r xl:border-edge' : ''}`}
           >
             {view === 'list' && (
               <DocumentsTable
@@ -562,7 +566,7 @@ export function DocumentLibrary({
             )}
           </div>
 
-          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden xl:block'}`}>
+          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden'}`}>
             {selectedDocument && (
               <button
                 type="button"

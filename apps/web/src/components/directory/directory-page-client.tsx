@@ -857,7 +857,7 @@ export function DirectoryPageClient({
                 />
               ) : (
                 // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it. Trigger: the top-nav flag is removed.
-                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-16rem)]'} min-h-[32rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
+                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-16rem)]'} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
                   <UnitsSplitList
                     units={filteredUnits}
                     hasOwnerRole={hasOwnerRole}

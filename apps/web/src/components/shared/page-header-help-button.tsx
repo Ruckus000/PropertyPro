@@ -2,8 +2,7 @@
 
 /**
  * <PageHeaderHelpButton/> — labeled Help button rendered in every
- * PageHeader's actions row (and as a fallback in the AppShell content
- * area for pages that don't use PageHeader). Lives here because the
+ * PageHeader's actions row (and by the directory page). Lives here because the
  * top-bar utility icon was getting lost among notifications, search,
  * and community switcher icons.
  *

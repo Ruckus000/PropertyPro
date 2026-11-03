@@ -246,7 +246,7 @@ export function WelcomeScreen({
       {checklistDisplayItems.length > 0 && (
         <section
           aria-label="Things to explore"
-          className="rounded-md border border-edge bg-surface-card p-5 shadow-sm"
+          className="rounded-md border border-edge bg-surface-card p-5"
         >
           <h2 className="mb-4 text-base font-semibold text-content">
             A few things to explore
