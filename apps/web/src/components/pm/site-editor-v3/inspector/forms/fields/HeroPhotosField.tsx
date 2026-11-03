@@ -442,7 +442,7 @@ export function HeroPhotosField({
                         // ("…the palm-lined street photo instead") is wider than
                         // the row, so let it wrap rather than run off the edge. The
                         // height is a floor for that reason: 44px below 768px and
-                        // 36px from there up (the touch-target rule in design.md).
+                        // 32px from there up (the touch-target rule in design.md).
                         className="h-auto md:h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
                         onClick={() => swapStock(index)}
                       >

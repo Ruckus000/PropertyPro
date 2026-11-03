@@ -60,9 +60,11 @@ The neutral story is two scales, not one: `--gray-*` for text and borders, and t
 
 4px base unit grid. Use **only** token values.
 
+- **Page frame** (Geist density, adopted 2026-11-03): `PageContainer` owns the gutter — `px-4 sm:px-6` (16px under 640px, 24px from there up), `py-5` (20px), fluid up to `max-w-[1600px]`. Macro spacing between sections stays at the token scale below.
 - **Micro** (component internals): `inline` (horizontal gaps 4–24px), `stack` (vertical gaps 8–32px), `inset` (padding 8–24px)
 - **Macro** (layout composition): `section` (24–64px), `page` (48–80px)
 - Macro spacing is constant across viewports. Only micro spacing adapts by breakpoint.
+- **Container queries.** Components that must lay out by the width of their own box rather than the window's (the sidebar and top nav change how much of the viewport a page gets) use `cq` plus `cq-sm` / `cq-md` / `cq-lg:`, which apply from 480 / 720 / 960px of the nearest `.cq` ancestor (a container named `cq`; defined in `apps/web/tailwind.config.ts`). Touch heights stay on the viewport `md:` breakpoint.
 
 ### Token Enforcement
 
@@ -79,7 +81,7 @@ the offending line (email-template hex, chart/canvas internals).
 
 ## Typography
 
-**Fonts:** Geist (sans-serif, body/data/headings — `--font-sans`) and Geist Mono (monospace — `--font-mono`), both vendored in `apps/web/src/app/fonts/` and loaded with `next/font/local`. Fraunces (display serif — `--font-display`) has left the authenticated app: the dashboard status headline, audit trail scope label, site-editor title bar and site settings heading use Geist `font-semibold tracking-tight`. Fraunces remains in four places: signup (`front-porch-shell.tsx`), the printable audit record, the marketing landing page, and `apps/admin`'s `AdminPageHeader`. The marketing page keeps Inter, loaded by its own layout as `--font-marketing-sans`, so the app's sans face cannot restyle it.
+**Fonts:** Geist (sans-serif, body/data/headings — `--font-sans`) and Geist Mono (monospace — `--font-mono`), both vendored in `apps/web/src/app/fonts/` and loaded with `next/font/local`. Fraunces (display serif — `--font-display`) was removed from four authenticated components, which moved to Geist `font-semibold tracking-tight`: the dashboard status headline, the audit trail scope label, the site-editor title bar and the site settings heading. Fraunces is kept for signup (`front-porch-shell.tsx`), the printable audit record, the marketing landing page and `apps/admin`'s `AdminPageHeader`. It also still reaches any standalone visible `<h1>` in web through the global `h1` rule in `apps/web/src/app/globals.css` (for example payments/success, select-community, the auth pages, help pages and the error/not-found pages) — see the page-titles note below. The marketing page keeps Inter, loaded by its own layout as `--font-marketing-sans`, so the app's sans face cannot restyle it.
 
 > **Page titles are not painted — in `apps/web`.** Per the PropertyPro design prototype ("the rail already says which page you are on"), `PageHeader` renders its `h1` visually hidden and does not paint `description`; the header is a toolbar. The `h1` still exists for the breadcrumb leaf and assistive tech. Consequence, accepted 2026-09-02: a standalone visible `h1` in web still picks up Fraunces from the global `h1` rule in `globals.css`, until it migrates onto `PageHeader` or opts out with `font-sans`.
 >
@@ -130,15 +132,17 @@ Four layers, each with a specific role:
 
 | Component | Heights | Radius | Notes |
 |-----------|---------|--------|-------|
-| Button | sm 32 / default 36 / lg 40 / icon 36 | md (10px) | Denser scale adopted 2026-07 (Wave 2); canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
-| Input | sm/md/lg 36 / 40 / 48 | sm (6px) | 1px border, 2px on focus |
-| Card | — | md (10px) | Padding: 16/20/24px. E0 rest, E1 hover |
-| Modal | — | lg (16px) | E3. Widths: 400/560/720/960px |
+| Button | 44 below 768px; from 768px sm 28 / default 32 / lg 40 / icon 32 | md (8px) | Geist density adopted 2026-11-03; every size is 44px below `md`. No shadow on any variant. Canonical component: `packages/ui/src/components/ui/button.tsx`. Variants: default, secondary, outline, ghost, destructive, link |
+| Input / Textarea | 44 below 768px, 32 from 768px | sm (6px) | `border-edge-strong`, no shadow; 1px border, 2px on focus |
+| Card | — | md (8px) | Flat at rest (no shadow). Padding 16px (header `p-4`, content/footer `p-4 pt-0`). E1 on hover only where a call site opts in |
+| Modal | — | lg (12px) | E3. Widths: 400/560/720/960px |
 | Badge | 20 / 24 / 28 | full | Status indicators |
-| NavRail item | 44 | md (10px) | Rail: 64px collapsed, 240px expanded |
-| Table row | 52 (body) / 40 (header) | — | Cell padding: 12px |
+| NavRail item | 44 | md (8px) | Rail: 64px collapsed, 240px expanded |
+| Table row | 40 (body) / 32 (header) | — | Cell padding: 12px |
 
-Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `packages/ui/src/components/ui/button.tsx`'s CVA. The deprecated `packages/ui` Button that kept the old 36/40/48 scale for admin is deleted — admin renders this same 32/36/40 scale.
+Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table); Button dimensions live in `packages/ui/src/components/ui/button.tsx`'s CVA. The deprecated `packages/ui` Button that kept the old 36/40/48 scale for admin is deleted — admin renders this same scale.
+
+**Desktop control floor is 32px.** Below 768px every interactive control is 44px, and the primitives carry that rule so call sites do not. From 768px up a control is at least 32px; Button `sm` (28px) is the single dense exception, and it still clears WCAG 2.5.8's 24px minimum. The Dialog/Sheet close button is `md:h-9` (36px), which meets the floor.
 
 ---
 
@@ -148,12 +152,12 @@ Source: `packages/ui/src/tokens/components.ts` (Badge/Card/Modal/NavRail/Table);
 
 | Level | Name | Usage |
 |-------|------|-------|
-| E0 | Flat | Default cards, page surfaces |
-| E1 | Raised | Hover lift, sticky bars |
+| E0 | Flat | Default cards (no shadow at rest), page surfaces |
+| E1 | Raised | Sticky bars; card hover lift only where a call site opts in |
 | E2 | Overlay | Dropdowns, popovers, sheets — **overlays only** |
 | E3 | Modal | Dialogs, command palettes — **overlays only** |
 
-**Radius scale:** `sm` (6px) inputs → `md` (10px) cards/buttons → `lg` (16px) modals → `xl`/`2xl` (20/24px) → `full` badges/avatars
+**Radius scale** (Geist, adopted 2026-11-03): `xs` (4px) → `sm` (6px) inputs → `md` (8px) cards/buttons → `lg` (12px) modals → `xl`/`2xl` (20/24px) → `full` badges/avatars. Tailwind `rounded-*` read `var(--radius-*)`.
 
 Shadows are slate-tinted (`rgba(15,23,42,…)`, never pure black) and single-sourced from `--elevation-e0..e3` (defined in `packages/tokens/src/static.ts`). Tailwind's `shadow-sm`/`shadow` map to E1, `shadow-md` to E2, and `shadow-lg`/`xl`/`2xl` to E3 — so the ladder holds even for stock utility classes.
 
@@ -200,8 +204,8 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 
 ### Data Display
 
-- DataRow pattern: 44px touch target on mobile, 36px on desktop
-- Tables: row height 52px, header 40px, 12px cell padding
+- DataRow pattern: 44px touch target on mobile, 32px on desktop
+- Tables: row height 40px, header 32px, 12px cell padding
 - ColumnHeader for sortable columns
 - StatusPills for aggregated status summaries
 - CSV export for any tabular data visible to admins
@@ -218,7 +222,7 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 ## Accessibility
 
 - **Focus:** `:focus-visible` ring system — 2px solid, 2px offset. NEVER suppress on any interactive element.
-- **Touch targets:** 44px minimum on mobile (<768px), 36px on desktop (>=768px)
+- **Touch targets:** 44px minimum on mobile (<768px), 32px floor on desktop (>=768px); Button `sm` (28px) is the single dense exception, above WCAG 2.5.8's 24px minimum
 - **Skip link:** `.skip-link` class supported for keyboard users
 - **Motion:** All animations respect `prefers-reduced-motion`. Motion must be functional (feedback/orientation/attention), never decorative.
 - **Color:** Never rely on color alone. Always icon + text + color for status.
@@ -239,7 +243,7 @@ Every PR touching UI must pass:
 - [ ] All radii from the radius scale
 - [ ] All shadows from the elevation scale
 - [ ] Focus ring visible on every interactive element
-- [ ] Touch targets meet minimums (44px mobile, 36px desktop)
+- [ ] Touch targets meet minimums (44px mobile, 32px desktop)
 - [ ] Status uses icon + text + color (never color alone)
 - [ ] `prefers-reduced-motion` respected (no decorative animation)
 - [ ] Loading, empty, and error states handled for all data-dependent views

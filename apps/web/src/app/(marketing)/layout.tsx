@@ -25,7 +25,7 @@ const fraunces = localFont({
 // its own variable rather than inheriting whatever the app uses. Same file the
 // app shell used to load, so no new bytes and no change to the landing page.
 // Like the root layout's Inter before it, no `adjustFontFallback` (default).
-// The CSS family name is `inter-latin-var`, derived from the file name — it
+// next/font emits the generated family as `inter` for this loader, and it
 // collides with nothing, because no other loader in apps/web uses this file.
 const inter = localFont({
   src: '../fonts/inter-latin-var.woff2',
