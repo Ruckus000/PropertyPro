@@ -28,12 +28,11 @@ const SPACING = {
 } as const;
 
 /**
- * Widths are Tailwind's nominal rem figures: apps/web does not override the
- * root font size, so 1rem is the browser default (16px) and `max-w-*` renders at
- * the size its comment says. (apps/admin still sets its own root size until its
- * parity task lands, so its pages render wider.) The authenticated content box is the viewport less the
- * page gutter (`PageContainer`); top tabs are the default navigation since
- * #1442, so no sidebar width comes off it.
+ * Widths are Tailwind's nominal rem figures: neither apps/web nor apps/admin
+ * overrides the root font size, so 1rem is the browser default (16px) and
+ * `max-w-*` renders at the size its comment says. The authenticated content box
+ * is the viewport less the page gutter (`PageContainer`); top tabs are the
+ * default navigation since #1442, so no sidebar width comes off it.
  */
 const WIDTHS = {
   /** Full app width (inherits the container cap). */

@@ -48,10 +48,9 @@ Sources (all `/* latin */`, from the URLs in "Refreshing them" below):
 Which app loads which: the authenticated app loads Geist (`--font-sans`), Geist
 Mono (`--font-mono`) and Fraunces (`--font-display`, the surfaces that keep a
 serif) in `app/layout.tsx`. Inter is loaded only by the marketing layout
-(`--font-marketing-sans`) and by `apps/admin`.
-
-`apps/admin/src/app/fonts/inter-latin-var.woff2` is a byte-identical copy of the
-Inter file above (same sha256).
+(`--font-marketing-sans`). `apps/admin` loads the same Geist and Geist Mono
+(plus Fraunces) from byte-identical copies in `apps/admin/src/app/fonts/`, with
+its own README and a test that checks the hashes against this one.
 
 ## What actually changed visually
 
@@ -85,11 +84,11 @@ for Inter and, in the app shell, 500/600/700 for Fraunces; the marketing layout
 requested Fraunces 400–700 in both normal and italic. Total bytes are roughly
 unchanged: 47K + 66K + 80K.
 
-`apps/admin/src/app/fonts/inter-latin-var.woff2` is a **copy of the same file**.
-The duplication is deliberate: `next/font/local` needs a literal path relative
-to the importing file, so a shared `packages/` location would mean a
-`../../../../` traversal that breaks the moment either app moves. Two identical
-47K files is the cheaper failure mode.
+`apps/admin/src/app/fonts/` holds **copies of the same files** (Geist, Geist
+Mono, Fraunces; admin no longer ships Inter). The duplication is deliberate:
+`next/font/local` needs a literal path relative to the importing file, so a shared `packages/` location would mean a
+`../../../../` traversal that breaks the moment either app moves. Identical
+duplicate files are the cheaper failure mode.
 
 ## Refreshing them
 
@@ -117,7 +116,8 @@ block (no `ital`/`opsz` axes):
 family=Geist:wght@100..900&family=Geist+Mono:wght@100..900
 ```
 
-Then copy `inter-latin-var.woff2` to `apps/admin/src/app/fonts/`.
+Then copy any refreshed Geist, Geist Mono or Fraunces file to
+`apps/admin/src/app/fonts/` and update the hashes in that README too.
 
 **Use `curl --fail`.** Bare `curl` writes an HTTP error body to the output file
 and still exits 0 — so a rate-limit or captcha page saves happily as a

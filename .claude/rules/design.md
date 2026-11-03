@@ -168,7 +168,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 
 ## Component Dimensions
 
-- Geist density, adopted 2026-11-03. The root font size is the browser default (16px; no 18px override). Large text is on by default, so default-mode interface text (`text-sm`) renders 16px and prose (`text-base`) 18px; standard mode gives 14/16.
+- Geist density, adopted 2026-11-03. The root font size is the browser default (16px; no 18px override). Large text is on by default, so default-mode interface text (`text-sm`) renders 16px and prose (`text-base`) 18px; standard mode gives 14/16. `apps/admin` is at parity: no root font-size override, Geist + Geist Mono loaded from its own `apps/admin/src/app/fonts/` copies (byte-identical to web's; `apps/admin/__tests__/styles/` pins both), Fraunces kept for `AdminPageHeader`.
 - Buttons: every size is 44px below `md` (768px). From `md` up: sm(28px) default(32px) lg(40px) icon(32px). Radius md. No shadow on any variant. Variants: default/secondary/outline/ghost/destructive/link. Canonical: `packages/ui/src/components/ui/button.tsx` (web re-exports it from `apps/web/src/components/ui/button.tsx`).
 - Inputs: 44px below `md`, 32px from `md` up. Radius sm. `border-edge-strong`, no shadow, 1px border, 2px on focus.
 - Textareas: a multi-line field with a 60px minimum height at every width (not a 44/32 control). Radius sm, `border-edge-strong`, no shadow.

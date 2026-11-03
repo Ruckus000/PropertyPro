@@ -6,32 +6,42 @@ import { ServiceWorkerRegistration } from '@/components/shell/ServiceWorkerRegis
 import '../styles/globals.css';
 
 /**
- * `styles/globals.css` has named Inter as `--font-sans` since the console was
- * built, but nothing ever LOADED it — no next/font, no @font-face, no <link>
- * anywhere in apps/admin — so every screen silently fell back to system-ui and
- * the operator console matched none of the product's typography.
+ * Geist (`--font-sans`) and Geist Mono (`--font-mono`) are the console's sans
+ * and mono faces, the same as apps/web (Geist density plan, 2026-11-03). Before
+ * that `styles/globals.css` named Inter as `--font-sans` but nothing LOADED it —
+ * no next/font, no @font-face, no <link> anywhere in apps/admin — so every
+ * screen silently fell back to system-ui.
  *
- * The font is served from `/_next` at build time, so the CSP added in this same
- * phase needs nothing beyond `font-src 'self'` and no request leaves for
- * fonts.googleapis.com at runtime.
+ * The fonts are served from `/_next` at build time, so the CSP needs nothing
+ * beyond `font-src 'self'` and no request leaves for fonts.googleapis.com at
+ * runtime.
  *
- * It is VENDORED (`./fonts/`) rather than fetched from Google during the build:
- * `next/font/google` downloads at build time, which twice took CI down on
- * unrelated PRs when `fonts.gstatic.com` was unreachable (#962). Same file as
- * `apps/web` uses — duplicated deliberately, because `next/font/local` needs a
- * literal path relative to this file and a cross-package `../../../../` would
- * break the moment either app moved. See fonts/README.md.
+ * They are VENDORED (`./fonts/`) rather than fetched from Google during the
+ * build: `next/font/google` downloads at build time, which twice took CI down on
+ * unrelated PRs when `fonts.gstatic.com` was unreachable (#962). The files are
+ * byte-identical copies of the ones `apps/web` uses — duplicated deliberately,
+ * because `next/font/local` needs a literal path relative to this file and a
+ * cross-package `../../../../` would break the moment either app moved. See
+ * fonts/README.md.
  */
-const inter = localFont({
-  src: './fonts/inter-latin-var.woff2',
+const geist = localFont({
+  src: './fonts/geist-latin-var.woff2',
   weight: '100 900',
   style: 'normal',
   display: 'swap',
   variable: '--font-sans',
 });
 
-// Display serif for page titles only (font-display); body/data stay on Inter.
-// Vendored for the same reason as Inter (see above) — no italic face, since
+const geistMono = localFont({
+  src: './fonts/geist-mono-latin-var.woff2',
+  weight: '100 900',
+  style: 'normal',
+  display: 'swap',
+  variable: '--font-mono',
+});
+
+// Display serif for page titles only (font-display); body/data stay on Geist.
+// Vendored for the same reason as Geist (see above) — no italic face, since
 // font-display is only ever used at weight 500, roman. `adjustFontFallback`
 // is required here: the local loader's default fallback is Arial, and sizing
 // a serif against a sans-serif fallback makes CLS worse, not better —
@@ -72,7 +82,7 @@ export default function RootLayout({
       // Large text is the default, as in apps/web; LARGE_TEXT_INIT_SCRIPT
       // removes the class for a browser that chose "standard", so hydration
       // must tolerate a className mismatch on this one element.
-      className={`${inter.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
+      className={`${geist.variable} ${geistMono.variable} ${fraunces.variable} ${LARGE_TEXT_CLASS}`}
       suppressHydrationWarning
     >
       <head>
