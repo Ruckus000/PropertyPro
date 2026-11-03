@@ -45,7 +45,7 @@ export function BoardPollsPanel({ communityId, isAdmin }: BoardPollsPanelProps) 
       <div className="space-y-4">
         {isAdmin ? (
           <div className="flex justify-end">
-            <Button type="button" className="h-11 md:h-9" onClick={() => setCreateDialogOpen(true)}>
+            <Button type="button" onClick={() => setCreateDialogOpen(true)}>
               Create Poll
             </Button>
           </div>

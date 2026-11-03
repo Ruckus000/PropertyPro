@@ -299,7 +299,7 @@ async function DashboardPanels({
           <h2 className="mt-1 text-2xl font-semibold text-content">Welcome, {data.firstName}</h2>
         </div>
         {audience === 'manager' && !supportSession ? (
-          <Button asChild className="h-11 md:h-9">
+          <Button asChild>
             <Link href={`/documents?communityId=${communityId}`}>Upload document</Link>
           </Button>
         ) : null}

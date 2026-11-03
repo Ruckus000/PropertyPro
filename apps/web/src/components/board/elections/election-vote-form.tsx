@@ -183,7 +183,7 @@ export function ElectionVoteForm({
 
       <Button
         type="button"
-        className="h-11 w-full md:h-9"
+        className="w-full"
         disabled={!canReview}
         loading={castVote.isPending}
         onClick={() => setReviewOpen(true)}

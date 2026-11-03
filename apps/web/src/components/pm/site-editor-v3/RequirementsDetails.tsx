@@ -227,7 +227,7 @@ function UnitCountField() {
           onChange={(event) => setDraft(event.target.value)}
           aria-invalid={error !== null}
           aria-describedby={error ? `${inputId}-error` : undefined}
-          className="h-9 w-28"
+          className="h-11 md:h-9 w-28"
         />
         <Button type="submit" size="sm" disabled={isSavingUnitCount || draft.trim() === ''}>
           {isSavingUnitCount ? 'Saving…' : 'Save'}

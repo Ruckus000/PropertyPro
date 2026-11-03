@@ -233,7 +233,7 @@ export function LeaseRosterPage({
                 setQuery(e.target.value);
                 setLimit(PAGE_SIZE);
               }}
-              className="h-9 w-64 pl-8"
+              className="h-11 md:h-9 w-64 pl-8"
             />
           </div>
           <div role="group" aria-label="Sort" className="inline-flex overflow-hidden rounded-md border border-edge">

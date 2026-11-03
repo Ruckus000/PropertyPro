@@ -357,14 +357,14 @@ describe('HeroPhotosField — stock photos', () => {
       expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
     });
 
-    it('is a touch target: 44px tall below 768px, 36px from there up', () => {
+    it('is a touch target: 44px tall below 768px, 32px from there up', () => {
       // jsdom has no layout, so the rule (.claude/rules/design.md) is asserted on
       // the classes that carry it. The label wraps in the narrow column, so the
       // height is a floor (`min-h`), not a fixed height.
       renderField([SUNSET]);
       expect(
         screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-      ).toHaveClass('min-h-11', 'md:min-h-9');
+      ).toHaveClass('min-h-11', 'md:min-h-8');
     });
 
     it('is not offered for an uploaded photo', () => {

@@ -98,12 +98,12 @@ describe('AttentionQueueList', () => {
     expect(container.innerHTML).not.toContain('status-brand');
   });
 
-  it('row action and View all link meet the touch-target minimums (44px mobile, 36px md+)', () => {
+  it('row action and View all link meet the touch-target minimums (44px mobile, 32px md+ for the row action, 36px md+ for View all)', () => {
     const items = Array.from({ length: 7 }, (_, i) => item(i + 1));
     render(<AttentionQueueList items={items} communityId={COMMUNITY_ID} error={false} />);
     const action = within(screen.getAllByRole('listitem')[0]!).getByRole('link', { name: 'Upload' });
     expect(action.className).toContain('h-11');
-    expect(action.className).toContain('md:h-9');
+    expect(action.className).toContain('md:h-8');
     const viewAll = screen.getByRole('link', { name: 'View all in Compliance' });
     expect(viewAll.className).toContain('min-h-11');
     expect(viewAll.className).toContain('md:min-h-9');

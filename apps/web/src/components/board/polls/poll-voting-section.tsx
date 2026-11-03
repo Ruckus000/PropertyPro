@@ -121,7 +121,6 @@ export function PollVotingSection({
       {!hasVoted && isActive ? (
         <Button
           type="button"
-          className="h-11 md:h-9"
           disabled={selectedOptions.length === 0}
           loading={castVote.isPending}
           onClick={() => void castVote.mutateAsync(selectedOptions)}

@@ -182,7 +182,7 @@ export function PlatformSettings({
               type="button"
               variant="ghost"
               size="icon"
-              className="h-9 w-9"
+              className="h-11 w-11 md:h-9 md:w-9"
               onClick={() => { setShowAddForm(false); setAddError(''); setAddEmail(''); }}
               aria-label="Cancel adding an admin"
             >

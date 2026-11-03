@@ -243,8 +243,10 @@ describe('the condo dashboard composition', () => {
     await renderPage();
     expect(screen.getByRole('link', { name: 'Schedule meeting' })).toBeInTheDocument();
     expect(within(greetingRow()).getByRole('link', { name: 'Upload document' })).toBeInTheDocument();
-    // 44px touch target on mobile, like the queue rows.
-    expect(within(greetingRow()).getByRole('link', { name: 'Upload document' }).className).toContain('h-11');
+    // 44px touch target on mobile, 32px from md up: the Button primitive carries both.
+    const uploadClass = within(greetingRow()).getByRole('link', { name: 'Upload document' }).className;
+    expect(uploadClass).toContain('h-11');
+    expect(uploadClass).toContain('md:h-8');
     document.body.innerHTML = '';
     mocks.requestHeaders.current = new Headers({ 'x-support-session-id': '7', 'x-support-community-id': '42' });
     await renderPage();

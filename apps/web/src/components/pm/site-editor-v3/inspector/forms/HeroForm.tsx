@@ -348,7 +348,6 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-11 md:min-h-8"
               aria-label={label}
               onClick={() => insertLinkedDetail(field)}
             >
@@ -378,7 +377,6 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
             type="button"
             variant="outline"
             size="sm"
-            className="min-h-11 md:min-h-8"
             onClick={restoreLookWording}
           >
             Use the look&apos;s wording

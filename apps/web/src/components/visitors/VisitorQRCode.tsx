@@ -47,7 +47,7 @@ export function VisitorQRCode({
         <Button
           variant="ghost"
           size="sm"
-          className={cn('h-8 w-8 p-0 text-content-secondary', className)}
+          className={cn('h-11 w-11 md:h-8 md:w-8 p-0 text-content-secondary', className)}
         >
           <QrCode className="h-4 w-4" />
           <span className="sr-only">Open QR code</span>

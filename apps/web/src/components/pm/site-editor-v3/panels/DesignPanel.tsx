@@ -105,7 +105,7 @@ export function DesignPanel({
           A look sets how your whole website is laid out and what your home page starts with. You
           choose it on the look picker. Sections you&apos;ve edited stay as they are.
         </p>
-        <Button asChild variant="outline" className="min-h-11 md:min-h-9">
+        <Button asChild variant="outline">
           <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
         </Button>
       </section>

@@ -62,7 +62,7 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
                   <p className="text-base font-medium text-content">{item.title}</p>
                   <p className="text-sm text-content-secondary">{item.detail}</p>
                 </div>
-                <Button asChild variant="outline" className="h-11 md:h-9">
+                <Button asChild variant="outline">
                   <Link href={item.action.href}>{item.action.label}</Link>
                 </Button>
               </li>
