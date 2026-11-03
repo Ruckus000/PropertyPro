@@ -85,14 +85,12 @@ describe('Mobile theme injection — toCssVars', () => {
     expect(cssVars).toHaveProperty('--theme-accent');
     expect(cssVars).toHaveProperty('--theme-font-heading');
     expect(cssVars).toHaveProperty('--theme-font-body');
-    expect(cssVars).toHaveProperty('--theme-logo-url');
-    expect(cssVars).toHaveProperty('--theme-community-name');
   });
 
-  it('sets logo-url to "none" when logoUrl is null', () => {
+  it('does not write the community name into CSS', () => {
     const theme = resolveTheme(null, 'No Logo Community', 'hoa_720');
     const cssVars = toCssVars(theme);
-    expect(cssVars['--theme-logo-url']).toBe('none');
+    expect(Object.values(cssVars)).not.toContain('No Logo Community');
   });
 });
 

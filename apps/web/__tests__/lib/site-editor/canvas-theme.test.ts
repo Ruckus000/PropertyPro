@@ -30,9 +30,8 @@ describe('canvasThemeVars', () => {
     expect(vars['--theme-primary']).toBe('#0E3338');
     expect(vars['--theme-secondary']).toBe('#F6F1E6');
     expect(vars['--theme-accent']).toBe('#C66F49');
-    expect(vars['--theme-font-heading']).toBe('Fraunces');
-    expect(vars['--theme-font-body']).toBe('Inter');
-    expect(vars['--theme-logo-url']).toBe('https://cdn/logo.webp');
+    expect(vars['--theme-font-heading']).toBe('"Fraunces"');
+    expect(vars['--theme-font-body']).toBe('"Inter"');
   });
 
   it('re-declares the semantic aliases beside the theme, so bg-primary repaints too', () => {

@@ -77,14 +77,14 @@ export function TenantDashboardMockup({
   return (
     <div
       className="flex flex-col pb-6 min-h-screen bg-white"
-      style={{ fontFamily: `${fontBody}, -apple-system, sans-serif` }}
+      style={{ fontFamily: `"${fontBody}", -apple-system, sans-serif` }}
     >
       {/* Header */}
       <div className="flex items-start justify-between px-5 pt-5">
         <div>
           <h1
             className="text-[28px] font-bold leading-[1.1] tracking-[-0.5px] text-stone-900"
-            style={{ fontFamily: `${fontHeading}, -apple-system, sans-serif` }}
+            style={{ fontFamily: `"${fontHeading}", -apple-system, sans-serif` }}
           >
             {communityName}
           </h1>

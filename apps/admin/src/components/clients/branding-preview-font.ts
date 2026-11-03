@@ -17,7 +17,11 @@ import localFont from 'next/font/local';
  * names are case-insensitive, which is what lets `Inter` match. Renaming it
  * emits a family nothing asks for and the preview falls back with no error.
  * `className` sets `font-family: Inter` on the preview wrapper, so a theme font
- * the console does not load falls back to Inter too, as the site does.
+ * the console does not load falls back to Inter.
+ *
+ * ponytail: the console loads no Google fonts, so this preview shows Inter for
+ * every family, while the public site renders the chosen one. Trigger: an
+ * operator reports the preview differs from the live site.
  */
 const inter = localFont({
   src: '../../app/fonts/inter-latin-var.woff2',

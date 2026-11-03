@@ -595,7 +595,7 @@ describe('Canvas — site chrome and theme (templates)', () => {
     renderChrome({ theme: { ...CONTEXT.theme, primaryColor: '#0E3338', headingFont: 'Lora' } });
     const frame = screen.getByTestId('canvas-frame');
     expect(frame.getAttribute('style')).toMatch(/--theme-primary:\s*#0E3338/);
-    expect(frame.getAttribute('style')).toMatch(/--theme-font-heading:\s*Lora/);
+    expect(frame.getAttribute('style')).toMatch(/--theme-font-heading:\s*"Lora"/);
   });
 
   it("renders the context's layout chrome around the sections, header and footer included", () => {

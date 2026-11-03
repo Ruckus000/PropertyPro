@@ -30,17 +30,15 @@ import localFont from 'next/font/local';
  * `SITE_FONT_CLASS` is applied on every `.site-frame` render root. Its
  * `className` half is what matters: it sets `font-family` on the frame, so
  * anything inside that inherits falls back to Inter exactly as before the app
- * moved to Geist. That includes text whose theme declaration is invalid:
- * `toCssVars` writes `--theme-font-body:Source Sans 3` unquoted, `3` is not a
- * CSS identifier, so `font-body` is invalid at computed-value time and the
- * text inherits from its parent. Without this class that parent chain ends at
- * `<body>`, i.e. Geist. A VALID theme font on a descendant (`font-body` /
- * `font-heading`) still wins, since it sits on an inner element. Do not put
- * this class on an element that also carries `font-body`: two classes of equal
- * specificity resolve by stylesheet order. (The unquoted-name bug itself is a
- * product decision, deliberately not fixed here: quoting it would make chosen
- * fonts newly render on live sites.) The `variable` half only defines a custom
- * property and is kept for anything that wants it.
+ * moved to Geist. That covers text outside any `font-body` / `font-heading`
+ * element, and any theme font that fails to load. Without this class that
+ * parent chain ends at `<body>`, i.e. Geist. A theme font on a descendant
+ * (`font-body` / `font-heading`) still wins, since it sits on an inner element.
+ * (`toCssVars` quotes family names; until 2026-11-03 it did not, so "Source
+ * Sans 3" was invalid CSS and fell back to this Inter.) Do not put this class
+ * on an element that also carries `font-body`: two classes of equal
+ * specificity resolve by stylesheet order. The `variable` half only defines a
+ * custom property and is kept for anything that wants it.
  */
 const inter = localFont({
   src: '../../app/fonts/inter-latin-var.woff2',
