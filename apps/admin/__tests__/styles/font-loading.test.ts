@@ -9,7 +9,7 @@
  *
  * What it pins:
  *  - the root layout loads Geist as `--font-sans` and Geist Mono as `--font-mono`,
- *    and no longer loads Inter;
+ *    and no longer loads Inter; only the branding preview loads it (its own const);
  *  - Fraunces stays as `--font-display` (AdminPageHeader's visible `<h1>`);
  *  - each vendored woff2 exists and matches the sha256 in fonts/README.md, and
  *    the two Geist files are byte-identical to apps/web's copies.
@@ -52,7 +52,7 @@ describe('admin root layout font loading', () => {
     expect(call).toMatch(/variable:\s*['"]--font-mono['"]/);
   });
 
-  it('no longer loads Inter', () => {
+  it('does not load Inter in the root layout (only the branding preview does)', () => {
     expect(rootLayout).not.toContain('inter-latin-var.woff2');
   });
 
@@ -65,6 +65,43 @@ describe('admin root layout font loading', () => {
     expect(rootLayout).toMatch(/\$\{geist\.variable\}/);
     expect(rootLayout).toMatch(/\$\{geistMono\.variable\}/);
     expect(rootLayout).toMatch(/\$\{fraunces\.variable\}/);
+  });
+});
+
+describe('the branding preview keeps Inter', () => {
+  // `CommunityWebsiteEditor` paints `style={{ fontFamily: form.fontBody }}` with no
+  // fallback; the default theme font is `Inter`. With Inter gone from the console
+  // the preview rendered the browser default, so it loads its own copy.
+  const loader = fs.readFileSync(path.join(SRC, 'components/clients/branding-preview-font.ts'), 'utf8');
+  const editor = fs.readFileSync(path.join(SRC, 'components/clients/CommunityWebsiteEditor.tsx'), 'utf8');
+
+  it('loads the vendored Inter into a const named `inter`, the emitted family name', () => {
+    expect(loader).toMatch(/\bconst inter\s*=\s*localFont\(/);
+    expect(loader).toMatch(/src:\s*['"]\.\.\/\.\.\/app\/fonts\/inter-latin-var\.woff2['"]/);
+    expect(loader).toMatch(/weight:\s*['"]100 900['"]/);
+    expect(loader).toMatch(/export const BRANDING_PREVIEW_FONT_CLASS\s*=\s*inter\.className/);
+  });
+
+  it('applies the class to the preview that names theme fonts', () => {
+    expect(editor).toContain("from './branding-preview-font'");
+    const usage = editor.replace(/import \{ BRANDING_PREVIEW_FONT_CLASS \}[^\n]*\n/, '');
+    expect(usage).toContain('BRANDING_PREVIEW_FONT_CLASS');
+    expect(usage).toContain('fontFamily: form.fontBody');
+  });
+
+  it('is the only Inter importer in apps/admin/src', () => {
+    const importers: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of fs.readdirSync(dir)) {
+        const p = path.join(dir, name);
+        if (fs.statSync(p).isDirectory()) walk(p);
+        else if (/\.(ts|tsx)$/.test(name) && fs.readFileSync(p, 'utf8').includes('inter-latin-var.woff2')) {
+          importers.push(path.relative(SRC, p).split(path.sep).join('/'));
+        }
+      }
+    };
+    walk(SRC);
+    expect(importers).toEqual(['components/clients/branding-preview-font.ts']);
   });
 });
 
@@ -84,7 +121,12 @@ describe('vendored font files match the README table', () => {
     expect(listed).toContain('geist-mono-latin-var.woff2');
   });
 
-  it.each(['geist-latin-var.woff2', 'geist-mono-latin-var.woff2', 'fraunces-latin-var.woff2'])(
+  it.each([
+    'geist-latin-var.woff2',
+    'geist-mono-latin-var.woff2',
+    'fraunces-latin-var.woff2',
+    'inter-latin-var.woff2',
+  ])(
     '%s exists with the recorded sha256 and size',
     (file) => {
       const row = rows.find((r) => r.file === file);
@@ -96,7 +138,7 @@ describe('vendored font files match the README table', () => {
     },
   );
 
-  it.each(['geist-latin-var.woff2', 'geist-mono-latin-var.woff2'])(
+  it.each(['geist-latin-var.woff2', 'geist-mono-latin-var.woff2', 'inter-latin-var.woff2'])(
     '%s is byte-identical to the apps/web copy',
     (file) => {
       const admin = fs.readFileSync(path.join(FONTS_DIR, file));
@@ -104,6 +146,11 @@ describe('vendored font files match the README table', () => {
       expect(sha256(admin)).toBe(sha256(web));
     },
   );
+
+  it('ships the Inter licence', () => {
+    const licence = fs.readFileSync(path.join(FONTS_DIR, 'OFL-Inter.txt'), 'utf8');
+    expect(licence).toContain('SIL OPEN FONT LICENSE Version 1.1');
+  });
 
   it('ships the Geist licence', () => {
     const licence = fs.readFileSync(path.join(FONTS_DIR, 'OFL-Geist.txt'), 'utf8');

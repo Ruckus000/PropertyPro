@@ -19,6 +19,7 @@ import type { CommunityType } from '@propertypro/shared';
 import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
 import { getBrandingForCommunity } from '@/lib/api/branding';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
+import { SITE_FONT_CLASS } from '@/lib/public-site/site-font';
 
 interface DemoLandingPageProps {
   params: Promise<{ slug: string }>;
@@ -208,8 +209,12 @@ export default async function DemoLandingPage({ params }: DemoLandingPageProps) 
         // eslint-disable-next-line @next/next/no-page-custom-font
         <link key={href} rel="stylesheet" href={href} />
       ))}
-      <div style={cssVars} className="font-body w-full flex justify-center">
-        {entrySection}
+      {/* Branded text falls back to Inter, as the public site does: a wrapper,
+          because the element below carries `font-body` (see site-font.ts). */}
+      <div className={`${SITE_FONT_CLASS} w-full`}>
+        <div style={cssVars} className="font-body w-full flex justify-center">
+          {entrySection}
+        </div>
       </div>
     </main>
   );

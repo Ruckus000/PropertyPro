@@ -85,7 +85,7 @@ requested Fraunces 400–700 in both normal and italic. Total bytes are roughly
 unchanged: 47K + 66K + 80K.
 
 `apps/admin/src/app/fonts/` holds **copies of the same files** (Geist, Geist
-Mono, Fraunces; admin no longer ships Inter). The duplication is deliberate:
+Mono, Fraunces, and Inter for the branding preview only, which is not loaded by admin's root layout). The duplication is deliberate:
 `next/font/local` needs a literal path relative to the importing file, so a shared `packages/` location would mean a
 `../../../../` traversal that breaks the moment either app moves. Identical
 duplicate files are the cheaper failure mode.

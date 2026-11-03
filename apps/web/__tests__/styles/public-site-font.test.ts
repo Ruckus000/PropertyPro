@@ -16,6 +16,13 @@
  * Every `.site-frame` render root must carry the loader's class: a root without
  * it pulls no @font-face into that page and silently falls back to Geist. The
  * root list mirrors `public-site/site-frame.test.ts`.
+ *
+ * Frames are not the only place a community's fonts are applied: the demo
+ * landing page paints `font-body` with no `.site-frame` at all, and lost Inter
+ * the same way. So the last block SCANS apps/web/src for every file that
+ * applies `font-body` / `font-heading` / `--theme-font-*` and makes each one
+ * either carry the class or be named, with a reason, as living inside a root
+ * that does. A new branded surface fails there until someone classifies it.
  */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -34,6 +41,31 @@ const SITE_FRAME_ROOTS = [
   'components/pm/site-editor-v3/PreviewDialog.tsx',
   'components/pm/site-editor-v3/canvas/Canvas.tsx',
 ];
+
+/** Branded roots that are not a `.site-frame` but still need Inter underneath. */
+const OTHER_BRANDED_ROOTS = ['app/demo/[slug]/page.tsx'];
+
+/**
+ * Files that apply a theme font and carry no class of their own, each with the
+ * root that supplies it. Every other file naming a theme font must appear in
+ * the roots above.
+ */
+const INSIDE_A_ROOT: Record<string, string> = {
+  'app/public-site/not-found.tsx': 'inside the public-site layout, a SITE_FONT_CLASS root',
+  'app/public-site/[[...slug]]/page.tsx': 'inside the public-site layout, a SITE_FONT_CLASS root',
+  'lib/site-editor/canvas-theme.ts': 'builds the vars the Canvas root (SITE_FONT_CLASS) applies',
+  'lib/public-site/site-font.ts': 'this loader; names the classes in its docblock',
+};
+/** Everything under here renders inside a `.site-frame`, which site-frame.test.ts proves. */
+const INSIDE_A_ROOT_PREFIXES = ['components/public-site/'];
+
+function walk(dir: string): string[] {
+  return fs.readdirSync(dir).flatMap((name) => {
+    const p = path.join(dir, name);
+    if (fs.statSync(p).isDirectory()) return walk(p);
+    return /\.(ts|tsx|css)$/.test(name) ? [p] : [];
+  });
+}
 
 describe('public-site Inter loader', () => {
   it('loads the vendored Inter file, not the app font', () => {
@@ -91,6 +123,51 @@ describe('every site-frame render root loads it', () => {
       if (line.includes('SITE_FONT_CLASS') && !line.includes('import ')) {
         expect(line).not.toContain('font-body');
       }
+    }
+  });
+});
+
+describe('the demo landing page keeps Inter for its branded text', () => {
+  it.each(OTHER_BRANDED_ROOTS)('%s', (file) => {
+    const text = read(file);
+    expect(text).toContain("import { SITE_FONT_CLASS } from '@/lib/public-site/site-font'");
+    expect(text.replace(/import \{ SITE_FONT_CLASS \}[^\n]*\n/, '')).toContain('SITE_FONT_CLASS');
+    for (const line of text.split('\n')) {
+      if (line.includes('SITE_FONT_CLASS') && !line.includes('import ')) {
+        expect(line).not.toContain('font-body');
+      }
+    }
+  });
+});
+
+describe('every file applying a theme font is under a SITE_FONT_CLASS root', () => {
+  const THEME_FONT = /font-body|font-heading|--theme-font-/;
+  const files = walk(SRC)
+    .map((f) => path.relative(SRC, f).split(path.sep).join('/'))
+    .filter((rel) => THEME_FONT.test(read(rel)));
+  const roots = new Set([...SITE_FRAME_ROOTS, ...OTHER_BRANDED_ROOTS]);
+
+  it('scans a non-empty population', () => {
+    expect(files.length).toBeGreaterThan(10);
+  });
+
+  it('classifies every one', () => {
+    const unclassified = files.filter(
+      (rel) =>
+        !roots.has(rel) &&
+        !(rel in INSIDE_A_ROOT) &&
+        !INSIDE_A_ROOT_PREFIXES.some((p) => rel.startsWith(p)),
+    );
+    expect(
+      unclassified,
+      'these apply a theme font outside a known SITE_FONT_CLASS root: add the class, ' +
+        'or name the root that supplies it in INSIDE_A_ROOT',
+    ).toEqual([]);
+  });
+
+  it('has no stale allowlist entries', () => {
+    for (const rel of Object.keys(INSIDE_A_ROOT)) {
+      expect(files, `${rel} no longer names a theme font`).toContain(rel);
     }
   });
 });
