@@ -52,6 +52,14 @@ function writeSandbox(
   webPages: Record<string, number>,
   /** One chunk of `kib` listed under every key in `keys` — as webpack/main-app are in a real manifest. */
   shared?: { kib: number; keys: string[] },
+  /**
+   * Web fonts preloaded per segment key (`/layout`, `/(marketing)/layout`), each a
+   * `woff2` of `kib`. `null` writes no font manifest at all. The default is a root
+   * layout font, as every real build has one.
+   */
+  webFonts: Record<string, number[]> | null = { '/layout': [10] },
+  /** Prefix written before each web font key, to model a manifest whose keys do not match. */
+  webFontKeyPrefix = '/abs/apps/web/src/app',
 ): string {
   const root = mkdtempSync(join(tmpdir(), 'perf-check-'));
   sandbox = root;
@@ -77,6 +85,23 @@ function writeSandbox(
     }
 
     writeFileSync(join(next, 'app-build-manifest.json'), JSON.stringify({ pages }));
+
+    if (app === 'admin' || webFonts) {
+      // Keyed by ABSOLUTE segment path, as next writes it.
+      const fontApp: Record<string, string[]> = {};
+      mkdirSync(join(next, 'static', 'media'), { recursive: true });
+      const fontsForApp = app === 'web' ? (webFonts ?? {}) : { '/layout': [10] };
+      const prefix = app === 'web' ? webFontKeyPrefix : '/abs/apps/admin/src/app';
+      for (const [segment, sizes] of Object.entries(fontsForApp)) {
+        fontApp[`${prefix}${segment}`] = sizes.map((kib, i) => {
+          const file = `static/media/${segment.replace(/[^a-z0-9]/gi, '_')}-${i}.p.woff2`;
+          writeFileSync(join(next, file), 'x'.repeat(kib * 1024));
+          return file;
+        });
+      }
+      mkdirSync(join(next, 'server'), { recursive: true });
+      writeFileSync(join(next, 'server', 'next-font-manifest.json'), JSON.stringify({ app: fontApp }));
+    }
   }
 
   return root;
@@ -84,7 +109,12 @@ function writeSandbox(
 
 function runGuard(cwd: string) {
   // Pinned so these fixtures do not move every time the real ceilings are re-based.
-  const env = { ...process.env, PERF_BUDGET_HARD_BYTES: String(700 * 1024), PERF_BUDGET_TOTAL_HARD_BYTES: String(1300 * 1024) };
+  const env = {
+    ...process.env,
+    PERF_BUDGET_HARD_BYTES: String(700 * 1024),
+    PERF_BUDGET_TOTAL_HARD_BYTES: String(1300 * 1024),
+    PERF_BUDGET_FONT_HARD_BYTES: String(200 * 1024),
+  };
   const result = spawnSync(tsxBin, [guardScript], { cwd, encoding: 'utf8', env });
   return {
     status: result.status ?? -1,
@@ -228,6 +258,65 @@ describe('perf-check — first-load measurement', () => {
     expect(output).toContain(`UNBUDGETED route ${settings} exceeds the hard budget (701.0 KiB`);
     expect(output).not.toContain('UNBUDGETED route /(public)/about/page');
     // 701 > the pinned 700 ceiling, and the sweep is enforced.
+    expect(status).toBe(1);
+  });
+});
+
+describe('perf-check — font preloads', () => {
+  it("counts the root and route-group layout's preloads, never a sibling group's", () => {
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100 }, undefined, {
+      '/layout': [50, 30],
+      '/(marketing)/layout': [60],
+      // A sibling group's font, over budget on its own: must not leak in.
+      '/(authenticated)/layout': [500],
+    });
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain(`${BUDGETED_WEB_ROUTE} preloads 3 fonts, 140.0 KiB`);
+    expect(output).not.toContain('preloads too many font bytes');
+    expect(status).toBe(0);
+  });
+
+  it('FAILS when a route preloads more font bytes than the ceiling', () => {
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100 }, undefined, {
+      '/layout': [150],
+      '/(marketing)/layout': [60],
+    });
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain(
+      `web marketing route ${BUDGETED_WEB_ROUTE} preloads too many font bytes (210.0 KiB > 200.0 KiB)`,
+    );
+    expect(status).toBe(1);
+  });
+
+  it('refuses to pass when the font manifest matches no route', () => {
+    // A checkout path with its own `src/app/` before the app's, keys cut wrongly.
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100 }, undefined, { '/layout': [10] }, '/home/src/app/elsewhere');
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain('web: the font manifest matched no budgeted route, so font preloads could not be checked.');
+    expect(status).toBe(1);
+  });
+
+  it('reads Turbopack-style `[project]/` keys', () => {
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100 }, undefined, { '/layout': [20] }, '[project]/apps/web/src/app');
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain(`${BUDGETED_WEB_ROUTE} preloads 1 fonts, 20.0 KiB`);
+    expect(status).toBe(0);
+  });
+
+  it('refuses to pass when a build has no font manifest', () => {
+    const root = writeSandbox({ [BUDGETED_WEB_ROUTE]: 100 }, undefined, null);
+
+    const { status, output } = runGuard(root);
+
+    expect(output).toContain('web: no server/next-font-manifest.json, so font preloads could not be checked.');
     expect(status).toBe(1);
   });
 });

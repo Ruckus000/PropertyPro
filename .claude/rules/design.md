@@ -177,7 +177,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - Modals: radius lg. E3. Widths: sm(400) md(560) lg(720) xl(960).
 - Table rows: 40px body (`py-2`), 32px header (`h-8`), 12px cell padding.
 - Page frame: `PageContainer` gutter `px-4 sm:px-6`, `py-5`, `max-w-[1600px]` (fluid, centred above that). Components that must lay out by the width of their own box (the sidebar and top nav change how much of the viewport a page gets) use the `cq` container-query vocabulary: mark the box `cq`, then `cq-sm`/`cq-md`/`cq-lg:` apply from 480/720/960px of that box (named container `cq`, `apps/web/tailwind.config.ts`). Touch heights (44px vs 32px) stay on the viewport `md:` breakpoint, never on `cq-*`.
-- Touch targets: 44px below 768px; on desktop (>=768px) the floor for a control is 32px. Button `sm` (28px) is the single dense exception, still above WCAG 2.5.8's 24px minimum. Dialog/Sheet close buttons are `md:h-9` (36px), which meets the floor.
+- Touch targets: 44px below 768px; on desktop (>=768px) the floor for a control is 32px. Button `sm` (28px) is the single dense exception, still above WCAG 2.5.8's 24px minimum. Dialog/Sheet close buttons are `md:h-9` (36px), which meets the floor. Shared controls that are not Button (QuickFilterTabs, TabsTrigger, the AlertBanner dismiss, NavRail sub-items) carry the same 44px floor; for a raw `<button>` or standalone link write `min-h-11 md:min-h-0`. `ponytail:` raw `<button>`s outside the shared primitives are held only to WCAG 2.5.8's 24px AA floor (probed at 375px by `e2e/responsive-overflow.spec.ts` via `e2e/helpers/target-size.ts`), not 44px; census 2026-11-03: 352 raw buttons in `apps/web/src`, 31 floored. Trigger: the 24px probe fails, or a phone user reports a control they cannot hit.
 
 ## State Handling
 
@@ -192,7 +192,7 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
 - NEVER suppress `:focus-visible`. All interactive elements must show the focus ring.
 - All decorative icons: `aria-hidden="true"`. Collapsible sections: `aria-expanded`. Alerts: `role="alert"`.
 - Respect `prefers-reduced-motion`. Motion must be functional (feedback/orientation/attention), never decorative.
-- Body text minimum: `base` (16px). Caption (`xs`/12px) is metadata-only, never primary content.
+- Body text minimum: 16px in both text modes, i.e. `sm` and up with large text (the default) and `base` and up in standard mode. Caption (`xs`, 12px standard / 14px large) is metadata-only, never primary content.
 
 ## UX Writing
 

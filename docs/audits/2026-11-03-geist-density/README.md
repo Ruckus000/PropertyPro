@@ -110,3 +110,29 @@ still dropped for that community and its chosen body font, Source Sans 3, is sti
 the site now inherits Inter from the frame, as it did before Geist. Playfair Display, Lora and
 Nunito Sans apply because they are plain identifiers. Quoting family names in `toCssVars` would
 make Source Sans 3 apply; not done here (`packages/theme` unchanged).
+
+## Follow-ups (branch `claude/design-system-followups`, 2026-11-03)
+
+Measured in the agent sandbox (dev server) with headless Chromium, same method as above.
+
+**Theme fonts.** `toCssVars` now quotes family names. Sunset Condos site preview at 1440:
+`--theme-font-body` is `"Source Sans 3"`, a paragraph renders **Source Sans 3**, the h1 Playfair
+Display. Only "Source Sans 3" and "Source Serif 4" of the 25 allowlisted families were affected;
+in production 1 of 5 live communities used one, a demo.
+
+**Touch targets at 375px** (`cam`, Sunset Condos, both text modes). Every audited control now
+measures 44px tall: dashboard checklist actions, Documents title buttons, header actions and
+category chips, Operations tab pills, Board section links. The WCAG 2.5.8 probe
+(`apps/web/e2e/helpers/target-size.ts`) finds **no** target under 24px without spacing on any of
+dashboard (22 controls scanned), documents (46), operations (6), board (3) and settings (37), nor
+on the six `responsive-overflow` pages. Census of the long tail: 352 raw `<button>`s in
+`apps/web/src`, 31 floored at 44px; settings still has 12 controls between 24 and 44px. That tail
+is a recorded `ponytail:` in `.claude/rules/design.md`.
+
+**PlanBadge.** 14px with large text, 12px standard (was 10px in both); 20px tall; the top bar does
+not overflow at 1024 or 1440.
+
+**Font preloads** (`pnpm perf:check`, production build). Marketing `/`: 4 fonts, 221.2 KiB (was 5,
+244 KiB; Geist Mono no longer preloads). App routes: 2 fonts, 94.4 KiB. Site editor: 3, 141.6 KiB.
+Ceiling 250 KiB. Geist still preloads on marketing (29 KB unused); recorded as a `ponytail:` in
+`scripts/perf-check.ts`.

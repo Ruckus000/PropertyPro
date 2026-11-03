@@ -75,7 +75,7 @@ function PolicyCard({
   return (
     <Card>
       {expired && (
-        <div className="px-6 pt-6">
+        <div className="px-4 pt-4">
           <AlertBanner status="danger" title={INSURANCE_POLICY_EXPIRED_BANNER(formatIsoDate(policy.expiresAt))} />
         </div>
       )}

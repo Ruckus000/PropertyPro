@@ -358,7 +358,7 @@ export function NavRail({
 
   const subItemClassName = (isActive: boolean) =>
     cn(
-      "flex h-9 items-center justify-between rounded-[10px] px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
+      "flex h-11 md:h-9 items-center justify-between rounded-[10px] px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
       isActive
         ? "bg-[var(--nav-bg-active)] font-medium text-[var(--nav-text-active)]"
         : "text-[var(--nav-text-muted)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)]",
@@ -463,7 +463,7 @@ export function NavRail({
                       aria-controls={sectionContentId}
                       onClick={() => onSectionToggle?.(section.label as string)}
                       data-testid="section-label"
-                      className="flex w-full items-center justify-between gap-2 rounded-[10px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+                      className="flex min-h-11 md:min-h-0 w-full items-center justify-between gap-2 rounded-[10px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
                     >
                       <span className="truncate">{section.label}</span>
                       <span
@@ -609,7 +609,7 @@ export function NavRail({
             onClick={onToggle}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
-              "flex w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
+              "flex min-h-11 md:min-h-0 w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
               expanded ? "" : "justify-center",
             )}
           >

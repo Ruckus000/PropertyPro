@@ -92,10 +92,9 @@ describe('public-site Inter loader', () => {
   });
 
   it('exposes a class that sets font-family (className), not only the variable', () => {
-    // `.variable` only defines a custom property. Sunset Condos' theme writes
-    // `--theme-font-body:Source Sans 3` unquoted, which is invalid at
-    // computed-value time, so its text inherits from the frame; only a real
-    // `font-family` on the frame keeps that inheritance on Inter, not Geist.
+    // `.variable` only defines a custom property. Text outside `font-body` /
+    // `font-heading`, or a theme font that fails to load, inherits from the
+    // frame; only a real `font-family` on the frame keeps that on Inter, not Geist.
     const decl = siteFont.match(/export const SITE_FONT_CLASS\s*=\s*([^;]+);/)?.[1] ?? '';
     expect(decl).toContain('inter.className');
     expect(decl).toContain('inter.variable');

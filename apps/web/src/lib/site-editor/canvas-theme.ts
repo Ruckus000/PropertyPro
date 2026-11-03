@@ -12,7 +12,7 @@
  *
  * The canvas frame now sets the same custom properties the public page sets,
  * from the context the Design panel keeps current (`applyDesignToCanvas`), and
- * loads the chosen fonts, which the route layout only did for the default.
+ * loads the chosen fonts itself; the route layout loads none.
  *
  * Pure. The custom colours are already folded into `context.theme` by
  * `applyDesignToCanvas`, so the theme alone matches the public page's theme +

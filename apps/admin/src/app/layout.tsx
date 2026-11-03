@@ -38,6 +38,9 @@ const geistMono = localFont({
   style: 'normal',
   display: 'swap',
   variable: '--font-mono',
+  // Not preloaded: mono only sets IDs, table columns and tooltips, never first-paint
+  // text, and a preload competes with the page's real first-paint resources.
+  preload: false,
 });
 
 // Display serif for page titles only (font-display); body/data stay on Geist.

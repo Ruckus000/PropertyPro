@@ -12,9 +12,6 @@ export default async function ResetPasswordPage() {
 
   return (
     <>
-      {branding.fontLinks.map((href) => (
-        <link key={href} rel="stylesheet" href={href} />
-      ))}
       <main
         className="flex min-h-screen items-center justify-center bg-surface-page px-4 py-12"
         style={branding.cssVars as React.CSSProperties}

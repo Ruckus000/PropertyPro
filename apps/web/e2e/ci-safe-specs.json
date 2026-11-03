@@ -96,6 +96,14 @@
     "goes 61 -> 60. Counted with `playwright test --config playwright.ci.config.ts",
     "--list | grep -c chromium`: 61 before, 60 after; responsive-overflow alone 8 -> 7.",
     "",
+    "2026-11-03: `target-size-detector.spec.ts` joins the list (8 blocks), so",
+    "expectedTestCount goes 60 -> 68. Like `overflow-detector`, it tests a GATE RULE",
+    "(`helpers/target-size.ts`, WCAG 2.5.8 with its spacing exception) against",
+    "synthetic `setContent` fixtures; `responsive-overflow` now calls that rule at",
+    "375px inside its existing blocks, which adds no block of its own. MEASURED",
+    "against the agent sandbox (dev server + local Supabase + demo seed) before being",
+    "added: all 7 responsive-overflow blocks and all 8 detector blocks passed.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -117,7 +125,8 @@
     "meeting-create-spacebar.spec.ts",
     "phase1-roadmap-smoke.spec.ts",
     "responsive-overflow.spec.ts",
-    "support-access.spec.ts"
+    "support-access.spec.ts",
+    "target-size-detector.spec.ts"
   ],
-  "expectedTestCount": 60
+  "expectedTestCount": 68
 }

@@ -8,19 +8,19 @@ export function ReportTabSkeleton() {
     <div className="space-y-6" aria-busy="true" aria-label="Loading report">
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
-          <CardHeader className="space-y-3 pb-2">
+          <CardHeader className="gap-3 pb-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-20" />
           </CardHeader>
         </Card>
         <Card>
-          <CardHeader className="space-y-3 pb-2">
+          <CardHeader className="gap-3 pb-2">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="h-8 w-16" />
           </CardHeader>
         </Card>
         <Card>
-          <CardHeader className="space-y-3 pb-2">
+          <CardHeader className="gap-3 pb-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-8 w-20" />
           </CardHeader>

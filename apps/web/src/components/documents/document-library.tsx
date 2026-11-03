@@ -350,7 +350,7 @@ export function DocumentLibrary({
             <button
               type="button"
               onClick={() => setSearchMode(!searchMode)}
-              className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+              className={`min-h-11 md:min-h-0 rounded-md border px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                 searchMode
                   ? 'border-interactive bg-interactive-subtle text-interactive'
                   : 'border-edge-strong text-content-secondary hover:bg-surface-hover'
@@ -361,7 +361,7 @@ export function DocumentLibrary({
             {canUpload && hasEsign && (
               <Link
                 href={`/esign?communityId=${communityId}`}
-                className="flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-hover sm:px-4"
+                className="flex min-h-11 md:min-h-0 items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary transition-colors hover:bg-surface-hover sm:px-4"
               >
                 <PenTool size={16} aria-hidden />
                 E-Sign
@@ -370,7 +370,7 @@ export function DocumentLibrary({
             {canUpload && (
               <Link
                 href={`/communities/${communityId}/documents/author/new`}
-                className="inline-flex items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive sm:px-4"
+                className="inline-flex min-h-11 md:min-h-0 items-center gap-2 rounded-md border border-edge-strong px-3 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive sm:px-4"
               >
                 <FilePlus2 size={16} aria-hidden="true" />
                 Author Document
@@ -391,7 +391,7 @@ export function DocumentLibrary({
                 // accessible name distinct from the "Upload Document" SUBMIT
                 // button inside the panel, which the e2e matches exactly.
                 aria-label={showUpload ? 'Close upload panel' : 'Open upload panel'}
-                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
+                className={`min-h-11 md:min-h-0 rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${
                   showUpload
                     ? 'bg-surface-muted text-content'
                     : 'bg-interactive text-white hover:bg-interactive-hover'
@@ -567,7 +567,7 @@ export function DocumentLibrary({
               <button
                 type="button"
                 onClick={() => setSelectedDocument(null)}
-                className="mb-3 inline-flex items-center gap-1 text-sm text-content-secondary hover:text-content xl:hidden"
+                className="mb-3 inline-flex min-h-11 md:min-h-0 items-center gap-1 text-sm text-content-secondary hover:text-content xl:hidden"
               >
                 Back to list
               </button>

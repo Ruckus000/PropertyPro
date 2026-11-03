@@ -26,7 +26,7 @@ describe('customCssOverridesToCssVars', () => {
 
   it('maps an allowlisted bodyFont to --theme-font-body', () => {
     expect(customCssOverridesToCssVars({ bodyFont: 'Lato' })).toEqual({
-      '--theme-font-body': 'Lato',
+      '--theme-font-body': '"Lato"',
     });
   });
 
@@ -43,7 +43,7 @@ describe('customCssOverridesToCssVars', () => {
       '--theme-primary-hover': darkExpected('#112233'),
       '--theme-secondary': '#445566',
       '--theme-accent': '#778899',
-      '--theme-font-body': 'Merriweather',
+      '--theme-font-body': '"Merriweather"',
     });
   });
 

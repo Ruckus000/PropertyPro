@@ -12,6 +12,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { loadDashboardData } from '@/lib/dashboard/load-dashboard-data';
 import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
 import { getFeaturesForCommunity } from '@propertypro/shared';
+import { resolveTheme } from '@propertypro/theme';
 import { MobileHomeContent } from '@/components/mobile/MobileHomeContent';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 
@@ -58,14 +59,18 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       getBrandingForCommunity(communityId),
       getCommunityPublicInfo(communityId),
     ]);
+    // Through resolveTheme, so only allowlisted fonts and valid hex reach the
+    // mockup's inline styles (this preview needs no login). Community type does
+    // not affect fonts or colours.
+    const theme = resolveTheme(branding, community?.name ?? 'Community', 'condo_718');
     return (
       <TenantDashboardMockup
         communityName={community?.name ?? 'Community'}
-        primaryColor={branding?.primaryColor ?? '#C2533A'}
-        secondaryColor={branding?.secondaryColor ?? '#A8412C'}
-        accentColor={branding?.accentColor ?? '#F7DCD2'}
-        fontHeading={branding?.fontHeading ?? 'Inter'}
-        fontBody={branding?.fontBody ?? 'Inter'}
+        primaryColor={theme.primaryColor}
+        secondaryColor={branding?.secondaryColor ? theme.secondaryColor : '#A8412C'}
+        accentColor={theme.accentColor}
+        fontHeading={theme.fontHeading}
+        fontBody={theme.fontBody}
       />
     );
   }

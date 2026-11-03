@@ -45,7 +45,7 @@ export function customCssOverridesToCssVars(overrides: unknown): Record<string, 
     typeof o.bodyFont === 'string' &&
     (ALLOWED_FONTS as readonly string[]).includes(o.bodyFont)
   ) {
-    out[THEME_CSS_VARS.fontBody] = o.bodyFont;
+    out[THEME_CSS_VARS.fontBody] = `"${o.bodyFont}"`; // quoted, as in toCssVars
   }
 
   return out;

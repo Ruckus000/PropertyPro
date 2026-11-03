@@ -150,12 +150,12 @@ V2 accessibility baseline includes:
 | Component | Key V2 Values |
 |---|---|
 | `Button` | see the Component Dimensions table in `/DESIGN.md` (canonical: `packages/ui/src/components/ui/button.tsx`) |
-| `Input` (token contract) | heights: `40 desktop / 48 mobile density`; radius `sm (6px)` |
-| `Card` | radius `md (10px)`; elevation `E0` rest, `E1` hover/interactive |
-| `Modal` | radius `lg (16px)`; elevation `E3` |
+| `Input` (token contract) | heights: `32 desktop / 44 mobile`; radius `sm (6px)` |
+| `Card` | radius `md (8px)`; elevation `E0` rest, `E1` hover/interactive |
+| `Modal` | radius `lg (12px)`; elevation `E3` |
 | `Badge` | radius `full`; touch-aware minimum target |
 | `NavRail Item` | height `44px`; radius `md (10px)` |
-| `DataRow` | minimum target `44px` mobile, `36px` desktop |
+| `DataRow` | minimum target `44px` mobile, `32px` desktop |
 | `SectionHeader` | macro spacing via `section.*` tokens |
 
 ## Implementation Notes

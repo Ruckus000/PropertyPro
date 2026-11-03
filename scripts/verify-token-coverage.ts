@@ -20,7 +20,7 @@ const DEFINITION_ROOTS = ['apps', 'packages'];
 const DYNAMIC_PREFIXES = ['--tw-', '--theme-', '--radix-', '--rt-'];
 // Individual known-dynamic vars (populate from --report output during rollout).
 const DYNAMIC_ALLOWLIST = new Set<string>([
-  // next/font/google `Fraunces({ variable: '--font-fraunces' })` injects this
+  // next/font/local's Fraunces loader (`variable: '--font-fraunces'`) injects this
   // as a class-scoped custom property at build time; see
   // apps/web/src/app/(marketing)/layout.tsx. Consumed by
   // apps/web/src/app/(marketing)/marketing-theme.css.

@@ -333,7 +333,7 @@ export function OperationsHub({
             tabIndex={candidate.id === selectedTab ? 0 : -1}
             onClick={() => setTab(candidate.id)}
             className={cn(
-              'rounded-full px-4 py-2 text-sm font-medium transition-colors',
+              'min-h-11 md:min-h-0 rounded-full px-4 py-2 text-sm font-medium transition-colors',
               candidate.id === selectedTab
                 ? 'bg-interactive text-content-inverse shadow-sm'
                 : 'bg-surface-muted text-content-secondary hover:bg-surface-hover hover:text-content',

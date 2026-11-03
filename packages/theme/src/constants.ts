@@ -18,8 +18,6 @@ export const THEME_CSS_VARS = {
   accentColor: '--theme-accent',
   fontHeading: '--theme-font-heading',
   fontBody: '--theme-font-body',
-  logoUrl: '--theme-logo-url',
-  communityName: '--theme-community-name',
 } as const;
 
 /**

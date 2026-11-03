@@ -46,7 +46,7 @@ function StateBadge({ state }: { state: DocumentState }) {
     <span
       data-testid="document-state"
       data-state={state}
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
     >
       {display.label}
     </span>
@@ -124,7 +124,7 @@ export function DocumentsTable({
                   type="button"
                   onClick={() => onSelectDocument(document)}
                   aria-pressed={selectedId === document.id}
-                  className="block max-w-full truncate text-left font-medium text-content hover:text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
+                  className="block min-h-11 md:min-h-0 max-w-full truncate py-2.5 text-left font-medium md:py-0 text-content hover:text-interactive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive"
                 >
                   {document.title}
                 </button>

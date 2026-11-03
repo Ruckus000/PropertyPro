@@ -3,14 +3,15 @@
  *
  * When middleware injects `x-community-id` (from a community subdomain or
  * query param), this helper fetches the community's branding and theme so
- * auth pages can display the community's logo, colours, and fonts.
+ * auth pages can display the community's logo and colours. (Its fonts are not
+ * loaded: no auth page renders a theme font.)
  *
  * Error boundary: If the DB is unreachable or the community lookup fails,
  * we fall back to generic PropertyPro branding. Login must NEVER crash due
  * to a branding fetch failure.
  */
 import { headers } from 'next/headers';
-import { resolveTheme, toCssVars, toFontLinks } from '@propertypro/theme';
+import { resolveTheme, toCssVars } from '@propertypro/theme';
 import type { CommunityTheme } from '@propertypro/theme';
 import { resolveBrandingImageUrl } from '@/lib/branding/branding-image-url';
 import { getCommunityPublicInfo, getBrandingForCommunity } from '@/lib/api/branding';
@@ -22,7 +23,6 @@ export interface AuthPageBranding {
   logoUrl: string | null;
   theme: CommunityTheme;
   cssVars: Record<string, string>;
-  fontLinks: string[];
   hasTenantContext: boolean;
 }
 
@@ -35,7 +35,6 @@ const GENERIC_BRANDING: AuthPageBranding = (() => {
     logoUrl: null,
     theme,
     cssVars: toCssVars(theme),
-    fontLinks: toFontLinks(theme),
     hasTenantContext: false,
   };
 })();
@@ -77,7 +76,6 @@ export async function resolveAuthPageBranding(): Promise<AuthPageBranding> {
       logoUrl,
       theme,
       cssVars: toCssVars(theme),
-      fontLinks: toFontLinks(theme),
       hasTenantContext: true,
     };
   } catch {

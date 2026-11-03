@@ -43,11 +43,13 @@ import { join } from 'node:path';
 // (`styles/tokens.css` alone has 116 raw-hex, `tokens/shadows.ts` 10 rgba) —
 // baselining those would record the token source as if it were in violation.
 // It is still the highest-value place to forbid a keyboard-blind focus ring,
-// since its components ship to both apps.
+// since its components ship to both apps. `arbitrary-font` joined it on
+// 2026-11-03: PlanBadge's `text-[10px]` sat under the 12px caption floor for
+// as long as this root went unscanned for it, and it was the only hit.
 const ROOTS: Array<{ dir: string; only?: readonly string[] }> = [
   { dir: 'apps/web/src' },
   { dir: 'apps/admin/src' },
-  { dir: 'packages/ui/src', only: ['bare-focus-ring'] },
+  { dir: 'packages/ui/src', only: ['bare-focus-ring', 'arbitrary-font'] },
 ];
 const BASELINE_PATH = 'scripts/design-token-baseline.json';
 

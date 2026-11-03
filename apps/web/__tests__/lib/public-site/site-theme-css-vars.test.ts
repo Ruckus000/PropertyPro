@@ -19,7 +19,7 @@ describe('siteThemeCssVars', () => {
     const vars = siteThemeCssVars(THEME, { primaryColor: '#112233' });
     expect(vars['--theme-primary']).toBe('#112233');
     expect(vars['--theme-accent']).toBe('#C66F49');
-    expect(vars['--theme-font-heading']).toBe('Fraunces');
+    expect(vars['--theme-font-heading']).toBe('"Fraunces"');
   });
 
   it('re-declares the semantic aliases as references, so bg-primary follows the theme', () => {
