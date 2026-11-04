@@ -141,6 +141,7 @@ function data(over: Partial<WebsiteHomeData> = {}, records: Partial<WebsiteHomeD
       liveLookId: 'bayfront',
       draftLookId: null,
       pendingDraftCount: 0,
+      hasUnpublishedChanges: false,
       siteUrl: 'https://sunset-condos.example.com/',
     },
     lastPublish: { publishedAt: '2026-10-26T16:00:00.000Z', byName: 'Maria Lopez' },
@@ -619,6 +620,30 @@ describe('other sections', () => {
     expect(banner).not.toHaveTextContent(/missing/);
     expect(banner.querySelector('svg.text-status-success')).not.toBeNull();
     expect(banner.querySelector('svg.text-status-warning')).toBeNull();
+  });
+
+  it('is not a green check while edits wait to be published, and links to the editor to publish them', () => {
+    // 2026-11-03, community 133: nine builder edits sat unpublished for days
+    // under a green "Your website is live", so the builder looked broken.
+    const d = data({}, { missing: [] });
+    renderHome({ ...d, facts: { ...d.facts, hasUnpublishedChanges: true } });
+
+    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
+    expect(banner).toHaveTextContent("You have changes that aren't published.");
+    expect(within(banner).getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
+    );
+    expect(banner.querySelector('svg.text-status-success')).toBeNull();
+    expect(banner.querySelector('svg.text-status-info')).not.toBeNull();
+  });
+
+  it('says nothing about unpublished changes when there are none', () => {
+    renderHome(data({}, { missing: [] }));
+
+    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
+    expect(banner).not.toHaveTextContent(/aren't published/);
+    expect(within(banner).queryByRole('link', { name: 'Review and publish' })).toBeNull();
   });
 
   it('does not warn about records where the statute only recommends them', () => {

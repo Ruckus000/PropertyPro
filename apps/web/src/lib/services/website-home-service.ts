@@ -5,7 +5,8 @@
  *
  * - `loadSiteFacts`: the look picker (`/pm/website/looks`). What the site
  *   already shows ("Filled in for you"), which look is live and which is
- *   drafted, and how many other unpublished edits a Publish would carry.
+ *   drafted, how many other unpublished edits a Publish would carry, and
+ *   whether anything at all is waiting to be published.
  * - `loadWebsiteHome`: the website home (`/pm/website`). The same facts, plus
  *   the last publish and the versions to restore, the "Email owners" offer, the
  *   Florida records still missing (with documents that may be them), the
@@ -74,6 +75,12 @@ export interface SiteFacts {
   draftLookId: LookId | null;
   /** Unpublished edits other than the drafted look's own, which a Publish carries too. */
   pendingDraftCount: number;
+  /**
+   * Anything is waiting to be published: a drafted layout or any other edit.
+   * A yes/no, not a count: the editor's Publish button counts changes its own
+   * way (`useSiteDiff`), and a second number here would disagree with it.
+   */
+  hasUnpublishedChanges: boolean;
   /** The public site's address. */
   siteUrl: string;
 }
@@ -130,6 +137,8 @@ async function buildSiteFacts(
     liveLookId: lookIdForLayout(branding?.layoutId),
     draftLookId: lookIdForLayout(branding?.draftLook?.layoutId),
     pendingDraftCount,
+    // A drafted layout counts on its own: `pendingDraftCount` leaves its edits out.
+    hasUnpublishedChanges: pendingDraftCount > 0 || pendingLook(branding).layoutId !== undefined,
     siteUrl: buildCommunityUrl(info.slug, '/'),
   };
 }

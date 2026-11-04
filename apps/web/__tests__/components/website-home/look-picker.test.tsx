@@ -88,6 +88,7 @@ function facts(over: Partial<SiteFacts> = {}): SiteFacts {
     liveLookId: 'bayfront',
     draftLookId: null,
     pendingDraftCount: 0,
+    hasUnpublishedChanges: false,
     siteUrl: 'https://sunset-condos.example.com/',
     ...over,
   };

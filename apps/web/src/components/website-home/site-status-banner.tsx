@@ -9,6 +9,11 @@
  * While records the statute requires are missing it is not a green check: it
  * says how many, in the warning tone, with a link down to the Records list.
  *
+ * While edits wait to be published it is not a green check either: it says so,
+ * in the info tone, with a link to the editor, whose Publish button counts the
+ * changes and reviews them before they go live. Edits made in the editor are
+ * drafts, so without this the home said "live" over a site that was not.
+ *
  * While the one-time "Email owners" offer stands (D10: not sent, not dismissed,
  * at least one owner) and the site is public (`site_published_at`, set from the
  * day the community is created), it asks whether to tell owners. **Email owners** sends once; a refusal from the
@@ -18,7 +23,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CircleAlert, CircleCheck, Copy, ExternalLink, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
+import { CircleAlert, CircleCheck, CircleDashed, Copy, ExternalLink, TriangleAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSiteLiveNotice, type SendSiteLiveNoticeResult } from '@/hooks/use-site-live-notice';
 import { ApiRequestError } from '@/lib/api/request-json';
@@ -34,6 +40,8 @@ export interface SiteStatusBannerProps {
   offerEmail: boolean;
   /** Records the statute requires that the site is missing; 0 when none are required. */
   missingRecordCount: number;
+  /** Edits are waiting to be published (`SiteFacts.hasUnpublishedChanges`). */
+  hasUnpublishedChanges: boolean;
 }
 
 type Note = { tone: 'ok' | 'error'; text: string };
@@ -59,6 +67,7 @@ export function SiteStatusBanner({
   published,
   offerEmail,
   missingRecordCount,
+  hasUnpublishedChanges,
 }: SiteStatusBannerProps) {
   const router = useRouter();
   const { send, dismiss } = useSiteLiveNotice(communityId);
@@ -118,6 +127,8 @@ export function SiteStatusBanner({
       <div className="flex items-start gap-3">
         {missingRecordCount > 0 ? (
           <TriangleAlert className="mt-0.5 size-5 shrink-0 text-status-warning" aria-hidden="true" />
+        ) : hasUnpublishedChanges ? (
+          <CircleDashed className="mt-0.5 size-5 shrink-0 text-status-info" aria-hidden="true" />
         ) : (
           <CircleCheck className="mt-0.5 size-5 shrink-0 text-status-success" aria-hidden="true" />
         )}
@@ -134,6 +145,17 @@ export function SiteStatusBanner({
               <a href="#records" className="font-medium text-content-link underline">
                 See the records
               </a>
+            </p>
+          )}
+          {hasUnpublishedChanges && (
+            <p className="text-sm text-content">
+              You have changes that aren&apos;t published.{' '}
+              <Link
+                href={`/pm/website-editor?communityId=${communityId}`}
+                className="font-medium text-content-link underline"
+              >
+                Review and publish
+              </Link>
             </p>
           )}
         </div>

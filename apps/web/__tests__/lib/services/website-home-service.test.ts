@@ -208,6 +208,7 @@ describe('loadSiteFacts', () => {
       liveLookId: 'bayfront',
       draftLookId: null,
       pendingDraftCount: 0,
+      hasUnpublishedChanges: false,
       siteUrl: 'https://sunset-condos.example.com/',
     });
   });
@@ -254,6 +255,7 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
     const facts = await loadSiteFacts(COMMUNITY_ID);
 
     expect(facts.pendingDraftCount).toBe(4 + 2 + 1);
+    expect(facts.hasUnpublishedChanges).toBe(true);
     // Only draft rows are read; the scoped client leaves out removed ones.
     expect(selectFromMock).toHaveBeenCalledWith(
       expect.objectContaining({ __table: 'site_blocks' }),
@@ -281,6 +283,18 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
     const facts = await loadSiteFacts(COMMUNITY_ID);
 
     expect(facts.pendingDraftCount).toBe(0);
+    expect(facts.hasUnpublishedChanges).toBe(false);
+  });
+
+  it('a drafted layout is an unpublished change even when nothing else is', async () => {
+    // pendingDraftCount leaves the drafted look's own edits out, so it alone reads 0 here.
+    siteRows([{ pageId: 1 }], [HOME]);
+    getBrandingMock.mockResolvedValue(branding({ draftLook: { layoutId: 'heritage' } }));
+
+    const facts = await loadSiteFacts(COMMUNITY_ID);
+
+    expect(facts.pendingDraftCount).toBe(0);
+    expect(facts.hasUnpublishedChanges).toBe(true);
   });
 });
 

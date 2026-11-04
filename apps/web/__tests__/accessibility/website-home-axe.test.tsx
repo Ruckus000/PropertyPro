@@ -49,6 +49,7 @@ const DATA: WebsiteHomeData = {
     liveLookId: 'bayfront',
     draftLookId: null,
     pendingDraftCount: 0,
+    hasUnpublishedChanges: true,
     siteUrl: 'https://sunset-condos.example.com/',
   },
   lastPublish: { publishedAt: '2026-10-26T16:00:00.000Z', byName: 'Maria Lopez' },
