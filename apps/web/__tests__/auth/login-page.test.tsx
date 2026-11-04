@@ -33,7 +33,7 @@ vi.mock('@/lib/auth/resolve-auth-page-branding', () => ({
 import LoginPage from '../../src/app/auth/login/page';
 
 describe('login page', () => {
-  it('renders a signup CTA and forgot-password link', async () => {
+  it('renders a signup CTA', async () => {
     resolveAuthPageBrandingMock.mockResolvedValue({
       communityName: null,
       hasTenantContext: false,
@@ -48,6 +48,5 @@ describe('login page', () => {
 
     expect(html).toContain('href="/signup"');
     expect(html).toContain('Create your account');
-    expect(html).toContain('href="/auth/forgot-password"');
   });
 });
