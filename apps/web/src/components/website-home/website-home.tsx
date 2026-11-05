@@ -81,6 +81,7 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
         offerEmail={data.liveNotice.offerable && data.sitePublished}
         // Only where the statute requires the records: then a missing one is a problem.
         missingRecordCount={data.records.level === 'required' ? data.records.missing.length : 0}
+        hasUnpublishedChanges={facts.hasUnpublishedChanges}
       />
 
       <WebsiteWelcomeCard communityId={communityId} facts={facts} liveHero={data.liveHero} />

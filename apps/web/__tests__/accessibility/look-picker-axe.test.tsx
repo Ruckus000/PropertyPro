@@ -49,6 +49,7 @@ const FACTS: SiteFacts = {
   liveLookId: 'bayfront',
   draftLookId: 'heritage',
   pendingDraftCount: 2,
+  hasUnpublishedChanges: true,
   siteUrl: 'https://sunset-condos.example.com/',
 };
 
