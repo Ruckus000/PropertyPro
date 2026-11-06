@@ -497,6 +497,7 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
             currently reachable. */}
         <PublicSiteFooter
           communityName={community.name}
+          communityType={community.communityType}
           {...resolveFooterSettings(rawBranding)}
         />
       </div>

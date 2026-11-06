@@ -14,4 +14,11 @@ export const APPLIES_HINT: Readonly<Record<string, string>> = {
   '718_video_recordings': 'Usually applies when meetings are held by video conference.',
   '718_conflict_contracts':
     'Usually applies when the association has a contract with a director, an officer, or a relative of one.',
+  '718_conflict_of_interest':
+    'Usually applies when a director or the manager has disclosed a conflict of interest.',
+  '720_conflict_of_interest':
+    'Usually applies when the association has a contract with a director or officer, or a conflict has been disclosed.',
+  '718_monthly_statements': 'Usually applies when a monthly income or expense statement is considered at a meeting.',
+  '720_monthly_statements': 'Usually applies when a monthly income or expense statement is considered at a meeting.',
+  '718_building_permits': 'Usually applies while construction is under way or planned.',
 };

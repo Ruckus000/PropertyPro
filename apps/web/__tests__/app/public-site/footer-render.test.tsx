@@ -17,7 +17,11 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
-import { STATUTORY_FOOTER_LINE, resolveFooterSettings } from '@/lib/site-editor/site-settings';
+import {
+  HOA_STATUTORY_FOOTER_LINE,
+  STATUTORY_FOOTER_LINE,
+  resolveFooterSettings,
+} from '@/lib/site-editor/site-settings';
 
 const COMMUNITY = 'Sunset Condos';
 
@@ -120,11 +124,28 @@ describe('PublicSiteFooter — the statutory line is opt-in', () => {
   });
 
   it('appears, with the exact §5 wording, only on an explicit opt-in', () => {
-    render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine />);
+    render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine communityType="condo_718" />);
     expect(
       screen.getByText('Records maintained under Fla. Stat. §718.111(12)(g)'),
     ).toBeInTheDocument();
   });
+});
+
+describe('PublicSiteFooter — the statutory line cites the community type’s statute', () => {
+  it('cites §720.303(4), never the condo statute, for an HOA', () => {
+    render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine communityType="hoa_720" />);
+    expect(screen.getByText(HOA_STATUTORY_FOOTER_LINE)).toBeInTheDocument();
+    expect(HOA_STATUTORY_FOOTER_LINE).toBe('Records maintained under Fla. Stat. §720.303(4)');
+    expect(screen.queryByText(STATUTORY_FOOTER_LINE)).not.toBeInTheDocument();
+  });
+
+  it.each([['apartment'], [undefined], [null], ['unknown_type']])(
+    'shows no line at all for %s, even when opted in',
+    (communityType) => {
+      render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine communityType={communityType} />);
+      expect(screen.queryByText(/Records maintained under/)).not.toBeInTheDocument();
+    },
+  );
 
   // End to end from the stored blob: a malformed or truthy-but-not-true stored
   // value must not publish a statutory claim under the association's name.
@@ -149,6 +170,7 @@ describe('PublicSiteFooter — everything at once', () => {
         associationName="Sunset Condominium Association, Inc."
         note="Managed by Acme Property Group."
         showStatutoryLine
+        communityType="condo_718"
       />,
     );
     const paragraphs = [...container.querySelectorAll('p')].map((p) => p.textContent);

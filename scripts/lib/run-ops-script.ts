@@ -24,11 +24,13 @@
  *
  * Throw an `Error` from `run` to exit non-zero. Anything else returns 0.
  *
- * The entrypoint check (comparing `import.meta.url` to argv[1]) is preserved
- * so that importing the script from a test or another tool does not
- * auto-execute it.
+ * The entrypoint check is preserved so that importing the script from a test
+ * or another tool does not auto-execute it. It uses `isMainModule`, which
+ * realpath-resolves both sides: the bare `import.meta.url === argv[1]` form
+ * silently skipped `run` when the script was invoked through a symlink or a
+ * path with a space, exiting having done nothing.
  */
-import { pathToFileURL } from 'node:url';
+import { isMainModule } from './is-main-module';
 // AUTHZ: CLI/seed script — runs out-of-band of tenant scoping with explicit operator authorization.
 import { closeUnscopedClient } from '@propertypro/db/unsafe';
 
@@ -42,10 +44,7 @@ export interface RunOpsScriptConfig {
 }
 
 export async function runOpsScript(config: RunOpsScriptConfig): Promise<void> {
-  const isEntrypoint = process.argv[1]
-    ? config.url === pathToFileURL(process.argv[1]).href
-    : false;
-  if (!isEntrypoint) return;
+  if (!isMainModule(config.url)) return;
 
   let exitCode = 0;
   try {

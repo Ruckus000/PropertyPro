@@ -85,7 +85,11 @@ export default async function PublicSiteNotFound() {
             </a>
           </div>
         </main>
-        <PublicSiteFooter communityName={community.name} {...resolveFooterSettings(branding)} />
+        <PublicSiteFooter
+          communityName={community.name}
+          communityType={community.communityType}
+          {...resolveFooterSettings(branding)}
+        />
       </div>
     </>
   );

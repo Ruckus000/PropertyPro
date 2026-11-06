@@ -1,4 +1,4 @@
-import { STATUTORY_FOOTER_LINE } from '@/lib/site-editor/site-settings';
+import { statutoryFooterLine } from '@/lib/site-editor/site-settings';
 
 interface PublicSiteFooterProps {
   communityName: string;
@@ -12,6 +12,8 @@ interface PublicSiteFooterProps {
   associationName?: string | null;
   note?: string | null;
   showStatutoryLine?: boolean;
+  /** Picks the statute the records line cites; without one, no line renders. */
+  communityType?: string | null;
 }
 
 /**
@@ -20,8 +22,10 @@ interface PublicSiteFooterProps {
  *
  * ## The statutory line is opt-in, and its wording is not editable
  *
- * A PM chooses whether `STATUTORY_FOOTER_LINE` appears; they cannot change what
- * it says. That split is deliberate. PropertyPro presents factual data and does
+ * A PM chooses whether the records line appears; they cannot change what it
+ * says. The statute it cites follows the community type
+ * (`statutoryFooterLine`): §718.111(12)(g) for a condominium, §720.303(4) for an
+ * HOA, and no line at all for an apartment community. That split is deliberate. PropertyPro presents factual data and does
  * not assess compliance adequacy (`.claude/rules/florida-compliance.md`), so a
  * footer line a community could read as the platform certifying its statutory
  * compliance is exactly the claim to avoid — and a free-text field here would
@@ -42,7 +46,9 @@ export function PublicSiteFooter({
   associationName,
   note,
   showStatutoryLine,
+  communityType,
 }: PublicSiteFooterProps) {
+  const statutoryLine = showStatutoryLine ? statutoryFooterLine(communityType) : null;
   const currentYear = new Date().getFullYear();
   // A blank association name falls back rather than rendering "© 2026 ."
   const owner = associationName?.trim() || communityName;
@@ -58,9 +64,7 @@ export function PublicSiteFooter({
         <div className="max-w-prose space-y-2">
           <div className="font-heading text-3xl font-semibold leading-tight">{communityName}</div>
           {noteText ? <p className="text-base">{noteText}</p> : null}
-          {showStatutoryLine ? (
-            <p className="text-sm">{STATUTORY_FOOTER_LINE}</p>
-          ) : null}
+          {statutoryLine ? <p className="text-sm">{statutoryLine}</p> : null}
         </div>
         <p className="text-sm">
           {/*

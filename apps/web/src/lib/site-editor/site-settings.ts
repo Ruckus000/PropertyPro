@@ -56,6 +56,24 @@ export const FOOTER_NOTE_MAX_LENGTH = 300;
 export const STATUTORY_FOOTER_LINE =
   'Records maintained under Fla. Stat. §718.111(12)(g)';
 
+/** The same statement for a homeowners association, under its own chapter. */
+export const HOA_STATUTORY_FOOTER_LINE =
+  'Records maintained under Fla. Stat. §720.303(4)';
+
+/**
+ * The records line for a community type, or `null` when none applies.
+ *
+ * A condominium's records are kept under §718.111(12)(g) and an HOA's under
+ * §720.303(4); an apartment community keeps neither, so it gets no line. An
+ * unknown type also gets none: a wrong statute under an association's name is
+ * worse than no line.
+ */
+export function statutoryFooterLine(communityType: string | null | undefined): string | null {
+  if (communityType === 'condo_718') return STATUTORY_FOOTER_LINE;
+  if (communityType === 'hoa_720') return HOA_STATUTORY_FOOTER_LINE;
+  return null;
+}
+
 /**
  * The sharing image (builder v4, Phase 5), as written by its finalize route:
  * one 1200×630 JPEG. `bytes` is kept so replacing it releases exactly what it
