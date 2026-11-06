@@ -49,16 +49,16 @@ function assertLoopbackDatabaseOrCI(label: string): void {
  * Used to detect both orphaned duplicates and missing data after reset.
  *
  * Derived from the seeder, not observed — re-derive when it changes:
- *   - sunset-condos: 2 base docs + the condo_718 compliance template (17 items)
+ *   - sunset-condos: 2 base docs + the condo_718 compliance template (21 items)
  *     minus the 3 it deliberately leaves unposted (718_conflict_contracts,
- *     718_sirs, 718_insurance) + 10 rolling minutes = 26.
+ *     718_sirs, 718_insurance) + 10 rolling minutes = 30.
  *   - palm-shores-hoa: the 2 base docs only. seedTransparencyDemoData is
  *     skipped for it on purpose (#764), so staging E2E can assert the empty
  *     transparency state.
  *   - sunset-ridge-apartments: rules, move-in instructions, resident handbook.
  */
 const EXPECTED_DOCS_PER_SLUG: Record<string, number> = {
-  'sunset-condos': 26,
+  'sunset-condos': 30,
   'palm-shores-hoa': 2,
   'sunset-ridge-apartments': 3,
 };

@@ -165,7 +165,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     community: 'condo_718|demo=true|trial=true|expires=true',
     tables: {
       announcements: 2,
-      compliance_checklist_items: 17,
+      compliance_checklist_items: 21,
       demo_seed_registry: 5,
       document_categories: 8,
       documents: 2,
@@ -191,7 +191,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     community: 'hoa_720|demo=true|trial=true|expires=true',
     tables: {
       announcements: 1,
-      compliance_checklist_items: 10,
+      compliance_checklist_items: 14,
       demo_seed_registry: 4,
       document_categories: 8,
       documents: 2,
@@ -244,7 +244,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     community: 'condo_718|demo=true|trial=true|expires=true',
     tables: {
       announcements: 3,
-      compliance_checklist_items: 17,
+      compliance_checklist_items: 21,
       demo_seed_registry: 13,
       document_categories: 8,
       documents: 4,
@@ -270,7 +270,7 @@ const EXPECTED: Record<string, CountSnapshot> = {
     community: 'hoa_720|demo=true|trial=true|expires=true',
     tables: {
       announcements: 2,
-      compliance_checklist_items: 10,
+      compliance_checklist_items: 14,
       demo_seed_registry: 8,
       document_categories: 8,
       documents: 4,
