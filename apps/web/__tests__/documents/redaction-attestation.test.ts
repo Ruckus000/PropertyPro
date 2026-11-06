@@ -30,6 +30,7 @@ const {
   REDACTION_ATTESTATION_TEXT,
   categoryRequiresRedactionAttestation,
   enforceRedactionAttestation,
+  enforcePublishRedactionAttestation,
 } = await import('@/lib/documents/redaction-attestation');
 
 /** Resolve categoryId 1 to the given display name. */
@@ -128,5 +129,39 @@ describe('enforceRedactionAttestation', () => {
 
   it('cites the statute in the attestation text', async () => {
     expect(REDACTION_ATTESTATION_TEXT).toContain('718.111(12)(c)');
+  });
+});
+
+// Putting a document on the public site publishes it to anyone. Nothing requires
+// it (the statutory duty is the owners-only portal), so it asks every time.
+describe('enforcePublishRedactionAttestation', () => {
+  const base = { communityId: 42, categoryId: 1, userId: 'user-1', title: 'Declaration' };
+
+  it.each(['Declaration', 'Rules', 'Meeting Minutes'])(
+    'requires an attestation for %s, even where an upload would not',
+    async (name) => {
+      categoryNamed(name);
+      await expect(
+        enforcePublishRedactionAttestation({ ...base, attested: undefined }),
+      ).rejects.toThrow(/public site/i);
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it('records a public-site attestation when attested', async () => {
+    categoryNamed('Declaration');
+
+    await enforcePublishRedactionAttestation({ ...base, attested: true });
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceType: 'document_publish_redaction_attestation',
+        newValues: expect.objectContaining({
+          attested: true,
+          attestationText: REDACTION_ATTESTATION_TEXT,
+          audience: 'public_site',
+        }),
+      }),
+    );
   });
 });

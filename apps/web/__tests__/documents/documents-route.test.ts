@@ -781,6 +781,38 @@ describe('PATCH /api/v1/documents - public_access', () => {
     expect(setDocumentPublicAccessMock).toHaveBeenCalledWith(42, 7, false);
   });
 
+  it('will not put a violation-evidence row on the public site', async () => {
+    // The library never lists these rows, so only a crafted request reaches
+    // here. They back violation photos and must never reach the open internet.
+    getDocumentForPublishAuditMock.mockResolvedValue({
+      title: 'Unit 4B — balcony',
+      categoryId: null,
+      publicAccess: false,
+      postedAt: new Date('2026-01-15T00:00:00.000Z'),
+      sourceType: 'violation_evidence',
+    });
+
+    const response = await PATCH(patchRequest({ publicAccess: true, redactionAttested: true }));
+
+    expect(response.status).toBe(400);
+    expect(setDocumentPublicAccessMock).not.toHaveBeenCalled();
+  });
+
+  it('can still put an authored document on the public site', async () => {
+    getDocumentForPublishAuditMock.mockResolvedValue({
+      title: 'Pool rules',
+      categoryId: 3,
+      publicAccess: false,
+      postedAt: new Date('2026-01-15T00:00:00.000Z'),
+      sourceType: 'authored',
+    });
+
+    const response = await PATCH(patchRequest({ publicAccess: true, redactionAttested: true }));
+
+    expect(response.status).toBe(200);
+    expect(setDocumentPublicAccessMock).toHaveBeenCalledWith(42, 7, true);
+  });
+
   it('refuses a document that is not in this community', async () => {
     getDocumentForPublishAuditMock.mockResolvedValue(null);
 

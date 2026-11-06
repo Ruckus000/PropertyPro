@@ -15,7 +15,6 @@ import {
   filterRows,
   linkedRequirementsByDocumentId,
   mergeDocumentsAndGaps,
-  owedToPublic,
   timelineRows,
   unlinkedDocuments,
   type ChecklistRow,
@@ -61,13 +60,13 @@ describe('documentState', () => {
     expect(documentState(doc({ publicAccess: true }), item({ documentId: 1 }))).toBe('public');
   });
 
-  it('calls a linked, non-public document "owed"', () => {
-    // §718.111(12)(g) is the posting duty and the checklist IS the record set,
-    // so a record with a file that is not on the site is owed to it.
-    expect(documentState(doc({ publicAccess: false }), item({ documentId: 1 }))).toBe('owed');
+  it('calls a linked, posted, non-public document "private" (on the owner portal)', () => {
+    // The statutory duty is the owners-only portal. Public is optional, so a
+    // posted record owners can see owes the public site nothing.
+    expect(documentState(doc({ publicAccess: false }), item({ documentId: 1 }))).toBe('private');
   });
 
-  it('does not owe the public site a requirement marked not applicable', () => {
+  it('reads a requirement marked not applicable the same way', () => {
     expect(
       documentState(doc({ publicAccess: false }), item({ documentId: 1, isApplicable: false })),
     ).toBe('private');
@@ -77,7 +76,7 @@ describe('documentState', () => {
     // The column is on the wire, but the row type has carried it only since
     // this module — an older cached payload must not read as published.
     const { publicAccess: _omitted, ...withoutFlag } = doc();
-    expect(documentState(withoutFlag as DocumentRow, item({ documentId: 1 }))).toBe('owed');
+    expect(documentState(withoutFlag as DocumentRow, item({ documentId: 1 }))).toBe('private');
   });
 });
 
@@ -101,7 +100,7 @@ describe('mergeDocumentsAndGaps', () => {
     expect(row?.kind).toBe('document');
     if (row?.kind !== 'document') throw new Error('expected a document row');
     expect(row.requirement?.statuteReference).toBe('§718.111(12)(a)1');
-    expect(row.state).toBe('owed');
+    expect(row.state).toBe('private');
   });
 
   it('leaves out a requirement that is not applicable', () => {
@@ -151,14 +150,6 @@ describe('the quick-filter predicates', () => {
       [item({ documentId: 1 })],
     );
     expect(orphans.map((d) => d.id)).toEqual([2]);
-  });
-
-  it('finds linked documents that are not on the public site', () => {
-    const owed = owedToPublic(
-      [doc({ id: 1, publicAccess: true }), doc({ id: 2, publicAccess: false })],
-      [item({ id: 100, documentId: 1 }), item({ id: 101, documentId: 2 })],
-    );
-    expect(owed.map((d) => d.id)).toEqual([2]);
   });
 });
 
@@ -360,14 +351,15 @@ describe('timelineRows', () => {
     expect(rows[0]?.tone).toBe('ok');
   });
 
-  it('marks a linked but unpublished record as owed, not overdue', () => {
+  it('reads a linked record that is not public as on file, with no warning', () => {
+    // Owners seeing it is the duty; the public site is optional.
     const rows = timelineRows(
       [doc({ id: 5, publicAccess: false })],
       [item({ documentId: 5, deadline: '2026-03-10T00:00:00.000Z', status: 'satisfied' })],
       NOW,
     );
-    expect(rows[0]?.tone).toBe('warn');
-    expect(rows[0]?.label).toBe('not public');
+    expect(rows[0]?.tone).toBe('ok');
+    expect(rows[0]?.label).toBe('on file');
   });
 
   it('reads the month in UTC, in every timezone', () => {

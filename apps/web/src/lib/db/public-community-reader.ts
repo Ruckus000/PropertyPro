@@ -127,11 +127,6 @@ export interface PublicDocumentFile {
   mimeType: string;
 }
 
-export interface PublicSitemapDocument {
-  id: number;
-  updatedAt: Date;
-}
-
 /**
  * Minimal projection used by sitemap.xml for multi-page sites (Phase 11b-2).
  * Slug + lastmod is everything a `<url>` entry needs.
@@ -299,13 +294,6 @@ export interface PublicScopedReader {
    */
   listDocuments(opts: { limit: number; includeCategories?: readonly DocumentCategory[] }): Promise<PublicDocument[]>;
 
-  /**
-   * Every public-access document for the community, oldest-stable-id-first
-   * (so paginated sitemaps stay consistent across requests). Powers
-   * apps/web/src/app/sitemap.ts. Differs from listDocuments by ignoring the
-   * category filter — sitemap surfaces every public document.
-   */
-  listPublicDocumentsForSitemap(opts: { limit: number }): Promise<PublicSitemapDocument[]>;
   getPublicDocumentFile(documentId: number): Promise<PublicDocumentFile | null>;
 
   /**
@@ -679,6 +667,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.publicAccess, true),
             // A draft is never public, even if the flag were set on one.
             isNotNull(documents.postedAt),
+            // Never `violation_evidence`, even if the flag were set on one.
+            buildSourceTypeFilter(),
             inArray(documents.categoryId, categoryIds),
           ),
         )
@@ -691,10 +681,11 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
      * Resolve one document for ANONYMOUS download.
      *
      * This is the only read in the product that hands an unauthenticated
-     * caller a path into the private `documents` storage bucket, so the four
+     * caller a path into the private `documents` storage bucket, so the
      * predicates below are the whole authorization: the row must belong to this
-     * community, must not be soft-deleted, must carry `public_access`, and the
-     * community itself must still be live. There is no session and no
+     * community, must not be soft-deleted, must carry `public_access`, must be
+     * posted and of a documents-UI source type, and the community itself must
+     * still be live. There is no session and no
      * membership to fall back on — if this filter is wrong, a private
      * association record is on the open internet.
      *
@@ -741,6 +732,8 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
             eq(documents.publicAccess, true),
             // A draft is never public, even if the flag were set on one.
             isNotNull(documents.postedAt),
+            // Never `violation_evidence`, even if the flag were set on one.
+            buildSourceTypeFilter(),
             isNull(communities.deletedAt),
           ),
         )
@@ -749,35 +742,9 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       return rows[0] ?? null;
     },
 
-    async listPublicDocumentsForSitemap(opts) {
-      // Sitemap surface — every public, non-deleted document for the
-      // community, regardless of category. Sorted by id asc so crawlers see
-      // a stable order across requests (createdAt could shift if a document
-      // is reuploaded). Minimal projection — sitemap only needs id + a
-      // lastmod date.
-      const rows = await db
-        .select({
-          id: documents.id,
-          updatedAt: documents.updatedAt,
-        })
-        .from(documents)
-        .where(
-          and(
-            eq(documents.communityId, communityId),
-            isNull(documents.deletedAt),
-            eq(documents.publicAccess, true),
-            // A draft is never public, even if the flag were set on one.
-            isNotNull(documents.postedAt),
-          ),
-        )
-        .orderBy(asc(documents.id))
-        .limit(opts.limit);
-      return rows;
-    },
-
     async listPublishedPagesForSitemap(opts) {
-      // Same shape as listPublicDocumentsForSitemap: published rows only,
-      // id-asc for a stable crawl order, hard-capped by the caller.
+      // Published rows only, id-asc for a stable crawl order, hard-capped by
+      // the caller.
       // `in_nav` is NOT a predicate (D16) and home is excluded because
       // sitemap.ts emits `/` itself.
       const rows = await db

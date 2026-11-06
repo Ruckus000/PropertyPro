@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
 import { DocumentLinkPicker } from '@/components/documents/author/document-link-picker';
+import { RedactionAttestationField } from '@/components/documents/redaction-attestation-field';
 import {
   useDocumentDraft,
   useAutosave,
@@ -60,6 +61,7 @@ export function AuthorEditorClient({
   const [title, setTitle] = React.useState('');
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [coverSheet, setCoverSheet] = React.useState(false);
+  const [redactionAttested, setRedactionAttested] = React.useState(false);
   const [letterheadHeader, setLetterheadHeader] = React.useState(true);
   const [letterheadFooter, setLetterheadFooter] = React.useState(true);
   const [savedAt, setSavedAt] = React.useState<Date | null>(null);
@@ -154,7 +156,7 @@ export function AuthorEditorClient({
       // Flush any pending autosave before we publish, otherwise we'd
       // publish a stale body.
       await autosave.flush();
-      const result = await publish.mutateAsync();
+      const result = await publish.mutateAsync({ redactionAttested });
       toast.success('Document published.');
       router.push(`/communities/${communityId}/documents`);
       router.refresh();
@@ -222,7 +224,7 @@ export function AuthorEditorClient({
             <button
               type="button"
               onClick={handlePublish}
-              disabled={publish.isPending}
+              disabled={publish.isPending || !redactionAttested}
               className="rounded-md bg-interactive px-3 py-2 text-sm font-medium text-white hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive disabled:opacity-60"
             >
               {publish.isPending ? 'Generating PDF…' : 'Publish'}
@@ -236,6 +238,17 @@ export function AuthorEditorClient({
           {lockWarning}
         </div>
       )}
+
+      {/* Always asked: this screen does not know the draft's category name.
+          The server decides by category, as uploads do, and always requires
+          it for minutes, which have no category. */}
+      <RedactionAttestationField
+        id="author-redaction-attested"
+        heading="Confirm redaction before publishing"
+        checked={redactionAttested}
+        onChange={setRedactionAttested}
+        disabled={publish.isPending}
+      />
 
       {publish.isPending && (
         <div className="rounded-md border border-edge bg-surface-muted p-3 text-sm text-content-secondary">

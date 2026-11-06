@@ -114,9 +114,12 @@ export async function recordRedactionAttestation(params: {
  *   - documents uploaded before that check shipped (audit F-02) carry none
  *     either.
  *
- * So publishing asks again rather than assuming a consent given for a smaller
- * audience covers a larger one. Un-publishing does not: it reduces disclosure,
- * and gating it would strand a document a board wants pulled.
+ * So publishing asks again, for EVERY category, rather than assuming a consent
+ * given for a smaller audience covers a larger one. Nothing requires a record
+ * to be public — the statute's duty is the owners-only portal — so asking once
+ * per publish costs a board nothing it owes. Un-publishing does not ask: it
+ * reduces disclosure, and gating it would strand a document a board wants
+ * pulled.
  */
 export async function enforcePublishRedactionAttestation(params: {
   communityId: number;
@@ -125,15 +128,9 @@ export async function enforcePublishRedactionAttestation(params: {
   title: string;
   attested: boolean | undefined;
 }): Promise<void> {
-  const required = await categoryRequiresRedactionAttestation(
-    params.communityId,
-    params.categoryId,
-  );
-  if (!required) return;
-
   if (params.attested !== true) {
     throw new ValidationError(
-      'This document category commonly contains protected personal information. Confirm you have redacted it before putting it on the public site.',
+      'Confirm you have redacted protected personal information before putting this document on the public site.',
       {
         fields: [{ field: 'redactionAttested', message: REDACTION_ATTESTATION_TEXT }],
       },

@@ -241,10 +241,11 @@ export const DELETE = withErrorHandler(
  * The only writer for `documents.public_access`.
  *
  * Publishing puts an association record on the open internet: it is what
- * `public-community-reader` filters on for both the site's documents block and
- * the sitemap, and §718.111(12)(g) is the duty it serves. The gate chain is the
- * DELETE chain — the same destructive-write posture — plus a redaction
- * attestation on the publishing direction only.
+ * `public-community-reader` filters on for the site's documents block and the
+ * anonymous download. It is optional — §718.111(12)(g) and §720.303(4) require
+ * an owners-only section, not a public one. The gate chain is the DELETE chain —
+ * the same destructive-write posture — plus a redaction attestation on the
+ * publishing direction only, and a source-type check.
  */
 export const PATCH = withErrorHandler(
   runRoute(documentsPatchContract, async ({ query, body, req }) => {
@@ -289,15 +290,25 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('Post this draft before putting it on the public site.');
     }
 
-    // Publishing only. Removing a document from the public site reduces
-    // disclosure, so it carries no attestation — gating it would strand a
-    // record a board wants pulled.
+    // Only the source types the documents UI shows (`buildSourceTypeFilter` in
+    // @propertypro/db) can be published. `violation_evidence` rows back
+    // violation photos; the library never lists them, so only a crafted request
+    // could reach this, and it must not put one on the open internet.
+    if (
+      body.publicAccess === true &&
+      existing.sourceType !== 'library' &&
+      existing.sourceType !== 'authored'
+    ) {
+      throw new ValidationError('This document cannot be put on the public site.');
+    }
+
+    // Publishing only, and for every category. Removing a document from the
+    // public site reduces disclosure, so it carries no attestation — gating it
+    // would strand a record a board wants pulled.
     if (body.publicAccess === true) {
       await enforcePublishRedactionAttestation({
         communityId,
-        // A null category is treated as sensitive by
-        // `categoryRequiresRedactionAttestation`: a missing category is not
-        // evidence that a document is safe to publish.
+        // Only the audit entry's resource id; it does not decide anything.
         categoryId: existing.categoryId ?? 0,
         userId,
         title: existing.title ?? String(id),

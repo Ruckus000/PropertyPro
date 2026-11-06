@@ -30,7 +30,11 @@ const {
   filtersMock,
   autoLinkDocumentMock,
   captureExceptionMock,
+  enforceRedactionAttestationMock,
+  renderHtmlToPdfMock,
 } = vi.hoisted(() => ({
+  enforceRedactionAttestationMock: vi.fn().mockResolvedValue(undefined),
+  renderHtmlToPdfMock: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -103,7 +107,11 @@ vi.mock('@/lib/documents/render-authored-html', () => ({
 }));
 
 vi.mock('@/lib/documents/render-pdf', () => ({
-  renderHtmlToPdf: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+  renderHtmlToPdf: renderHtmlToPdfMock,
+}));
+
+vi.mock('@/lib/documents/redaction-attestation', () => ({
+  enforceRedactionAttestation: enforceRedactionAttestationMock,
 }));
 
 vi.mock('@/lib/documents/create-authored-document', () => ({
@@ -132,6 +140,7 @@ vi.mock('@/lib/services/document-draft-service', () => ({
 }));
 
 import { POST } from '../../src/app/api/v1/documents/drafts/[id]/publish/route';
+import { ValidationError } from '../../src/lib/api/errors';
 
 const NOW = new Date('2026-09-14T18:05:00.000Z');
 
@@ -148,12 +157,12 @@ function mockMeetingRow(row: Record<string, unknown> | null) {
   return { updateMock };
 }
 
-function publish() {
+function publish(body: string | undefined = JSON.stringify({ redactionAttested: true })) {
   return POST(
     new NextRequest('http://localhost:3000/api/v1/documents/drafts/5/publish?communityId=42', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
+      body,
     }),
     { params: Promise.resolve({ id: '5' }) },
   );
@@ -359,5 +368,87 @@ describe('publishing a draft authored from a meeting', () => {
       failure,
       expect.objectContaining({ tags: { record_auto_link: 'authored_publish' } }),
     );
+  });
+});
+
+// Publishing posts the document to owners at once, the same disclosure as an
+// upload, so it carries the upload's §718.111(12)(c) redaction attestation.
+describe('the redaction attestation on publish', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requireAuthenticatedUserIdMock.mockResolvedValue('author-1');
+    requireCommunityMembershipMock.mockResolvedValue({
+      userId: 'author-1',
+      communityId: 42,
+      role: 'manager',
+      isAdmin: true,
+      communityType: 'condo_718',
+      timezone: 'America/New_York',
+    });
+    createAuthoredDocumentMock.mockResolvedValue({ document: { id: 900 }, warnings: [] });
+    autoLinkDocumentMock.mockResolvedValue({ templateKey: null, outcome: 'not_eligible' });
+    getMeetingForDraftSeedMock.mockResolvedValue(null);
+    mockMeetingRow(null);
+    getDocumentDraftByIdMock.mockResolvedValue({
+      id: 5,
+      authorId: 'author-1',
+      title: 'Minutes — August Board Meeting',
+      bodyHtml: '<p>The board met.</p>',
+      // Minutes drafts carry no category; `?? 0` resolves to none, which the
+      // attestation treats as sensitive.
+      targetCategoryId: null,
+      targetMeetingId: 13,
+      sourceDocumentId: null,
+      coverSheetEnabled: false,
+      letterheadOptions: {},
+      deletedAt: null,
+    });
+  });
+
+  it('asks for it with the draft category and the body value, before rendering', async () => {
+    const response = await publish();
+
+    expect(response.status).toBe(200);
+    expect(enforceRedactionAttestationMock).toHaveBeenCalledWith({
+      communityId: 42,
+      categoryId: 0,
+      userId: 'author-1',
+      title: 'Minutes — August Board Meeting',
+      attested: true,
+    });
+    expect(enforceRedactionAttestationMock.mock.invocationCallOrder[0]).toBeLessThan(
+      renderHtmlToPdfMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('refuses with a 400 and writes nothing when it is refused', async () => {
+    enforceRedactionAttestationMock.mockRejectedValueOnce(
+      new ValidationError('Confirm you have redacted it before uploading.'),
+    );
+
+    const response = await publish(JSON.stringify({}));
+
+    expect(response.status).toBe(400);
+    expect(enforceRedactionAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attested: undefined }),
+    );
+    expect(renderHtmlToPdfMock).not.toHaveBeenCalled();
+    expect(createAuthoredDocumentMock).not.toHaveBeenCalled();
+    expect(softDeleteDocumentDraftMock).not.toHaveBeenCalled();
+  });
+
+  it('reads an empty body as no attestation given', async () => {
+    await publish('');
+
+    expect(enforceRedactionAttestationMock).toHaveBeenCalledWith(
+      expect.objectContaining({ attested: undefined }),
+    );
+  });
+
+  it('refuses a body that is not JSON, or carries an unknown field', async () => {
+    expect((await publish('{not json')).status).toBe(400);
+    expect((await publish(JSON.stringify({ redactionAttested: 'yes' }))).status).toBe(400);
+    expect((await publish(JSON.stringify({ publicAccess: true }))).status).toBe(400);
+    expect(createAuthoredDocumentMock).not.toHaveBeenCalled();
   });
 });

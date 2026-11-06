@@ -90,7 +90,7 @@ describe('DocumentReplaceFile', () => {
     expect(submit).toBeEnabled();
   });
 
-  it('asks nothing for a PUBLIC document in a non-sensitive category — the server requires nothing there', () => {
+  it('asks for a PUBLIC document even in a non-sensitive category — the server asks on every publish', () => {
     render(
       <DocumentReplaceFile communityId={8} document={{ ...DOC, publicAccess: true }} onReplaced={vi.fn()} />,
     );
@@ -98,8 +98,10 @@ describe('DocumentReplaceFile', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Replace file' }));
     chooseFile();
 
-    expect(screen.queryByRole('checkbox', { name: /Confirm redaction/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Replace file' })).toBeEnabled();
+    const submit = screen.getByRole('button', { name: 'Replace file' });
+    expect(submit).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirm redaction/ }));
+    expect(submit).toBeEnabled();
   });
 
   it('asks nothing for a DRAFT, even in a sensitive category — the server asks at posting', () => {

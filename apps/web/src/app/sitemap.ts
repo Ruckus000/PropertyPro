@@ -4,18 +4,17 @@
  * Three branches (mirroring robots.ts):
  *   1. Community public host — a community subdomain OR a verified custom
  *      domain: list the community's public URLs, one entry per published
- *      site page (Phase 11b-2), + per-document URLs for documents marked
- *      public_access=true (migration 0007).
+ *      site page (Phase 11b-2).
  *   2. Reserved subdomain (pm.*, app.*, admin.*): empty sitemap.
  *   3. Marketing root: list the marketing pages.
  *
  * Cached via revalidate: 3600 (1 hour).
  *
- * Per-document URLs point at `/api/v1/public/documents/{id}/download`, which
- * serves a document ONLY while `public_access` is true, it is not soft-deleted,
- * and it belongs to this community. Until that route existed these URLs pointed
- * at the authenticated endpoint and every crawler — and every resident who
- * clicked one — got a 401, which made the whole public-documents feature inert.
+ * Documents are deliberately NOT listed. A board may choose to put a record on
+ * its public site, but nothing requires it (the statute's duty is the owners-only
+ * portal), and handing every public file's download URL to crawlers turns an
+ * optional, reversible choice into a permanent search-engine copy. Visitors still
+ * reach public documents through the site's Documents section.
  */
 import type { MetadataRoute } from 'next';
 import { headers } from 'next/headers';
@@ -28,13 +27,8 @@ import { getAllResources } from '@/lib/services/resource-article-service';
 
 export const revalidate = 3600;
 
-/** Per-host sitemap cap for per-document URLs. Sitemaps spec allows up to
- *  50k entries; we stay well below that and rely on the public-access opt-in
- *  to keep the list small in practice. */
-const SITEMAP_DOCUMENT_LIMIT = 1000;
-
-/** Phase 11b-2 cap on per-page sitemap entries (D16), following the
- *  SITEMAP_DOCUMENT_LIMIT precedent. */
+/** Phase 11b-2 cap on per-page sitemap entries (D16). The sitemaps spec allows
+ *  up to 50k; we stay well below it. */
 const SITEMAP_PAGE_LIMIT = 200;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -98,7 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       { url: `${base}/transparency`, lastModified: now, changeFrequency: 'monthly', priority: 0.8 },
     ];
 
-    // Append per-document URLs when middleware has resolved a community id.
+    // Append per-page URLs when middleware has resolved a community id.
     // The header-vs-context split mirrors what apps/web/src/app/public-site/page.tsx
     // does — context tells us we're on a community subdomain; the header gives
     // us the resolved id middleware already looked up by slug.
@@ -117,15 +111,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         changeFrequency: 'weekly',
         priority: 0.7,
       }));
-
-      const docs = await reader.listPublicDocumentsForSitemap({ limit: SITEMAP_DOCUMENT_LIMIT });
-      const documentEntries: MetadataRoute.Sitemap = docs.map((doc) => ({
-        url: `${base}/api/v1/public/documents/${doc.id}/download?communityId=${communityId}`,
-        lastModified: doc.updatedAt,
-        changeFrequency: 'yearly',
-        priority: 0.4,
-      }));
-      return [...staticEntries, ...pageEntries, ...documentEntries];
+      return [...staticEntries, ...pageEntries];
     }
     return staticEntries;
   }

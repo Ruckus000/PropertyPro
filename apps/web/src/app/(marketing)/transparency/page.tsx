@@ -22,15 +22,15 @@ export default function TransparencyPage() {
                 Community Transparency Pages
               </h1>
               <p className="mk-muted" style={{ fontSize: 19 }}>
-                Every community on PropertyPro gets a public transparency page — a
-                single destination for financials, meeting minutes, posted
-                documents, and compliance status required under Florida
-                §718.111(12)(g) and §720.303.
+                Every community on PropertyPro can turn on a public transparency
+                page. It shows which records Florida §718.111(12)(g) and §720.303
+                ask an association to make available to owners, whether each one
+                is posted, and when.
               </p>
               <p className="mk-muted" style={{ fontSize: 17, marginTop: 14 }}>
-                Residents and prospective buyers can view this information without
-                logging in. Boards control what is shared and when documents are
-                published.
+                The records themselves stay in the owners-only portal, where the law
+                requires them. Boards decide whether the page is on, and whether any
+                document also goes on the public site.
               </p>
             </div>
 

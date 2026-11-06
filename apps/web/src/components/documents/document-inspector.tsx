@@ -153,9 +153,9 @@ export function DocumentInspector({
               evidence.
             </p>
           )}
-          {state === 'owed' && (
-            <p className="mt-2 text-xs text-status-warning">
-              Not on the public site.
+          {state === 'private' && (
+            <p className="mt-2 text-xs text-content-secondary">
+              On the owner portal. Putting it on the public site is optional.
             </p>
           )}
         </div>

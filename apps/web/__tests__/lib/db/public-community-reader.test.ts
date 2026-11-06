@@ -726,15 +726,15 @@ describe('getPublicCommunityScopedReader', () => {
   });
 
   // Drafts (`posted_at` NULL) are never public. One case per reader: the
-  // site's documents block, the public download, and the sitemap.
-  it.each([
+  // site's documents block and the public download.
+  const anonymousDocumentReads = [
     ['listDocuments', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
       r.listDocuments({ limit: 5, includeCategories: ['budget'] })],
     ['getPublicDocumentFile', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
       r.getPublicDocumentFile(7)],
-    ['listPublicDocumentsForSitemap', (r: ReturnType<typeof getPublicCommunityScopedReader>) =>
-      r.listPublicDocumentsForSitemap({ limit: 50 })],
-  ])('%s WHERE excludes drafts (posted_at IS NOT NULL)', async (name, call) => {
+  ] as const;
+
+  it.each(anonymousDocumentReads)('%s WHERE excludes drafts (posted_at IS NOT NULL)', async (name, call) => {
     // listDocuments reads the community's categories first (matched by meaning).
     if (name === 'listDocuments') {
       queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
@@ -768,63 +768,18 @@ describe('getPublicCommunityScopedReader', () => {
     expect((publicAccessClause as { __eq: { val: boolean } }).__eq.val).toBe(true);
   });
 
-  // ---------------------------------------------------------------------------
-  // listPublicDocumentsForSitemap (migration 0007 follow-up)
-  // ---------------------------------------------------------------------------
+  // `violation_evidence` rows back violation photos and must never reach an
+  // anonymous visitor, even if `public_access` were set on one.
+  it.each(anonymousDocumentReads)('%s WHERE keeps to documents-UI source types', async (name, call) => {
+    if (name === 'listDocuments') {
+      queueQueryResults([{ id: 3, name: 'Financial Records' }, { id: 4, name: 'Meeting Records' }, { id: 5, name: 'Rules' }]);
+    } else {
+      mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    }
+    await call(getPublicCommunityScopedReader(42));
 
-  it('listPublicDocumentsForSitemap returns mapped { id, updatedAt } rows', async () => {
-    const fakeRow = {
-      id: 10,
-      updatedAt: new Date('2026-01-15T10:00:00Z'),
-    };
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([fakeRow]).then(resolve),
-    );
-    const reader = getPublicCommunityScopedReader(42);
-    const result = await reader.listPublicDocumentsForSitemap({ limit: 100 });
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({ id: 10 });
-    expect(result[0]!.updatedAt).toBeInstanceOf(Date);
-  });
-
-  it('listPublicDocumentsForSitemap WHERE binds communityId + deletedAt isNull + publicAccess=true', async () => {
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
-    const reader = getPublicCommunityScopedReader(7);
-    await reader.listPublicDocumentsForSitemap({ limit: 100 });
-
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
-    // communityId eq
-    const cidClause = whereCall.__and.find(
-      (c: unknown) => (c as { __eq?: { col: string } }).__eq?.col === 'documents.communityId',
-    );
-    expect((cidClause as { __eq: { val: number } }).__eq.val).toBe(7);
-    // deletedAt isNull
-    const isNullCols = whereCall.__and
-      .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
-      .map((c: unknown) => (c as { __isNull: string }).__isNull);
-    expect(isNullCols).toContain('documents.deletedAt');
-    // publicAccess=true
-    const paClause = whereCall.__and.find(
-      (c: unknown) => (c as { __eq?: { col: string } }).__eq?.col === 'documents.publicAccess',
-    );
-    expect((paClause as { __eq: { val: boolean } }).__eq.val).toBe(true);
-  });
-
-  it('listPublicDocumentsForSitemap is NOT category-filtered (sitemap surfaces every public doc)', async () => {
-    mockSelectChain.then.mockImplementation((resolve) =>
-      Promise.resolve([]).then(resolve),
-    );
-    const reader = getPublicCommunityScopedReader(42);
-    await reader.listPublicDocumentsForSitemap({ limit: 100 });
-
-    const whereCall = mockSelectChain.where.mock.calls[0]![0];
-    const hasInArray = whereCall.__and.some(
-      (c: unknown) => (c as { __inArray?: unknown }).__inArray !== undefined,
-    );
-    expect(hasInArray).toBe(false);
-    expect(mockSelectChain.leftJoin).not.toHaveBeenCalled();
+    const whereCall = mockSelectChain.where.mock.calls.at(-1)![0];
+    expect(whereCall.__and).toContainEqual({ __sourceTypeFilter: 'owner-visible' });
   });
 
   // ---------------------------------------------------------------------------
