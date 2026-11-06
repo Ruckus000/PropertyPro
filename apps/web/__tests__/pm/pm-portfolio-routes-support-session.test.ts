@@ -73,7 +73,7 @@ const CASES: Case[] = [
     path: '/api/v1/pm/bulk/documents',
     body: {
       communityIds: [1],
-      documents: [{ fileName: 'a.pdf', storagePath: 'communities/1/documents/a.pdf' }],
+      documents: [{ fileName: 'a.pdf', storagePath: 'communities/1/documents/a.pdf', fileSize: 1 }],
     },
   },
   {

@@ -56,9 +56,12 @@ export interface BulkDocumentResponse {
 
 export interface BulkCreateDocumentsInput {
   communityIds: number[];
+  /** The redaction attestation, for every document in the batch. */
+  redactionAttested: boolean;
   documents: Array<{
     fileName: string;
     storagePath: string;
+    fileSize: number;
     description: string | null;
   }>;
 }
@@ -132,12 +135,7 @@ export interface BulkUploadDocumentsInput {
    * destination set).
    */
   communityIds: number[];
-  /**
-   * Community id used for the presign step. The pre-drain behavior used
-   * the first selected community's id for the upload path; callers
-   * typically pass `selectedCommunities[0].id` here.
-   */
-  uploadCommunityId: number;
+  redactionAttested: boolean;
   description: string | null;
 }
 
@@ -154,9 +152,13 @@ export function useBulkUploadDocuments(
   options?: UseBulkUploadDocumentsOptions,
 ): UseMutationResult<BulkDocumentResponse, Error, BulkUploadDocumentsInput> {
   return useMutation<BulkDocumentResponse, Error, BulkUploadDocumentsInput>({
-    mutationFn: async ({ files, communityIds, uploadCommunityId, description }) => {
+    mutationFn: async ({ files, communityIds, redactionAttested, description }) => {
+      // Each file is uploaded once, under the first selected community; the
+      // server accepts a path under any selected community and no other.
+      const uploadCommunityId = communityIds[0];
+      if (uploadCommunityId === undefined) throw new Error('Select at least one community');
       options?.onProgress?.('Uploading files...');
-      const uploaded: Array<{ fileName: string; storagePath: string }> = [];
+      const uploaded: Array<{ fileName: string; storagePath: string; fileSize: number }> = [];
 
       for (const file of files) {
         const presigned = await presignSingleUpload({
@@ -175,17 +177,14 @@ export function useBulkUploadDocuments(
           throw new Error(`Failed to upload ${file.name}`);
         }
 
-        uploaded.push({ fileName: file.name, storagePath: presigned.path });
+        uploaded.push({ fileName: file.name, storagePath: presigned.path, fileSize: file.size });
       }
 
       options?.onProgress?.('Creating document records...');
       return await bulkCreateDocuments({
         communityIds,
-        documents: uploaded.map((u) => ({
-          fileName: u.fileName,
-          storagePath: u.storagePath,
-          description,
-        })),
+        redactionAttested,
+        documents: uploaded.map((u) => ({ ...u, description })),
       });
     },
   });

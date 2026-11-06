@@ -18,7 +18,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { RedactionAttestationField } from '@/components/documents/redaction-attestation-field';
 import { useBulkUploadDocuments } from '@/hooks/use-bulk-documents';
+import { DOCUMENT_ACCEPT } from '@/lib/documents/upload-rules';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,6 +48,8 @@ export function BulkDocumentDialog({
 }: BulkDocumentDialogProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [description, setDescription] = useState('');
+  // Bulk files carry no category, so the server always asks for this.
+  const [redactionAttested, setRedactionAttested] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [resultIsError, setResultIsError] = useState(false);
@@ -62,7 +66,7 @@ export function BulkDocumentDialog({
       {
         files,
         communityIds: selectedCommunities.map((c) => c.id),
-        uploadCommunityId: selectedCommunities[0].id,
+        redactionAttested,
         description: description || null,
       },
       {
@@ -87,6 +91,7 @@ export function BulkDocumentDialog({
   function resetForm() {
     setFiles([]);
     setDescription('');
+    setRedactionAttested(false);
     setShowConfirm(false);
     setResultMessage(null);
     setResultIsError(false);
@@ -109,7 +114,7 @@ export function BulkDocumentDialog({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (files.length === 0) return;
+    if (files.length === 0 || !redactionAttested) return;
     setShowConfirm(true);
   }
 
@@ -191,6 +196,7 @@ export function BulkDocumentDialog({
                 ref={fileInputRef}
                 type="file"
                 multiple
+                accept={DOCUMENT_ACCEPT}
                 onChange={handleFileChange}
                 className="block w-full text-sm text-content-secondary file:mr-3 file:rounded file:border-0 file:bg-interactive-subtle file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-content-link hover:file:bg-interactive-muted"
               />
@@ -216,11 +222,17 @@ export function BulkDocumentDialog({
               />
             </div>
 
+            <RedactionAttestationField
+              id="bulk-doc-redaction-attested"
+              checked={redactionAttested}
+              onChange={setRedactionAttested}
+            />
+
             <DialogFooter>
               <Button variant="outline" type="button" onClick={handleClose}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={files.length === 0}>
+              <Button type="submit" disabled={files.length === 0 || !redactionAttested}>
                 Review & Upload
               </Button>
             </DialogFooter>

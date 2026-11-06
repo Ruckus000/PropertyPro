@@ -61,7 +61,7 @@ export function RedactionAttestationField({
           <span className="block font-medium text-content">
             Confirm redaction before uploading
           </span>
-          {REDACTION_ATTESTATION_TEXT} Documents in this category commonly contain
+          {REDACTION_ATTESTATION_TEXT} Documents like these commonly contain
           social-security or driver-licence numbers, personal contact details, or
           medical and personnel information.
         </span>

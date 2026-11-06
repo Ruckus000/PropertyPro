@@ -70,6 +70,19 @@ export async function enforceRedactionAttestation(params: {
     );
   }
 
+  await recordRedactionAttestation(params);
+}
+
+/**
+ * Record an attestation the caller has already required. Exported for the PM
+ * bulk route, which refuses a missing one once for the whole request.
+ */
+export async function recordRedactionAttestation(params: {
+  communityId: number;
+  categoryId: number;
+  userId: string;
+  title: string;
+}): Promise<void> {
   // Actor + timestamp + what they attested to, verbatim. `logAuditEvent` stamps
   // the time; recording the attestation TEXT means a later change to the wording
   // does not rewrite what past uploaders actually agreed to.
