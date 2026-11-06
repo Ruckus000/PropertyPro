@@ -30,6 +30,7 @@ import { sanitizeAuthoredHtml } from '@/lib/utils/sanitize-authored-html';
 import { renderAuthoredHtml } from '@/lib/documents/render-authored-html';
 import { renderHtmlToPdf } from '@/lib/documents/render-pdf';
 import { createAuthoredDocument } from '@/lib/documents/create-authored-document';
+import { enforceRedactionAttestation } from '@/lib/documents/redaction-attestation';
 import {
   getAuthorDisplayName,
   getCommunityForDocumentPublish,
@@ -48,6 +49,24 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const querySchema = z.object({ communityId: z.coerce.number().int().positive() });
+const bodySchema = z.object({ redactionAttested: z.boolean().optional() }).strict();
+
+/** The body is optional: an empty one means "no attestation given". */
+async function parseBody(req: NextRequest): Promise<z.infer<typeof bodySchema>> {
+  const raw = await req.text();
+  if (raw.trim().length === 0) return {};
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new ValidationError('Request body must be JSON');
+  }
+  const parsed = bodySchema.safeParse(json);
+  if (!parsed.success) {
+    throw new ValidationError('Invalid request body', { fields: formatZodErrors(parsed.error) });
+  }
+  return parsed.data;
+}
 
 interface LetterheadOptions {
   header?: boolean;
@@ -80,6 +99,7 @@ export const POST = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, userId);
     requirePermission(membership, 'documents', 'write');
     await requireActiveSubscriptionForMutation(communityId);
+    const body = await parseBody(req);
 
     // 1. Load draft.
     const draft = await getDocumentDraftById(communityId, draftId);
@@ -106,6 +126,21 @@ export const POST = withErrorHandler(
     if (rawBodyHtml.trim().length === 0) {
       throw new ValidationError('Cannot publish an empty document');
     }
+
+    // Publishing posts the document to owners at once, the same disclosure as
+    // an upload, so it carries the upload's redaction attestation. Before the
+    // render, so a refusal costs no Chromium run and writes nothing. A minutes
+    // draft has no category (`?? 0` resolves to none), so it always requires one.
+    // The attestation is recorded here too, so a render that then fails leaves
+    // an entry for a publish that did not happen; that is accepted, because the
+    // entry records what the author confirmed, and they did confirm it.
+    await enforceRedactionAttestation({
+      communityId,
+      categoryId: targetCategoryId ?? 0,
+      userId,
+      title,
+      attested: body.redactionAttested,
+    });
 
     // 2. Sanitize once more on the server.
     const safeBody = sanitizeAuthoredHtml(rawBodyHtml);

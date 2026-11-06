@@ -3,14 +3,15 @@
 /**
  * The library as a lifecycle board.
  *
- * Columns are the statutory states a record can be in — no file, uploaded but
- * not public, on the public site, deleted — so the whole compliance posture
- * reads in one glance and acting on a record means moving it.
+ * Columns are the states a record can be in — no file, draft, on the owner
+ * portal (the statutory duty, met), also on the public site (optional), deleted
+ * — so the whole compliance posture reads in one glance and acting on a record
+ * means moving it.
  *
  * ## Nothing commits on a drop
  *
  * A drop opens the SAME review dialog the inspector's buttons do. Putting a
- * document on the public site is the §718.111(12)(g) act and carries a
+ * document on the public site is optional, publishes it to anyone, and carries a
  * §718.111(12)(c) redaction gate; a gesture that published on release would be
  * the one interaction in this app where an accident is publication.
  *
@@ -43,7 +44,6 @@ const COLUMN_TONE: Record<BoardColumnId, string> = {
 const STATE_TONE: Record<string, string> = {
   draft: 'bg-status-warning-bg text-status-warning',
   public: 'bg-status-success-bg text-status-success',
-  owed: 'bg-status-warning-bg text-status-warning',
   private: 'bg-surface-muted text-content-secondary',
   unlinked: 'bg-surface-muted text-content-secondary',
 };
@@ -51,8 +51,7 @@ const STATE_TONE: Record<string, string> = {
 const STATE_LABEL: Record<string, string> = {
   draft: 'draft',
   public: 'public',
-  owed: 'owed',
-  private: 'owners only',
+  private: 'owner portal',
   unlinked: 'not linked',
 };
 

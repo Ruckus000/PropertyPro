@@ -211,7 +211,7 @@ describeDb('document drafts are visible to managers only', () => {
     expect(await paletteIds(marker)).toContain(ids.draft);
   });
 
-  it('the public site, public download and sitemap never serve the draft — even flagged public', async () => {
+  it('the public site and public download never serve the draft — even flagged public', async () => {
     const { getPublicCommunityScopedReader } = await import('../../src/lib/db/public-community-reader');
     const reader = getPublicCommunityScopedReader(communityId());
 
@@ -222,9 +222,6 @@ describeDb('document drafts are visible to managers only', () => {
     expect(await reader.getPublicDocumentFile(ids.draft)).toBeNull();
     expect(await reader.getPublicDocumentFile(ids.posted)).not.toBeNull();
 
-    const sitemap = (await reader.listPublicDocumentsForSitemap({ limit: 50 })).map((d) => d.id);
-    expect(sitemap).toContain(ids.posted);
-    expect(sitemap).not.toContain(ids.draft);
   });
 
   it('the snowbird digest lists the posted document and not the draft', async () => {

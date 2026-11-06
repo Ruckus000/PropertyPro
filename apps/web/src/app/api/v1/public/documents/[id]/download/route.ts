@@ -4,14 +4,15 @@
  * ## Why this route exists at all
  *
  * `documents.public_access` has been readable since migration 0007 — the public
- * site's documents block and the sitemap both filter on it — but the only
+ * site's documents block filters on it — but the only
  * download endpoint required a session AND community membership, and the
  * `documents` bucket is private. So a "public" document was listed on a public
- * page behind a link that bounced anonymous visitors to the login screen. The
- * sitemap's own docblock recorded the gap and named this route as future work.
+ * page behind a link that bounced anonymous visitors to the login screen.
  *
- * §718.111(12)(g) is the duty it serves: a condo of 25+ units must post its
- * official records on a website.
+ * Public posting is OPTIONAL. §718.111(12)(g) and §720.303(4) require records in
+ * an owners-only protected section, which the authenticated route serves; this
+ * route serves only what a board has chosen, behind a redaction attestation, to
+ * put on the open internet as well.
  *
  * ## Why it is a separate route, not a branch in the authenticated one
  *

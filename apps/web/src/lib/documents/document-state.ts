@@ -9,23 +9,19 @@
  * The link is `compliance_checklist_items.document_id`, not a column on
  * `documents` — a checklist item points at the file that satisfies it.
  *
- * ## On "owed to the public site"
+ * ## The owner portal is the duty; the public site is optional
  *
- * There is no per-item "must be public" flag. §718.111(12)(g) is the posting
- * duty and the checklist IS the statutory record set, so the conservative
- * reading is that an applicable record whose file is not on the site is owed to
- * it. That is deliberately the cautious direction: it over-reports the duty
- * rather than telling a board it has posted something it has not.
+ * §718.111(12)(g)1. and §720.303(4)(b) require a protected section reachable
+ * only by owners (and association employees), and (12)(g)3. bars posting
+ * protected information. Nothing requires an official record on the open
+ * internet. So a linked, posted record is DONE once owners can see it
+ * (`private`, shown as "On owner portal"); `public` is an optional extra a
+ * board chooses, never a debt. Treating it as owed would point boards toward
+ * publishing — the direction the protected-information rule penalises.
  *
- * Note that `documents.public_access` reads false for every row in production
- * today — no community has ever flipped it — so `publicCount` is 0 and every
- * linked document reads `owed`. That is a fact about the DATA, not about the
- * code. The flag has a writer: `setDocumentPublicAccess` (documents-service),
- * reached from `PATCH /api/v1/documents` via `useSetDocumentPublicAccess` and
- * the inspector's "Put on public site" button, available to condo and HOA
- * communities on any paid plan. So `public` is a live state one click away,
- * not an unreachable one — this module must keep handling it, and the zero is
- * not something to design around.
+ * `public` is still a live state: `setDocumentPublicAccess` (documents-service)
+ * is reached from `PATCH /api/v1/documents` via the inspector's "Put on public
+ * site" button, behind a redaction attestation.
  */
 
 export type DocumentExtractionStatus =
@@ -83,7 +79,7 @@ export interface ChecklistRow {
  * documents out, so the client never receives one and a state for it would be
  * unreachable.
  */
-export type DocumentState = 'draft' | 'unlinked' | 'owed' | 'public' | 'private';
+export type DocumentState = 'draft' | 'unlinked' | 'public' | 'private';
 
 export type LibraryRow =
   | {
@@ -95,7 +91,7 @@ export type LibraryRow =
     }
   | { kind: 'gap'; id: number; requirement: ChecklistRow };
 
-export type DocumentQuickFilter = 'all' | 'unlinked' | 'owed' | 'drafts';
+export type DocumentQuickFilter = 'all' | 'unlinked' | 'drafts';
 
 /** An item counts only when the community has not excluded it. */
 function isApplicable(row: ChecklistRow): boolean {
@@ -132,8 +128,8 @@ export function documentState(
   // other state describes what owners (or the public) see.
   if (isDraft(document)) return 'draft';
   if (!requirement) return 'unlinked';
-  if (isPublic(document)) return 'public';
-  return isApplicable(requirement) ? 'owed' : 'private';
+  // Owners can see it either way; public is an optional extra on top.
+  return isPublic(document) ? 'public' : 'private';
 }
 
 /**
@@ -193,17 +189,6 @@ export function unlinkedDocuments(
   return documents.filter((document) => !byDocument.has(document.id));
 }
 
-/** Linked, applicable records whose file is not on the public site. */
-export function owedToPublic(
-  documents: readonly DocumentRow[],
-  items: readonly ChecklistRow[],
-): DocumentRow[] {
-  const byDocument = linkedRequirementsByDocumentId(items);
-  return documents.filter(
-    (document) => documentState(document, byDocument.get(document.id) ?? null) === 'owed',
-  );
-}
-
 /**
  * A quick filter asks a question about FILES, so it drops gap rows — leaving
  * them in would answer a different question in the same table. A category
@@ -224,7 +209,6 @@ export function filterRows(
     }
 
     if (options.quickFilter === 'unlinked') return row.state === 'unlinked';
-    if (options.quickFilter === 'owed') return row.state === 'owed';
     if (options.quickFilter === 'drafts') return row.state === 'draft';
     return true;
   });
@@ -269,8 +253,9 @@ export interface BoardColumn {
 }
 
 /**
- * The statutory lifecycle as columns: no file → draft (owners cannot see it)
- * → uploaded but not public → on the public site → deleted. Acting on a record means moving it between them.
+ * The lifecycle as columns: no file → draft (owners cannot see it) → on the
+ * owner portal (the statutory duty, met) → also on the public site (optional) →
+ * deleted. Acting on a record means moving it between them.
  *
  * Deleted documents are passed in separately because the list endpoint filters
  * soft-deleted rows out of every other view; only the board asks for them.
@@ -295,7 +280,7 @@ export function boardColumns(
     },
     {
       id: 'private',
-      label: 'Uploaded · not public',
+      label: 'On owner portal',
       emptyText: 'Nothing here.',
       rows: documents.filter(
         (row) => row.kind === 'document' && row.state !== 'public' && row.state !== 'draft',
@@ -388,7 +373,6 @@ export function timelineRows(
       // A requirement whose file is a draft is still a hole to owners.
       const isGap = requirement.documentId == null || (document != null && isDraft(document));
       const isOverdue = requirement.status === 'overdue';
-      const isOwed = document ? documentState(document, requirement) === 'owed' : false;
 
       // `bad` is "this obligation is already MISSED", and a requirement holding
       // a document CAN be missed. `calculateComplianceStatus` returns 'overdue'
@@ -397,24 +381,18 @@ export function timelineRows(
       // Both became reachable once minutes started auto-linking and writing
       // `documentPostedAt`.
       //
-      // So `isOverdue` is tested FIRST, ahead of the gap/owed split. It used to
+      // So `isOverdue` is tested FIRST, ahead of the gap split. It used to
       // be tested only INSIDE the gap branch, under a comment claiming a linked
       // item is never overdue — which let a linked + overdue + public row score
       // `ok` and read 'on file' while `open` below was true. That is a green row
       // drawing an open exposure bar. Testing it first makes `tone` agree with
       // `open` by construction rather than by coincidence.
-      const tone: TimelineTone = isOverdue ? 'bad' : isGap ? 'none' : isOwed ? 'warn' : 'ok';
+      const tone: TimelineTone = isOverdue ? 'bad' : isGap ? 'none' : 'ok';
 
-      // `isOverdue` outranks `isOwed` because it is the more urgent of the two
-      // claims, and both outrank 'on file' — labelling an overdue record
-      // 'on file' in red is the same defect in smaller form.
-      const label = isGap
-        ? 'no file'
-        : isOverdue
-          ? 'overdue'
-          : isOwed
-            ? 'not public'
-            : 'on file';
+      // `isOverdue` outranks 'on file' — labelling an overdue record 'on file'
+      // in red is the same defect in smaller form. Whether a record is also on
+      // the public site is not a timeline claim: owners seeing it is the duty.
+      const label = isGap ? 'no file' : isOverdue ? 'overdue' : 'on file';
 
       // An exposure is open while the record is unsatisfied. It reads from the
       // month it was owed through to today.

@@ -37,7 +37,12 @@ vi.mock('@propertypro/db', () => ({
     publicAccess: 'documents.publicAccess',
     deletedAt: 'documents.deletedAt',
     postedAt: 'documents.postedAt',
+    sourceType: 'documents.sourceType',
   },
+  // Same meaning as the real one: the documents-UI source types only.
+  buildSourceTypeFilter: () => ({
+    __inArray: { col: 'documents.sourceType', vals: ['library', 'authored'] },
+  }),
   communities: {
     id: 'communities.id',
     deletedAt: 'communities.deletedAt',
@@ -188,8 +193,10 @@ function matches(clause: unknown, row: FakeRow): boolean {
     __eq?: { col: string; val: unknown };
     __isNull?: string;
     __isNotNull?: string;
+    __inArray?: { col: string; vals: unknown[] };
   };
   if (c.__and) return c.__and.every((sub) => matches(sub, row));
+  if (c.__inArray) return c.__inArray.vals.includes(row[c.__inArray.col]);
   if (c.__eq) {
     // The join predicate compares two columns; the document predicates compare
     // a column to a literal.
@@ -250,6 +257,7 @@ const PUBLISHED_DOCUMENT_ROW: FakeRow = {
   'documents.filePath': 'community-42/bylaws.pdf',
   'documents.fileName': 'bylaws.pdf',
   'documents.mimeType': 'application/pdf',
+  'documents.sourceType': 'library',
   'communities.id': 42,
 };
 
@@ -347,3 +355,24 @@ describe('a draft', () => {
   });
 });
 
+describe('a violation-evidence row', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    createPresignedDownloadUrlMock.mockResolvedValue('https://storage.example.com/signed');
+  });
+
+  it('404s, and mints no signed URL, even with public_access set', async () => {
+    // The PATCH refuses to publish one; this is the reader's own backstop.
+    unscopedClientHolder.db = fakeDbHolding({
+      ...PUBLISHED_DOCUMENT_ROW,
+      'communities.deletedAt': null,
+      'documents.sourceType': 'violation_evidence',
+    });
+    const get = await routeWithRealReader();
+
+    const response = await get(request(), params());
+
+    expect(response.status, 'violation evidence was served on the public download route').toBe(404);
+    expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+  });
+});

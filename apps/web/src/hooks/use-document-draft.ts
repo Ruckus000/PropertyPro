@@ -184,11 +184,15 @@ export function useDocumentSearch(
 
 export function usePublishDocumentDraft(communityId: number, draftId: number | null) {
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (input: { redactionAttested: boolean }) => {
       if (draftId == null) throw new Error('No draft id');
       return requestJson<{ documentId: number; warnings?: Array<{ code: string; message: string }> }>(
         `/api/v1/documents/drafts/${draftId}/publish?${qs({ communityId })}`,
-        { method: 'POST' },
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ redactionAttested: input.redactionAttested }),
+        },
       );
     },
   });

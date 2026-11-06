@@ -59,7 +59,6 @@ import {
   filterRows,
   mergeDocumentsAndGaps,
   isDraft,
-  owedToPublic,
   timelineRows,
   unlinkedDocuments,
   type ChecklistRow,
@@ -218,10 +217,6 @@ export function DocumentLibrary({
   const facts = useMemo(() => coverageFacts(documents, checklist), [checklist, documents]);
   const unlinkedCount = useMemo(
     () => unlinkedDocuments(documents, checklist).length,
-    [checklist, documents],
-  );
-  const owedCount = useMemo(
-    () => owedToPublic(documents, checklist).length,
     [checklist, documents],
   );
   const draftCount = useMemo(() => documents.filter(isDraft).length, [documents]);
@@ -457,7 +452,6 @@ export function DocumentLibrary({
               onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
               tabs={[
                 { label: 'All records', value: 'all' },
-                { label: 'Owed to public', value: 'owed', count: owedCount },
                 { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
                 { label: 'Drafts', value: 'drafts', count: draftCount },
               ]}

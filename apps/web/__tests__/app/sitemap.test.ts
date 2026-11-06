@@ -3,21 +3,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const {
   headersMock,
   resolveCommunityContextMock,
-  listPublicDocumentsForSitemapMock,
   listPublishedPagesForSitemapMock,
   getReaderMock,
   getBrandingForCommunityMock,
 } = vi.hoisted(() => {
-  const listPublicDocumentsForSitemapMock = vi.fn().mockResolvedValue([]);
   const listPublishedPagesForSitemapMock = vi.fn().mockResolvedValue([]);
   return {
     headersMock: vi.fn(),
     resolveCommunityContextMock: vi.fn(),
-    listPublicDocumentsForSitemapMock,
     listPublishedPagesForSitemapMock,
     getBrandingForCommunityMock: vi.fn().mockResolvedValue(null),
     getReaderMock: vi.fn(() => ({
-      listPublicDocumentsForSitemap: listPublicDocumentsForSitemapMock,
       listPublishedPagesForSitemap: listPublishedPagesForSitemapMock,
       // The other reader methods aren't called by sitemap.ts; stubbed so the
       // mock satisfies the PublicScopedReader interface shape if extended.
@@ -52,7 +48,6 @@ import sitemap from '@/app/sitemap';
 describe('sitemap.ts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listPublicDocumentsForSitemapMock.mockResolvedValue([]);
     listPublishedPagesForSitemapMock.mockResolvedValue([]);
     getBrandingForCommunityMock.mockResolvedValue(null);
   });
@@ -70,7 +65,7 @@ describe('sitemap.ts', () => {
     expect(result[0]?.url).toBe('https://sunset-condos.getpropertypro.com/');
     expect(result[1]?.url).toBe('https://sunset-condos.getpropertypro.com/transparency');
     // Reader is NOT consulted when the middleware-injected community id is missing.
-    expect(listPublicDocumentsForSitemapMock).not.toHaveBeenCalled();
+    expect(getReaderMock).not.toHaveBeenCalled();
   });
 
   it('does not advertise /notices or /request-access — neither renders on a tenant host', async () => {
@@ -93,7 +88,9 @@ describe('sitemap.ts', () => {
     expect(urls).toContain('https://sunset-condos.getpropertypro.com/transparency');
   });
 
-  it('appends per-document URLs when middleware resolves an x-community-id (migration 0007)', async () => {
+  it('never lists document download URLs, even for a community with public documents', async () => {
+    // Public posting is an optional extra; the statute's duty is the owners-only
+    // portal. Handing crawlers every public file would make that choice permanent.
     headersMock.mockResolvedValueOnce(
       new Headers({ host: 'sunset-condos.getpropertypro.com', 'x-community-id': '42' }),
     );
@@ -103,24 +100,14 @@ describe('sitemap.ts', () => {
       isReservedSubdomain: false,
       communityId: null,
     });
-    listPublicDocumentsForSitemapMock.mockResolvedValueOnce([
-      { id: 101, updatedAt: new Date('2026-02-01T00:00:00Z') },
-      { id: 247, updatedAt: new Date('2026-03-15T00:00:00Z') },
+    listPublishedPagesForSitemapMock.mockResolvedValueOnce([
+      { id: 5, slug: 'about', updatedAt: new Date('2026-02-01T00:00:00Z') },
     ]);
 
-    const result = await sitemap();
-    // 2 static + 2 documents = 4 entries.
-    expect(result).toHaveLength(4);
-    expect(result[2]?.url).toBe(
-      'https://sunset-condos.getpropertypro.com/api/v1/public/documents/101/download?communityId=42',
-    );
-    expect(result[2]?.lastModified).toEqual(new Date('2026-02-01T00:00:00Z'));
-    expect(result[3]?.url).toBe(
-      'https://sunset-condos.getpropertypro.com/api/v1/public/documents/247/download?communityId=42',
-    );
-    // Reader is bound to the parsed numeric community id.
+    const urls = (await sitemap()).map((e) => e.url);
     expect(getReaderMock).toHaveBeenCalledWith(42);
-    expect(listPublicDocumentsForSitemapMock).toHaveBeenCalledWith({ limit: 1000 });
+    expect(urls).toContain('https://sunset-condos.getpropertypro.com/about');
+    expect(urls.some((u) => u.includes('/api/v1/public/documents/'))).toBe(false);
   });
 
   it('ignores a malformed x-community-id and returns static entries only', async () => {
@@ -135,7 +122,7 @@ describe('sitemap.ts', () => {
     });
     const result = await sitemap();
     expect(result).toHaveLength(2);
-    expect(listPublicDocumentsForSitemapMock).not.toHaveBeenCalled();
+    expect(getReaderMock).not.toHaveBeenCalled();
   });
 
   it('returns an empty sitemap on a reserved subdomain (e.g. pm.)', async () => {

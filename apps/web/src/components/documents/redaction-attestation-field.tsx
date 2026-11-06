@@ -38,6 +38,8 @@ interface RedactionAttestationFieldProps {
   disabled?: boolean;
   /** Unique per rendered instance — two uploaders can be mounted at once. */
   id?: string;
+  /** The act being confirmed. The sentence below it never changes. */
+  heading?: string;
 }
 
 export function RedactionAttestationField({
@@ -45,6 +47,7 @@ export function RedactionAttestationField({
   onChange,
   disabled = false,
   id = 'redaction-attested',
+  heading = 'Confirm redaction before uploading',
 }: RedactionAttestationFieldProps) {
   return (
     <div className="rounded-md border border-status-warning-border bg-status-warning-bg p-3">
@@ -58,9 +61,7 @@ export function RedactionAttestationField({
           className="mt-0.5 h-4 w-4 shrink-0"
         />
         <span>
-          <span className="block font-medium text-content">
-            Confirm redaction before uploading
-          </span>
+          <span className="block font-medium text-content">{heading}</span>
           {REDACTION_ATTESTATION_TEXT} Documents like these commonly contain
           social-security or driver-licence numbers, personal contact details, or
           medical and personnel information.

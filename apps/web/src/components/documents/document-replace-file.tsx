@@ -34,13 +34,15 @@ export function DocumentReplaceFile({ communityId, document, onReplaced }: Docum
   const { categories } = useDocumentCategories(communityId);
 
   const categoryName = categories.find((c) => c.id === document.categoryId)?.name ?? null;
-  // Mirrors the server: the category decides whether a question is asked (the
-  // public flag only decides WHICH attestation is recorded), as in
-  // `publish-document-dialog.tsx`. The server remains the enforcement point.
-  // A draft reaches no owner yet, so the server asks nothing (the question
-  // comes when it is posted). Only a real NULL is a draft.
+  // Mirrors the server. A public document always asks, as publishing does
+  // (`publish-document-dialog.tsx`); an owner-portal document asks when its
+  // category usually carries personal information, as an upload does. The
+  // server remains the enforcement point. A draft reaches no owner yet, so the
+  // server asks nothing (the question comes when it is posted). Only a real
+  // NULL is a draft.
   const requiresAttestation =
-    document.postedAt !== null && categoryRequiresRedactionAttestation(categoryName);
+    document.postedAt !== null &&
+    (document.publicAccess === true || categoryRequiresRedactionAttestation(categoryName));
 
   const inputId = `document-replace-file-${document.id}`;
 
