@@ -150,9 +150,10 @@ describe('useBulkCreateDocuments', () => {
 
     const returned = await result.current.mutateAsync({
       communityIds: [1, 2],
+      redactionAttested: true,
       documents: [
-        { fileName: 'a.pdf', storagePath: 'communities/1/a.pdf', description: 'Annual report' },
-        { fileName: 'b.pdf', storagePath: 'communities/1/b.pdf', description: null },
+        { fileName: 'a.pdf', storagePath: 'communities/1/a.pdf', fileSize: 10, description: 'Annual report' },
+        { fileName: 'b.pdf', storagePath: 'communities/1/b.pdf', fileSize: 20, description: null },
       ],
     });
 
@@ -164,9 +165,10 @@ describe('useBulkCreateDocuments', () => {
     expect(init.headers).toEqual({ 'content-type': 'application/json' });
     expect(JSON.parse(init.body as string)).toEqual({
       communityIds: [1, 2],
+      redactionAttested: true,
       documents: [
-        { fileName: 'a.pdf', storagePath: 'communities/1/a.pdf', description: 'Annual report' },
-        { fileName: 'b.pdf', storagePath: 'communities/1/b.pdf', description: null },
+        { fileName: 'a.pdf', storagePath: 'communities/1/a.pdf', fileSize: 10, description: 'Annual report' },
+        { fileName: 'b.pdf', storagePath: 'communities/1/b.pdf', fileSize: 20, description: null },
       ],
     });
 
@@ -185,8 +187,9 @@ describe('useBulkCreateDocuments', () => {
     await expect(
       result.current.mutateAsync({
         communityIds: [1],
+        redactionAttested: true,
         documents: [
-          { fileName: 'a.pdf', storagePath: 'p', description: null },
+          { fileName: 'a.pdf', storagePath: 'p', fileSize: 1, description: null },
         ],
       }),
     ).rejects.toThrow('You are not authorized');
@@ -204,8 +207,9 @@ describe('useBulkCreateDocuments', () => {
     await expect(
       result.current.mutateAsync({
         communityIds: [1],
+        redactionAttested: true,
         documents: [
-          { fileName: 'a.pdf', storagePath: 'p', description: null },
+          { fileName: 'a.pdf', storagePath: 'p', fileSize: 1, description: null },
         ],
       }),
     ).rejects.toThrow('Failed to create bulk documents');
@@ -223,8 +227,9 @@ describe('useBulkCreateDocuments', () => {
     await expect(
       result.current.mutateAsync({
         communityIds: [1],
+        redactionAttested: true,
         documents: [
-          { fileName: 'a.pdf', storagePath: 'p', description: null },
+          { fileName: 'a.pdf', storagePath: 'p', fileSize: 1, description: null },
         ],
       }),
     ).rejects.toThrow('Failed to create bulk documents');
@@ -244,8 +249,8 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
   }
 
   it('runs presign + S3 PUT per file then bulk-create, calling onProgress between steps', async () => {
-    const presigned1 = { path: 'communities/7/a.pdf', uploadUrl: 'https://s3/a' };
-    const presigned2 = { path: 'communities/7/b.pdf', uploadUrl: 'https://s3/b' };
+    const presigned1 = { path: 'communities/1/documents/u-a/a.pdf', uploadUrl: 'https://s3/a' };
+    const presigned2 = { path: 'communities/1/documents/u-b/b.pdf', uploadUrl: 'https://s3/b' };
     const bulkResult = {
       results: [
         { communityId: 1, communityName: 'A', status: 'created' as const, documentsCreated: 2 },
@@ -268,7 +273,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
     const returned = await result.current.mutateAsync({
       files: [makeFile('a.pdf'), makeFile('b.pdf')],
       communityIds: [1, 2],
-      uploadCommunityId: 7,
+      redactionAttested: true,
       description: 'q3 packet',
     });
 
@@ -281,12 +286,13 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       'Creating document records...',
     ]);
 
-    // Presign POST URL + payload (first file)
+    // Presign POST URL + payload (first file). The file is uploaded once, under
+    // the first selected community — the server only accepts a selected one.
     const [presignUrl1, presignInit1] = fetchMock.mock.calls[0]!;
     expect(presignUrl1).toBe('/api/v1/upload');
     expect(presignInit1.method).toBe('POST');
     expect(JSON.parse(presignInit1.body as string)).toEqual({
-      communityId: 7,
+      communityId: 1,
       fileName: 'a.pdf',
       fileSize: 1,
       mimeType: 'application/pdf',
@@ -303,9 +309,10 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
     expect(bulkInit.method).toBe('POST');
     expect(JSON.parse(bulkInit.body as string)).toEqual({
       communityIds: [1, 2],
+      redactionAttested: true,
       documents: [
-        { fileName: 'a.pdf', storagePath: 'communities/7/a.pdf', description: 'q3 packet' },
-        { fileName: 'b.pdf', storagePath: 'communities/7/b.pdf', description: 'q3 packet' },
+        { fileName: 'a.pdf', storagePath: 'communities/1/documents/u-a/a.pdf', fileSize: 1, description: 'q3 packet' },
+        { fileName: 'b.pdf', storagePath: 'communities/1/documents/u-b/b.pdf', fileSize: 1, description: 'q3 packet' },
       ],
     });
 
@@ -324,7 +331,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
     await result.current.mutateAsync({
       files: [makeFile('a.pdf')],
       communityIds: [1],
-      uploadCommunityId: 1,
+      redactionAttested: true,
       description: null,
     });
 
@@ -346,7 +353,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       result.current.mutateAsync({
         files: [makeFile('report.pdf'), makeFile('never.pdf')],
         communityIds: [1],
-        uploadCommunityId: 1,
+        redactionAttested: true,
         description: null,
       }),
     ).rejects.toThrow('Failed to prepare upload for report.pdf');
@@ -367,7 +374,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       result.current.mutateAsync({
         files: [makeFile('report.pdf'), makeFile('never.pdf')],
         communityIds: [1],
-        uploadCommunityId: 1,
+        redactionAttested: true,
         description: null,
       }),
     ).rejects.toThrow('Failed to upload report.pdf');
@@ -389,7 +396,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       result.current.mutateAsync({
         files: [makeFile('a.pdf')],
         communityIds: [1, 2],
-        uploadCommunityId: 1,
+        redactionAttested: true,
         description: null,
       }),
     ).rejects.toThrow('community 2 disabled');
@@ -408,7 +415,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
       result.current.mutateAsync({
         files: [makeFile('a.pdf')],
         communityIds: [1],
-        uploadCommunityId: 1,
+        redactionAttested: true,
         description: null,
       }),
     ).rejects.toThrow('Failed to create bulk documents');
@@ -426,7 +433,7 @@ describe('useBulkUploadDocuments (orchestrator)', () => {
     await result.current.mutateAsync({
       files: [makeFile('a.pdf')],
       communityIds: [1],
-      uploadCommunityId: 1,
+      redactionAttested: true,
       description: null,
     });
 

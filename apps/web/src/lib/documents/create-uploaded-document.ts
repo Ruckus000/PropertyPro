@@ -29,6 +29,10 @@ interface CreateUploadedDocumentInput {
    * (`postDocument`). Library uploads only.
    */
   draft?: boolean;
+  /** `readValidatedUpload`'s result for this exact `filePath`, when the caller already ran it. */
+  measured?: { byteLength: number; mime: string };
+  /** `false` skips the PDF text-extraction job (the row records `not_applicable`). */
+  extractText?: boolean;
 }
 
 interface InvalidUploadContext {
@@ -171,9 +175,9 @@ export async function readValidatedUpload(input: {
 export async function createUploadedDocument(
   input: CreateUploadedDocumentInput,
 ): Promise<DocumentMutationResult> {
-  const upload = await readValidatedUpload(input);
+  const upload = input.measured ?? (await readValidatedUpload(input));
   const scoped = createScopedClient(input.communityId);
-  const isPdf = upload.mime.toLowerCase().includes('pdf');
+  const extractPdf = input.extractText !== false && upload.mime.toLowerCase().includes('pdf');
   const insertedRows = await scoped.insert(documents, {
     title: input.title,
     description: input.description ?? null,
@@ -184,7 +188,7 @@ export async function createUploadedDocument(
     mimeType: upload.mime,
     sourceType: input.sourceType,
     uploadedBy: input.userId,
-    extractionStatus: isPdf ? 'pending' : 'not_applicable',
+    extractionStatus: extractPdf ? 'pending' : 'not_applicable',
     // Omitted for a posted upload so the column default stamps it.
     ...(input.draft ? { postedAt: null } : {}),
   });
@@ -213,7 +217,7 @@ export async function createUploadedDocument(
   });
 
   try {
-    if (isPdf) {
+    if (extractPdf) {
       const docId = Number((created as Record<string, unknown>)['id']);
       const communityId = Number((created as Record<string, unknown>)['communityId'] ?? input.communityId);
       if (Number.isFinite(docId) && Number.isFinite(communityId)) {

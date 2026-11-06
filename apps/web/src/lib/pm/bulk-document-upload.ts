@@ -1,28 +1,32 @@
 /**
  * PM bulk document upload — per-community insert helper.
  *
- * Inserts the same set of document records into one community using the
- * tenant-scoped client. Files are assumed to already be uploaded to
- * Supabase Storage; this helper only writes the DB rows.
+ * Creates the same set of documents in one community. Each row is written
+ * through `createUploadedDocument`, the same path a single upload takes, so the
+ * real size and MIME type are recorded and the creation is audit-logged.
  *
  * Caller is responsible for iterating across the requested communities (so
- * that per-community Promise.allSettled error capture stays at the route)
- * and for verifying PM permissions for each communityId BEFORE invoking.
+ * that per-community Promise.allSettled error capture stays at the route), for
+ * verifying PM permissions, each storage path and the redaction attestation,
+ * and for reading each file once with `readValidatedUpload` (its result is
+ * `measured`) BEFORE invoking.
  */
 import { captureException } from '@sentry/nextjs';
-import { createScopedClient, documents } from '@propertypro/db';
+import { createUploadedDocument } from '@/lib/documents/create-uploaded-document';
+import { recordRedactionAttestation } from '@/lib/documents/redaction-attestation';
 import { autoLinkCommunityRecords } from '@/lib/services/record-auto-link-service';
 
 export interface BulkDocumentInput {
   fileName: string;
   storagePath: string;
-  categoryId?: number | null;
+  fileSize: number;
   description?: string | null;
+  measured: { byteLength: number; mime: string };
 }
 
 /**
- * Insert every document in `docs` into `communityId`. Returns the number
- * of rows successfully written.
+ * Create every document in `docs` in `communityId`. Returns the number of
+ * rows created.
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor holds
  * property_manager or root_manager in this community. The bulk route does this
@@ -36,22 +40,39 @@ export async function insertBulkDocumentsForCommunity(params: {
   docs: BulkDocumentInput[];
 }): Promise<{ created: number }> {
   const { communityId, uploadedBy, docs } = params;
-  const scoped = createScopedClient(communityId);
-  let created = 0;
+
+  // Before the first row exists, as on the single upload path. The route has
+  // already refused a request without the attestation; bulk rows carry no
+  // category, recorded as 0 like an unknown one.
+  for (const doc of docs) {
+    await recordRedactionAttestation({
+      communityId,
+      categoryId: 0,
+      userId: uploadedBy,
+      title: doc.fileName,
+    });
+  }
+
   const createdIds: number[] = [];
   for (const doc of docs) {
-    const [row] = await scoped.insert(documents, {
+    const { document } = await createUploadedDocument({
+      userId: uploadedBy,
+      communityId,
       title: doc.fileName,
       description: doc.description ?? null,
-      categoryId: doc.categoryId ?? null,
       filePath: doc.storagePath,
       fileName: doc.fileName,
-      fileSize: 0, // Size not tracked in bulk — already uploaded
-      mimeType: 'application/octet-stream',
-      uploadedBy,
+      fileSize: doc.fileSize,
+      measured: doc.measured,
+      sourceType: 'library',
+      // Bulk uploads have never notified residents; unchanged here.
+      sendDocumentNotifications: false,
+      // ponytail: bulk PDFs get no text extraction (search misses their text),
+      // as before; one job per community would re-download the shared file N
+      // times. Trigger: a manager reports a bulk-uploaded PDF missing from search.
+      extractText: false,
     });
-    created++;
-    if (row) createdIds.push(Number(row['id']));
+    createdIds.push(Number(document['id']));
   }
 
   // Bulk rows are inserted posted, so link the records THESE rows unambiguously
@@ -69,5 +90,5 @@ export async function insertBulkDocumentsForCommunity(params: {
       });
     }
   }
-  return { created };
+  return { created: createdIds.length };
 }
