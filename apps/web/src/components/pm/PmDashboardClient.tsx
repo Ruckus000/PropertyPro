@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,12 @@ import { AddCommunityModal } from './add-community-modal';
 import { CommunityAddedModal } from './CommunityAddedModal';
 import { SiteSetupBanner } from './SiteSetupBanner';
 import { BulkAnnouncementDialog } from './BulkAnnouncementDialog';
-import { BulkDocumentDialog } from './BulkDocumentDialog';
+
+// Loaded on demand: it closes by default, and its upload rules and redaction
+// field would otherwise put the dashboard over the web JS budget (perf-check).
+const BulkDocumentDialog = dynamic(() => import('./BulkDocumentDialog').then((m) => m.BulkDocumentDialog), {
+  loading: () => null,
+});
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
