@@ -38,6 +38,9 @@ const UNDER_THREE_STORIES = "The building is under three stories";
 const NO_BIDDING = 'No bidding period has closed';
 const NO_VIDEO = "We don't hold meetings by video";
 const NO_CONFLICT_CONTRACTS = 'No contracts with directors or officers';
+const NO_CONFLICT_DISCLOSED = 'No conflict of interest has been disclosed';
+const NO_MONTHLY_STATEMENTS = 'No monthly statement has been considered at a meeting';
+const NO_CONSTRUCTION = 'No construction is under way or planned';
 
 /** The choices that fit one record, by checklist item. "Another reason" is offered for every item. */
 const FIXED_REASONS: Readonly<Record<string, readonly string[]>> = {
@@ -47,6 +50,11 @@ const FIXED_REASONS: Readonly<Record<string, readonly string[]>> = {
   '720_bids': [NO_BIDDING],
   '718_video_recordings': [NO_VIDEO],
   '718_conflict_contracts': [NO_CONFLICT_CONTRACTS],
+  '718_conflict_of_interest': [NO_CONFLICT_DISCLOSED],
+  '720_conflict_of_interest': [NO_CONFLICT_CONTRACTS, NO_CONFLICT_DISCLOSED],
+  '718_monthly_statements': [NO_MONTHLY_STATEMENTS],
+  '720_monthly_statements': [NO_MONTHLY_STATEMENTS],
+  '718_building_permits': [NO_CONSTRUCTION],
 };
 
 export interface NotApplicableDialogProps {

@@ -169,6 +169,35 @@ describe('the statutory line', () => {
       screen.getByText('Your association is responsible for this statement.'),
     ).toBeInTheDocument();
   });
+  it('quotes the HOA statute to an HOA, not the condominium one', () => {
+    recordRef.current = EMPTY_RECORD;
+    useSiteSettingsMock.mockReturnValue({ data: EMPTY_RECORD });
+    render(
+      <SitePanel
+        communityId={42}
+        community={{ ...COMMUNITY, communityType: 'hoa_720' }}
+        tagline={null}
+        part="footer"
+      />,
+    );
+    expect(screen.getByText('“Records maintained under Fla. Stat. §720.303(4)”')).toBeInTheDocument();
+    expect(screen.queryByText(`“${STATUTORY_FOOTER_LINE}”`)).not.toBeInTheDocument();
+  });
+
+  it('offers no records statement to an apartment community', () => {
+    recordRef.current = EMPTY_RECORD;
+    useSiteSettingsMock.mockReturnValue({ data: EMPTY_RECORD });
+    render(
+      <SitePanel
+        communityId={42}
+        community={{ ...COMMUNITY, communityType: 'apartment' }}
+        tagline={null}
+        part="footer"
+      />,
+    );
+    expect(screen.queryByLabelText('Show the records statement')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your association is responsible for this statement.')).not.toBeInTheDocument();
+  });
 });
 
 describe('keyboard operation', () => {

@@ -40,7 +40,7 @@ import {
   FOOTER_NOTE_MAX_LENGTH,
   SEO_DESCRIPTION_MAX_LENGTH,
   SEO_TITLE_MAX_LENGTH,
-  STATUTORY_FOOTER_LINE,
+  statutoryFooterLine,
   type SiteStorage,
 } from '@/lib/site-editor/site-settings';
 import { formatBytes } from '@/lib/utils/format-bytes';
@@ -153,6 +153,7 @@ export function SitePanel({
 }: SitePanelProps) {
   const { data: record } = useSiteSettings(communityId, initialSettings);
   const update = useUpdateSiteSettings(communityId);
+  const statutoryLine = statutoryFooterLine(community.communityType);
 
   const [seoTitle, setSeoTitle] = useState(record?.settings.seoTitle ?? '');
   const [seoDescription, setSeoDescription] = useState(record?.settings.seoDescription ?? '');
@@ -364,39 +365,42 @@ export function SitePanel({
             </p>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="site-statutory-line">Show the records statement</Label>
-                <p className="text-sm text-content-tertiary">
-                  Adds this line to your footer:{' '}
-                  <span className="text-content">&ldquo;{STATUTORY_FOOTER_LINE}&rdquo;</span>
-                </p>
+          {/* An apartment community keeps no statutory records, so it has no line to offer. */}
+          {statutoryLine ? (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="site-statutory-line">Show the records statement</Label>
+                  <p className="text-sm text-content-tertiary">
+                    Adds this line to your footer:{' '}
+                    <span className="text-content">&ldquo;{statutoryLine}&rdquo;</span>
+                  </p>
+                </div>
+                <Switch
+                  id="site-statutory-line"
+                  checked={showStatutoryLine}
+                  onCheckedChange={setShowStatutoryLine}
+                  disabled={update.isPending}
+                />
               </div>
-              <Switch
-                id="site-statutory-line"
-                checked={showStatutoryLine}
-                onCheckedChange={setShowStatutoryLine}
-                disabled={update.isPending}
+
+              {/*
+                Always visible, never dismissible, and shown whether or not the
+                toggle is on — a manager should read it BEFORE deciding, not after.
+
+                PropertyPro presents factual data and does not assess compliance
+                adequacy (.claude/rules/florida-compliance.md). This line is the
+                association's statement about itself, so the warning has to make the
+                ownership of that claim unmistakable. See the gap analysis §5: this
+                is a compliance constraint, not copy that can be tightened for tone.
+              */}
+              <AlertBanner
+                status="warning"
+                title="Your association is responsible for this statement."
+                description="PropertyPro doesn't verify how your records are kept. Check with your association's attorney before turning this on."
               />
             </div>
-
-            {/*
-              Always visible, never dismissible, and shown whether or not the
-              toggle is on — a manager should read it BEFORE deciding, not after.
-
-              PropertyPro presents factual data and does not assess compliance
-              adequacy (.claude/rules/florida-compliance.md). This line is the
-              association's statement about itself, so the warning has to make the
-              ownership of that claim unmistakable. See the gap analysis §5: this
-              is a compliance constraint, not copy that can be tightened for tone.
-            */}
-            <AlertBanner
-              status="warning"
-              title="Your association is responsible for this statement."
-              description="PropertyPro doesn't verify how your records are kept. Check with your association's attorney before turning this on."
-            />
-          </div>
+          ) : null}
         </section>
       )}
 

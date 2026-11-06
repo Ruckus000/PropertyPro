@@ -299,6 +299,7 @@ export function SiteChrome({
         associationName={footer?.associationName}
         note={footer?.note}
         showStatutoryLine={footer?.showStatutoryLine}
+        communityType={community.communityType}
       />
     </div>
   );

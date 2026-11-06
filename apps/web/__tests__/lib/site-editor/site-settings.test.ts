@@ -20,6 +20,7 @@ import {
   resolveSeoDescription,
   resolveSeoTitle,
   resolveSiteSettings,
+  statutoryFooterLine,
 } from '@/lib/site-editor/site-settings';
 
 const community = {
@@ -243,6 +244,16 @@ describe('resolveSeoTitle / resolveSeoDescription', () => {
       .toContain('a homeowners association');
     expect(resolveSeoDescription(DEFAULT_SITE_SETTINGS, { ...community, communityType: 'apartment' }, null))
       .toContain('an apartment community');
+  });
+});
+
+describe('statutoryFooterLine', () => {
+  // The HOA line used to read §718.111(12)(g), the condominium statute.
+  it('cites each chapter by community type, and nothing for an apartment', () => {
+    expect(statutoryFooterLine('condo_718')).toBe(STATUTORY_FOOTER_LINE);
+    expect(statutoryFooterLine('hoa_720')).toBe('Records maintained under Fla. Stat. §720.303(4)');
+    expect(statutoryFooterLine('apartment')).toBeNull();
+    expect(statutoryFooterLine(undefined)).toBeNull();
   });
 });
 

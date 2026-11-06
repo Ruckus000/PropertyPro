@@ -6,7 +6,7 @@
  * to see what breaks.
  *
  * This is NOT "does the component render" — this is "does the system require
- * all 17 document categories, enforce 30-day posting deadlines, calculate
+ * all 21 document categories, enforce 30-day posting deadlines, calculate
  * meeting notice windows correctly, and generate a compliance score that
  * accurately reflects missing items."
  */
@@ -35,8 +35,8 @@ import {
 describe('§718.111(12)(g) condo compliance template completeness', () => {
   const template = CONDO_718_CHECKLIST_TEMPLATE;
 
-  it('requires exactly 17 document categories for condo associations', () => {
-    expect(template).toHaveLength(17);
+  it('requires exactly 21 document categories for condo associations', () => {
+    expect(template).toHaveLength(21);
   });
 
   it('includes all required governing documents per §718.111(12)(g)(2)(a)-(d)', () => {
@@ -54,7 +54,7 @@ describe('§718.111(12)(g) condo compliance template completeness', () => {
   it('includes annual budget per §718.112(2)(f)', () => {
     const budget = template.find((t) => t.templateKey === '718_budget');
     expect(budget).toBeDefined();
-    expect(budget!.statuteReference).toBe('§718.112(2)(f)');
+    expect(budget!.statuteReference).toBe('§718.111(12)(g)(2)(h), §718.112(2)(f)');
     expect(budget!.category).toBe('financial_records');
     expect(budget!.deadlineDays).toBe(30);
   });
@@ -64,7 +64,7 @@ describe('§718.111(12)(g) condo compliance template completeness', () => {
       (t) => t.templateKey === '718_financial_report',
     );
     expect(report).toBeDefined();
-    expect(report!.statuteReference).toBe('§718.111(13)');
+    expect(report!.statuteReference).toBe('§718.111(12)(g)(2)(i), §718.111(13)');
     expect(report!.category).toBe('financial_records');
   });
 
@@ -100,7 +100,7 @@ describe('§718.111(12)(g) condo compliance template completeness', () => {
   it('includes SIRS per §718.112(2)(g)', () => {
     const sirs = template.find((t) => t.templateKey === '718_sirs');
     expect(sirs).toBeDefined();
-    expect(sirs!.statuteReference).toBe('§718.112(2)(g)');
+    expect(sirs!.statuteReference).toBe('§718.111(12)(g)(2)(p), §718.112(2)(g)');
     expect(sirs!.isConditional).toBe(true);
   });
 
@@ -144,8 +144,8 @@ describe('§718.111(12)(g) condo compliance template completeness', () => {
 describe('§720.303 HOA compliance template completeness', () => {
   const template = HOA_720_CHECKLIST_TEMPLATE;
 
-  it('requires exactly 10 document categories for HOA associations', () => {
-    expect(template).toHaveLength(10);
+  it('requires exactly 14 document categories for HOA associations', () => {
+    expect(template).toHaveLength(14);
   });
 
   it('includes declaration of covenants per §720.303(4)', () => {
@@ -159,7 +159,7 @@ describe('§720.303 HOA compliance template completeness', () => {
   it('includes annual budget per §720.303(6)', () => {
     const budget = template.find((t) => t.templateKey === '720_budget');
     expect(budget).toBeDefined();
-    expect(budget!.statuteReference).toBe('§720.303(6)');
+    expect(budget!.statuteReference).toBe('§720.303(4)(b)(1)(f), §720.303(6)');
   });
 
   it('includes annual financial report per §720.303(7)', () => {
@@ -167,7 +167,7 @@ describe('§720.303 HOA compliance template completeness', () => {
       (t) => t.templateKey === '720_financial_report',
     );
     expect(report).toBeDefined();
-    expect(report!.statuteReference).toBe('§720.303(7)');
+    expect(report!.statuteReference).toBe('§720.303(4)(b)(1)(g), §720.303(7)');
   });
 
   it('includes meeting minutes and notices with rolling windows', () => {
@@ -187,15 +187,15 @@ describe('§720.303 HOA compliance template completeness', () => {
 // =============================================================================
 
 describe('getComplianceTemplate community type mapping', () => {
-  it('condo_718 returns the 17-item condo template', () => {
+  it('condo_718 returns the 21-item condo template', () => {
     const template = getComplianceTemplate('condo_718');
-    expect(template).toHaveLength(17);
+    expect(template).toHaveLength(21);
     expect(template[0]!.templateKey).toBe('718_declaration');
   });
 
-  it('hoa_720 returns the 10-item HOA template', () => {
+  it('hoa_720 returns the 14-item HOA template', () => {
     const template = getComplianceTemplate('hoa_720');
-    expect(template).toHaveLength(10);
+    expect(template).toHaveLength(14);
     expect(template[0]!.templateKey).toBe('720_governing_docs');
   });
 
@@ -413,14 +413,19 @@ describe('conditional item handling (isApplicable)', () => {
     const conditionalItems = CONDO_718_CHECKLIST_TEMPLATE.filter(
       (t) => t.isConditional,
     );
-    // Video recordings, conflict contracts, bids, inspection reports, SIRS
-    expect(conditionalItems.length).toBe(5);
+    // Video recordings, conflict contracts, bids, inspection reports, SIRS,
+    // and (2026-11-06) monthly statements, conflict-of-interest documents and
+    // building permits.
+    expect(conditionalItems.length).toBe(8);
     const keys = conditionalItems.map((t) => t.templateKey);
     expect(keys).toContain('718_video_recordings');
     expect(keys).toContain('718_conflict_contracts');
     expect(keys).toContain('718_bids');
     expect(keys).toContain('718_inspection_reports');
     expect(keys).toContain('718_sirs');
+    expect(keys).toContain('718_monthly_statements');
+    expect(keys).toContain('718_conflict_of_interest');
+    expect(keys).toContain('718_building_permits');
   });
 });
 
@@ -444,7 +449,7 @@ describe('compliance score calculation accuracy', () => {
 
     const statuses = items.map(calculateComplianceStatus);
     const satisfiedCount = statuses.filter((s) => s === 'satisfied').length;
-    expect(satisfiedCount).toBe(17);
+    expect(satisfiedCount).toBe(21);
     expect(satisfiedCount / statuses.length).toBe(1);
   });
 
@@ -525,6 +530,11 @@ describe('legislative amendment regression detection', () => {
     '718_qa_sheet',
     '718_budget',
     '718_financial_report',
+    // Added 2026-11-06 against the 2026 text of §718.111(12)(g)2.: items i
+    // (monthly statements), j (director certifications), l (conflict-of-interest
+    // documents) and q (building permits) had no row, so a board could read
+    // 100% without them. See docs/audits/2026-11-05-website-compliance-audit.md H-3.
+    '718_monthly_statements',
     '718_minutes_rolling_12m',
     '718_video_recordings',
     // Added 2026-08-10. Not a legislative amendment — a gap: the notice/agenda
@@ -534,25 +544,35 @@ describe('legislative amendment regression detection', () => {
     // See docs/audits/2026-08-09-legal-risk-audit.md F-01.
     '718_meeting_notices',
     '718_affidavits',
+    '718_director_certifications',
+    '718_conflict_of_interest',
     '718_insurance',
     '718_contracts',
     '718_conflict_contracts',
     '718_bids',
     '718_inspection_reports',
     '718_sirs',
+    '718_building_permits',
   ] as const;
 
   const REQUIRED_HOA_KEYS = [
     '720_governing_docs',
     '720_articles',
     '720_bylaws_rules',
+    // Added 2026-11-06 against the 2026 text of §720.303(4): (c) retention rules,
+    // (b)1.g monthly statements, (b)1.i director certifications and (b)1.j-k
+    // conflict-of-interest contracts and documents.
+    '720_retention_rules',
     '720_budget',
     '720_financial_report',
+    '720_monthly_statements',
     '720_minutes_rolling_12m',
     '720_meeting_notices',
+    '720_director_certifications',
     '720_insurance',
     '720_contracts',
     '720_bids',
+    '720_conflict_of_interest',
   ] as const;
 
   it('condo template contains every required statutory key', () => {
@@ -601,22 +621,42 @@ describe('legislative amendment regression detection', () => {
       '718_articles': '§718.111(12)(g)(2)(c)',
       '718_rules': '§718.111(12)(g)(2)(d)',
       '718_qa_sheet': '§718.504',
-      '718_budget': '§718.112(2)(f)',
-      '718_financial_report': '§718.111(13)',
+      '718_budget': '§718.111(12)(g)(2)(h), §718.112(2)(f)',
+      '718_financial_report': '§718.111(12)(g)(2)(i), §718.111(13)',
+      '718_monthly_statements': '§718.111(12)(g)(2)(i)',
       '718_minutes_rolling_12m': '§718.111(12)(g)(2)(e)',
       '718_video_recordings': '§718.111(12)(g)(2)(f)',
-      '718_meeting_notices': '§718.111(12)(g)(2)(h), §718.112(2)(c)',
-      '718_affidavits': '§718.111(12)(g)(2)(g)',
+      '718_meeting_notices': '§718.111(12)(g)(2)(m)-(n), §718.112(2)(c)',
+      '718_affidavits': '§718.111(12)(g)(2)(r)',
+      '718_director_certifications': '§718.111(12)(g)(2)(j), §718.112(2)(d)5.b.',
+      '718_conflict_of_interest': '§718.111(12)(g)(2)(l)',
       '718_insurance': '§718.111(11)',
-      '718_contracts': '§718.111(12)(g)(2)',
-      '718_conflict_contracts': '§718.3026',
-      '718_bids': '§718.111(12)(g)(2)',
-      '718_inspection_reports': '§553.899, §718.301(4)(p)',
-      '718_sirs': '§718.112(2)(g)',
+      '718_contracts': '§718.111(12)(g)(2)(g)',
+      '718_conflict_contracts': '§718.111(12)(g)(2)(k), §718.3026',
+      '718_bids': '§718.111(12)(g)(2)(g)',
+      '718_inspection_reports': '§718.111(12)(g)(2)(o), §553.899, §718.301(4)(p)',
+      '718_sirs': '§718.111(12)(g)(2)(p), §718.112(2)(g)',
+      '718_building_permits': '§718.111(12)(g)(2)(q)',
+      // Chapter 720, against the 2026 text of §720.303(4).
+      '720_governing_docs': '§720.303(4)(b)(1)(c)',
+      '720_articles': '§720.303(4)(b)(1)(a)',
+      '720_bylaws_rules': '§720.303(4)(b)(1)(b), (d)',
+      '720_retention_rules': '§720.303(4)(c)',
+      '720_budget': '§720.303(4)(b)(1)(f), §720.303(6)',
+      '720_financial_report': '§720.303(4)(b)(1)(g), §720.303(7)',
+      '720_monthly_statements': '§720.303(4)(b)(1)(g)',
+      '720_minutes_rolling_12m': '§720.303(4)',
+      '720_meeting_notices': '§720.303(4)(b)(1)(l)-(m), §720.303(2)',
+      '720_director_certifications': '§720.303(4)(b)(1)(i), §720.3033(1)(a)',
+      '720_insurance': '§720.303(4)(b)(1)(h)',
+      '720_contracts': '§720.303(4)(b)(1)(e)',
+      '720_bids': '§720.303(4)(b)(1)(e)',
+      '720_conflict_of_interest': '§720.303(4)(b)(1)(j)-(k)',
     };
 
-    for (const item of CONDO_718_CHECKLIST_TEMPLATE) {
+    for (const item of [...CONDO_718_CHECKLIST_TEMPLATE, ...HOA_720_CHECKLIST_TEMPLATE]) {
       const expected = expectedReferences[item.templateKey];
+      expect(expected, `No pinned statute reference for ${item.templateKey}`).toBeDefined();
       if (expected) {
         expect(
           item.statuteReference,
@@ -630,7 +670,7 @@ describe('legislative amendment regression detection', () => {
     // When a legislative amendment adds a new requirement:
     //   1. Add the item to templates.ts
     //   2. Add the key to REQUIRED_CONDO_KEYS above
-    //   3. Update this count from 17 to 18
+    //   3. Update the counts above
     //   4. Add a statute reference entry in the drift check above
     // This 4-step process ensures no requirement is added without full review.
     expect(CONDO_718_CHECKLIST_TEMPLATE).toHaveLength(REQUIRED_CONDO_KEYS.length);

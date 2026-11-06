@@ -108,6 +108,16 @@ const MINUTES = /\bminutes\b/i;
 // Meeting-record words take a plural, since a file often holds a batch: "Meeting Notices.pdf".
 const MEETING_NOTICES = /\bnotices?\b|\bagendas?\b/i;
 const BIDS = /\bbids?\b/i;
+// The monthly statements considered at a meeting: "March Income & Expense", "Monthly Financial Statement".
+const MONTHLY_STATEMENTS =
+  /\bmonthly\s+(?:income|expense|financial|operating)|income\s+(?:and|&)\s+expense|profit\s+(?:and|&)\s+loss/i;
+// A director's certification, or the education certificate that stands in for it. The words must be
+// adjacent: "Minutes of Board of Directors Meeting - Certified Copy" is minutes, not a certification.
+const DIRECTOR_CERTIFICATIONS =
+  /\bdirectors?'?s?\s+(?:certifications?|education\s+certificates?)\b|\bcertifications?\s+of\s+(?:the\s+)?directors?\b|\bboard\s+(?:member\s+)?education\b/i;
+const CONFLICT_OF_INTEREST = /conflict\s+of\s+interest/i;
+// The LIST of executory contracts both chapters require, not any one contract.
+const EXECUTORY_CONTRACTS_LIST = /list\s+of\s+(executory\s+)?contracts|contracts?\s+list/i;
 
 // Vetoes (see "Vetoes" above). Each is defined once and shared by every item that uses it.
 // Committee and meeting papers about a governing document: the committee that drafts the rules, the
@@ -115,8 +125,17 @@ const BIDS = /\bbids?\b/i;
 const VETO_GOVERNING_DOCUMENT = /\b(?:committees?|agendas?|minutes|notices?)\b/i;
 // ... and the budget's own working papers: a workshop, budget against actual, a variance report.
 const VETO_BUDGET = /\b(?:committees?|agendas?|minutes|notices?|workshops?|vs|versus|actuals?|variance)\b/i;
-// ... and the paperwork around an audit that is not the report: a waiver ballot, an engagement letter.
-const VETO_FINANCIAL_REPORT = /\b(?:committees?|agendas?|minutes|notices?|waivers?|waive|ballots?|engagement|proposals?)\b/i;
+// ... and the paperwork around an audit that is not the report: a waiver ballot, an engagement letter,
+// and a monthly statement, which is its own record.
+const VETO_FINANCIAL_REPORT = /\b(?:committees?|agendas?|minutes|notices?|waivers?|waive|ballots?|engagement|proposals?|monthly)\b/i;
+// A monthly statement, not the budget or the annual report that use the same words ("2026 Budget -
+// Income & Expense Summary", "Audited Financial Statements - Profit and Loss"), nor meeting papers.
+const VETO_MONTHLY_STATEMENT =
+  /\b(?:committees?|agendas?|minutes|notices?|budgets?|annual|audit(?:ed)?|proposed|reserves?)\b/i;
+// The association's bylaws and rules, but not its records-retention rules, which are their own record.
+const VETO_BYLAWS_RULES = /\b(?:committees?|agendas?|minutes|notices?|retention)\b/i;
+// An application, fee or quote for a permit is not the permit.
+const VETO_PERMIT = /\b(?:applications?|invoices?|fees?|quotes?|proposals?)\b/i;
 // Minutes are the record once approved: a draft, unapproved or proposed set is not yet.
 const VETO_MINUTES = /\b(?:drafts?|unapproved|proposed)\b/i;
 // Bids RECEIVED are the record; the invitation, request or notice that asked for them is not.
@@ -151,6 +170,8 @@ export const RECORD_MATCH_RULES: Readonly<Record<string, RecordMatchRule>> = {
   '720_budget': { categoryKeys: ['financial_records'], title: BUDGET, exclude: VETO_BUDGET },
   '718_financial_report': { categoryKeys: ['financial_records'], title: FINANCIAL_REPORT, exclude: VETO_FINANCIAL_REPORT },
   '720_financial_report': { categoryKeys: ['financial_records'], title: FINANCIAL_REPORT, exclude: VETO_FINANCIAL_REPORT },
+  '718_monthly_statements': { categoryKeys: ['financial_records'], title: MONTHLY_STATEMENTS, exclude: VETO_MONTHLY_STATEMENT },
+  '720_monthly_statements': { categoryKeys: ['financial_records'], title: MONTHLY_STATEMENTS, exclude: VETO_MONTHLY_STATEMENT },
   '718_minutes_rolling_12m': { categoryKeys: ['meeting_minutes'], title: MINUTES, exclude: VETO_MINUTES },
   '720_minutes_rolling_12m': { categoryKeys: ['meeting_minutes'], title: MINUTES, exclude: VETO_MINUTES },
   // A plural too, as with MEETING_NOTICES: "Board Meeting Recordings".
@@ -158,21 +179,28 @@ export const RECORD_MATCH_RULES: Readonly<Record<string, RecordMatchRule>> = {
   '718_meeting_notices': { categoryKeys: ['meeting_minutes'], title: MEETING_NOTICES },
   '720_meeting_notices': { categoryKeys: ['meeting_minutes'], title: MEETING_NOTICES },
   '718_affidavits': { categoryKeys: ['declaration', 'meeting_minutes'], title: /\baffidavit/i },
+  '718_director_certifications': { categoryKeys: ['declaration', 'meeting_minutes'], title: DIRECTOR_CERTIFICATIONS },
+  '720_director_certifications': { categoryKeys: ['declaration', 'meeting_minutes'], title: DIRECTOR_CERTIFICATIONS },
+  // Item l. Not the contracts category: item k (`718_conflict_contracts`) reads the same words there.
+  '718_conflict_of_interest': { categoryKeys: ['declaration', 'meeting_minutes'], title: CONFLICT_OF_INTEREST, exclude: VETO_CONFLICT },
+  // Chapter 720 posts items j and k together, so one rule reads both categories.
+  '720_conflict_of_interest': { categoryKeys: ['contracts', 'declaration', 'meeting_minutes'], title: CONFLICT_OF_INTEREST, exclude: VETO_CONFLICT },
   '718_insurance': { categoryKeys: ['insurance'], title: ANY_TITLE, exclude: VETO_INSURANCE },
   '720_insurance': { categoryKeys: ['insurance'], title: ANY_TITLE, exclude: VETO_INSURANCE },
-  '718_contracts': { categoryKeys: ['contracts'], title: /list\s+of\s+(executory\s+)?contracts|contracts?\s+list/i },
-  '718_conflict_contracts': { categoryKeys: ['contracts'], title: /conflict\s+of\s+interest/i, exclude: VETO_CONFLICT },
+  '718_contracts': { categoryKeys: ['contracts'], title: EXECUTORY_CONTRACTS_LIST },
+  '720_contracts': { categoryKeys: ['contracts'], title: EXECUTORY_CONTRACTS_LIST },
+  '718_conflict_contracts': { categoryKeys: ['contracts'], title: CONFLICT_OF_INTEREST, exclude: VETO_CONFLICT },
   '718_bids': { categoryKeys: ['contracts'], title: BIDS, exclude: VETO_BIDS },
   '720_bids': { categoryKeys: ['contracts'], title: BIDS, exclude: VETO_BIDS },
   '718_inspection_reports': { categoryKeys: ['inspection_reports'], title: /milestone|structural\s+inspection/i, exclude: VETO_INSPECTION },
   '718_sirs': { categoryKeys: ['inspection_reports'], title: /reserve\s+study|\bsirs\b/i, exclude: VETO_INSPECTION },
-  // Chapter 720 only: its own wording for the governing documents and contracts.
+  '718_building_permits': { categoryKeys: ['inspection_reports'], title: /\bpermits?\b/i, exclude: VETO_PERMIT },
+  // Chapter 720 only: its own wording for the governing documents.
   '720_governing_docs': { categoryKeys: ['declaration'], title: /declaration|covenants/i, exclude: VETO_GOVERNING_DOCUMENT },
   // The spaced "by laws" starts at a word boundary, so "Standby Laws" is not read as bylaws. The first
   // form has no leading \b, as in the brief, so "Standby-Laws" and "Standbylaws" still are.
-  '720_bylaws_rules': { categoryKeys: ['declaration', 'rules'], title: /by-?laws?|\bby\s+laws\b|\brules?\b|regulations?/i, exclude: VETO_GOVERNING_DOCUMENT },
-  // Whole words only: "Contractor Insurance Certificate" is not a contract.
-  '720_contracts': { categoryKeys: ['contracts'], title: /\bcontracts?\b/i },
+  '720_bylaws_rules': { categoryKeys: ['declaration', 'rules'], title: /by-?laws?|\bby\s+laws\b|\brules?\b|regulations?/i, exclude: VETO_BYLAWS_RULES },
+  '720_retention_rules': { categoryKeys: ['declaration', 'rules'], title: /\bretention\b/i, exclude: VETO_GOVERNING_DOCUMENT },
 };
 
 /** A run of these is the gap between two words in a file name: `2025_budget.xlsx`. */

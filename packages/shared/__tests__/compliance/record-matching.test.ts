@@ -53,29 +53,41 @@ const SAMPLES: readonly Sample[] = [
   { key: '718_budget', title: '2026 Annual Budget', categoryKey: 'financial_records' },
   { key: '718_financial_report', title: 'Annual Financial Report 2025', categoryKey: 'financial_records' },
   { key: '718_financial_report', title: 'Audited Financial Statements 2025', categoryKey: 'financial_records' },
+  { key: '718_monthly_statements', title: 'Monthly Financial Statement March 2026', categoryKey: 'financial_records' },
+  { key: '718_monthly_statements', title: 'Income and Expense Statement March 2026', categoryKey: 'financial_records' },
   { key: '718_minutes_rolling_12m', title: 'Board Meeting Minutes March 2026', categoryKey: 'meeting_minutes' },
   { key: '718_video_recordings', title: 'Board Meeting Recording March 2026', categoryKey: 'meeting_minutes' },
   { key: '718_meeting_notices', title: 'Notice of Annual Meeting', categoryKey: 'meeting_minutes' },
   { key: '718_affidavits', title: 'Officer Affidavit 2026', categoryKey: 'meeting_minutes' },
   { key: '718_affidavits', title: 'Director Affidavit 2026', categoryKey: 'declaration' },
+  { key: '718_director_certifications', title: 'Director Certification - J. Smith', categoryKey: 'declaration' },
+  { key: '718_director_certifications', title: 'Board Member Education Certificate', categoryKey: 'meeting_minutes' },
+  { key: '718_conflict_of_interest', title: 'Manager Conflict of Interest Disclosure', categoryKey: 'meeting_minutes' },
   { key: '718_insurance', title: 'Master Property Policy', categoryKey: 'insurance' },
   { key: '718_contracts', title: 'List of Executory Contracts', categoryKey: 'contracts' },
   { key: '718_conflict_contracts', title: 'Conflict of Interest Disclosure', categoryKey: 'contracts' },
   { key: '718_bids', title: 'Roof Replacement Bids', categoryKey: 'contracts' },
   { key: '718_inspection_reports', title: 'Milestone Inspection Report 2025', categoryKey: 'inspection_reports' },
   { key: '718_sirs', title: 'Structural Integrity Reserve Study', categoryKey: 'inspection_reports' },
+  { key: '718_building_permits', title: 'Building Permit - Balcony Repairs', categoryKey: 'inspection_reports' },
   // Homeowners' association, chapter 720
   { key: '720_governing_docs', title: 'Declaration of Covenants, Conditions and Restrictions', categoryKey: 'declaration' },
   { key: '720_articles', title: 'Articles of Incorporation', categoryKey: 'declaration' },
   { key: '720_bylaws_rules', title: 'Bylaws', categoryKey: 'declaration' },
   { key: '720_bylaws_rules', title: 'Rules and Regulations', categoryKey: 'rules' },
+  { key: '720_retention_rules', title: 'Records Retention Rules', categoryKey: 'rules' },
+  { key: '720_retention_rules', title: 'Record Retention Policy', categoryKey: 'declaration' },
   { key: '720_budget', title: '2026 Budget', categoryKey: 'financial_records' },
   { key: '720_financial_report', title: 'Annual Financial Statement', categoryKey: 'financial_records' },
+  { key: '720_monthly_statements', title: 'Monthly Income Statement', categoryKey: 'financial_records' },
   { key: '720_minutes_rolling_12m', title: 'Minutes of Board Meeting', categoryKey: 'meeting_minutes' },
   { key: '720_meeting_notices', title: 'Meeting Agenda', categoryKey: 'meeting_minutes' },
+  { key: '720_director_certifications', title: 'Director Education Certificate', categoryKey: 'meeting_minutes' },
   { key: '720_insurance', title: 'Liability Insurance Certificate', categoryKey: 'insurance' },
-  { key: '720_contracts', title: 'Landscaping Contract', categoryKey: 'contracts' },
+  { key: '720_contracts', title: 'List of Executory Contracts', categoryKey: 'contracts' },
   { key: '720_bids', title: 'Pool Resurfacing Bids', categoryKey: 'contracts' },
+  { key: '720_conflict_of_interest', title: 'Conflict of Interest Disclosure', categoryKey: 'contracts' },
+  { key: '720_conflict_of_interest', title: 'Director Conflict of Interest Statement', categoryKey: 'meeting_minutes' },
 ];
 
 const keysFor = (templateKey: string): string[] => (templateKey.startsWith('718_') ? condoKeys : hoaKeys);
@@ -170,15 +182,18 @@ describe('RECORD_MATCH_RULES', () => {
     const VETO_GROUPS: Record<string, readonly string[]> = {
       'governing document': [
         '718_declaration', '718_bylaws', '718_articles', '720_articles',
-        '718_rules', '718_qa_sheet', '720_governing_docs', '720_bylaws_rules',
+        '718_rules', '718_qa_sheet', '720_governing_docs', '720_retention_rules',
       ],
+      'chapter 720 bylaws and rules': ['720_bylaws_rules'],
+      'monthly statement': ['718_monthly_statements', '720_monthly_statements'],
+      permit: ['718_building_permits'],
       budget: ['718_budget', '720_budget'],
       'financial report': ['718_financial_report', '720_financial_report'],
       minutes: ['718_minutes_rolling_12m', '720_minutes_rolling_12m'],
       bids: ['718_bids', '720_bids'],
       insurance: ['718_insurance', '720_insurance'],
       inspection: ['718_inspection_reports', '718_sirs'],
-      'conflict of interest': ['718_conflict_contracts'],
+      'conflict of interest': ['718_conflict_contracts', '718_conflict_of_interest', '720_conflict_of_interest'],
       recording: ['718_video_recordings'],
     };
 
@@ -564,9 +579,37 @@ describe('papers about a record are not the record', () => {
     expect(matchingTemplateKeys(doc('Affidavit of Mailing of Notice', 'declaration'), condoKeys)).toEqual(['718_affidavits']);
   });
 
-  it('the chapter 720 contracts item reads a contract as a whole word, singular or plural', () => {
-    expect(matchingTemplateKeys(doc('Landscaping Contract', 'contracts'), hoaKeys)).toEqual(['720_contracts']);
-    expect(matchingTemplateKeys(doc('Landscaping Contracts', 'contracts'), hoaKeys)).toEqual(['720_contracts']);
+  it('both contracts items want the LIST of executory contracts, not one contract', () => {
+    // §718.111(12)(g)2.g and §720.303(4)(b)1.e both name a list.
+    expect(matchingTemplateKeys(doc('Landscaping Contract', 'contracts'), hoaKeys)).toEqual([]);
+    expect(matchingTemplateKeys(doc('Contracts List 2026', 'contracts'), hoaKeys)).toEqual(['720_contracts']);
+    expect(RECORD_MATCH_RULES['720_contracts']?.title).toBe(RECORD_MATCH_RULES['718_contracts']?.title);
+  });
+
+  it('reads a monthly statement as its own record, not the annual financial report', () => {
+    const monthly = doc('Monthly Financial Statement March 2026', 'financial_records');
+    expect(matchingTemplateKeys(monthly, condoKeys)).toEqual(['718_monthly_statements']);
+    expect(matchingTemplateKeys(monthly, hoaKeys)).toEqual(['720_monthly_statements']);
+  });
+
+  it('reads records-retention rules as their own record, not the bylaws and rules', () => {
+    expect(matchingTemplateKeys(doc('Records Retention Rules', 'rules'), hoaKeys)).toEqual(['720_retention_rules']);
+    expect(matchingTemplateKeys(doc('Rules and Regulations', 'rules'), hoaKeys)).toEqual(['720_bylaws_rules']);
+  });
+
+  // Titles that already linked to one record must not start matching a second one, which would
+  // stop them linking at all (auto-link needs exactly one match).
+  it.each([
+    ['2026 Budget - Income & Expense Summary', 'financial_records', '718_budget'],
+    ['Audited Financial Statements - Profit and Loss', 'financial_records', '718_financial_report'],
+    ['Minutes of Board of Directors Meeting - Certified Copy', 'meeting_minutes', '718_minutes_rolling_12m'],
+    ['Board of Directors Meeting Notice - Certificate of Mailing', 'meeting_minutes', '718_meeting_notices'],
+  ] as const)('still reads "%s" as one record only', (title, categoryKey, key) => {
+    expect(matchingTemplateKeys(doc(title, categoryKey), condoKeys)).toEqual([key]);
+  });
+
+  it('does not read a permit application as a permit', () => {
+    expect(matchingTemplateKeys(doc('Building Permit Application', 'inspection_reports'), condoKeys)).toEqual([]);
   });
 });
 

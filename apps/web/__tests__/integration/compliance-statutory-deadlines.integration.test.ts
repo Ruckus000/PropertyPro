@@ -120,11 +120,13 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
     // never posted a notice or agenda, while meeting-calculator computed the
     // 14-day / 48-hour lead times the whole time. The HOA template already had
     // its equivalent. See docs/audits/2026-08-09-legal-risk-audit.md F-01.
-    expect(json.data.length).toBe(17);
+    // 21 since 2026-11-06: items i (monthly statements), j, l and q of the 2026
+    // §718.111(12)(g)2. had no row (docs/audits/2026-11-05-website-compliance-audit.md H-3).
+    expect(json.data.length).toBe(21);
     expect(json.data.some((item) => item.templateKey === '718_meeting_notices')).toBe(true);
   });
 
-  it('HOA community generates exactly 10 checklist items', async () => {
+  it('HOA community generates exactly 14 checklist items', async () => {
     const kit = requireState();
     const route = requireRoute();
     const communityB = requireCommunity(kit, 'communityB');
@@ -140,7 +142,8 @@ describeDb('Statutory compliance deadlines (db-backed integration)', () => {
     // HOA generation: 200 (already generated) or 201 (first time)
     expect([200, 201]).toContain(response.status);
     const json = await parseJson<{ data: Array<Record<string, unknown>> }>(response);
-    expect(json.data.length).toBe(10);
+    // 14 since 2026-11-06: §720.303(4)(c) and (4)(b)1.g, i and j-k had no row.
+    expect(json.data.length).toBe(14);
   });
 
   // =========================================================================
