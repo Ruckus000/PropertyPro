@@ -121,6 +121,9 @@ const ConfirmDialog = dynamic(() => import('../ConfirmDialog').then((m) => m.Con
   loading: () => null,
 });
 
+/** What a discard does to the public site, said once for the confirm and the toast. */
+const DISCARD_LEAVES_LIVE_SITE = 'Your live site stays exactly as it is.'; // page-state-copy:exempt — the whole site, true by construction: a discard only clears draft rows, never published ones; not a page's visibility
+
 /**
  * Where "Fix this" sends the PM: a page AND a slot, never a slot alone.
  *
@@ -666,7 +669,7 @@ function PublishSheetBody({
         return;
       }
     }
-    toast.success('Your unpublished changes were discarded. Your live site is unchanged.');
+    toast.success(`Your unpublished changes were discarded. ${DISCARD_LEAVES_LIVE_SITE}`);
     onOpenChange(false);
     onDiscarded?.();
   }
@@ -1077,7 +1080,7 @@ function PublishSheetBody({
           onOpenChange={setConfirmDiscardOpen}
           restoreFocusTo={discardButtonRef}
           title="Discard all unpublished changes?"
-          description={`This throws away ${diff.changes.length === 1 ? 'the 1 change' : `all ${diff.changes.length} changes`} listed here. Your live site stays exactly as it is.${
+          description={`This throws away ${diff.changes.length === 1 ? 'the 1 change' : `all ${diff.changes.length} changes`} listed here. ${DISCARD_LEAVES_LIVE_SITE}${
             scheduleToCancel
               ? ` The publish you scheduled for ${new Date(scheduleToCancel.scheduledFor).toLocaleString()} is called off too.`
               : ''
