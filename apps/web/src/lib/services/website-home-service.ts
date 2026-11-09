@@ -1,21 +1,17 @@
 /**
- * The website pages' loaders (website builder, Phase 4, D19): each manager
- * page reads everything it shows through one function here, and its
- * components render what that returns without querying anything themselves.
+ * The website overview's loader (website builder, Phase 4, D19): the page
+ * reads everything it shows through `loadWebsiteHome`, and its components
+ * render what that returns without querying anything themselves.
  *
- * - `loadSiteFacts`: the look picker (`/pm/website/looks`). What the site
- *   already shows ("Filled in for you"), which look is live and which is
- *   drafted, how many other unpublished edits a Publish would carry, and
- *   whether anything at all is waiting to be published.
- * - `loadWebsiteHome`: the website home (`/pm/website`). The same facts, plus
- *   the last publish and the versions to restore, the "Email owners" offer, the
- *   Florida records still missing (with documents that may be them), the
- *   meetings coming up, and the live welcome (hero) that Edit words and Change
- *   photo start from.
+ * What it reads: the site's facts (the profile, which look is live and which is
+ * drafted, how many unpublished edits a Publish would carry, whether anything is
+ * waiting, the records posted), the last publish and the versions to restore,
+ * the "Email owners" offer, and the Florida records still missing (with
+ * documents that may be them).
  *
  * Read only: nothing here writes.
  *
- * AUTHZ: callers authorize. Both pages verify a management role in the
+ * AUTHZ: callers authorize. The page verifies a management role in the
  * community, the `hasSiteEditor` plan feature and an entitled subscription
  * before calling.
  */
@@ -35,7 +31,6 @@ import { NotFoundError } from '@/lib/api/errors';
 import { loadChecklistWithStatus } from '@/lib/compliance/load-checklist-with-status';
 import { getPublicCommunityScopedReader } from '@/lib/db/public-community-reader';
 import { getCommunityProfile, type CommunityProfile } from '@/lib/services/community-profile-service';
-import { listMeetingsForCommunity } from '@/lib/services/meeting-service';
 import { listRecordCandidates } from '@/lib/services/record-auto-link-service';
 import { paginateSitePublishHistory } from '@/lib/services/site-blocks-service';
 import { getSiteLiveNoticeState, type SiteLiveNoticeState } from '@/lib/services/site-live-notice-service';
@@ -51,27 +46,15 @@ import {
 import { lookIdForLayout, type LookId } from '@/lib/site-looks/looks';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 
-/**
- * How many meetings and news posts are counted. The picker shows the limit as
- * "50+", so a long list costs one bounded read rather than a count of all.
- */
-const SITE_FACTS_LIST_LIMIT = 50;
-/** Upcoming meetings within a year, the window the public Meetings section's longest setting reads. */
-const UPCOMING_MEETINGS_WINDOW_DAYS = 365;
-
 export interface SiteFacts {
   profile: CommunityProfile;
   communityType: CommunityType;
-  /** Upcoming meetings the public site can show, up to `SITE_FACTS_LIST_LIMIT`. */
-  upcomingMeetingCount: number;
-  /** News posts the public site can show, up to `SITE_FACTS_LIST_LIMIT`. */
-  newsCount: number;
   /** Records posted and current, over all owed (`recordsPostedTotals`); 0 of 0 for apartments. */
   recordsPosted: number;
   recordsTotal: number;
   /** The live look; null for a site on a legacy layout. */
   liveLookId: LookId | null;
-  /** A look drafted over the live one (a picker card chosen, not yet published). */
+  /** A look drafted over the live one (chosen in the editor, not yet published). */
   draftLookId: LookId | null;
   /** Unpublished edits other than the drafted look's own, which a Publish carries too. */
   pendingDraftCount: number;
@@ -102,12 +85,6 @@ async function loadRecordsChecklist(
   return (await loadChecklistWithStatus(communityId, communityType)) as unknown as ChecklistItemData[];
 }
 
-export async function loadSiteFacts(communityId: number): Promise<SiteFacts> {
-  const info = await requireCommunityInfo(communityId);
-  const checklist = await loadRecordsChecklist(communityId, info.communityType as CommunityType);
-  return buildSiteFacts(communityId, info, checklist);
-}
-
 /** The facts, given the community and its checklist (read once by `loadWebsiteHome` for both uses). */
 async function buildSiteFacts(
   communityId: number,
@@ -115,14 +92,10 @@ async function buildSiteFacts(
   checklist: readonly ChecklistItemData[],
 ): Promise<SiteFacts> {
   const communityType = info.communityType as CommunityType;
-  const reader = getPublicCommunityScopedReader(communityId);
 
-  const [profile, branding, meetings, news] = await Promise.all([
+  const [profile, branding] = await Promise.all([
     getCommunityProfile(communityId),
     getBrandingForCommunity(communityId),
-    // The public reader, so these are the meetings and posts a visitor sees.
-    reader.listMeetings({ limit: SITE_FACTS_LIST_LIMIT, timeWindowDays: UPCOMING_MEETINGS_WINDOW_DAYS }),
-    reader.listAnnouncements({ limit: SITE_FACTS_LIST_LIMIT }),
   ]);
   const records = recordsPostedTotals(checklist);
   const pendingDraftCount = await countOtherPendingEdits(communityId, branding);
@@ -130,8 +103,6 @@ async function buildSiteFacts(
   return {
     profile,
     communityType,
-    upcomingMeetingCount: meetings.length,
-    newsCount: news.length,
     recordsPosted: records.posted,
     recordsTotal: records.total,
     liveLookId: lookIdForLayout(branding?.layoutId),
@@ -143,11 +114,8 @@ async function buildSiteFacts(
   };
 }
 
-/** The "Coming up" window on the website home. */
-const HOME_MEETINGS_WINDOW_DAYS = 90;
 /** How many past publishes the version list shows. */
 const HISTORY_LIMIT = 10;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Documents that may be a record, newest first, keyed by checklist item id (`listRecordCandidates`). */
 type RecordCandidates = Record<number, Array<{ documentId: number; title: string }>>;
@@ -189,17 +157,8 @@ export interface WebsiteHomeData {
     /** This manager's snooze of the alert, while it is in force. */
     snoozedUntil: string | null;
   };
-  /** Meetings in the next 90 days, soonest first. */
-  upcomingMeetings: Array<{ id: number; title: string; startsAt: string; noticePosted: boolean }>;
   /** The community's subdomain, for the transparency page's address. */
   slug: string;
-  /**
-   * The welcome section as the public site serves it now: the published hero's
-   * stored content on the home page, unparsed (tokens such as `{{name}}`
-   * included), or null when there is none. Edit words prefills from it, and
-   * Undo saves it back as it was.
-   */
-  liveHero: unknown | null;
 }
 
 export interface LoadWebsiteHomeOptions {
@@ -225,18 +184,13 @@ export async function loadWebsiteHome(
   const now = new Date();
 
   const reader = getPublicCommunityScopedReader(communityId);
-  const [checklist, candidatesByItem, historyPage, liveNotice, meetings, storedSnooze, publishToken, liveHero] = await Promise.all([
+  const [checklist, candidatesByItem, historyPage, liveNotice, storedSnooze, publishToken] = await Promise.all([
     loadRecordsChecklist(communityId, communityType),
     hasRecords ? listRecordCandidates(communityId) : Promise.resolve<RecordCandidates>({}),
     paginateSitePublishHistory({ communityId, pageSize: HISTORY_LIMIT }),
     getSiteLiveNoticeState(communityId),
-    listMeetingsForCommunity(communityId, {
-      startUtc: now,
-      endUtcExclusive: new Date(now.getTime() + HOME_MEETINGS_WINDOW_DAYS * DAY_MS),
-    }),
     getUserPreference(userId, recordsAlertSnoozeKey(communityId)),
     reader.getLatestPublishedAt(),
-    readLiveHero(reader),
   ]);
   const facts = await buildSiteFacts(communityId, info, checklist);
 
@@ -280,22 +234,8 @@ export async function loadWebsiteHome(
       candidates,
       snoozedUntil: readSnoozedUntil(storedSnooze, now.getTime()),
     },
-    upcomingMeetings: meetings.map((meeting) => ({
-      id: meeting.id,
-      title: meeting.title,
-      startsAt: new Date(meeting.startsAt).toISOString(),
-      noticePosted: meeting.noticePostedAt != null,
-    })),
     slug: info.slug,
-    liveHero,
   };
-}
-
-/** The published hero on the home page (slot 1 by convention), as stored. */
-async function readLiveHero(reader: ReturnType<typeof getPublicCommunityScopedReader>): Promise<unknown | null> {
-  const homePageId = await reader.getHomePageId();
-  const blocks = await reader.listSiteBlocks(homePageId === null ? {} : { pageId: homePageId });
-  return blocks.find((block) => block.blockType === 'hero')?.content ?? null;
 }
 
 /**

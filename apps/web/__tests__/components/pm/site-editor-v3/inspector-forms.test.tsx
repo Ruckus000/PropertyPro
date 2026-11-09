@@ -933,7 +933,7 @@ describe('SorEmptyTextForm — the panels say where the content comes from', () 
     expect(within(records).getByText('Meeting minutes · 2')).toBeInTheDocument();
     expect(
       within(records).getByRole('link', { name: 'See the records on your website home' }),
-    ).toHaveAttribute('href', '/pm/website?communityId=7#records');
+    ).toHaveAttribute('href', '/pm/website?communityId=7&tab=records');
   });
 
   it('says so when no record is posted for owners yet', () => {

@@ -34,7 +34,7 @@ export function RecordsAttention({ communityId, enabled }: RecordsAttentionProps
   const label = `${count} missing ${count === 1 ? 'record' : 'records'}`;
   return (
     <Link
-      href={`/pm/website?communityId=${communityId}#records`}
+      href={`/pm/website?communityId=${communityId}&tab=records`}
       title={label}
       data-testid="editor-missing-records"
       // Icon, number and words, never the colour alone. Below 1680px the bar

@@ -69,7 +69,7 @@ describe('<SiteSetupBanner> — CTA (slice 8f)', () => {
     mockStatus(false);
     render(wrap(<SiteSetupBanner hasIncompleteSite firstIncompleteCommunityId={7} />));
     const cta = await screen.findByTestId('site-setup-banner-cta');
-    expect(cta).toHaveAttribute('href', '/pm/website/looks?communityId=7');
+    expect(cta).toHaveAttribute('href', '/pm/website-editor?communityId=7&item=look');
     expect(cta).toHaveTextContent('Pick a look');
   });
 

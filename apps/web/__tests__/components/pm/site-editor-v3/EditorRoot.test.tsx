@@ -954,7 +954,7 @@ describe('EditorRoot — editing on the page (combined plan Task 28)', () => {
     const { unmount } = renderRoot();
     expect(await screen.findByRole('link', { name: '3 missing records' })).toHaveAttribute(
       'href',
-      '/pm/website?communityId=42#records',
+      '/pm/website?communityId=42&tab=records',
     );
     expect(recordsAlert.calls[0]).toEqual([42, { enabled: true }]);
     unmount();

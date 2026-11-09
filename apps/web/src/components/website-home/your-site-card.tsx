@@ -1,14 +1,8 @@
 'use client';
 
 /**
- * The website home's "Your site" (spec C2, corrections 3 and 4): the look,
- * **Change look**, when the site was last published and by whom, and Restore.
- *
- * The full editor is not offered here (option 1): the welcome card edits the
- * words and photo, and the home ends with a quiet "Advanced editor" link.
- *
- * A look chosen in the picker but not published yet is said in one line, with
- * a link back to the picker to publish it or keep the live one.
+ * The website overview's Versions tab (spec C2, corrections 3 and 4): the
+ * publishes that can be put back.
  *
  * - **Restore previous version** (every plan) puts the site back to how it was
  *   before the last publish. It asks first, because a restore replaces the
@@ -18,18 +12,17 @@
  *   Only on plans with `hasSitePolishBlocks`; the loader sends no list
  *   otherwise.
  *
- * Times read relative to `now`, the moment the page was rendered, so the server
- * and the browser print the same words and nothing changes on hydration.
+ * `relativeTime` (also the status list's) reads times relative to `now`, the
+ * moment the page was rendered, so the server and the browser print the same
+ * words and nothing changes on hydration.
  */
 import { useRef, useState, type MouseEvent } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CircleAlert, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RestoreError, useRestorePreviousSite } from '@/hooks/use-restore-previous-site';
 import { LOOK_SUMMARIES } from '@/lib/site-looks/look-summaries';
-import { cn } from '@/lib/utils';
 import type { LookId } from '@/lib/site-looks/looks';
 import { TOUCH } from './touch';
 import { LazyConfirmDialog } from './website-home-lazy';
@@ -51,18 +44,15 @@ export function discardedEditsSentence(pendingDraftCount: number, draftLookName:
 export interface YourSiteCardProps {
   communityId: number;
   liveLookId: LookId | null;
-  /** A look chosen in the picker but not published yet (`SiteFacts.draftLookId`). */
+  /** A look drafted in the editor but not published yet (`SiteFacts.draftLookId`). */
   draftLookId: LookId | null;
   /** Unpublished edits a restore would discard (`SiteFacts.pendingDraftCount`). */
   pendingDraftCount: number;
-  lastPublish: { publishedAt: string; byName: string | null } | null;
   history: Array<{ snapshotId: number; publishedAt: string; byName: string | null; restorable: boolean }> | null;
   /** The version before the last publish, when it can be restored (`WebsiteHomeData.previousSnapshotId`). */
   previousSnapshotId: number | null;
   /** The publish token the page loaded with; Restore refuses if the live site has moved on. */
   publishToken: string | null;
-  /** When the page was rendered, ISO 8601. */
-  now: string;
   /** Formats a date and time, in the community's time zone. */
   formatDateTime: (iso: string) => string;
 }
@@ -94,11 +84,9 @@ export function YourSiteCard({
   liveLookId,
   draftLookId,
   pendingDraftCount,
-  lastPublish,
   history,
   previousSnapshotId,
   publishToken,
-  now,
   formatDateTime,
 }: YourSiteCardProps) {
   const router = useRouter();
@@ -113,12 +101,10 @@ export function YourSiteCard({
   const [showVersions, setShowVersions] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
 
-  const lookName = LOOK_SUMMARIES.find((look) => look.id === liveLookId)?.name ?? 'An older look';
   const draftLookName =
     draftLookId !== null && draftLookId !== liveLookId
       ? (LOOK_SUMMARIES.find((look) => look.id === draftLookId)?.name ?? null)
       : null;
-  const keepLabel = liveLookId === null ? 'keep your current look' : `keep ${lookName}`;
   const discarded = discardedEditsSentence(pendingDraftCount, draftLookName);
 
   function ask(next: Pending, event: MouseEvent<HTMLElement>) {
@@ -148,37 +134,17 @@ export function YourSiteCard({
     <section aria-labelledby="your-site-heading" className="space-y-4 rounded-md border border-edge bg-surface-card p-5">
       <div className="space-y-1">
         <h2 id="your-site-heading" className="text-lg font-semibold text-content">
-          Your site
+          Versions
         </h2>
         <p className="text-sm text-content-secondary">
-          Look: <span className="font-medium text-content">{lookName}</span>
+          Every publish is kept, and an earlier one can be brought back at once.
         </p>
-        {draftLookName && (
-          <div className="flex flex-wrap items-center gap-x-2">
-            <p className="text-sm text-content-secondary">{draftLookName} is chosen but not published yet.</p>
-            <Link
-              href={`/pm/website/looks?communityId=${communityId}`}
-              className={cn('inline-flex items-center text-sm font-medium text-content-link underline', TOUCH)}
-            >
-              Publish it or {keepLabel}
-            </Link>
-          </div>
-        )}
-        {lastPublish && (
-          <p className="text-sm text-content-secondary">
-            Last published{' '}
-            <time dateTime={lastPublish.publishedAt} title={formatDateTime(lastPublish.publishedAt)}>
-              {relativeTime(lastPublish.publishedAt, now, formatDateTime)}
-            </time>
-            {lastPublish.byName ? ` by ${lastPublish.byName}` : ''}
-          </p>
-        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button asChild variant="outline" className={TOUCH}>
-          <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
-        </Button>
+        {previousSnapshotId === null && (history === null || history.length <= 1) && (
+          <p className="text-sm text-content-secondary">There is no earlier version to restore yet.</p>
+        )}
         {previousSnapshotId !== null && (
           <Button
             type="button"

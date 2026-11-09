@@ -328,8 +328,9 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * - `incoming` already drafted (`draftedLookId`): the page exactly as it is.
  *   Its sections were planned when that look was drafted, and planning again
  *   from that look's own defaults would take an edit that happens to equal one
- *   of them for untouched, and could move it. "Publish this look" repeats the
- *   card's draft (D9), so this keeps the second run from changing the first.
+ *   of them for untouched, and could move it. Picking the drafted look's card
+ *   again repeats its draft (D9), so this keeps the second run from changing
+ *   the first.
  * - `incoming` is the live look and no other layout is drafted: the page
  *   exactly as it is. Nothing is being switched.
  * - `incoming` is the live look and another layout is drafted: the live home

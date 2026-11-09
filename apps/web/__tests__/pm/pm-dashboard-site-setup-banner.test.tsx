@@ -114,7 +114,7 @@ describe('PmDashboardClient → SiteSetupBanner wiring', () => {
     render(<PmDashboardClient />);
     expect(screen.getByTestId('site-setup-banner-cta')).toHaveAttribute(
       'href',
-      '/pm/website/looks?communityId=9',
+      '/pm/website-editor?communityId=9&item=look',
     );
   });
 
@@ -134,7 +134,7 @@ describe('PmDashboardClient → SiteSetupBanner wiring', () => {
     expect(banner).toHaveTextContent('Pick a look for your community website, then publish it.');
     expect(banner).not.toHaveTextContent(/already live/);
     // The same CTA.
-    expect(screen.getByTestId('site-setup-banner-cta')).toHaveAttribute('href', '/pm/website/looks?communityId=9');
+    expect(screen.getByTestId('site-setup-banner-cta')).toHaveAttribute('href', '/pm/website-editor?communityId=9&item=look');
   });
 
   it('hides the banner when every community has completed onboarding', () => {

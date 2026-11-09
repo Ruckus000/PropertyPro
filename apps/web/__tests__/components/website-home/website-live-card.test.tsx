@@ -54,9 +54,9 @@ describe('WebsiteLiveCard', () => {
     expect(view).toHaveAttribute('rel', expect.stringContaining('noreferrer'));
     expect(screen.getByRole('link', { name: 'Pick a different look' })).toHaveAttribute(
       'href',
-      `/pm/website/looks?communityId=${COMMUNITY_ID}`,
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&item=look`,
     );
-    expect(screen.getByRole('link', { name: 'Open website home' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Open website' })).toHaveAttribute(
       'href',
       `/pm/website?communityId=${COMMUNITY_ID}`,
     );

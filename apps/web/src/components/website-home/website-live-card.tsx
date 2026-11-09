@@ -7,7 +7,7 @@
  * look, or open the website home.
  *
  * The page shows it to managers whose plan has the site editor while
- * `site_onboarding_completed_at` is still null. **Dismiss** and the picker's
+ * `site_onboarding_completed_at` is still null. **Dismiss** and the editor's
  * **Keep my current look** end that state the same way (`keepCurrent`), with one
  * difference: Dismiss sends the plain form, so a look the manager drafted in
  * the editor is never discarded by closing a card.
@@ -107,7 +107,7 @@ export function WebsiteLiveCard({ communityId, communityName, publicUrl }: Websi
 
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild>
-              <Link href={`/pm/website?communityId=${communityId}`}>Open website home</Link>
+              <Link href={`/pm/website?communityId=${communityId}`}>Open website</Link>
             </Button>
             <Button asChild variant="outline">
               <a href={publicUrl} target="_blank" rel="noreferrer">
@@ -117,7 +117,7 @@ export function WebsiteLiveCard({ communityId, communityName, publicUrl }: Websi
               </a>
             </Button>
             <Button asChild variant="outline">
-              <Link href={`/pm/website/looks?communityId=${communityId}`}>Pick a different look</Link>
+              <Link href={`/pm/website-editor?communityId=${communityId}&item=look`}>Pick a different look</Link>
             </Button>
             <Button type="button" variant="ghost" onClick={dismiss} aria-disabled={keepCurrent.isPending}>
               Dismiss

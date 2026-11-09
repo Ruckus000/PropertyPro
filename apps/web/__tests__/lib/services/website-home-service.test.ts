@@ -1,6 +1,6 @@
 /**
- * `loadSiteFacts` — the look picker's loader — and `loadWebsiteHome` — the
- * website home's (website builder, Phase 4, D19).
+ * `loadWebsiteHome` — the website overview's loader (website builder,
+ * Phase 4, D19), and the site facts inside it.
  *
  * Mocked at the module edges: the community and branding reads, the public
  * reader, the checklist loader, the profile service and the scoped client.
@@ -103,9 +103,10 @@ vi.mock('@propertypro/db/filters', () => ({
   inArray: (col: unknown, vals: unknown) => ({ __inArray: { col, vals } }),
 }));
 
-import { loadSiteFacts, loadWebsiteHome } from '@/lib/services/website-home-service';
+import { loadWebsiteHome } from '@/lib/services/website-home-service';
 
 const COMMUNITY_ID = 42;
+const USER_ID = 'user-1';
 
 const PROFILE = {
   name: 'Sunset Condos',
@@ -182,27 +183,22 @@ beforeEach(() => {
   userRows = [];
 });
 
-describe('loadSiteFacts', () => {
-  it('loadSiteFacts counts what the public site shows', async () => {
-    listMeetingsMock.mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]);
-    // The reader stops at the limit, so a long list comes back as 50 rows.
-    listAnnouncementsMock.mockResolvedValue(Array.from({ length: 50 }, (_, i) => ({ id: i })));
+describe('the site facts', () => {
+  it('reads the profile, the looks, the records posted and what is waiting', async () => {
     loadChecklistMock.mockResolvedValue([
       item('declaration', 'satisfied', 'posted'),
       item('bylaws', 'unsatisfied', null),
     ]);
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
-    // The public reader: what a visitor's Meetings and News sections read.
-    expect(listMeetingsMock).toHaveBeenCalledWith({ limit: 50, timeWindowDays: 365 });
-    expect(listAnnouncementsMock).toHaveBeenCalledWith({ limit: 50 });
     expect(loadChecklistMock).toHaveBeenCalledWith(COMMUNITY_ID, 'condo_718');
+    // Nothing on the overview counts meetings or news, so neither is read.
+    expect(listMeetingsMock).not.toHaveBeenCalled();
+    expect(listAnnouncementsMock).not.toHaveBeenCalled();
     expect(facts).toEqual({
       profile: PROFILE,
       communityType: 'condo_718',
-      upcomingMeetingCount: 3,
-      newsCount: 50,
       recordsPosted: 1,
       recordsTotal: 2,
       liveLookId: 'bayfront',
@@ -216,7 +212,7 @@ describe('loadSiteFacts', () => {
   it('reads the drafted look over the live one, and null for a legacy layout', async () => {
     getBrandingMock.mockResolvedValue(branding({ layoutId: 'sable', draftLook: { layoutId: 'heritage' } }));
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     expect(facts.liveLookId).toBeNull();
     expect(facts.draftLookId).toBe('heritage');
@@ -225,7 +221,7 @@ describe('loadSiteFacts', () => {
   it('reads no records for an apartment community', async () => {
     getCommunityPublicInfoMock.mockResolvedValue({ id: COMMUNITY_ID, slug: 'ridge', communityType: 'apartment' });
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     expect(loadChecklistMock).not.toHaveBeenCalled();
     expect(facts.communityType).toBe('apartment');
@@ -235,11 +231,11 @@ describe('loadSiteFacts', () => {
   it('refuses a community that does not exist', async () => {
     getCommunityPublicInfoMock.mockResolvedValue(null);
 
-    await expect(loadSiteFacts(COMMUNITY_ID)).rejects.toMatchObject({ statusCode: 404 });
+    await expect(loadWebsiteHome(COMMUNITY_ID, USER_ID)).rejects.toMatchObject({ statusCode: 404 });
   });
 });
 
-describe('loadSiteFacts — unpublished edits besides the look', () => {
+describe('the site facts — unpublished edits besides the look', () => {
   it('counts each draft section, each added or removed page, and drafted colours as one', async () => {
     siteRows(
       [{ pageId: 1 }, { pageId: 1 }, { pageId: 2 }, { pageId: null }],
@@ -252,7 +248,7 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
     );
     getBrandingMock.mockResolvedValue(branding({ draftLook: { primaryColor: '#123456' } }));
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     expect(facts.pendingDraftCount).toBe(4 + 2 + 1);
     expect(facts.hasUnpublishedChanges).toBe(true);
@@ -270,7 +266,7 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
       branding({ draftLook: { layoutId: 'heritage', themePresetSlug: 'heritage', primaryColor: '#1D2B4A' } }),
     );
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     // The About page's edit is still another edit; the home page is the look's.
     expect(facts.pendingDraftCount).toBe(1);
@@ -280,7 +276,7 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
     siteRows([], [{ id: 1, isHome: true, isDraft: true, deleteStagedAt: null }]);
     getBrandingMock.mockResolvedValue(branding({ draftLook: { layoutId: 'bayfront' } }));
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     expect(facts.pendingDraftCount).toBe(0);
     expect(facts.hasUnpublishedChanges).toBe(false);
@@ -291,7 +287,7 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
     siteRows([{ pageId: 1 }], [HOME]);
     getBrandingMock.mockResolvedValue(branding({ draftLook: { layoutId: 'heritage' } }));
 
-    const facts = await loadSiteFacts(COMMUNITY_ID);
+    const { facts } = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
 
     expect(facts.pendingDraftCount).toBe(0);
     expect(facts.hasUnpublishedChanges).toBe(true);
@@ -299,7 +295,6 @@ describe('loadSiteFacts — unpublished edits besides the look', () => {
 });
 
 describe('loadWebsiteHome', () => {
-  const USER_ID = 'user-1';
   const NOW = new Date('2026-10-29T12:00:00.000Z');
 
   function checklistRow(over: Record<string, unknown>) {
@@ -360,24 +355,6 @@ describe('loadWebsiteHome', () => {
     expect(home.liveNotice).toEqual(LIVE_NOTICE);
   });
 
-  it('reads the live welcome from the home page, published rows only, as stored', async () => {
-    const stored = { headline: 'Welcome to {{name}}', subtitle: 'In {{city}}.' };
-    listSiteBlocksMock.mockResolvedValue([
-      { id: 3, blockType: 'announcements', blockOrder: 2, content: {}, isDraft: false, publishedAt: NOW },
-      { id: 1, blockType: 'hero', blockOrder: 1, content: stored, isDraft: false, publishedAt: NOW },
-    ]);
-
-    const home = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
-
-    // No includeDrafts: Edit words starts from what visitors see, and Undo puts that back.
-    expect(listSiteBlocksMock).toHaveBeenCalledWith({ pageId: 7 });
-    expect(home.liveHero).toEqual(stored);
-  });
-
-  it('reads no live welcome when the home page has no hero', async () => {
-    expect((await loadWebsiteHome(COMMUNITY_ID, USER_ID)).liveHero).toBeNull();
-  });
-
   it('a lapsed snooze reads as none', async () => {
     getUserPreferenceMock.mockResolvedValue({ snoozedUntil: '2026-10-28T00:00:00.000Z' });
 
@@ -402,24 +379,6 @@ describe('loadWebsiteHome', () => {
     expect(loadChecklistMock).not.toHaveBeenCalled();
     expect(listRecordCandidatesMock).not.toHaveBeenCalled();
     expect(records.level).toBe('none');
-  });
-
-  it('reads meetings in the next 90 days, with whether each notice is marked posted', async () => {
-    listMeetingsForCommunityMock.mockResolvedValue([
-      { id: 7, title: 'Board meeting', startsAt: new Date('2026-11-05T23:00:00.000Z'), noticePostedAt: null },
-      { id: 8, title: 'Annual meeting', startsAt: new Date('2026-12-01T23:00:00.000Z'), noticePostedAt: new Date() },
-    ]);
-
-    const home = await loadWebsiteHome(COMMUNITY_ID, USER_ID);
-
-    expect(listMeetingsForCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, {
-      startUtc: NOW,
-      endUtcExclusive: new Date('2027-01-27T12:00:00.000Z'),
-    });
-    expect(home.upcomingMeetings).toEqual([
-      { id: 7, title: 'Board meeting', startsAt: '2026-11-05T23:00:00.000Z', noticePosted: false },
-      { id: 8, title: 'Annual meeting', startsAt: '2026-12-01T23:00:00.000Z', noticePosted: true },
-    ]);
   });
 
   it('names who published last; the version list only when asked for (hasSitePolishBlocks)', async () => {

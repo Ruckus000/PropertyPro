@@ -84,11 +84,11 @@ describe('website editor articles', () => {
     }
   });
 
-  it('florida-website-rules sends a manager to the Records list and the editor\'s missing-records link', () => {
+  it('florida-website-rules sends a manager to the Records tab and the editor\'s missing-records link', () => {
     const text = article('florida-website-rules');
     // The Documents tool was deleted with the rail.
     expect(text).not.toMatch(/\*\*Documents\*\* tool/);
-    expect(text).toContain('**Records** list on your website home');
+    expect(text).toContain('**Records** tab on your Website page');
     expect(text).toMatch(/top bar shows a link with a warning sign and how many records are missing/);
     expect(text).not.toMatch(/\bcompliant\b|\$\d/i);
   });

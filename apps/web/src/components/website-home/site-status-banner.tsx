@@ -1,30 +1,25 @@
 'use client';
 
 /**
- * The website home's status (spec C2): the site is live, at this address.
+ * The website overview's two notices (spec C2): what just happened, and the one
+ * thing worth offering about it. Renders nothing when neither applies.
  *
- * After a publish from the look picker (`?published=1`) it says the site has
- * been updated instead. Both show the address, **View site** and **Copy link**.
+ * - After a publish from the editor (`?published=1`), it says the site has been
+ *   updated.
+ * - While the one-time "Email owners" offer stands (D10: not sent, not
+ *   dismissed, at least one owner) and the site is public (`site_published_at`,
+ *   set from the day the community is created), it asks whether to tell
+ *   owners. **Email owners** sends once; a refusal from the server (already
+ *   sent, dismissed by a colleague, no owners) is shown as the server words it.
+ *   **Not now** retires the offer.
  *
- * While records the statute requires are missing it is not a green check: it
- * says how many, in the warning tone, with a link down to the Records list.
- *
- * While edits wait to be published it is not a green check either: it says so,
- * in the info tone, with a link to the editor, whose Publish button counts the
- * changes and reviews them before they go live. Edits made in the editor are
- * drafts, so without this the home said "live" over a site that was not.
- *
- * While the one-time "Email owners" offer stands (D10: not sent, not dismissed,
- * at least one owner) and the site is public (`site_published_at`, set from the
- * day the community is created), it asks whether to tell owners. **Email owners** sends once; a refusal from the
- * server (already sent, dismissed by a colleague, no owners) is shown as the
- * server words it. **Not now** retires the offer.
+ * The site's address, look, last publish and records are the status list's
+ * (`site-status-list.tsx`); edits waiting to publish are the overview's draft
+ * strip.
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import Link from 'next/link';
-import { CircleAlert, CircleCheck, CircleDashed, Copy, ExternalLink, TriangleAlert } from 'lucide-react';
+import { CircleAlert, CircleCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSiteLiveNotice, type SendSiteLiveNoticeResult } from '@/hooks/use-site-live-notice';
 import { ApiRequestError } from '@/lib/api/request-json';
@@ -33,15 +28,10 @@ import { TOUCH } from './touch';
 export interface SiteStatusBannerProps {
   communityId: number;
   communityName: string;
-  siteUrl: string;
   /** Arrived from a publish (`?published=1`). */
   published: boolean;
   /** Show the "Email owners" offer: offerable, and the site is public. */
   offerEmail: boolean;
-  /** Records the statute requires that the site is missing; 0 when none are required. */
-  missingRecordCount: number;
-  /** Edits are waiting to be published (`SiteFacts.hasUnpublishedChanges`). */
-  hasUnpublishedChanges: boolean;
 }
 
 type Note = { tone: 'ok' | 'error'; text: string };
@@ -60,28 +50,13 @@ function sentNote(result: SendSiteLiveNoticeResult): Note {
   return { tone: 'error', text: "We couldn't send the email just now. Please try again." };
 }
 
-export function SiteStatusBanner({
-  communityId,
-  communityName,
-  siteUrl,
-  published,
-  offerEmail,
-  missingRecordCount,
-  hasUnpublishedChanges,
-}: SiteStatusBannerProps) {
+export function SiteStatusBanner({ communityId, communityName, published, offerEmail }: SiteStatusBannerProps) {
   const router = useRouter();
   const { send, dismiss } = useSiteLiveNotice(communityId);
   const [offerClosed, setOfferClosed] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
-  const address = siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const busy = send.isPending || dismiss.isPending;
-
-  function copyLink() {
-    void navigator.clipboard
-      .writeText(siteUrl)
-      .then(() => toast.success('Link copied.'))
-      .catch(() => toast.error("We couldn't copy the link. Select the address and copy it."));
-  }
+  const showOffer = offerEmail && !offerClosed;
 
   function refused(error: Error) {
     if (error instanceof ApiRequestError && error.status === 409) {
@@ -119,67 +94,27 @@ export function SiteStatusBanner({
     });
   }
 
+  // The status region stays mounted while the offer was ever showing, so what
+  // lands in it after the offer closes is still announced.
+  if (!published && !offerEmail && note === null) return null;
+
   return (
     <section
-      aria-labelledby="site-status-heading"
-      className="space-y-4 rounded-md border border-edge bg-surface-card p-5 shadow-sm"
+      aria-label="Website notices"
+      className="space-y-3 rounded-md border border-edge bg-surface-card p-4"
     >
-      <div className="flex items-start gap-3">
-        {missingRecordCount > 0 ? (
-          <TriangleAlert className="mt-0.5 size-5 shrink-0 text-status-warning" aria-hidden="true" />
-        ) : hasUnpublishedChanges ? (
-          <CircleDashed className="mt-0.5 size-5 shrink-0 text-status-info" aria-hidden="true" />
-        ) : (
-          <CircleCheck className="mt-0.5 size-5 shrink-0 text-status-success" aria-hidden="true" />
-        )}
-        <div className="min-w-0 space-y-1">
-          <h2 id="site-status-heading" className="text-lg font-semibold text-content">
-            {published ? `${communityName}'s website has been updated` : 'Your website is live'}
-          </h2>
-          <p className="break-all text-sm text-content-secondary">{address}</p>
-          {missingRecordCount > 0 && (
-            <p className="text-sm text-content">
-              {missingRecordCount === 1
-                ? '1 record Florida requires is missing.'
-                : `${missingRecordCount} records Florida requires are missing.`}{' '}
-              <a href="#records" className="font-medium text-content-link underline">
-                See the records
-              </a>
-            </p>
-          )}
-          {hasUnpublishedChanges && (
-            <p className="text-sm text-content">
-              You have changes that aren&apos;t published.{' '}
-              <Link
-                href={`/pm/website-editor?communityId=${communityId}&publish=1`}
-                className="font-medium text-content-link underline"
-              >
-                Review and publish
-              </Link>
-            </p>
-          )}
-        </div>
-      </div>
+      {published && (
+        <p className="flex items-start gap-2 text-sm font-medium text-content">
+          <CircleCheck className="mt-0.5 size-4 shrink-0 text-status-success" aria-hidden="true" />
+          {`${communityName}'s website has been updated.`}
+        </p>
+      )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" className={TOUCH}>
-          <a href={siteUrl} target="_blank" rel="noreferrer">
-            View site
-            <ExternalLink className="size-4" aria-hidden="true" />
-            <span className="sr-only">(opens in a new tab)</span>
-          </a>
-        </Button>
-        <Button type="button" variant="outline" className={TOUCH} onClick={copyLink}>
-          <Copy className="size-4" aria-hidden="true" />
-          Copy link
-        </Button>
-      </div>
-
-      {offerEmail && !offerClosed && (
-        <div className="flex flex-col gap-3 border-t border-edge-subtle pt-4 sm:flex-row sm:items-center sm:justify-between">
+      {showOffer && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-content">Let owners know their association has a website.</p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" className={TOUCH} loading={send.isPending} disabled={busy} onClick={emailOwners}>
+            <Button type="button" variant="outline" className={TOUCH} loading={send.isPending} disabled={busy} onClick={emailOwners}>
               Email owners
             </Button>
             <Button type="button" variant="ghost" className={TOUCH} disabled={busy} onClick={notNow}>

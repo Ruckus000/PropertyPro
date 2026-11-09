@@ -1,14 +1,13 @@
 /**
- * The website home (website builder, Phase 4; spec C2, D7).
+ * The website overview (design D; website builder spec C2, D7).
  *
- * Route: /pm/website?communityId=X[&published=1]
+ * Route: /pm/website?communityId=X[&tab=overview|records|versions|settings][&published=1]
  *
- * Where a manager comes back to the association's website, and where every
- * manager edits it (option 1): its status, the welcome words and photo (saved
- * straight to the live site, with Undo), the Florida records still missing,
- * meetings coming up, the details it shows, the look with Change look and
- * Restore, the transparency page, and a quiet link to the full editor.
- * The look picker lands here with `published=1` after a publish.
+ * The front door to the association's website: where it stands, the Florida
+ * records still missing, earlier versions to restore, and the settings that
+ * take effect when saved. Everything about what the site says or how it looks
+ * is changed in the editor (`/pm/website-editor`), behind **Edit website**. The
+ * editor's Publish lands back here with `published=1`.
  *
  * ## Authorization
  *
@@ -35,7 +34,6 @@ import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
 import { loadWebsiteHome } from '@/lib/services/website-home-service';
 import { PageBody } from '@/components/shared/page-body';
-import { PageHeader } from '@/components/shared/page-header';
 import { WebsiteHome } from '@/components/website-home/website-home';
 
 export const dynamic = 'force-dynamic';
@@ -91,7 +89,7 @@ export default async function WebsiteHomePage({ searchParams }: PageProps) {
 
   return (
     <PageBody>
-      <PageHeader title="Website" />
+      {/* The page's PageHeader (and its <h1>) is the overview's: its toolbar holds the tabs. */}
       <WebsiteHome
         communityId={communityId}
         data={data}

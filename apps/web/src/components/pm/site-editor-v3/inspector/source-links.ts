@@ -28,7 +28,7 @@ export const documentsHref = (communityId: number): string =>
 
 /** The website home's list of the records the website shows or still lacks. */
 export const websiteRecordsHref = (communityId: number): string =>
-  `/pm/website?communityId=${communityId}#records`;
+  `/pm/website?communityId=${communityId}&tab=records`;
 
 /** The Community profile section of Settings (ruling R10). */
 export const communityProfileHref = (communityId: number): string =>

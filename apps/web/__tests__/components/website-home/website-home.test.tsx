@@ -1,5 +1,5 @@
 /**
- * The website home (`/pm/website`, spec C2).
+ * The website overview (`/pm/website`, design D; spec C2).
  *
  * The page's components and hooks are real. Mocked at the edges:
  *
@@ -10,7 +10,9 @@
  *   record their props and expose their callbacks — the drawer and dialog have
  *   their own tests, and the upload modal's `skipAutoLink` has its own;
  * - `TransparencyToggle`, which reads its own settings;
- * - the router, so `refresh` can be asserted.
+ * - the router, so `refresh` can be asserted;
+ * - `useUrlView`, as a stateful stand-in seeded from `tabRef`: the tab lives in
+ *   `?tab=`, and the hook has its own tests.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
@@ -19,8 +21,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { WebsiteHomeData } from '@/lib/services/website-home-service';
 
-const { refreshMock, lazyProps } = vi.hoisted(() => ({
+const { refreshMock, lazyProps, tabRef } = vi.hoisted(() => ({
   refreshMock: vi.fn(),
+  /** The `?tab=` the page opens on; null is the Overview. */
+  tabRef: { value: null as string | null },
   lazyProps: {
     upload: null as null | Record<string, unknown>,
     drawer: null as null | Record<string, unknown>,
@@ -34,6 +38,15 @@ const { toastMock } = vi.hoisted(() => {
   return { toastMock: { error: vi.fn(), success: vi.fn((..._args: unknown[]) => `toast-${(next += 1)}`), dismiss: vi.fn() } };
 });
 vi.mock('sonner', () => ({ toast: toastMock }));
+vi.mock('@/hooks/use-url-view', async () => {
+  const { useState } = await import('react');
+  return {
+    useUrlView: <T extends string>(_param: string, coerce: (raw: string | null) => T) => {
+      const [view, set] = useState<T>(() => coerce(tabRef.value));
+      return { view, setView: (next: string) => set(coerce(next)) };
+    },
+  };
+});
 vi.mock('@/components/transparency/transparency-toggle', () => ({
   TransparencyToggle: ({ subdomain }: { subdomain: string }) => <p>Transparency switch for {subdomain}</p>,
 }));
@@ -67,19 +80,6 @@ vi.mock('@/components/website-home/website-home-lazy', () => ({
       <p>{props.description}</p>
       <button type="button" onClick={props.onConfirm}>
         {props.confirmLabel}
-      </button>
-    </div>
-  ),
-}));
-
-// The photo field has its own tests (upload, describe, reorder); here it stands
-// in for a picked file that has not uploaded yet. The axe test renders the real one.
-vi.mock('@/components/pm/site-editor-v3/inspector/forms/fields/HeroPhotosField', () => ({
-  HeroPhotosField: (props: { onPendingChange?: (pending: boolean) => void }) => (
-    <div>
-      <p>Photos</p>
-      <button type="button" onClick={() => props.onPendingChange?.(true)}>
-        Pick a file
       </button>
     </div>
   ),
@@ -134,8 +134,6 @@ function data(over: Partial<WebsiteHomeData> = {}, records: Partial<WebsiteHomeD
         contactPhone: null,
       },
       communityType: 'condo_718',
-      upcomingMeetingCount: 1,
-      newsCount: 0,
       recordsPosted: 9,
       recordsTotal: 12,
       liveLookId: 'bayfront',
@@ -159,12 +157,7 @@ function data(over: Partial<WebsiteHomeData> = {}, records: Partial<WebsiteHomeD
       snoozedUntil: null,
       ...records,
     },
-    upcomingMeetings: [
-      { id: 7, title: 'Board meeting', startsAt: '2026-11-05T23:00:00.000Z', noticePosted: false },
-      { id: 8, title: 'Annual meeting', startsAt: '2026-12-01T23:00:00.000Z', noticePosted: true },
-    ],
     slug: 'sunset-condos',
-    liveHero: { headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' },
     ...over,
   };
 }
@@ -186,6 +179,7 @@ const posts = (path: string) => calls.filter((call) => call.path.startsWith(path
 
 beforeEach(() => {
   vi.clearAllMocks();
+  tabRef.value = null;
   lazyProps.upload = null;
   lazyProps.drawer = null;
   lazyProps.notApplicable = null;
@@ -246,6 +240,10 @@ beforeEach(() => {
 });
 
 describe('records', () => {
+  beforeEach(() => {
+    tabRef.value = 'records';
+  });
+
   it('a covered condo sees the alert with its missing items and the auto-linked count', () => {
     renderHome();
 
@@ -482,17 +480,21 @@ describe('records', () => {
     expect(alert()).toBeNull();
   });
 
-  it('an apartment shows no records section', () => {
-    renderHome(
-      data(
-        { facts: { ...data().facts, communityType: 'apartment' } },
-        { level: 'none', missing: [], conditional: [] },
-      ),
+  it('an apartment has no Records tab, and a link to one lands on the overview', () => {
+    const apartment = data(
+      { facts: { ...data().facts, communityType: 'apartment' } },
+      { level: 'none', missing: [], conditional: [] },
     );
+    renderHome(apartment);
 
+    expect(screen.queryByRole('tab', { name: /Records/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Records' })).not.toBeInTheDocument();
-    expect(alert()).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    cleanup();
+
     // Nor the transparency page, which is for condos and HOAs.
+    tabRef.value = 'settings';
+    renderHome(apartment);
     expect(screen.queryByRole('heading', { name: 'Transparency page' })).not.toBeInTheDocument();
   });
 
@@ -506,37 +508,130 @@ describe('records', () => {
   });
 });
 
-describe('other sections', () => {
-  it('coming up shows "Notice not marked posted yet" and links to Meetings', () => {
+describe('the overview', () => {
+  const statusList = () => screen.getByLabelText('Website status');
+  const value = (label: string) => within(statusList()).getByText(label).nextElementSibling as HTMLElement;
+
+  it('leads with Edit website, its one primary action, beside Visit site', () => {
     renderHome();
 
-    const section = screen.getByRole('heading', { name: 'Coming up' }).closest('section') as HTMLElement;
-    const board = within(section).getByText('Board meeting').closest('li') as HTMLElement;
-    expect(within(board).getByText('Notice not marked posted yet')).toBeInTheDocument();
-    expect(within(board).getByRole('link', { name: 'Open Board meeting in Meetings' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Edit website' })).toHaveAttribute(
       'href',
-      `/communities/${COMMUNITY_ID}/meetings`,
+      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
     );
-    // The start in the community's time zone (23:00 UTC is 6 PM in Miami).
-    expect(within(board).getByText('Thu, Nov 5, 2026, 6:00 PM')).toBeInTheDocument();
-    const annual = within(section).getByText('Annual meeting').closest('li') as HTMLElement;
-    expect(within(annual).getByText('Notice marked posted')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Visit site/ })).toHaveAttribute('href', 'https://sunset-condos.example.com/');
+    // The editor has its own Simple and Advanced; there is no second, quiet way in.
+    expect(screen.queryByRole('link', { name: 'Advanced editor' })).not.toBeInTheDocument();
   });
 
-  it('details show "Not added yet, so it\'s hidden on the site" for empty fields', () => {
+  it('has four tabs for a condo, with the missing records counted on Records', () => {
     renderHome();
 
-    const section = screen.getByRole('heading', { name: 'Details on your site' }).closest('section') as HTMLElement;
-    const value = (label: string) => within(section).getByText(label).nextElementSibling as HTMLElement;
-    expect(value('Name')).toHaveTextContent('Sunset Condos');
-    expect(value('Address')).toHaveTextContent('100 Ocean Dr, Miami, FL 33139');
-    expect(value('Public email')).toHaveTextContent('board@sunsetcondos.org');
-    expect(value('Public phone')).toHaveTextContent("Not added yet, so it's hidden on the site");
-    expect(value('Office hours')).toHaveTextContent("Not added yet, so it's hidden on the site");
-    expect(within(section).getByRole('link', { name: 'Edit in Community profile' })).toHaveAttribute(
+    const tabs = screen.getAllByRole('tab').map((tab) => tab.textContent);
+    expect(tabs).toEqual(['Overview', 'Records 2 missing', 'Versions', 'Settings']);
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('the status list shows the address, the look with Change into the editor, and who published last', () => {
+    renderHome();
+
+    expect(value('Address')).toHaveTextContent('sunset-condos.example.com');
+    expect(within(value('Address')).getByRole('button', { name: 'Copy the address' })).toBeInTheDocument();
+    expect(value('Look')).toHaveTextContent('Bayfront');
+    expect(within(value('Look')).getByRole('link', { name: 'Change the look (now Bayfront)' })).toHaveAttribute(
       'href',
-      `/settings?communityId=${COMMUNITY_ID}#community-profile`,
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&item=look`,
     );
+    expect(value('Last published')).toHaveTextContent('3 days ago by Maria Lopez');
+  });
+
+  it('a site on a legacy layout reads "An older look"', () => {
+    renderHome(data({ facts: { ...data().facts, liveLookId: null } }));
+
+    expect(value('Look')).toHaveTextContent('An older look');
+  });
+
+  it('says Live, and says so when edits are waiting, never by colour alone', () => {
+    renderHome();
+    expect(value('Status')).toHaveTextContent(/^Live$/);
+    expect(value('Status').querySelector('svg.text-status-success')).not.toBeNull();
+    cleanup();
+
+    renderHome(data({ facts: { ...data().facts, hasUnpublishedChanges: true } }));
+    expect(value('Status')).toHaveTextContent('Live, with edits waiting to be published');
+    expect(value('Status').querySelector('svg.text-status-success')).toBeNull();
+  });
+
+  it('counts the records owed, and its missing count opens the Records tab', async () => {
+    const user = renderHome();
+
+    expect(value('Florida records')).toHaveTextContent('9 of 12 posted');
+    await user.click(within(value('Florida records')).getByRole('button', { name: '2 missing' }));
+    expect(screen.getByRole('heading', { level: 2, name: 'Records' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Records/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('does not count records where the statute only recommends them', () => {
+    renderHome(data({}, { level: 'recommended' }));
+
+    expect(within(statusList()).queryByText('Florida records')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('records-attention')).not.toBeInTheDocument();
+  });
+
+  it('names the missing records, and Add records opens the Records tab', async () => {
+    const user = renderHome();
+
+    const attention = screen.getByTestId('records-attention');
+    expect(attention).toHaveTextContent('2 records Florida requires are missing');
+    expect(attention).toHaveTextContent('Annual budget, Meeting minutes.');
+    await user.click(within(attention).getByRole('button', { name: 'Add records' }));
+    expect(alert()).not.toBeNull();
+  });
+
+  // Revert check (production line): `{facts.hasUnpublishedChanges && (` before
+  // the draft strip in `website-home.tsx`.
+  it('while edits wait, says how many, with Keep editing and Review and publish', () => {
+    // 2026-11-03, community 133: nine builder edits sat unpublished for days
+    // under a green "Your website is live", so the builder looked broken.
+    const facts = {
+      ...data().facts,
+      hasUnpublishedChanges: true,
+      pendingDraftCount: 2,
+      draftLookId: 'palm-grove' as const,
+    };
+    renderHome(data({ facts }));
+
+    const strip = screen.getByTestId('draft-strip');
+    // Two edits and the drafted look, which the count leaves out.
+    expect(strip).toHaveTextContent('3 changes saved as a draft, not live yet');
+    expect(within(strip).getByRole('link', { name: 'Keep editing' })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
+    );
+    expect(within(strip).getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&publish=1`,
+    );
+  });
+
+  it('says nothing about drafts when there are none', () => {
+    renderHome();
+    expect(screen.queryByTestId('draft-strip')).not.toBeInTheDocument();
+  });
+
+  it('quick edits open the editor on the welcome or the look, and contact details in Settings', async () => {
+    const user = renderHome();
+
+    expect(screen.getByRole('link', { name: /^Welcome/ })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
+    );
+    expect(screen.getByRole('link', { name: /^Look/ })).toHaveAttribute(
+      'href',
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&item=look`,
+    );
+    await user.click(screen.getByRole('button', { name: /^Contact details/ }));
+    expect(screen.getByRole('heading', { name: 'Details on your site' })).toBeInTheDocument();
   });
 
   it('the email offer shows only while offerable', async () => {
@@ -552,7 +647,7 @@ describe('other sections', () => {
     expect(screen.queryByText(offer)).not.toBeInTheDocument();
     cleanup();
 
-    // A site live from creation with no publish in the log yet (Keep my current look):
+    // A site live from creation with no publish in the log yet:
     // the offer shows, because the site IS public.
     renderHome(data({ liveNotice: live, sitePublished: true, lastPublish: null }));
     expect(screen.getByText(offer)).toBeInTheDocument();
@@ -592,129 +687,52 @@ describe('other sections', () => {
     });
   });
 
-  it('?published=1 shows the updated banner', () => {
+  it('?published=1 says the site was updated, and nothing extra otherwise', () => {
     renderHome(data(), { published: true });
-
-    expect(
-      screen.getByRole('heading', { level: 2, name: "Sunset Condos's website has been updated" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText('sunset-condos.example.com')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /View site/ })).toHaveAttribute('href', 'https://sunset-condos.example.com/');
-    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
-  });
-
-  it('is not a green check while records Florida requires are missing', () => {
-    renderHome();
-
-    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
-    expect(banner).toHaveTextContent('2 records Florida requires are missing.');
-    expect(within(banner).getByRole('link', { name: 'See the records' })).toHaveAttribute('href', '#records');
-    expect(banner.querySelector('.text-status-success')).toBeNull();
-    expect(banner.querySelector('svg.text-status-warning')).not.toBeNull();
-  });
-
-  it('is a green check once nothing required is missing', () => {
-    renderHome(data({}, { missing: [] }));
-
-    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
-    expect(banner).not.toHaveTextContent(/missing/);
-    expect(banner.querySelector('svg.text-status-success')).not.toBeNull();
-    expect(banner.querySelector('svg.text-status-warning')).toBeNull();
-  });
-
-  it('is not a green check while edits wait to be published, and links to the editor to publish them', () => {
-    // 2026-11-03, community 133: nine builder edits sat unpublished for days
-    // under a green "Your website is live", so the builder looked broken.
-    const d = data({}, { missing: [] });
-    renderHome({ ...d, facts: { ...d.facts, hasUnpublishedChanges: true } });
-
-    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
-    expect(banner).toHaveTextContent("You have changes that aren't published.");
-    expect(within(banner).getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
-      'href',
-      `/pm/website-editor?communityId=${COMMUNITY_ID}&publish=1`,
-    );
-    expect(banner.querySelector('svg.text-status-success')).toBeNull();
-    expect(banner.querySelector('svg.text-status-info')).not.toBeNull();
-  });
-
-  it('says nothing about unpublished changes when there are none', () => {
-    renderHome(data({}, { missing: [] }));
-
-    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
-    expect(banner).not.toHaveTextContent(/aren't published/);
-    expect(within(banner).queryByRole('link', { name: 'Review and publish' })).toBeNull();
-  });
-
-  it('does not warn about records where the statute only recommends them', () => {
-    renderHome(data({}, { level: 'recommended' }));
-
-    const banner = screen.getByRole('heading', { level: 2, name: 'Your website is live' }).closest('section') as HTMLElement;
-    expect(banner).not.toHaveTextContent(/missing/);
-  });
-
-  it('without it, says the website is live', () => {
-    renderHome();
-
-    expect(screen.getByRole('heading', { level: 2, name: 'Your website is live' })).toBeInTheDocument();
-  });
-
-  it('your site shows the look, change look, and who published last, and no editor buttons', () => {
-    renderHome();
-
-    const section = screen.getByRole('heading', { name: 'Your site' }).closest('section') as HTMLElement;
-    expect(within(section).getByText('Bayfront')).toBeInTheDocument();
-    expect(within(section).getByRole('link', { name: 'Change look' })).toHaveAttribute(
-      'href',
-      `/pm/website/looks?communityId=${COMMUNITY_ID}`,
-    );
-    expect(section).toHaveTextContent('Last published 3 days ago by Maria Lopez');
-    // Option 1: the full editor is only the quiet link at the end of the page.
-    expect(within(section).queryByRole('link', { name: 'Edit your site' })).toBeNull();
-    expect(within(section).queryByRole('link', { name: 'Site settings' })).toBeNull();
-  });
-
-  it('ends with a quiet Advanced editor link, the one way into the full editor', () => {
-    renderHome();
-
-    const links = screen.getAllByRole('link');
-    const editorLinks = links.filter((link) => link.getAttribute('href')?.startsWith('/pm/website-editor'));
-    expect(editorLinks).toHaveLength(1);
-    expect(editorLinks[0]).toHaveAccessibleName('Advanced editor');
-    expect(editorLinks[0]).toHaveAttribute('href', `/pm/website-editor?communityId=${COMMUNITY_ID}&mode=advanced`);
-    // Last on the page, and a text link, not a button.
-    expect(links[links.length - 1]).toBe(editorLinks[0]);
-  });
-
-  it('a site on a legacy layout reads "An older look"', () => {
-    renderHome(data({ facts: { ...data().facts, liveLookId: null } }));
-
-    expect(screen.getByText('An older look')).toBeInTheDocument();
-  });
-
-  it('a look chosen but not published says so, and links to the picker to publish it or keep the live one', () => {
-    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'palm-grove' } }));
-
-    expect(screen.getByText('Palm Grove is chosen but not published yet.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Publish it or keep Bayfront' })).toHaveAttribute(
-      'href',
-      `/pm/website/looks?communityId=${COMMUNITY_ID}`,
-    );
+    expect(screen.getByText("Sunset Condos's website has been updated.")).toBeInTheDocument();
     cleanup();
 
-    // Over a legacy layout there is no look name to keep.
-    renderHome(data({ facts: { ...data().facts, liveLookId: null, draftLookId: 'heritage' } }));
-    expect(screen.getByText('Heritage is chosen but not published yet.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Publish it or keep your current look' })).toBeInTheDocument();
-    cleanup();
+    renderHome();
+    expect(screen.queryByText(/has been updated/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Website notices' })).not.toBeInTheDocument();
+  });
+});
 
-    // No draft, or a draft of the look already live: nothing to say.
-    renderHome(data({ facts: { ...data().facts, liveLookId: 'bayfront', draftLookId: 'bayfront' } }));
-    expect(screen.queryByText(/is chosen but not published yet/)).not.toBeInTheDocument();
+describe('settings', () => {
+  beforeEach(() => {
+    tabRef.value = 'settings';
+  });
+
+  it('details show "Not added yet, so it\'s hidden on the site" for empty fields', () => {
+    renderHome();
+
+    const section = screen.getByRole('heading', { name: 'Details on your site' }).closest('section') as HTMLElement;
+    const value = (label: string) => within(section).getByText(label).nextElementSibling as HTMLElement;
+    expect(value('Name')).toHaveTextContent('Sunset Condos');
+    expect(value('Address')).toHaveTextContent('100 Ocean Dr, Miami, FL 33139');
+    expect(value('Public email')).toHaveTextContent('board@sunsetcondos.org');
+    expect(value('Public phone')).toHaveTextContent("Not added yet, so it's hidden on the site");
+    expect(value('Office hours')).toHaveTextContent("Not added yet, so it's hidden on the site");
+    expect(within(section).getByRole('link', { name: 'Edit in Community profile' })).toHaveAttribute(
+      'href',
+      `/settings?communityId=${COMMUNITY_ID}#community-profile`,
+    );
+  });
+
+  it('says these take effect when saved, and holds the transparency page for a condo', () => {
+    renderHome();
+
+    expect(screen.getByText(/These take effect when you save them/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Transparency page' })).toBeInTheDocument();
+    expect(screen.getByText('Transparency switch for sunset-condos')).toBeInTheDocument();
   });
 });
 
 describe('restore', () => {
+  beforeEach(() => {
+    tabRef.value = 'versions';
+  });
+
   it('restore shows on Essentials; the version list only with hasSitePolishBlocks', async () => {
     // Essentials: the loader sends no list.
     renderHome(data({ history: null }));
@@ -833,219 +851,11 @@ describe('restore', () => {
   });
 });
 
-describe('the welcome (Edit words / Change photo)', () => {
-  const welcome = () => screen.getByRole('heading', { level: 2, name: 'Your welcome' }).closest('section') as HTMLElement;
-  const heroPatches = () => posts('/api/v1/pm/site/hero');
-
-  it('shows the welcome as visitors read it, never a {{token}}, beside a preview of the site', () => {
-    renderHome();
-
-    const section = welcome();
-    expect(section).toHaveTextContent('Welcome to Sunset Condos');
-    expect(section).toHaveTextContent('Homes in Miami.');
-    expect(section).not.toHaveTextContent('{{');
-    expect(within(section).getByTestId('look-preview-frame')).toHaveAttribute(
-      'src',
-      `/pm/site-preview?communityId=${COMMUNITY_ID}&preview=true`,
-    );
-  });
-
-  it('Edit words prefills the two fields with the resolved words', async () => {
-    const user = renderHome();
-
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-
-    expect(screen.getByLabelText(/Headline/)).toHaveValue('Welcome to Sunset Condos');
-    expect(screen.getByLabelText('Subtitle')).toHaveValue('Homes in Miami.');
-    expect(screen.getByLabelText(/Headline/)).toHaveFocus();
-  });
-
-  it('saving sends the new words live, keeping the untouched field linked, and offers Undo', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.clear(screen.getByLabelText(/Headline/));
-    await user.type(screen.getByLabelText(/Headline/), 'Hello, neighbors');
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    await waitFor(() => expect(heroPatches()).toHaveLength(1));
-    expect(heroPatches()[0]?.body).toEqual({
-      communityId: COMMUNITY_ID,
-      live: true,
-      headline: 'Hello, neighbors',
-      // Left as it was, so it keeps tracking the city.
-      subtitle: 'Homes in {{city}}.',
-    });
-    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
-    expect(toastMock.success).toHaveBeenCalledWith(
-      'Your new welcome words are live.',
-      expect.objectContaining({ action: expect.objectContaining({ label: 'Undo' }) }),
-    );
-    expect(within(welcome()).getByRole('status')).toHaveTextContent('Your new welcome words are live.');
-    // Focus goes back to the button that opened the form.
-    expect(within(welcome()).getByRole('button', { name: 'Edit words' })).toHaveFocus();
-  });
-
-  it('Undo saves the previous welcome back, exactly as it was stored', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.clear(screen.getByLabelText('Subtitle'));
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-    await waitFor(() => expect(heroPatches()).toHaveLength(1));
-    expect(heroPatches()[0]?.body).toEqual({ communityId: COMMUNITY_ID, live: true, headline: 'Welcome to {{name}}' });
-
-    await user.click(within(welcome()).getByRole('button', { name: 'Undo' }));
-
-    await waitFor(() => expect(heroPatches()).toHaveLength(2));
-    expect(heroPatches()[1]?.body).toEqual({
-      communityId: COMMUNITY_ID,
-      live: true,
-      headline: 'Welcome to {{name}}',
-      subtitle: 'Homes in {{city}}.',
-    });
-    await waitFor(() =>
-      expect(toastMock.success).toHaveBeenLastCalledWith('Your previous welcome is back.'),
-    );
-    // The save's toast, with its Undo, is closed rather than left offering an undo of the undo.
-    expect(toastMock.dismiss).toHaveBeenCalledWith(toastMock.success.mock.results[0]?.value);
-  });
-
-  it('the toast Undo does the same', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.type(screen.getByLabelText(/Headline/), '!');
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-    await waitFor(() => expect(toastMock.success).toHaveBeenCalled());
-    const options = toastMock.success.mock.calls[0]?.[1] as { action: { onClick: () => void } };
-
-    options.action.onClick();
-
-    await waitFor(() => expect(heroPatches()).toHaveLength(2));
-    expect(heroPatches()[1]?.body).toMatchObject({ headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' });
-  });
-
-  it('refuses an empty headline without saving', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.clear(screen.getByLabelText(/Headline/));
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Add a headline.');
-    expect(heroPatches()).toHaveLength(0);
-  });
-
-  it('a failed save keeps the form open and says so', async () => {
-    heroStatus = 500;
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.type(screen.getByLabelText(/Headline/), '!');
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent("We couldn't save that just now.");
-    expect(screen.getByLabelText(/Headline/)).toBeInTheDocument();
-    expect(refreshMock).not.toHaveBeenCalled();
-  });
-
-  it('Cancel closes the form without saving', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-
-    await user.click(screen.getByRole('button', { name: 'Cancel' }));
-
-    expect(screen.queryByLabelText(/Headline/)).toBeNull();
-    expect(heroPatches()).toHaveLength(0);
-    expect(within(welcome()).getByRole('button', { name: 'Edit words' })).toHaveFocus();
-  });
-
-  it('Change photo saves the photo list live and drops the legacy single image', async () => {
-    const user = renderHome(
-      data({
-        liveHero: {
-          headline: 'Welcome to {{name}}',
-          heroImagePath: `${COMMUNITY_ID}/hero/old.webp`,
-          heroImageAlt: 'The pool',
-        },
-      }),
-    );
-    await user.click(within(welcome()).getByRole('button', { name: 'Change photo' }));
-    expect(screen.getByRole('heading', { name: 'Change photo' })).toHaveFocus();
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    await waitFor(() => expect(heroPatches()).toHaveLength(1));
-    expect(heroPatches()[0]?.body).toEqual({
-      communityId: COMMUNITY_ID,
-      live: true,
-      headline: 'Welcome to {{name}}',
-      photos: [{ path: `${COMMUNITY_ID}/hero/old.webp`, alt: 'The pool' }],
-    });
-  });
-
-  it('Change photo will not save while a picked photo has not uploaded, so it is never dropped', async () => {
-    const user = renderHome();
-    await user.click(within(welcome()).getByRole('button', { name: 'Change photo' }));
-    await user.click(screen.getByRole('button', { name: 'Pick a file' }));
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Upload the photo you picked first, or remove it.');
-    expect(heroPatches()).toHaveLength(0);
-  });
-
-  it('with no welcome yet, saving words creates one and offers no Undo', async () => {
-    const user = renderHome(data({ liveHero: null }));
-    expect(welcome()).toHaveTextContent('Sunset Condos');
-    await user.click(within(welcome()).getByRole('button', { name: 'Edit words' }));
-    await user.type(screen.getByLabelText('Subtitle'), 'On the beach.');
-
-    await user.click(screen.getByRole('button', { name: 'Save and publish' }));
-
-    await waitFor(() => expect(heroPatches()).toHaveLength(1));
-    expect(heroPatches()[0]?.body).toEqual({
-      communityId: COMMUNITY_ID,
-      live: true,
-      headline: '{{name}}',
-      subtitle: 'On the beach.',
-    });
-    await waitFor(() =>
-      expect(toastMock.success).toHaveBeenCalledWith('Your new welcome words are live.'),
-    );
-    expect(within(welcome()).queryByRole('button', { name: 'Undo' })).toBeNull();
-  });
-
-  it('lists what is filled in for you, what each shows, and where it comes from', () => {
-    renderHome();
-
-    const list = screen.getByRole('list', { name: 'Filled in for you' });
-    const rows = within(list).getAllByRole('listitem');
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining('Meetings1 upcoming meeting'),
-      expect.stringContaining('NewsNothing yet'),
-      expect.stringContaining('Records9 of 12 posted'),
-      expect.stringContaining('ContactYour address, email'),
-    ]);
-    expect(within(list).getByRole('link', { name: /Open Meetings/ })).toHaveAttribute(
-      'href',
-      `/communities/${COMMUNITY_ID}/meetings`,
-    );
-    expect(within(list).getByRole('link', { name: /Open Announcements/ })).toHaveAttribute(
-      'href',
-      `/announcements?communityId=${COMMUNITY_ID}`,
-    );
-    expect(within(list).getByRole('link', { name: /Open Documents/ })).toHaveAttribute(
-      'href',
-      `/communities/${COMMUNITY_ID}/documents`,
-    );
-    expect(within(list).getByRole('link', { name: /Open Community profile/ })).toHaveAttribute(
-      'href',
-      `/settings?communityId=${COMMUNITY_ID}#community-profile`,
-    );
-  });
-});
-
 describe('contact details', () => {
+  beforeEach(() => {
+    tabRef.value = 'settings';
+  });
+
   const details = () => screen.getByRole('heading', { name: 'Details on your site' }).closest('section') as HTMLElement;
 
   it('asks for the missing phone in one line, and keeps the link to Settings', () => {
@@ -1070,6 +880,10 @@ describe('contact details', () => {
 });
 
 describe('records progress', () => {
+  beforeEach(() => {
+    tabRef.value = 'records';
+  });
+
   it('counts the records posted of those owed, above one compact list', () => {
     renderHome();
 

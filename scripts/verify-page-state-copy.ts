@@ -122,12 +122,11 @@ const VISIBILITY_VOCABULARY: RegExp[] = [
  *
  * The website-home entries (added with that scan root, 2026-10-29) were read
  * one by one and are true by construction, none a page-visibility claim:
- *   - look-picker.tsx (2): "Live now" on the card whose look IS the live look
- *     (`facts.liveLookId`), as text and in the card's accessible name.
  *   - site-details-card.tsx (1): the heading "Details on your site".
- *   - your-site-card.tsx (2): "{Look} is chosen but not published yet", shown
- *     only while a drafted look differs from the live one; and "Live now" on
- *     the newest publish in the version list, which is the live version.
+ *   - your-site-card.tsx (1): "Live now" on the newest publish in the version
+ *     list, which is the live version.
+ * The look picker's two lines left with the picker (design D, 2026-11-08), and
+ * so did the "{Look} is chosen but not published yet" line in your-site-card.
  */
 const BASELINE_PATH = join(repoRoot, 'scripts/page-state-copy-baseline.json');
 

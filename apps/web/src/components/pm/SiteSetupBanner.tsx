@@ -71,13 +71,13 @@ export function SiteSetupBanner({ hasIncompleteSite, firstIncompleteCommunityId,
         <Button asChild size="sm">
           {/*
             A plain <a>, not next/link: this leaves the PM portal for the
-            community-scoped look picker, and the destination reads
+            editor's Look row, and the destination reads
             `communityId` server-side to resolve tenancy.
           */}
           <a
             href={
               firstIncompleteCommunityId
-                ? `/pm/website/looks?communityId=${firstIncompleteCommunityId}`
+                ? `/pm/website-editor?communityId=${firstIncompleteCommunityId}&item=look`
                 : '/pm/website-editor'
             }
             data-testid="site-setup-banner-cta"
