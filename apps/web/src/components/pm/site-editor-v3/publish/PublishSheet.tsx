@@ -169,6 +169,13 @@ export interface PublishSheetProps {
    * silently never appear.
    */
   complianceSubject: ComplianceSubject;
+  /**
+   * Called after a publish SUCCEEDS, once the sheet has closed: the editor takes
+   * the manager back to the website overview. Never on a refusal, a conflict, an
+   * error or a schedule, which all leave the manager where they are. Absent, the
+   * sheet just closes.
+   */
+  onPublished?: () => void;
 }
 
 /**
@@ -334,6 +341,7 @@ export function PublishSheet({
   onFixIssue,
   onGoToPages,
   complianceSubject,
+  onPublished,
 }: PublishSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -359,6 +367,7 @@ export function PublishSheet({
             onGoToPages={onGoToPages}
             onOpenChange={onOpenChange}
             complianceSubject={complianceSubject}
+            onPublished={onPublished}
           />
         ) : null}
       </SheetContent>
@@ -379,6 +388,7 @@ interface BodyProps {
   onGoToPages: () => void;
   onOpenChange: (open: boolean) => void;
   complianceSubject: ComplianceSubject;
+  onPublished?: () => void;
 }
 
 function PublishSheetBody({
@@ -389,6 +399,7 @@ function PublishSheetBody({
   onGoToPages,
   onOpenChange,
   complianceSubject,
+  onPublished,
 }: BodyProps) {
   // The same hook the top bar's Publish button reads, so the button's enabled
   // state and this sheet's change count are one computation, not two.
@@ -591,6 +602,10 @@ function PublishSheetBody({
     try {
       const result = await publish.mutateAsync({
         expectedPublishedAt: tokenQuery.data ?? null,
+        // The editor is where a look is chosen and the site set up, so a publish
+        // from here finishes the website setup (the dashboard's nudge). The
+        // server stamps it once and never again.
+        markOnboardingComplete: true,
       });
       if (!result.published) {
         setReceipt({
@@ -614,6 +629,7 @@ function PublishSheetBody({
         : '';
       toast.success(describeOutcome(result) + scheduleNote);
       onOpenChange(false);
+      onPublished?.();
     } catch (error) {
       if (error instanceof PublishConflictError) {
         setReceipt({

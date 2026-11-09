@@ -301,7 +301,7 @@ describe('RequirementsPill', () => {
     expect(await screen.findByText('3 records are still missing')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'See which ones' })).toHaveAttribute(
       'href',
-      '/pm/website?communityId=7#records',
+      '/pm/website?communityId=7&tab=records',
     );
   });
 

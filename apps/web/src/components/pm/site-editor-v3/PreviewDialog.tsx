@@ -158,7 +158,7 @@ export function PreviewDialog({
   );
 }
 
-interface PreviewBodyProps {
+export interface PreviewBodyProps {
   communityId: number;
   context: CanvasContext;
   now?: number;
@@ -167,7 +167,12 @@ interface PreviewBodyProps {
   page?: SitePageContext;
 }
 
-function PreviewBody({ communityId, context, now, nav, footer, page }: PreviewBodyProps) {
+/**
+ * The read-only page itself. Also Simple mode's preview, which shows it beside
+ * the welcome and look controls; it follows the blocks query, so an autosave
+ * shows here without a reload.
+ */
+export function PreviewBody({ communityId, context, now, nav, footer, page }: PreviewBodyProps) {
   const { data: blocks, isPending, isError, error, refetch } = useContentBlocks(communityId);
   const selectedPageId = useSelectedSitePage();
 

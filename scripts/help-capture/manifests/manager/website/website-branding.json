@@ -36,29 +36,21 @@
     {
       "name": "wb-domain",
       "kind": "still",
-      "route": "/pm/website-editor?communityId={cid}",
+      "route": "/pm/website?communityId={cid}&tab=settings",
       "role": "cam",
       "community": "condo",
       "actions": [
         {
           "type": "waitFor",
-          "selector": "[data-testid=\"editor-view-settings\"]"
+          "selector": "role=textbox[name=\"Your domain\"]"
         },
         {
-          "type": "click",
-          "selector": "[data-testid=\"editor-view-settings\"]"
-        },
-        {
-          "type": "click",
-          "selector": "role=tab[name=\"Address & domain\"]"
-        },
-        {
-          "type": "waitFor",
+          "type": "scrollTo",
           "selector": "role=textbox[name=\"Your domain\"]"
         }
       ],
       "clipTo": [
-        "#settings-panel-address > div:has(> h3:text-is(\"Use your own domain\"))"
+        "[data-testid=\"live-site-settings\"] > div:has(> h3:text-is(\"Use your own domain\"))"
       ],
       "highlight": "role=textbox[name=\"Your domain\"]",
       "step": 2

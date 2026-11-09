@@ -384,7 +384,7 @@ export function HelpDrawer({
                   </p>
                 ) : null}
                 <GuideList
-                  title={view === 'settings' ? 'Help with Site settings' : 'Help with your website'}
+                  title={view === 'settings' ? 'Help with Pages & design' : 'Help with your website'}
                   articles={guides.filter((g) => EDITOR_GUIDES[g.slug]?.views.includes(view))}
                   onOpen={setOpen}
                 />

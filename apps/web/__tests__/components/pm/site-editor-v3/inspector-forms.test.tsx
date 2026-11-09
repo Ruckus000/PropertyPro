@@ -549,7 +549,7 @@ describe('BoardForm', () => {
   });
 });
 
-describe('HeroForm — "Shows as" for linked fields', () => {
+describe('HeroForm — the words as the page shows them', () => {
   const HARBOR: LinkedFacts = {
     name: 'Harbor Pointe Condominium Association, Inc.',
     shortName: 'Harbor Pointe',
@@ -557,53 +557,36 @@ describe('HeroForm — "Shows as" for linked fields', () => {
     unitCount: 120,
   };
 
-  function renderHero(content: unknown, facts: LinkedFacts | null = HARBOR) {
+  function renderHero(
+    content: unknown,
+    facts: LinkedFacts | null = HARBOR,
+    options: { layoutId?: string | null; variant?: 'full' | 'simple' } = {},
+  ) {
     return render(
       <LinkedFactsProvider facts={facts}>
-        <HeroForm communityId={7} blockType="hero" blockOrder={1} content={content} />
+        {withSources(
+          <HeroForm
+            communityId={7}
+            blockType="hero"
+            blockOrder={1}
+            content={content}
+            variant={options.variant}
+          />,
+          { layoutId: options.layoutId ?? null },
+        )}
       </LinkedFactsProvider>,
     );
   }
   const headline = () => screen.getByLabelText(/headline/i) as HTMLInputElement;
   const subtitle = () => screen.getByLabelText('Subtitle') as HTMLTextAreaElement;
 
-  it('the hero form shows "Shows as: Welcome to Harbor Pointe" for "Welcome to {{name}}"', () => {
-    renderHero({ headline: 'Welcome to {{name}}' });
-    expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
-  });
-
-  it('keeps the typed words in the field, and the line next to it for a screen reader', () => {
+  it('shows "Welcome to Harbor Pointe" for "Welcome to {{name}}", never the template', () => {
     renderHero({ headline: 'Welcome to {{name}}', subtitle: '{{units}} homes in {{city}}.' });
-    expect(headline()).toHaveValue('Welcome to {{name}}');
-    expect(headline()).toHaveAccessibleDescription('Shows as: Welcome to Harbor Pointe');
-    expect(subtitle()).toHaveValue('{{units}} homes in {{city}}.');
-    expect(subtitle()).toHaveAccessibleDescription('Shows as: 120 homes in Miami.');
+    expect(headline()).toHaveValue('Welcome to Harbor Pointe');
+    expect(subtitle()).toHaveValue('120 homes in Miami.');
   });
 
-  it('follows the headline as it is typed', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome to {{name}}' });
-
-    await user.type(headline(), ' today');
-
-    expect(screen.getByText('Shows as: Welcome to Harbor Pointe today')).toBeInTheDocument();
-  });
-
-  it('fills the subtitle from the community facts', () => {
-    renderHero({
-      headline: 'Welcome',
-      subtitle: '{{units}} homes in {{city}}. Meeting notices and records, all in one place.',
-    });
-    expect(
-      screen.getByText(
-        'Shows as: 120 homes in Miami. Meeting notices and records, all in one place.',
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it('shows what is left when a sentence drops for a fact the community has not given', () => {
-    // The page drops the whole sentence, not just the token, and the line is how
-    // the author sees that it happened.
+  it('leaves out a sentence for a fact the community has not given, as the page does', () => {
     renderHero(
       {
         headline: 'Welcome',
@@ -611,76 +594,75 @@ describe('HeroForm — "Shows as" for linked fields', () => {
       },
       { ...HARBOR, city: null, unitCount: null },
     );
-    expect(
-      screen.getByText('Shows as: Meeting notices and records, all in one place.'),
-    ).toBeInTheDocument();
-  });
-
-  it('says the subtitle shows nothing when every sentence drops', () => {
-    renderHero(
-      { headline: 'Welcome', subtitle: '{{units}} homes in {{city}}.' },
-      { ...HARBOR, city: null },
-    );
-    expect(
-      screen.getByText(
-        "Shows as: nothing. It uses a detail your Community profile doesn't have yet.",
-      ),
-    ).toBeInTheDocument();
+    expect(subtitle()).toHaveValue('Meeting notices and records, all in one place.');
   });
 
   it('shows the community name when the whole headline drops, as the page does', () => {
-    // The page keeps its <h1> by falling back to the display name.
     renderHero({ headline: '{{city}}' }, { ...HARBOR, city: null });
-    expect(screen.getByText('Shows as: Harbor Pointe')).toBeInTheDocument();
-
-    renderHero({ headline: '{{city}}' }, { ...HARBOR, shortName: null, city: null });
-    expect(
-      screen.getByText('Shows as: Harbor Pointe Condominium Association, Inc.'),
-    ).toBeInTheDocument();
+    expect(headline()).toHaveValue('Harbor Pointe');
   });
 
-  it('adds no line for words that use no linked detail, or for an empty subtitle', () => {
-    renderHero({ headline: 'Welcome home' });
-    expect(screen.queryByText(/Shows as/)).not.toBeInTheDocument();
-    expect(headline()).not.toHaveAccessibleDescription();
+  it('shows words with no detail in them exactly as stored', () => {
+    renderHero({ headline: 'Welcome home', subtitle: 'Our own words.' });
+    expect(headline()).toHaveValue('Welcome home');
+    expect(subtitle()).toHaveValue('Our own words.');
   });
 
-  it('adds no line when the community facts are not known', () => {
+  it('shows the stored words when the community facts are not known', () => {
     renderHero({ headline: 'Welcome to {{name}}' }, null);
-    expect(screen.queryByText(/Shows as/)).not.toBeInTheDocument();
+    expect(headline()).toHaveValue('Welcome to {{name}}');
   });
 
-  it('shows a name holding markup or a token exactly as typed, and creates no element', () => {
+  it('shows a name holding markup or a token as plain text, and creates no element', () => {
     const { container } = renderHero(
-      { headline: 'Welcome to {{name}}', subtitle: 'Home of {{name}}.' },
+      { headline: 'Welcome to {{name}}' },
       { ...HARBOR, shortName: null, name: '<b>Rose</b> {{city}} Court' },
     );
-    expect(screen.getByText('Shows as: Welcome to <b>Rose</b> {{city}} Court')).toBeInTheDocument();
+    expect(headline()).toHaveValue('Welcome to <b>Rose</b> {{city}} Court');
     expect(container.querySelector('b')).toBeNull();
   });
 
-  it('saves the words as typed, never the line it shows', async () => {
-    // The tokens are what keep the site current after a rename; saving the
-    // resolved text would freeze today's name into the hero.
+  it('saves what the manager sees once they type in a field', async () => {
     const user = setupTimers();
-    renderHero({ headline: 'Welcome to {{name}}', subtitle: 'Old.' });
+    renderHero({ headline: 'Welcome to {{name}}', subtitle: '{{units}} homes in {{city}}.' });
 
-    await user.clear(subtitle());
-    // Pasted: `type` reads a brace as the start of a key name.
-    await user.click(subtitle());
-    await user.paste('{{units}} homes.');
+    await user.type(headline(), ' today');
+    await settleAutosave();
+
+    const sent = updateHeroMock.mock.calls.at(-1)![0];
+    expect(sent.headline).toBe('Welcome to Harbor Pointe today');
+    // The field nobody typed in keeps its details, so it still follows the profile.
+    expect(sent.subtitle).toBe('{{units}} homes in {{city}}.');
+  });
+
+  // Guards the design rather than one line: the DRAFT keeps the stored words and
+  // only the field shows them resolved. A form that resolved them into the draft
+  // would save the community's name in place of `{{name}}` on any edit at all.
+  it('keeps the stored details when something other than the words changes', async () => {
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome to {{name}}', subtitle: '{{units}} homes in {{city}}.' });
+
+    await user.type(screen.getByLabelText('Button label'), 'Sign in');
+    await user.type(screen.getByLabelText('Button link'), '/auth/login');
     await settleAutosave();
 
     const sent = updateHeroMock.mock.calls.at(-1)![0];
     expect(sent.headline).toBe('Welcome to {{name}}');
-    expect(sent.subtitle).toBe('{{units}} homes.');
+    expect(sent.subtitle).toBe('{{units}} homes in {{city}}.');
+  });
+
+  it('offers no buttons that put a detail into the words', () => {
+    renderHero({ headline: 'Welcome' });
+    expect(
+      screen.queryByRole('group', { name: 'Add a detail from your Community profile' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Insert the community name' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Shows as/)).not.toBeInTheDocument();
   });
 
   describe('matches the page', () => {
-    // The line is only worth having if it is what the page shows. Rendered
+    // Worth having only if the field shows what the page shows. Rendered
     // through the real HeroBlock, so the two cannot drift apart unnoticed.
-    const NOTHING = "Shows as: nothing. It uses a detail your Community profile doesn't have yet.";
-
     function pageOf(content: unknown, facts: LinkedFacts) {
       const community: PublicCommunity = {
         id: 1,
@@ -716,8 +698,6 @@ describe('HeroForm — "Shows as" for linked fields', () => {
       return shown;
     }
 
-    // Each headline and subtitle uses a linked detail: that is when the form
-    // shows a line at all.
     const WELCOME = 'Welcome to {{name}}';
     const COUNTED = '{{units}} homes in {{city}}. Notices for {{name}} here.';
     const CASES: [string, { headline: string; subtitle: string }, LinkedFacts][] = [
@@ -734,178 +714,24 @@ describe('HeroForm — "Shows as" for linked fields', () => {
       const page = pageOf(content, facts);
       renderHero(content, facts);
 
-      expect(screen.getByText(`Shows as: ${page.headline}`)).toBeInTheDocument();
-      expect(
-        screen.getByText(page.subtitle === '' ? NOTHING : `Shows as: ${page.subtitle}`),
-      ).toBeInTheDocument();
+      expect(headline()).toHaveValue(page.headline);
+      expect(subtitle()).toHaveValue(page.subtitle);
     });
   });
-});
 
-describe('HeroForm — linked-detail chips and buttons', () => {
-  const HARBOR: LinkedFacts = {
-    name: 'Harbor Pointe Condominium Association, Inc.',
-    shortName: 'Harbor Pointe',
-    city: 'Miami',
-    unitCount: 120,
-  };
-
-  function renderHero(content: unknown, layoutId: string | null = null) {
-    return render(
-      <LinkedFactsProvider facts={HARBOR}>
-        {withSources(
-          <HeroForm communityId={7} blockType="hero" blockOrder={1} content={content} />,
-          { layoutId },
-        )}
-      </LinkedFactsProvider>,
-    );
-  }
-  const headline = () => screen.getByLabelText(/headline/i) as HTMLInputElement;
-  const subtitle = () => screen.getByLabelText('Subtitle') as HTMLTextAreaElement;
-  const insertButton = (name: string) => screen.getByRole('button', { name });
-  const chips = () => Array.from(document.querySelectorAll('[data-linked-field]'));
-
-  it('the Name chip inserts {{name}}', async () => {
+  it('"Use the look\'s wording" restores the bayfront defaults, details and all', async () => {
     const user = setupTimers();
-    renderHero({ headline: 'Welcome to !' });
-
-    // The cursor sits between "to " and "!": the detail goes there, not at the end.
-    headline().focus();
-    headline().setSelectionRange(11, 11);
-    await user.click(insertButton('Insert the community name'));
-
-    expect(headline()).toHaveValue('Welcome to {{name}}!');
-    // The words become a chip, and the line still says what the page shows.
-    expect(chips().map((chip) => chip.getAttribute('data-linked-field'))).toEqual(['name']);
-    expect(chips()[0]!.textContent).toContain('Community name');
-    expect(screen.getByText('Shows as: Welcome to Harbor Pointe!')).toBeInTheDocument();
-    // The cursor is behind the detail, still in the headline, ready to go on typing.
-    expect(headline()).toHaveFocus();
-    expect(headline().selectionStart).toBe(19);
-    // Said aloud too, since focus moved to the field and the button row is behind it.
-    expect(screen.getByText('Added the community name to the headline.')).toHaveAttribute(
-      'role',
-      'status',
-    );
-
-    await settleAutosave();
-    expect(updateHeroMock.mock.calls.at(-1)![0].headline).toBe('Welcome to {{name}}!');
-
-    // ...and gone once the manager types on.
-    await user.type(headline(), 'x');
-    expect(screen.queryByText(/Added the community name/)).not.toBeInTheDocument();
-  });
-
-  it('puts City and Homes into the subtitle when that is the field being edited', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome', subtitle: 'Homes in .' });
-
-    subtitle().focus();
-    subtitle().setSelectionRange(9, 9);
-    await user.click(insertButton('Insert the city'));
-    expect(subtitle()).toHaveValue('Homes in {{city}}.');
-
-    subtitle().setSelectionRange(0, 0);
-    await user.click(insertButton('Insert the number of homes'));
-    expect(subtitle()).toHaveValue('{{units}}Homes in {{city}}.');
-    expect(headline()).toHaveValue('Welcome');
-  });
-
-  it('adds the detail to the end of the headline when no field has been used', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome to ' });
-
-    await user.click(insertButton('Insert the community name'));
-
-    expect(headline()).toHaveValue('Welcome to {{name}}');
-  });
-
-  it('forgets the field once focus has gone to another control', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome to ', subtitle: 'Homes in .' });
-
-    subtitle().focus();
-    subtitle().setSelectionRange(9, 9);
-    await user.click(screen.getByLabelText('Button label'));
-    await user.click(insertButton('Insert the community name'));
-
-    // Not into the subtitle it was last in: the headline's end, like a fresh form.
-    expect(subtitle()).toHaveValue('Homes in .');
-    expect(headline()).toHaveValue('Welcome to {{name}}');
-  });
-
-  it('replaces the words selected in the field', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome to our home' });
-
-    headline().focus();
-    headline().setSelectionRange(11, 19);
-    await user.click(insertButton('Insert the community name'));
-
-    expect(headline()).toHaveValue('Welcome to {{name}}');
-  });
-
-  it('inserts into the field the keyboard user was in, though focus is on the button', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Welcome', subtitle: 'Homes in .' });
-
-    subtitle().focus();
-    subtitle().setSelectionRange(9, 9);
-    await user.tab();
-    expect(insertButton('Insert the community name')).toHaveFocus();
-    await user.keyboard('{Enter}');
-
-    expect(subtitle()).toHaveValue('Homes in {{name}}.');
-  });
-
-  it('says so, and changes nothing, when the field has no room left', async () => {
-    const user = setupTimers();
-    const full = 'x'.repeat(115);
-    renderHero({ headline: full });
-
-    await user.click(insertButton('Insert the community name'));
-
-    expect(headline()).toHaveValue(full);
-    expect(screen.getByText(/There isn't room left in the headline for that\./)).toHaveAttribute(
-      'role',
-      'status',
-    );
-  });
-
-  it('names what each button inserts, and keeps its short label in that name', () => {
-    renderHero({ headline: 'Welcome' });
-    for (const [label, name] of [
-      ['Name', 'Insert the community name'],
-      ['City', 'Insert the city'],
-      ['Homes', 'Insert the number of homes'],
-    ] as const) {
-      const button = insertButton(name);
-      expect(button).toHaveTextContent(label);
-      expect(name.toLowerCase()).toContain(label.toLowerCase());
-    }
-  });
-
-  it('shows no chip for words that use no linked detail', () => {
-    renderHero({ headline: 'Welcome home' });
-    expect(chips()).toHaveLength(0);
-  });
-
-  it('"Use the look\'s wording" restores the bayfront defaults', async () => {
-    const user = setupTimers();
-    renderHero({ headline: 'Our own words', subtitle: 'Something else.' }, 'bayfront');
+    renderHero({ headline: 'Our own words', subtitle: 'Something else.' }, HARBOR, {
+      layoutId: 'bayfront',
+    });
 
     await user.click(screen.getByRole('button', { name: "Use the look's wording" }));
 
     const bayfront = getLook('bayfront')!.sections.find((section) => section.blockType === 'hero')!
       .content as { headline: string; subtitle: string };
-    expect(headline()).toHaveValue('Welcome to {{name}}');
-    expect(subtitle()).toHaveValue(
-      '{{units}} homes in {{city}}. Meeting notices, news and community records, all in one place.',
-    );
-    expect(headline()).toHaveValue(bayfront.headline);
-    expect(subtitle()).toHaveValue(bayfront.subtitle);
-
-    // Through the form's normal save, like any other edit.
+    // Shown as the page shows it…
+    expect(headline()).toHaveValue('Welcome to Harbor Pointe');
+    // …and saved with its details, so it follows the profile again.
     await settleAutosave();
     const sent = updateHeroMock.mock.calls.at(-1)![0];
     expect(sent.headline).toBe(bayfront.headline);
@@ -921,7 +747,8 @@ describe('HeroForm — linked-detail chips and buttons', () => {
         ctaTarget: '/auth/login',
         photos: [{ stock: 'sunset', alt: 'A sunset over the water' }],
       },
-      'bayfront',
+      HARBOR,
+      { layoutId: 'bayfront' },
     );
 
     await user.click(screen.getByRole('button', { name: "Use the look's wording" }));
@@ -936,10 +763,40 @@ describe('HeroForm — linked-detail chips and buttons', () => {
   it.each(['tidewater', 'boulevard', 'sable', null])(
     'has no look to go back to on the %s layout, so the button is not offered',
     (layoutId) => {
-      renderHero({ headline: 'Our own words' }, layoutId);
+      renderHero({ headline: 'Our own words' }, HARBOR, { layoutId });
       expect(screen.queryByRole('button', { name: "Use the look's wording" })).not.toBeInTheDocument();
     },
   );
+
+  describe('in Simple', () => {
+    it('shows the words and photos only', () => {
+      renderHero({ headline: 'Welcome to {{name}}' }, HARBOR, {
+        layoutId: 'bayfront',
+        variant: 'simple',
+      });
+      expect(headline()).toHaveValue('Welcome to Harbor Pointe');
+      expect(subtitle()).toBeInTheDocument();
+      expect(screen.queryByLabelText('Button label')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Button link')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: "Use the look's wording" })).not.toBeInTheDocument();
+    });
+
+    // The button is not offered here, but one set in Advanced must survive.
+    it('keeps a button set in Advanced when the words change', async () => {
+      const user = setupTimers();
+      renderHero(
+        { headline: 'Welcome', ctaText: 'Sign in', ctaTarget: '/auth/login' },
+        HARBOR,
+        { variant: 'simple' },
+      );
+      await user.type(headline(), '!');
+      await settleAutosave();
+      const sent = updateHeroMock.mock.calls.at(-1)![0];
+      expect(sent.headline).toBe('Welcome!');
+      expect(sent.ctaText).toBe('Sign in');
+      expect(sent.ctaTarget).toBe('/auth/login');
+    });
+  });
 });
 
 describe('SorEmptyTextForm — the panels say where the content comes from', () => {
@@ -1076,7 +933,7 @@ describe('SorEmptyTextForm — the panels say where the content comes from', () 
     expect(within(records).getByText('Meeting minutes · 2')).toBeInTheDocument();
     expect(
       within(records).getByRole('link', { name: 'See the records on your website home' }),
-    ).toHaveAttribute('href', '/pm/website?communityId=7#records');
+    ).toHaveAttribute('href', '/pm/website?communityId=7&tab=records');
   });
 
   it('says so when no record is posted for owners yet', () => {

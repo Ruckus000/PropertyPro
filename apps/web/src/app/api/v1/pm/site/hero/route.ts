@@ -2,8 +2,7 @@
  * PR #1b: PM site editor — hero block endpoint.
  *
  * GET  /api/v1/pm/site/hero?communityId=X   — read current hero (draft wins)
- * PATCH /api/v1/pm/site/hero                — upsert the hero draft, or with
- *                                             `live: true` the published hero
+ * PATCH /api/v1/pm/site/hero                — upsert the hero draft
  *
  * Authorization: caller must hold a management role (property_manager / root_manager) in the target community and the
  * community's subscription plan must include `hasSiteEditor`.
@@ -11,11 +10,8 @@
  * Slice 8e is live: PATCH writes a draft row; the public site keeps serving
  * the last-published hero until POST /api/v1/pm/site/publish promotes it.
  *
- * `live: true` (the website home's Edit words / Change photo) writes the
- * published row instead, so the public site shows it on the next request. If a
- * hero draft exists it is overwritten with the same content, so a later
- * publish from the editor cannot bring the older words back: the newest edit
- * wins. Undo is the client saving the previous content back the same way.
+ * Every hero edit is a draft, from either editor mode: the website's rule is
+ * that nothing goes live until Publish (design D).
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -53,17 +49,6 @@ async function ensurePmAccess(
   return { userId, communityId: effective, membership };
 }
 
-/** A hero draft on the home page: the row a later editor publish would promote. */
-async function hasHeroDraft(communityId: number): Promise<boolean> {
-  const reader = getPublicCommunityScopedReader(communityId);
-  const homePageId = await reader.getHomePageId();
-  const blocks = await reader.listSiteBlocks({
-    includeDrafts: true,
-    ...(homePageId === null ? {} : { pageId: homePageId }),
-  });
-  return blocks.some((block) => block.blockType === 'hero' && block.isDraft);
-}
-
 export const GET = withErrorHandler(
   runRoute(heroBlockGetContract, async ({ query, req }) => {
     const { communityId, membership } = await ensurePmAccess(req, query.communityId, {
@@ -95,7 +80,7 @@ export const GET = withErrorHandler(
 
 export const PATCH = withErrorHandler(
   runRoute(heroBlockPatchContract, async ({ body, req }) => {
-    const { communityId: rawCommunityId, live = false, ...heroFields } = body;
+    const { communityId: rawCommunityId, ...heroFields } = body;
     const { userId, communityId } = await ensurePmAccess(req, rawCommunityId);
 
     const heroParse = heroBlockSchema.safeParse(heroFields);
@@ -126,41 +111,15 @@ export const PATCH = withErrorHandler(
       collectBlockAssetPaths('hero', heroParse.data),
     );
 
-    if (!live) {
-      // PR #8e — hero edits write to the draft row at block_order=1. The
-      // public site continues to serve the last-published hero until the PM
-      // clicks Publish.
-      await upsertPublishedHero({
-        communityId,
-        actorUserId: userId,
-        content: heroParse.data,
-        isDraft: true,
-      });
-      return { ok: true as const };
-    }
-
-    // ponytail: an edited welcome is saved as literal text and stops tracking
-    // name/city/units. Trigger: a community renames or changes unit count and
-    // its welcome goes stale.
+    // PR #8e — hero edits write to the draft row at block_order=1. The public
+    // site continues to serve the last-published hero until the PM clicks
+    // Publish.
     await upsertPublishedHero({
       communityId,
       actorUserId: userId,
       content: heroParse.data,
-      isDraft: false,
+      isDraft: true,
     });
-
-    // ponytail: live write and draft overwrite are two transactions; a failed
-    // second leaves a stale draft, nothing lost. Trigger: a support report of a
-    // publish restoring old welcome words.
-    if (await hasHeroDraft(communityId)) {
-      await upsertPublishedHero({
-        communityId,
-        actorUserId: userId,
-        content: heroParse.data,
-        isDraft: true,
-      });
-    }
-
     return { ok: true as const };
   }),
 );

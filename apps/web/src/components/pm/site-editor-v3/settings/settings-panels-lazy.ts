@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * The panels Site settings hosts for its Pages, Design and Notice tabs, each
+ * The panels Pages & design hosts for its two tabs, each
  * fetched as a chunk of its own on the tab's first visit.
  *
  * `next/dynamic` splits a component out only when it is called from a client
@@ -18,10 +18,5 @@ export const LazyPagesPanel = dynamic(
 
 export const LazyDesignPanel = dynamic(
   () => import('../panels/DesignPanel').then((m) => m.DesignPanel),
-  { loading: () => null },
-);
-
-export const LazyUrgentNoticePanel = dynamic(
-  () => import('../panels/UrgentNoticePanel').then((m) => m.UrgentNoticePanel),
   { loading: () => null },
 );

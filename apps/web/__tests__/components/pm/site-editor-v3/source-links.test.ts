@@ -33,7 +33,7 @@ describe('source links', () => {
 
   it('points at the community it is given', () => {
     expect(newAnnouncementHref(7)).toBe('/announcements/new?communityId=7');
-    expect(websiteRecordsHref(7)).toBe('/pm/website?communityId=7#records');
+    expect(websiteRecordsHref(7)).toBe('/pm/website?communityId=7&tab=records');
     expect(communityProfileHref(7)).toBe('/settings?communityId=7#community-profile');
     expect(rolesAccessHref(7)).toBe('/settings/roles?communityId=7');
   });

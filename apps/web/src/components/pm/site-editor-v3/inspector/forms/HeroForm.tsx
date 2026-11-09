@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FocusEvent } from 'react';
+import { useCallback } from 'react';
 import {
   MAX_HERO_PHOTOS,
   heroBlockSchema,
@@ -10,7 +10,6 @@ import {
   resolveLinkedText,
   type HeroPhoto,
   type LinkedFacts,
-  type LinkedField,
 } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -22,7 +21,6 @@ import { useLinkedFacts } from '../linked-facts-context';
 import { useSectionSources } from '../section-sources-context';
 import { heroWordingForLayout } from '@/lib/site-looks/look-wording';
 import { HeroPhotosField } from './fields/HeroPhotosField';
-import { LinkedChips } from './fields/LinkedChips';
 import type { BlockFormProps } from '../types';
 
 const HEADLINE_MAX = 120;
@@ -81,54 +79,33 @@ function isDescribed(photo: HeroPhoto): boolean {
   return photo.decorative === true || (photo.alt ?? '').length > 0;
 }
 
-/** The two fields a linked detail can be put into. */
-type WordsField = 'headline' | 'subtitle';
-
 /**
- * The buttons that put a linked detail into the words. The visible text is short;
- * the accessible name says what is inserted, and still contains the visible text.
- */
-const INSERT_BUTTONS: ReadonlyArray<{ field: LinkedField; text: string; label: string }> = [
-  { field: 'name', text: 'Name', label: 'Insert the community name' },
-  { field: 'city', text: 'City', label: 'Insert the city' },
-  { field: 'units', text: 'Homes', label: 'Insert the number of homes' },
-];
-
-const FIELD_NAME: Record<WordsField, string> = { headline: 'headline', subtitle: 'subtitle' };
-
-/** What each detail is called in the line that says it was added. */
-const DETAIL_PHRASE: Record<LinkedField, string> = {
-  name: 'community name',
-  city: 'city',
-  units: 'number of homes',
-};
-
-/** What the last press of an insert button did, said aloud in a status line. */
-type InsertNotice =
-  | { kind: 'added'; field: WordsField; detail: LinkedField }
-  | { kind: 'no-room'; field: WordsField };
-
-/** What the "Shows as" line says when every sentence drops. */
-const NOTHING_SHOWN = "nothing. It uses a detail your Community profile doesn't have yet.";
-
-/**
- * What the page will show for these words, for the "Shows as" line, or null when
- * the line would add nothing: the community's facts are not known, or the words
- * use no linked detail and so show as typed.
+ * What a words field SHOWS: the stored words with the community's details filled
+ * in, the way the page shows them.
  *
- * `resolve` is the page's own rule for the field, so a line that disagrees with the
- * page is not possible: `resolveHeroHeadline` for the headline (which shows the
- * community's name when it drops whole, to keep the page's heading) and
- * `resolveLinkedText` for the subtitle (which then shows nothing, and the line says
- * why). Which sentences dropped is the author's to see: the line holds what is left.
+ * The stored words can hold `{{name}}`, `{{city}}` and `{{units}}` (a look's own
+ * wording does), and a volunteer should see "Welcome to Harbor Pointe", never the
+ * template. So a field with a detail in it shows `resolve(text)`, the page's own
+ * rule for that field — `resolveHeroHeadline` for the headline, `resolveLinkedText`
+ * for the subtitle — and words without one show as stored.
+ *
+ * The draft itself keeps the stored words. Typing in a field replaces them with
+ * what the person sees plus their keystroke, so that field is saved as plain
+ * text from then on; a field nobody typed in keeps its details, even when a photo
+ * change saves the section.
+ *
+ * ponytail: a words field stores plain text from its first edit, so it stops
+ * following name/city/units, and a template sentence hidden by a missing detail
+ * (no city on file, say) is not kept. Trigger: a community renames, changes its
+ * unit count or adds a missing city, and its welcome goes stale.
  */
-function shownAs(
+function shown(
   text: string,
   facts: LinkedFacts | null,
   resolve: (text: string, facts: LinkedFacts) => string,
-): string | null {
-  if (facts === null || !parseLinkedText(text).some((part) => part.kind === 'field')) return null;
-  return resolve(text, facts) || NOTHING_SHOWN;
+): string {
+  if (facts === null || !parseLinkedText(text).some((part) => part.kind === 'field')) return text;
+  return resolve(text, facts);
 }
 
 /**
@@ -178,7 +155,15 @@ function toCanonical(draft: HeroDraft): unknown | null {
   };
 }
 
-export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
+export interface HeroFormProps extends BlockFormProps {
+  /**
+   * `simple` (Simple mode): the words and the photos only. `full` (the
+   * inspector) adds the button and "Use the look's wording".
+   */
+  variant?: 'full' | 'simple';
+}
+
+export function HeroForm({ communityId, blockOrder, content, variant = 'full' }: HeroFormProps) {
   // The hero writes through its own endpoint, not the blocks upsert: it lives
   // at slot 1, and `blocksUpsertContract` constrains blockOrder to min(2).
   const update = useUpdateHeroBlock(communityId);
@@ -202,15 +187,9 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
   const ctaTextId = `hero-cta-text-${blockOrder}`;
   const ctaTargetId = `hero-cta-target-${blockOrder}`;
 
-  // The words are saved as typed, tokens and all, so a rename in Settings shows
-  // on the site; these lines only say what the page does with them today.
   const facts = useLinkedFacts();
-  const headlineShows = shownAs(draft.headline, facts, resolveHeroHeadline);
-  const subtitleShows = shownAs(draft.subtitle, facts, resolveLinkedText);
   const overPhotoLimit = draft.photos.length > MAX_HERO_PHOTOS;
-  const headlineShowsId = `${headlineId}-shows-as`;
-  const subtitleShowsId = `${subtitleId}-shows-as`;
-  const insertHintId = `hero-insert-hint-${blockOrder}`;
+  const full = variant === 'full';
 
   // "Use the look's wording": the look the canvas draws, or none for a legacy
   // layout, which has no wording to go back to.
@@ -221,57 +200,6 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
     setDraft((prev) => ({ ...prev, headline: lookWording.headline, subtitle: lookWording.subtitle }));
   };
 
-  // Linked-detail buttons. They insert at the cursor of the field the manager was
-  // in. Reaching a button takes focus from that field (and in Safari a click does
-  // not focus it at all), so the field is remembered, and a field keeps its
-  // selection after it blurs. Focus going to any control that is not one of these
-  // buttons forgets the field, and the detail is then added to the end of the
-  // headline. Afterwards the cursor goes back into the field, behind the detail.
-  const headlineRef = useRef<HTMLInputElement>(null);
-  const subtitleRef = useRef<HTMLTextAreaElement>(null);
-  const insertGroupRef = useRef<HTMLDivElement>(null);
-  const lastFieldRef = useRef<WordsField | null>(null);
-  const caretRef = useRef<{ field: WordsField; position: number } | null>(null);
-  const [notice, setNotice] = useState<InsertNotice | null>(null);
-
-  const onFieldBlur = (event: FocusEvent) => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && !insertGroupRef.current?.contains(next)) lastFieldRef.current = null;
-  };
-
-  const insertLinkedDetail = (detail: LinkedField) => {
-    const token = `{{${detail}}}`;
-    const remembered = lastFieldRef.current;
-    const target: WordsField = remembered ?? 'headline';
-    const element = target === 'headline' ? headlineRef.current : subtitleRef.current;
-    const current = draft[target];
-    const max = target === 'headline' ? HEADLINE_MAX : SUBTITLE_MAX;
-    const start = remembered === null ? current.length : (element?.selectionStart ?? current.length);
-    const end = remembered === null ? current.length : (element?.selectionEnd ?? start);
-    const next = current.slice(0, start) + token + current.slice(end);
-
-    // The field's own limit stops typing, not this; a longer value would be refused
-    // by the route on every save.
-    if (next.length > max) {
-      setNotice({ kind: 'no-room', field: target });
-      return;
-    }
-    setNotice({ kind: 'added', field: target, detail });
-    caretRef.current = { field: target, position: start + token.length };
-    setDraft((prev) => ({ ...prev, [target]: next }));
-  };
-
-  // After the new words are in the field, put the cursor behind the inserted detail.
-  useEffect(() => {
-    const caret = caretRef.current;
-    if (caret === null) return;
-    caretRef.current = null;
-    const element = caret.field === 'headline' ? headlineRef.current : subtitleRef.current;
-    if (!element) return;
-    element.focus();
-    element.setSelectionRange(caret.position, caret.position);
-  }, [draft.headline, draft.subtitle]);
-
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
@@ -281,97 +209,26 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
         </Label>
         <Input
           id={headlineId}
-          ref={headlineRef}
-          value={draft.headline}
+          value={shown(draft.headline, facts, resolveHeroHeadline)}
           maxLength={HEADLINE_MAX}
           required
-          aria-describedby={headlineShows === null ? undefined : headlineShowsId}
-          onFocus={() => {
-            lastFieldRef.current = 'headline';
-          }}
-          onBlur={onFieldBlur}
-          onChange={(event) => {
-            setNotice(null);
-            setDraft((prev) => ({ ...prev, headline: event.target.value }));
-          }}
+          onChange={(event) => setDraft((prev) => ({ ...prev, headline: event.target.value }))}
         />
-        <LinkedChips text={draft.headline} />
-        {headlineShows !== null && (
-          <p id={headlineShowsId} className="break-words text-xs text-content-secondary">
-            {`Shows as: ${headlineShows}`}
-          </p>
-        )}
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor={subtitleId}>Subtitle</Label>
         <Textarea
           id={subtitleId}
-          ref={subtitleRef}
-          value={draft.subtitle}
+          value={shown(draft.subtitle, facts, resolveLinkedText)}
           maxLength={SUBTITLE_MAX}
           rows={3}
           placeholder="Optional"
-          aria-describedby={subtitleShows === null ? undefined : subtitleShowsId}
-          onFocus={() => {
-            lastFieldRef.current = 'subtitle';
-          }}
-          onBlur={onFieldBlur}
-          onChange={(event) => {
-            setNotice(null);
-            setDraft((prev) => ({ ...prev, subtitle: event.target.value }));
-          }}
+          onChange={(event) => setDraft((prev) => ({ ...prev, subtitle: event.target.value }))}
         />
-        <LinkedChips text={draft.subtitle} />
-        {subtitleShows !== null && (
-          <p id={subtitleShowsId} className="break-words text-xs text-content-secondary">
-            {`Shows as: ${subtitleShows}`}
-          </p>
-        )}
       </div>
 
-      <div
-        ref={insertGroupRef}
-        role="group"
-        aria-label="Add a detail from your Community profile"
-        aria-describedby={insertHintId}
-        className="space-y-1.5"
-      >
-        <p id={insertHintId} className="text-xs text-content-secondary">
-          Adds a detail from your Community profile where your cursor is. It updates by itself if
-          the profile changes.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {INSERT_BUTTONS.map(({ field, text, label }) => (
-            <Button
-              key={field}
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label={label}
-              onClick={() => insertLinkedDetail(field)}
-            >
-              {text}
-            </Button>
-          ))}
-        </div>
-        {notice !== null && (
-          <p
-            role="status"
-            className={
-              notice.kind === 'no-room'
-                ? 'text-xs text-status-danger'
-                : 'text-xs text-content-secondary'
-            }
-          >
-            {notice.kind === 'no-room'
-              ? `There isn't room left in the ${FIELD_NAME[notice.field]} for that. Shorten it and try again.`
-              : `Added the ${DETAIL_PHRASE[notice.detail]} to the ${FIELD_NAME[notice.field]}.`}
-          </p>
-        )}
-      </div>
-
-      {lookWording !== null && (
+      {full && lookWording !== null && (
         <div className="space-y-1.5">
           <Button
             type="button"
@@ -387,27 +244,29 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1.5">
-          <Label htmlFor={ctaTextId}>Button label</Label>
-          <Input
-            id={ctaTextId}
-            value={draft.ctaText}
-            maxLength={CTA_TEXT_MAX}
-            onChange={(event) => setDraft((prev) => ({ ...prev, ctaText: event.target.value }))}
-          />
+      {full && (
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <Label htmlFor={ctaTextId}>Button label</Label>
+            <Input
+              id={ctaTextId}
+              value={draft.ctaText}
+              maxLength={CTA_TEXT_MAX}
+              onChange={(event) => setDraft((prev) => ({ ...prev, ctaText: event.target.value }))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={ctaTargetId}>Button link</Label>
+            <Input
+              id={ctaTargetId}
+              value={draft.ctaTarget}
+              maxLength={CTA_TARGET_MAX}
+              placeholder="/auth/login"
+              onChange={(event) => setDraft((prev) => ({ ...prev, ctaTarget: event.target.value }))}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor={ctaTargetId}>Button link</Label>
-          <Input
-            id={ctaTargetId}
-            value={draft.ctaTarget}
-            maxLength={CTA_TARGET_MAX}
-            placeholder="/auth/login"
-            onChange={(event) => setDraft((prev) => ({ ...prev, ctaTarget: event.target.value }))}
-          />
-        </div>
-      </div>
+      )}
 
       <HeroPhotosField
         communityId={communityId}
@@ -425,8 +284,9 @@ export function HeroForm({ communityId, blockOrder, content }: BlockFormProps) {
       {/* Too many photos has its sentence above; this one is for what else can be missing. */}
       {isIncomplete && !overPhotoLimit && (
         <p className="text-xs text-status-danger">
-          Add a headline, describe every photo (or mark it decorative), and fill in both the
-          button label and link — or neither — before this section can be saved.
+          {full
+            ? 'Add a headline, describe every photo (or mark it decorative), and fill in both the button label and link — or neither — before this section can be saved.'
+            : 'Add a headline and describe every photo (or mark it decorative) before this can be saved.'}
         </p>
       )}
     </div>

@@ -10,10 +10,11 @@ export interface UrgentNoticePanelProps {
 }
 
 /**
- * Site settings' Notice tab.
+ * The urgent notice card on the website overview's Settings tab
+ * (`LiveSiteSettings`).
  *
- * A thin wrapper over `UrgentNoticeForm` — the heading is the tab's card title
- * (`SettingsView`), and the form is shared verbatim with the phone gate. The
+ * A thin wrapper over `UrgentNoticeForm` — the heading is the card's title
+ * (`LiveSiteSettings`), and the form is shared verbatim with the phone gate. The
  * wrapper exists so the tab has a single lazy import to hang on, and so the
  * desktop surface can carry the one bit of orientation the phone surface has
  * no room for.

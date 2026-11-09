@@ -25,14 +25,14 @@ beforeEach(() => {
 });
 
 describe('RecordsAttention — the top bar link', () => {
-  // Revert check: drop the `#records` from the href, or the `missing records`
+  // Revert check: drop the `&tab=records` from the href, or the `missing records`
   // words from the label.
   it('links to the records on the website home, named "3 missing records"', () => {
     alert.data = { missingCount: 3, snoozedUntil: null };
     render(<RecordsAttention communityId={42} enabled />);
 
     const link = screen.getByRole('link', { name: '3 missing records' });
-    expect(link).toHaveAttribute('href', '/pm/website?communityId=42#records');
+    expect(link).toHaveAttribute('href', '/pm/website?communityId=42&tab=records');
     // Not colour alone: an icon, the number and the words.
     expect(link.querySelector('svg')).not.toBeNull();
     expect(link).toHaveTextContent('3');

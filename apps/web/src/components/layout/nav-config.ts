@@ -205,7 +205,7 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     // The badge counts the Florida records the website still lacks (D11).
     badgeSignal: 'missingRecords',
     // The editor and the look picker sit under /pm/website-editor and
-    // /pm/website/looks, so the home's own prefix covers the picker.
+    // /pm/website/looks (a redirect into the editor), so these two prefixes cover all three.
     // `/pm/settings` is kept alongside so the item still highlights for anyone
     // arriving on the retired /pm/settings/website URL during the redirect hop,
     // and for /pm/settings/branding.

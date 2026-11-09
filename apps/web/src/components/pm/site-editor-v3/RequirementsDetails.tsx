@@ -131,7 +131,7 @@ export function RequirementsDetails({
                   : `${missingRecordCount} records are still missing`}
               </span>
               <Link
-                href={`/pm/website?communityId=${communityId}#records`}
+                href={`/pm/website?communityId=${communityId}&tab=records`}
                 onClick={onClose}
                 className="text-xs font-medium text-content-link underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
               >

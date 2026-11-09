@@ -1,13 +1,15 @@
 /**
- * Accessibility audit — the website home (`/pm/website`).
+ * Accessibility audit — the website overview (`/pm/website`), one run per tab.
  *
- * Its own file because the page needs `next/navigation` and `sonner` mocked,
- * and `vi.mock` is file-scoped.
+ * Its own file because the page needs `next/navigation`, `sonner` and the tab
+ * hook (`useUrlView`, as a stand-in seeded from `tabRef`) mocked, and `vi.mock`
+ * is file-scoped.
  *
  * Everything on the page is real, the transparency switch included (its
  * settings read is answered by a stub `fetch`). The overlays the page loads on
  * a click are not opened here; the drawer and dialog are audited in their own
- * tests.
+ * tests. So are the live site settings on the Settings tab
+ * (`LiveSiteSettings.test.tsx`), which are stood in for here.
  *
  * Each case first asserts that the page's own content rendered, because an axe
  * run over a container that rendered nothing passes trivially.
@@ -22,6 +24,20 @@ import type { WebsiteHomeData } from '@/lib/services/website-home-service';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock('@/components/website-home/website-home-lazy', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/website-home/website-home-lazy')>()),
+  LazyLiveSiteSettings: () => <p>Live site settings</p>,
+}));
+const { tabRef } = vi.hoisted(() => ({ tabRef: { value: null as string | null } }));
+vi.mock('@/hooks/use-url-view', async () => {
+  const { useState } = await import('react');
+  return {
+    useUrlView: <T extends string>(_param: string, coerce: (raw: string | null) => T) => {
+      const [view, set] = useState<T>(() => coerce(tabRef.value));
+      return { view, setView: (next: string) => set(coerce(next)) };
+    },
+  };
+});
 
 import { WebsiteHome } from '@/components/website-home/website-home';
 
@@ -42,8 +58,6 @@ const DATA: WebsiteHomeData = {
       contactPhone: null,
     },
     communityType: 'condo_718',
-    upcomingMeetingCount: 1,
-    newsCount: 0,
     recordsPosted: 9,
     recordsTotal: 12,
     liveLookId: 'bayfront',
@@ -86,15 +100,11 @@ const DATA: WebsiteHomeData = {
     },
     snoozedUntil: null,
   },
-  upcomingMeetings: [
-    { id: 7, title: 'Board meeting', startsAt: '2026-11-05T23:00:00.000Z', noticePosted: false },
-    { id: 8, title: 'Annual meeting', startsAt: '2026-12-01T23:00:00.000Z', noticePosted: true },
-  ],
   slug: 'sunset-condos',
-  liveHero: { headline: 'Welcome to {{name}}', subtitle: 'Homes in {{city}}.' },
 };
 
 beforeEach(() => {
+  tabRef.value = null;
   global.fetch = vi.fn(async (input: string) => {
     const body = String(input).startsWith('/api/v1/document-categories')
       ? {
@@ -114,95 +124,82 @@ function renderHome(data: WebsiteHomeData) {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return render(
-    <WebsiteHome communityId={42} data={data} published={false} now="2026-10-29T16:00:00.000Z" timeZone="America/New_York" />,
+    <WebsiteHome communityId={42} data={data} published={false} now="2026-10-29T16:00:00.000Z" timeZone="America/New_York"
+      siteSettings={{
+        community: { name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718' },
+        tagline: null,
+        hasSiteCustomDomain: false,
+        initialNotice: null,
+      }}
+    />,
     { wrapper },
   );
 }
 
-/** The page's own sections, so the audit below cannot pass over an empty tree. */
-async function expectSections(names: readonly string[]) {
-  for (const name of names) {
-    expect(screen.getByRole('heading', { level: 2, name })).toBeInTheDocument();
-  }
-  // Settled: the transparency switch has read its settings.
-  expect(await screen.findByRole('checkbox', { name: 'Enable compliance transparency page' })).toBeInTheDocument();
-}
-
-describe('website home — axe', () => {
-  it('the axe run has no violations', async () => {
-    const user = userEvent.setup();
+describe('website overview — axe', () => {
+  it('has no violations on the Overview, at its fullest', async () => {
     const { container } = renderHome(DATA);
-    await expectSections([
-      'Your website is live',
-      'Your welcome',
-      'Records',
-      'Coming up',
-      'Details on your site',
-      'Your site',
-      'Transparency page',
-    ]);
-    // The alert at its fullest: missing rows, matches, a "may not apply" row,
-    // the email offer, and the version list open.
+    // Rendered, not an empty tree: the tabs, the notices, the draft strip, the
+    // status list, the records attention and the quick edits.
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Email owners' })).toBeInTheDocument();
+    expect(screen.getByTestId('draft-strip')).toBeInTheDocument();
+    expect(screen.getByLabelText('Website status')).toBeInTheDocument();
+    expect(screen.getByTestId('records-attention')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quick edits' })).toBeInTheDocument();
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has none on the Overview below the threshold, with nothing waiting', async () => {
+    const { container } = renderHome({
+      ...DATA,
+      lastPublish: null,
+      facts: { ...DATA.facts, hasUnpublishedChanges: false },
+      records: { ...DATA.records, level: 'recommended', missing: [], conditional: [], candidates: {} },
+    });
+    expect(screen.getByLabelText('Website status')).toHaveTextContent('Not yet');
+    expect(screen.queryByTestId('draft-strip')).not.toBeInTheDocument();
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has none on Records, at its fullest', async () => {
+    tabRef.value = 'records';
+    const { container } = renderHome(DATA);
+    expect(screen.getByRole('heading', { level: 2, name: 'Records' })).toBeInTheDocument();
     expect(screen.getByTestId('missing-records-alert')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Use 2025 Budget for Annual budget' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Email owners' })).toBeInTheDocument();
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has none on Versions, with the list open', async () => {
+    tabRef.value = 'versions';
+    const user = userEvent.setup();
+    const { container } = renderHome(DATA);
+    expect(screen.getByRole('heading', { level: 2, name: 'Versions' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'See earlier versions' }));
     expect(screen.getByText('Live now')).toBeInTheDocument();
 
-    const results = await axe(container);
-
-    expect(results).toHaveNoViolations();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
-  it('has none with the Edit words form open', async () => {
-    const user = userEvent.setup();
+  it('has none on Settings, once the transparency switch has read its settings', async () => {
+    tabRef.value = 'settings';
     const { container } = renderHome(DATA);
-    await expectSections(['Your welcome']);
-    await user.click(screen.getByRole('button', { name: 'Edit words' }));
-    // The form itself, with its labelled fields, is what is audited.
-    expect(screen.getByLabelText(/Headline/)).toHaveValue('Welcome to Sunset Condos');
-    expect(screen.getByLabelText('Subtitle')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Details on your site' })).toBeInTheDocument();
+    expect(await screen.findByRole('checkbox', { name: 'Enable compliance transparency page' })).toBeInTheDocument();
+    expect(screen.getByText('Live site settings')).toBeInTheDocument();
 
-    const results = await axe(container);
-
-    expect(results).toHaveNoViolations();
-  });
-
-  it('has none with the Change photo form open', async () => {
-    const user = userEvent.setup();
-    const { container } = renderHome(DATA);
-    await expectSections(['Your welcome']);
-    await user.click(screen.getByRole('button', { name: 'Change photo' }));
-    expect(screen.getByRole('heading', { name: 'Change photo' })).toBeInTheDocument();
-    expect(screen.getByText('Photos')).toBeInTheDocument();
-
-    const results = await axe(container);
-
-    expect(results).toHaveNoViolations();
-  });
-
-  it('has none below the threshold, with nothing to restore and nothing coming up', async () => {
-    const { container } = renderHome({
-      ...DATA,
-      history: null,
-      previousSnapshotId: null,
-      lastPublish: null,
-      upcomingMeetings: [],
-      records: { ...DATA.records, level: 'recommended', missing: [], conditional: [], candidates: {} },
-    });
-    await expectSections(['Your website is live', 'Records', 'Coming up', 'Details on your site', 'Your site']);
-    expect(screen.getByText(/so this list is a recommendation/)).toBeInTheDocument();
-    expect(screen.getByText('No meetings in the next 90 days.')).toBeInTheDocument();
-
-    const results = await axe(container);
-
-    expect(results).toHaveNoViolations();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('has none with the upload dialog open, which takes and keeps focus', async () => {
+    tabRef.value = 'records';
     const user = userEvent.setup();
     const { baseElement } = renderHome(DATA);
-    await expectSections(['Records']);
     const upload = screen.getByRole('button', { name: 'Upload: Annual budget' });
 
     await user.click(upload);

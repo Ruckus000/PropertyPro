@@ -64,9 +64,9 @@ export const POST = withErrorHandler(
       expectedPublishedAt,
     });
 
-    // A caller that asks for it marks website setup complete. No caller in the
-    // app sends the flag (the look picker marks setup complete through the
-    // look route), so this only runs for a request made by hand.
+    // A caller that asks for it marks website setup complete. The editor's
+    // publish sheet sends it on every publish: the editor is where a look is
+    // chosen and the site set up. The stamp is written once and never moves.
     // Done after (and outside) the publish transaction on purpose: completion
     // is a separate concern from draft-promotion, and it holds even when the
     // publish was a no-op (`nothing-to-publish` rolls back the tx but is not an

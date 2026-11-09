@@ -6,16 +6,20 @@ import type { SettingsTabId } from '../settings/settings-tabs';
  * about, after the drawer closes.
  *
  * - `add`: the Add a part dialog, adding to the end of the page being edited;
- * - `settings`: Site settings, on one tab;
+ * - `settings`: Pages & design, on one tab;
  * - `publish`: the publish sheet.
+ * - `website-settings`: the website overview's Settings tab, where the
+ *   settings that save at once live (design D). It leaves the editor, so its
+ *   label says where it goes.
  *
  * There is no tool rail any more (combined plan Task 28): sections are edited
- * on the page itself, and pages, design and the notice live in Site settings.
+ * on the page itself, and pages and design live in Pages & design.
  */
 export type HelpAction =
   | { kind: 'add' }
   | { kind: 'settings'; tab: SettingsTabId }
-  | { kind: 'publish' };
+  | { kind: 'publish' }
+  | { kind: 'website-settings' };
 
 export interface GuideMeta {
   group: GuideGroup;
@@ -28,7 +32,7 @@ export const GUIDE_GROUPS = [
   'Getting started',
   'Editing your site',
   'Documents & Florida law',
-  'Site settings',
+  'Website settings',
 ] as const;
 
 export type GuideGroup = (typeof GUIDE_GROUPS)[number];
@@ -58,8 +62,9 @@ export const EDITOR_GUIDES: Readonly<Record<string, GuideMeta>> = {
     views: ['website'],
     showMe: { label: 'Add a part', action: { kind: 'add' } },
   },
-  // Pages, Design and the notice are Site settings tabs, so these guides are
-  // listed first in Site settings too.
+  // Pages and Design are the Pages & design tabs, so these guides are listed
+  // first there too. The notice, domain and search settings are on the website
+  // overview's Settings tab, which their Show me opens.
   'website-pages': {
     group: 'Editing your site',
     views: ['website', 'settings'],
@@ -77,8 +82,8 @@ export const EDITOR_GUIDES: Readonly<Record<string, GuideMeta>> = {
   },
   'urgent-notice': {
     group: 'Editing your site',
-    views: ['settings'],
-    showMe: { label: 'Open Notice', action: { kind: 'settings', tab: 'notice' } },
+    views: [],
+    showMe: { label: 'Open Settings on your Website page', action: { kind: 'website-settings' } },
   },
   'publish-website': {
     group: 'Editing your site',
@@ -99,14 +104,14 @@ export const EDITOR_GUIDES: Readonly<Record<string, GuideMeta>> = {
     views: [],
   },
   'website-domain': {
-    group: 'Site settings',
-    views: ['settings'],
-    showMe: { label: 'Open Address & domain', action: { kind: 'settings', tab: 'address' } },
+    group: 'Website settings',
+    views: [],
+    showMe: { label: 'Open Settings on your Website page', action: { kind: 'website-settings' } },
   },
   'website-search': {
-    group: 'Site settings',
-    views: ['settings'],
-    showMe: { label: 'Open Search & sharing', action: { kind: 'settings', tab: 'search' } },
+    group: 'Website settings',
+    views: [],
+    showMe: { label: 'Open Settings on your Website page', action: { kind: 'website-settings' } },
   },
 };
 

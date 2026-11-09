@@ -1,56 +1,33 @@
 'use client';
 
 /**
- * The editor's Site settings view (website builder v4, Phase 5; the tools,
- * combined plan Task 27): everything about the site that is not a section on a
- * page. General (footer and site icon), Pages, Design (colours, fonts and
- * logos; looks are chosen on the look picker), Notice, Address & domain,
- * Search & sharing, and Access & visibility.
+ * The editor's Pages & design view (website builder v4, Phase 5; design D):
+ * the site's pages, and its look, colours and fonts. Both are drafts that wait
+ * for Publish, like everything else in the editor (with the one exception the
+ * Pages note states).
  *
- * Code-split by `EditorRoot` like every panel: the web JS aggregate has little
- * headroom, and a manager who never opens Site settings should not pay for it.
- * Pages, Design and Notice are themselves loaded on their tab's first visit
- * (`settings-panels-lazy`).
+ * The settings that take effect when saved (site icon and footer, logos,
+ * address and domain, search and sharing, the urgent notice, who can see what)
+ * moved to the website overview's Settings tab (`LiveSiteSettings`).
  *
- * Each tab opens with a line saying whether it saves immediately or waits for
- * Publish (`SETTINGS_SAVE_NOTES`). Deliberately absent (see the v4 plan's
- * Phase 5 deferrals): changing the PropertyPro address, taking the site
- * offline, and hiding the login button.
+ * Code-split by `EditorRoot` like every panel, and each tab's panel is loaded on
+ * its first visit (`settings-panels-lazy`): the web JS aggregate has little
+ * headroom. Each tab opens with a line saying how it saves
+ * (`SETTINGS_SAVE_NOTES`).
  */
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { toast } from 'sonner';
-import { Copy } from 'lucide-react';
-import Link from 'next/link';
-import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { SiteSettingsRecord } from '@/hooks/use-site-settings';
-import { DomainPanel } from '../panels/DomainPanel';
 import type { DesignPanelProps } from '../panels/DesignPanel';
 import type { PagesPanelProps } from '../panels/PagesPanel';
-import type { UrgentNoticePanelProps } from '../panels/UrgentNoticePanel';
-import { ShareImageField, SiteIconField, SitePanel, StorageMeter } from '../panels/SitePanel';
-import { useSiteSettings } from '@/hooks/use-site-settings';
-import { PageSeoCard } from './PageSeoCard';
-import { DEFAULT_SITE_SETTINGS, resolveSeoDescription } from '@/lib/site-editor/site-settings';
-import { LazyDesignPanel, LazyPagesPanel, LazyUrgentNoticePanel } from './settings-panels-lazy';
-import { SETTINGS_SAVE_NOTES, SETTINGS_TABS as TABS, type SettingsTabId } from './settings-tabs';
+import { LazyDesignPanel, LazyPagesPanel } from './settings-panels-lazy';
+import { SettingsCard } from './settings-card';
+import { DEFAULT_SETTINGS_TAB, SETTINGS_SAVE_NOTES, SETTINGS_TABS as TABS, type SettingsTabId } from './settings-tabs';
 
 export type { SettingsTabId };
 
 export interface SettingsViewProps {
   communityId: number;
-  community: {
-    name: string;
-    slug: string;
-    communityType: 'condo_718' | 'hoa_720' | 'apartment';
-    city?: string | null;
-  };
-  tagline: string | null;
-  initialSettings?: SiteSettingsRecord;
-  /** The site's PropertyPro address, e.g. `https://sunset.getpropertypro.com/`. */
-  publicSiteUrl: string | null;
-  hasSiteCustomDomain: boolean;
   /**
    * A tab to bring forward — a Help guide's "Show me" (v4 Phase 3). A new
    * object per request, so asking for the tab already showing after the PM has
@@ -61,42 +38,25 @@ export interface SettingsViewProps {
    * Told whenever the manager moves to another tab. `EditorRoot` keeps it and
    * hands it back as `tabRequest`, because choosing a page in the Pages tab
    * remounts the whole editor shell (the page-keyed provider): without this the
-   * view would drop back to General.
+   * view would drop back to Pages.
    */
   onTabChange?: (tab: SettingsTabId) => void;
   /** The Pages tab: the editor's page selection, as `EditorRoot` holds it. */
   pagesPanel: Omit<PagesPanelProps, 'communityId'>;
-  /** The Design tab: colour sets, custom colours and the theme that seeds them. */
+  /** The Design tab: the looks, colour sets, custom colours and the theme that seeds them. */
   designPanel: Omit<DesignPanelProps, 'communityId'>;
-  /** The Notice tab. */
-  noticePanel: Omit<UrgentNoticePanelProps, 'communityId'>;
 }
 
 type TabId = SettingsTabId;
 
-function Card({ title, children }: { title?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-4 rounded-[var(--radius-lg)] border border-edge bg-surface-card p-5">
-      {title ? <h3 className="text-base font-semibold text-content">{title}</h3> : null}
-      {children}
-    </div>
-  );
-}
-
 export function SettingsView({
   communityId,
-  community,
-  tagline,
-  initialSettings,
-  publicSiteUrl,
-  hasSiteCustomDomain,
   tabRequest,
   onTabChange,
   pagesPanel,
   designPanel,
-  noticePanel,
 }: SettingsViewProps) {
-  const initialTab = tabRequest?.tab ?? 'general';
+  const initialTab = tabRequest?.tab ?? DEFAULT_SETTINGS_TAB;
   const [tab, setTabState] = useState<TabId>(initialTab);
   // Tabs opened so far. A panel mounts on its first visit and is then hidden,
   // not unmounted, when another tab is selected — so a half-typed footer note
@@ -114,7 +74,6 @@ export function SettingsView({
     setVisited((prev) => (prev.has(tabRequest.tab) ? prev : new Set(prev).add(tabRequest.tab)));
   }, [tabRequest]);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const { data: record } = useSiteSettings(communityId, initialSettings);
 
   // The WAI-ARIA tabs pattern: arrows move between tabs and select them,
   // Home/End jump to the ends. Only the selected tab is in the Tab order.
@@ -136,144 +95,18 @@ export function SettingsView({
     tabRefs.current[next]?.focus();
   }
 
-  const address = publicSiteUrl?.replace(/^https?:\/\//, '').replace(/\/$/, '') ?? null;
-
-
   // Each tab's content. Built as descriptions only; nothing mounts until its
   // panel renders it (below).
   const panels: Record<TabId, ReactNode> = {
-    general: (
-      <>
-        <Card title="General">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-content">Site name</p>
-            <p className="text-sm text-content" data-testid="settings-site-name">
-              {community.name}
-            </p>
-            <p className="text-sm text-content-tertiary">
-              Your site uses your community&apos;s name in its header, the browser tab and
-              search results.
-            </p>
-          </div>
-          <SiteIconField communityId={communityId} initialSettings={initialSettings} />
-          {record?.storage ? <StorageMeter storage={record.storage} /> : null}
-        </Card>
-        <Card>
-          <SitePanel
-            part="footer"
-            communityId={communityId}
-            community={community}
-            tagline={tagline}
-            initialSettings={initialSettings}
-          />
-        </Card>
-      </>
-    ),
     pages: (
-      <Card title="Pages">
+      <SettingsCard title="Pages">
         <LazyPagesPanel communityId={communityId} {...pagesPanel} />
-      </Card>
+      </SettingsCard>
     ),
     design: (
-      <Card title="Design">
+      <SettingsCard title="Design">
         <LazyDesignPanel communityId={communityId} {...designPanel} />
-      </Card>
-    ),
-    notice: (
-      <Card title="Urgent notice">
-        <LazyUrgentNoticePanel communityId={communityId} {...noticePanel} />
-      </Card>
-    ),
-    address: (
-      <>
-        <Card title="Your PropertyPro address">
-          <p className="text-sm text-content-secondary">
-            This address always works, even after you connect your own domain.
-          </p>
-          {address ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className="rounded-[var(--radius-md)] bg-surface-muted px-3 py-2 font-mono text-sm text-content"
-                data-testid="settings-address"
-              >
-                {address}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void navigator.clipboard
-                    .writeText(publicSiteUrl ?? address)
-                    .then(() => toast.success('Copied.'))
-                    .catch(() => toast.error("Couldn't copy. Select the address and copy it."));
-                }}
-              >
-                <Copy className="h-4 w-4" aria-hidden="true" />
-                Copy
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-content-secondary">
-              Your address isn&apos;t available right now.
-            </p>
-          )}
-        </Card>
-        <Card title="Use your own domain">
-          <DomainPanel communityId={communityId} hasSiteCustomDomain={hasSiteCustomDomain} />
-        </Card>
-      </>
-    ),
-    search: (
-      <>
-        <Card>
-          <SitePanel
-            part="search"
-            communityId={communityId}
-            community={community}
-            tagline={tagline}
-            initialSettings={initialSettings}
-          />
-        </Card>
-        <Card>
-          <ShareImageField communityId={communityId} initialSettings={initialSettings} />
-        </Card>
-        <Card>
-          <PageSeoCard
-            communityId={communityId}
-            communityName={community.name}
-            // What a page's description falls back to: the site's, as the
-            // public page computes it (its own default when none is set).
-            siteDescription={resolveSeoDescription(
-              record?.settings ?? DEFAULT_SITE_SETTINGS,
-              community,
-              tagline,
-            )}
-          />
-        </Card>
-      </>
-    ),
-    access: (
-      <Card title="Who can see what">
-        <p className="text-sm text-content">
-          <span className="font-semibold">The pages you publish are open to everyone.</span>{' '}
-          Anyone with the address can read them.
-        </p>
-        <p className="text-sm text-content">
-          <span className="font-semibold">
-            Official records are for owners and residents who sign in.
-          </span>{' '}
-          Each document stays private until you open it to the public, one at a time, in
-          Documents.
-        </p>
-        {/* The documents library, where each one is opened to the public. */}
-        <Link
-          href={`/communities/${communityId}/documents`}
-          className={buttonVariants({ variant: 'outline', size: 'sm' })}
-        >
-          Open Documents
-        </Link>
-      </Card>
+      </SettingsCard>
     ),
   };
 
@@ -283,10 +116,10 @@ export function SettingsView({
       className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-6 py-8 lg:flex-row lg:items-start"
     >
       <div className="shrink-0 space-y-4 lg:sticky lg:top-8 lg:w-[220px]">
-        <h2 className="text-xl font-semibold tracking-tight text-content">Site settings</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-content">Pages &amp; design</h2>
         <div
           role="tablist"
-          aria-label="Site settings"
+          aria-label="Pages and design"
           aria-orientation="vertical"
           className="flex flex-wrap gap-1 lg:flex-col"
         >

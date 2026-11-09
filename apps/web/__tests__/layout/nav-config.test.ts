@@ -243,10 +243,10 @@ describe('nav href generation', () => {
     expect(NAV_ITEMS.find((item) => item.id === 'website')?.badgeSignal).toBe('missingRecords');
   });
 
-  it('highlights Website on the website home, the look picker and the editor', () => {
+  it('highlights Website on the overview, the old look address and the editor', () => {
     // `matchPrefixes` used to be ['/pm/settings'] alone, which silently stopped
-    // matching the moment traffic moved to /pm/website-editor; the home and the
-    // picker (/pm/website/looks) are the next such move.
+    // matching the moment traffic moved to /pm/website-editor. /pm/website/looks
+    // is now only a redirect into the editor, but a bookmark still lands there.
     expect(getActiveItemId(NAV_ITEMS, '/pm/website')).toBe('website');
     expect(getActiveItemId(NAV_ITEMS, '/pm/website/looks')).toBe('website');
     expect(getActiveItemId(NAV_ITEMS, '/pm/website-editor')).toBe('website');

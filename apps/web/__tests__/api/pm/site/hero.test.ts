@@ -241,90 +241,22 @@ describe('PATCH /api/v1/pm/site/hero', () => {
     expect(upsertMock).not.toHaveBeenCalled();
   });
 
-  // The website home's Edit words / Change photo: `live: true` writes the
-  // published row, and a hero draft, if any, gets the same content so a later
-  // editor publish cannot bring the older words back.
-  describe('live', () => {
-    const CONTENT = {
-      headline: 'Welcome',
-      subtitle: 'Hello.',
-      ctaText: 'Login',
-      ctaTarget: '/auth/login',
-    };
-
-    it('writes the published hero, not a draft, when live is true', async () => {
-      listSiteBlocksMock.mockResolvedValueOnce([
-        { id: 1, blockType: 'hero', blockOrder: 1, content: CONTENT, isDraft: false, publishedAt: new Date() },
-      ]);
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: true }));
+  // Every hero edit is a draft (design D): the website home's live save is
+  // gone. A stray `live` is refused by the strict hero schema, so no request can
+  // reach a published write through this route.
+  // Revert check (production line): `isDraft: true` in the PATCH handler's
+  // single `upsertPublishedHero` call.
+  describe('drafts only', () => {
+    it('writes the hero as a draft', async () => {
+      const res = await PATCH(makeRequest(VALID_BODY));
       expect(res.status).toBe(200);
       expect(upsertMock).toHaveBeenCalledTimes(1);
-      expect(upsertMock).toHaveBeenCalledWith({
-        communityId: 42,
-        actorUserId: 'user-1',
-        content: CONTENT,
-        isDraft: false,
-      });
+      expect(upsertMock).toHaveBeenCalledWith(expect.objectContaining({ isDraft: true }));
     });
 
-    it('overwrites an existing hero draft with the same content', async () => {
-      listSiteBlocksMock.mockResolvedValueOnce([
-        { id: 9, blockType: 'hero', blockOrder: 1, content: { headline: 'Old draft' }, isDraft: true, publishedAt: null },
-      ]);
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: true }));
-      expect(res.status).toBe(200);
-      expect(upsertMock).toHaveBeenCalledTimes(2);
-      expect(upsertMock.mock.calls[0]?.[0]).toEqual(
-        expect.objectContaining({ content: CONTENT, isDraft: false }),
-      );
-      expect(upsertMock.mock.calls[1]?.[0]).toEqual(
-        expect.objectContaining({ content: CONTENT, isDraft: true }),
-      );
-      // The draft is looked for on the home page only.
-      expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true, pageId: 1 });
-    });
-
-    it('ignores a draft of another section type when looking for a hero draft', async () => {
-      listSiteBlocksMock.mockResolvedValueOnce([
-        { id: 4, blockType: 'announcements', blockOrder: 2, content: {}, isDraft: true, publishedAt: null },
-      ]);
-      await PATCH(makeRequest({ ...VALID_BODY, live: true }));
-      expect(upsertMock).toHaveBeenCalledTimes(1);
-    });
-
-    it('writes only the draft when live is false, as the editor does', async () => {
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: false }));
-      expect(res.status).toBe(200);
-      expect(upsertMock).toHaveBeenCalledTimes(1);
-      expect(upsertMock).toHaveBeenCalledWith(expect.objectContaining({ content: CONTENT, isDraft: true }));
-      expect(listSiteBlocksMock).not.toHaveBeenCalled();
-    });
-
-    it('400s when live is not a boolean', async () => {
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: 'yes' }));
+    it.each([true, false, 'yes'])('400s a body that still carries live: %s, writing nothing', async (live) => {
+      const res = await PATCH(makeRequest({ ...VALID_BODY, live }));
       expect(res.status).toBe(400);
-      expect(upsertMock).not.toHaveBeenCalled();
-    });
-
-    it('keeps the cross-community photo check on a live save', async () => {
-      const res = await PATCH(
-        makeRequest({ ...VALID_BODY, live: true, photos: [{ path: '999/hero/sneaky.webp', alt: 'theirs' }] }),
-      );
-      expect(res.status).toBe(400);
-      expect(upsertMock).not.toHaveBeenCalled();
-    });
-
-    it('403s a live save from a resident, writing nothing', async () => {
-      requireMembershipMock.mockResolvedValueOnce({ role: 'resident', communityId: 42 });
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: true }));
-      expect(res.status).toBe(403);
-      expect(upsertMock).not.toHaveBeenCalled();
-    });
-
-    it('401s a live save when unauthenticated', async () => {
-      requireAuthMock.mockRejectedValueOnce(new AppError('Unauthorized', 401, 'UNAUTHORIZED'));
-      const res = await PATCH(makeRequest({ ...VALID_BODY, live: true }));
-      expect(res.status).toBe(401);
       expect(upsertMock).not.toHaveBeenCalled();
     });
   });
@@ -333,7 +265,7 @@ describe('PATCH /api/v1/pm/site/hero', () => {
     resolveEffectiveCommunityIdMock.mockImplementationOnce(() => {
       throw new NotFoundError('Community not found');
     });
-    const res = await PATCH(makeRequest({ ...VALID_BODY, live: true }));
+    const res = await PATCH(makeRequest(VALID_BODY));
     expect(res.status).toBe(404);
     expect(upsertMock).not.toHaveBeenCalled();
   });

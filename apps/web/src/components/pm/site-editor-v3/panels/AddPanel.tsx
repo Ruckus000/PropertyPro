@@ -50,7 +50,7 @@ export interface AddPanelProps {
    */
   onAdded?: (label: string) => void;
   /**
-   * Opens Site settings on Pages. The navigation bar is not a section — its links ARE
+   * Opens Pages & design on Pages. The navigation bar is not a section — its links ARE
    * the pages (`in_nav`), so the Add panel offers it as an entry that leads to
    * where it is built rather than as a block to insert. Optional so the panel
    * still renders standalone; without it the entry is not shown.

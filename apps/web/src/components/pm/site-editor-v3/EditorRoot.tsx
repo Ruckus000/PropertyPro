@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useContentBlocks } from '@/hooks/use-content-blocks';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -62,7 +63,18 @@ const HelpDrawer = dynamic(() => import('./help/HelpDrawer').then((m) => m.HelpD
 });
 // Type-only: erased at build, so the chunk is not pulled in.
 import type { HelpAction } from './help/guides';
-import { DEFAULT_SETTINGS_TAB, type SettingsTabId } from './settings/settings-tabs';
+import {
+  DEFAULT_SETTINGS_TAB,
+  type EditorMode,
+  type SettingsTabId,
+  type SimpleItem,
+} from './settings/settings-tabs';
+// Simple mode: the welcome form, the looks and the read-only page. Split for the
+// reason the Inspector is: an Advanced PM should not pay for it, and its forms
+// and preview stay out of the route's first load either way.
+const SimpleMode = dynamic(() => import('./SimpleMode').then((m) => m.SimpleMode), {
+  loading: () => null,
+});
 // The top bar's missing-records link; its query stays out of the first load.
 const RecordsAttention = dynamic(
   () => import('./RecordsAttention').then((m) => m.RecordsAttention),
@@ -115,8 +127,6 @@ export interface EditorRootProps {
   communityId: number;
   communityName: string;
   publicSiteUrl: string | null;
-  /** Whether the plan includes a custom domain (Settings → Address & domain). */
-  hasSiteCustomDomain: boolean;
   /**
    * `hasSitePolishBlocks` — whether the plan includes the FAQ / Gallery /
    * Amenities blocks the Add panel offers.
@@ -130,16 +140,16 @@ export interface EditorRootProps {
   /**
    * Phase 7 urgent notice. Both values come from the page's existing
    * `getCommunityPublicInfo` read, so they cost no extra query — and passing
-   * them down means the notice panel and the phone gate open with real state
-   * instead of a spinner, which matters for the one tool in this editor that
-   * gets used under time pressure.
+   * them down means the phone gate's notice form opens with real state
+   * instead of a spinner, which matters for a tool used under time pressure.
+   * (On a wider screen the notice is on the website overview's Settings tab.)
    */
   hasPublishedSite: boolean;
   initialNotice: UrgentNotice | null;
   /**
    * Phase 8 site settings. Like the notice above, both come from reads the page
-   * already makes, so the Site panel opens with real values rather than a
-   * spinner and costs no extra query.
+   * already makes. They seed the shared site-settings query, which the canvas
+   * footer reads, so it paints real values rather than a spinner.
    */
   siteIdentity: SitePanelProps['community'];
   /**
@@ -149,7 +159,6 @@ export interface EditorRootProps {
   unitCount: number | null;
   /** Whether this viewer may correct `unitCount` (community admin). */
   canEditUnitCount: boolean;
-  tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
    * The colour-set catalog (`site_theme_presets`) for the Design panel. The
@@ -187,8 +196,63 @@ export interface EditorRootProps {
    * Absent means the Website view, as every link to the editor has always meant.
    */
   initialView?: EditorView;
-  /** The Site settings tab to open on when `initialView` is `'settings'`. */
+  /** The Pages & design tab to open on when `initialView` is `'settings'`. */
   initialSettingsTab?: SettingsTabId;
+  /** Simple or Advanced, from `?mode=` (`parseEditorLocation`). Simple when absent. */
+  initialMode?: EditorMode;
+  /** Simple's row to open first, from `?item=`. */
+  initialItem?: SimpleItem;
+  /** `?publish=1`: open the publish review on arrival (the overview's "Review and publish"). */
+  openPublishOnLoad?: boolean;
+}
+
+/**
+ * The section-context providers a section form reads: the community's facts
+ * (so the Welcome shows "Harbor Pointe", not `{{name}}`) and where each section's
+ * content comes from. Both the inspector and Simple mode render forms, and both
+ * hooks fall back to null silently, so each needs this around it.
+ */
+function SectionFormContext({
+  canvasContext,
+  recordsApply,
+  children,
+}: {
+  canvasContext: CanvasContext | null;
+  recordsApply: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <LinkedFactsProvider facts={canvasContext?.community ?? null}>
+      <SectionSourcesProvider
+        layoutId={canvasContext?.layout ?? null}
+        contact={canvasContext?.preview.contact ?? null}
+        ownerRecordGroups={canvasContext?.ownerRecordGroups ?? null}
+        recordsApply={recordsApply}
+      >
+        {children}
+      </SectionSourcesProvider>
+    </LinkedFactsProvider>
+  );
+}
+
+/**
+ * Keep the mode in the address bar, so a reload or a shared link opens the same
+ * mode. `replaceState`, like the app's URL-synced tabs (`use-url-view.ts`): a
+ * mode switch is not a place Back should walk through. Simple drops `view` and
+ * `tab`, which would otherwise reopen Advanced's Site settings on reload.
+ *
+ * ponytail: the mode lives in the URL only, not per person. Trigger: managers
+ * report re-picking Advanced on most visits.
+ */
+function writeModeToUrl(mode: EditorMode) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('mode', mode);
+  url.searchParams.delete('item');
+  if (mode === 'simple') {
+    url.searchParams.delete('view');
+    url.searchParams.delete('tab');
+  }
+  window.history.replaceState(null, '', url);
 }
 
 /**
@@ -222,7 +286,6 @@ export function EditorRoot({
   communityId,
   communityName,
   publicSiteUrl,
-  hasSiteCustomDomain,
   hasPolishBlocks,
   canvasContext: serverCanvasContext,
   hasPublishedSite,
@@ -230,15 +293,26 @@ export function EditorRoot({
   siteIdentity,
   unitCount,
   canEditUnitCount,
-  tagline,
   initialSiteSettings,
   presets,
   hasSiteCustomCss,
   initialPages,
   initialView = 'website',
   initialSettingsTab = DEFAULT_SETTINGS_TAB,
+  initialMode = 'simple',
+  initialItem = 'welcome',
+  openPublishOnLoad = false,
 }: EditorRootProps) {
+  const router = useRouter();
   const { data: blocks } = useContentBlocks(communityId);
+  // Simple or Advanced. Everything below that only Advanced shows (the canvas,
+  // the inspector, Site settings, the Add dialog) also switches to Advanced
+  // when something asks for it: a Help "Show me", a publish "Fix this".
+  const [mode, setModeState] = useState<EditorMode>(initialMode);
+  const setMode = useCallback((next: EditorMode) => {
+    setModeState(next);
+    writeModeToUrl(next);
+  }, []);
   // The canvas, preview and publish-sheet contrast check all show the DRAFT
   // look (website builder v4), which changes as the Design panel saves. The
   // server context carries the live look; this re-derives theme and layout
@@ -413,7 +487,10 @@ export function EditorRoot({
     pages?.find((page) => page.isHome)?.id ??
     pages?.[0]?.id ??
     null;
-  const effectivePageId = selectedPageId ?? homePageId;
+  // Simple always edits the home page: its preview and its Welcome must agree,
+  // and a page picked in Advanced would otherwise show beside the home page's
+  // welcome. Advanced's choice is kept and comes back with Advanced.
+  const effectivePageId = mode === 'simple' ? homePageId : (selectedPageId ?? homePageId);
 
   /*
    * BOTH page reads failed, and that is not a degraded editor — it is a wrong
@@ -758,18 +835,24 @@ export function EditorRoot({
   const handleGoToSlot = useCallback(
     (target: SlotTarget) => {
       // Reachable from Settings too (requirements pill, Publish's "Fix this"),
-      // whose view hides the canvas this lands on.
+      // whose view hides the canvas this lands on — and from Simple, which has
+      // no canvas at all.
+      setMode('advanced');
       setView('website');
       const targetPageId = Number(target.pageId);
+      // Compared with the page ADVANCED shows, not `effectivePageId`: from
+      // Simple that is pinned to home, and Advanced may come back on another
+      // page the manager chose earlier, which would remount over the selection.
+      const advancedPageId = selectedPageId ?? homePageId;
       // `SITE_CHANGE_GROUP` is a non-numeric sentinel for a slot on no page.
-      if (!Number.isFinite(targetPageId) || targetPageId === effectivePageId) return;
+      if (!Number.isFinite(targetPageId) || targetPageId === advancedPageId) return;
       setSelectedPageId(targetPageId);
       setPendingSelectionId(null);
       setPendingSelectSlot(target.slot);
       setFocusSelectedRow(false);
       setPageAnnouncement('');
     },
-    [effectivePageId],
+    [selectedPageId, homePageId, setMode],
   );
   const handleSlotSelected = useCallback(() => setPendingSelectSlot(null), []);
 
@@ -779,10 +862,14 @@ export function EditorRoot({
    * sheet's "Go to Pages", the canvas's navigation bar, the Add a part
    * dialog's "Manage pages", and Help's "Show me".
    */
-  const openSettingsTab = useCallback((tab: SettingsTabId) => {
-    setView('settings');
-    setSettingsTab(tab);
-  }, []);
+  const openSettingsTab = useCallback(
+    (tab: SettingsTabId) => {
+      setMode('advanced');
+      setView('settings');
+      setSettingsTab(tab);
+    },
+    [setMode],
+  );
   const handleGoToPages = useCallback(() => openSettingsTab('pages'), [openSettingsTab]);
 
   /*
@@ -809,6 +896,7 @@ export function EditorRoot({
     addTarget !== null && addTarget.pageId === effectivePageId ? addTarget.blockId : null;
   const openAdd = useCallback(
     (beforeBlockId: number | null, opener: HTMLElement | null) => {
+      setMode('advanced');
       setView('website');
       setAddTarget(
         beforeBlockId === null ? null : { pageId: effectivePageId, blockId: beforeBlockId },
@@ -817,7 +905,7 @@ export function EditorRoot({
         opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
       setAddOpen(true);
     },
-    [effectivePageId],
+    [effectivePageId, setMode],
   );
   const handleInsertAt = useCallback(
     (beforeBlockId: number | null, opener: HTMLElement) => openAdd(beforeBlockId, opener),
@@ -853,6 +941,22 @@ export function EditorRoot({
   const handleHelpToggle = useCallback(() => setHelpOpen((open) => !open), []);
   const handleHelpClose = useCallback(() => setHelpOpen(false), []);
   const canOpenPublish = diff.changes.length > 0 || diffFailed;
+
+  /*
+   * `?publish=1` (the overview's "Review and publish"): open the review once
+   * the change model has loaded, and only when the top bar's Publish would
+   * open it too — an old link must not open an empty review. Spent either way,
+   * so a reload after closing it does not open it again.
+   */
+  const publishRequestRef = useRef(openPublishOnLoad);
+  useEffect(() => {
+    if (!publishRequestRef.current || diffPending) return;
+    publishRequestRef.current = false;
+    if (canOpenPublish) setPublishOpen(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('publish');
+    window.history.replaceState(null, '', url);
+  }, [diffPending, canOpenPublish]);
   const handleShowMe = useCallback(
     (action: HelpAction) => {
       if (action.kind === 'add') {
@@ -860,11 +964,13 @@ export function EditorRoot({
         openAdd(null, null);
       } else if (action.kind === 'settings') {
         openSettingsTab(action.tab);
+      } else if (action.kind === 'website-settings') {
+        router.push(`/pm/website?communityId=${communityId}&tab=settings`);
       } else {
         setPublishOpen(true);
       }
     },
-    [openAdd, openSettingsTab],
+    [openAdd, openSettingsTab, router, communityId],
   );
 
   return (
@@ -936,8 +1042,14 @@ export function EditorRoot({
         changeCount={diff.changes.length}
         device={effectiveDevice}
         onDeviceChange={setDevice}
+        mode={mode}
+        onModeChange={setMode}
+        // Advanced only: every action in it (go to a section, add a required
+        // one) lands on the canvas. Simple's Publish still checks the same rules.
         requirements={
-          <RequirementsPill onGoToSection={handleGoToSlot} onAddSection={handleGoToAdd} />
+          mode === 'advanced' ? (
+            <RequirementsPill onGoToSection={handleGoToSlot} onAddSection={handleGoToAdd} />
+          ) : undefined
         }
         // Condos and HOAs only: apartments owe no records, and the count's
         // route refuses them. The page has already required a manager with
@@ -958,11 +1070,6 @@ export function EditorRoot({
           view === 'settings' ? (
             <SettingsView
               communityId={communityId}
-              community={siteIdentity}
-              tagline={tagline}
-              initialSettings={initialSiteSettings}
-              publicSiteUrl={publicSiteUrl}
-              hasSiteCustomDomain={hasSiteCustomDomain}
               tabRequest={settingsTabRequest}
               onTabChange={setSettingsTab}
               pagesPanel={{
@@ -977,7 +1084,6 @@ export function EditorRoot({
                 hasSiteCustomCss,
                 theme: resolveStylingTheme(canvasContext),
               }}
-              noticePanel={{ hasPublishedSite, initialNotice }}
             />
           ) : null
         }
@@ -1068,22 +1174,17 @@ export function EditorRoot({
         // costs an empty render rather than a branch here — except while the
         // page is unknown, where an inspector save would target home.
         inspector={
-          pagesUnavailable ? null : (
-            // The hero form previews its linked fields with the facts the canvas
-            // draws them with, and each section's panel says where its content
-            // comes from with the same canvas context.
-            <LinkedFactsProvider facts={canvasContext?.community ?? null}>
-              <SectionSourcesProvider
-                layoutId={canvasContext?.layout ?? null}
-                contact={canvasContext?.preview.contact ?? null}
-                ownerRecordGroups={canvasContext?.ownerRecordGroups ?? null}
-                // Apartments owe no records list, so their Documents panel says
-                // nothing about owners' records.
-                recordsApply={siteIdentity.communityType !== 'apartment'}
-              >
-                <Inspector communityId={communityId} />
-              </SectionSourcesProvider>
-            </LinkedFactsProvider>
+          pagesUnavailable || mode === 'simple' ? null : (
+            // The hero form shows its words with the facts the canvas draws them
+            // with, and each section's panel says where its content comes from
+            // with the same canvas context. Apartments owe no records list, so
+            // their Documents panel says nothing about owners' records.
+            <SectionFormContext
+              canvasContext={canvasContext}
+              recordsApply={siteIdentity.communityType !== 'apartment'}
+            >
+              <Inspector communityId={communityId} />
+            </SectionFormContext>
           )
         }
       >
@@ -1098,6 +1199,21 @@ export function EditorRoot({
               </p>
             </div>
           </div>
+        ) : canvasContext && mode === 'simple' ? (
+          <SectionFormContext
+            canvasContext={canvasContext}
+            recordsApply={siteIdentity.communityType !== 'apartment'}
+          >
+            <SimpleMode
+              communityId={communityId}
+              context={canvasContext}
+              device={effectiveDevice}
+              nav={canvasNav}
+              footer={canvasFooter}
+              page={canvasPage}
+              initialItem={initialItem}
+            />
+          </SectionFormContext>
         ) : canvasContext ? (
           <Canvas
             communityId={communityId}
@@ -1159,6 +1275,9 @@ export function EditorRoot({
           onOpenChange={setPublishOpen}
           onFixIssue={handleGoToSlot}
           onGoToPages={handleGoToPages}
+          // A publish is the end of an edit, so the manager lands back on the
+          // website overview, which says the site was updated.
+          onPublished={() => router.push(`/pm/website?communityId=${communityId}&published=1`)}
         />
       ) : null}
 
@@ -1202,6 +1321,7 @@ function PublishSheetMount({
   onOpenChange,
   onFixIssue,
   onGoToPages,
+  onPublished,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
@@ -1209,6 +1329,7 @@ function PublishSheetMount({
   onOpenChange: (open: boolean) => void;
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
+  onPublished: () => void;
 }) {
   const { movableSections, select } = useSiteEditor();
   // From the provider, not a prop: a unit count corrected in the pill this
@@ -1260,6 +1381,7 @@ function PublishSheetMount({
       // Page-set problems are fixed in the Pages panel and nowhere else.
       onGoToPages={onGoToPages}
       complianceSubject={subject}
+      onPublished={onPublished}
     />
   );
 }

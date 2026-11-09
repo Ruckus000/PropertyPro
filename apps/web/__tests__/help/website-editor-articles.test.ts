@@ -1,6 +1,6 @@
 /**
  * The website editor's Help Center articles describe the editor as it is once
- * Site settings holds the pages, design and notice tools (combined website
+ * Pages & design holds the pages and design tools (combined website
  * builder plan, Tasks 27 and 28). `guard:help-content` checks frontmatter and
  * links; nothing checks that the words still match the screen, which is what
  * this file pins for the claims that went stale.
@@ -44,24 +44,27 @@ describe('website editor articles', () => {
     expect(text).not.toMatch(/\bcompliant\b/i);
   });
 
-  it('website-design sends a manager to the look picker and keeps colours in Site settings', () => {
+  it('website-design chooses the look in the editor and keeps colours in Pages & design', () => {
     const text = article('website-design');
-    expect(text).toContain('look picker');
-    expect(text).toContain('**Change look**');
-    expect(text).toContain('**Publish this look**');
-    expect(text).toMatch(/\*\*Site settings\*\*[^.]*\*\*Design\*\* tab/);
-    // The old steps: a look chosen from a list in the Design panel.
-    expect(text).not.toMatch(/under \*\*Look\*\*/i);
-    expect(text).not.toMatch(/Select \*\*Design\*\*/);
+    expect(text).toContain('**Edit website**');
+    expect(text).toContain('**Look**');
+    expect(text).toMatch(/\*\*Pages & design\*\*[^.]*\*\*Design\*\* tab/);
+    // The look picker page and its one-click publish are gone.
+    expect(text).not.toContain('look picker');
+    expect(text).not.toContain('**Publish this look**');
+    expect(text).not.toContain('**Change look**');
   });
 
-  it('website-branding puts colours and logos on the Design tab of Site settings', () => {
+  // Colours are drafts, so they are in the editor; logos and the domain save at
+  // once, so they are on the Website page's Settings tab (design D).
+  it('website-branding puts colours in Pages & design, and logos and the domain on the Website page', () => {
     const text = article('website-branding');
-    expect(text).toMatch(/\*\*Site settings\*\*[^.]*\*\*Design\*\* tab/);
-    expect(text).toContain('**Logos**');
+    expect(text).toMatch(/\*\*Pages & design\*\*[^.]*\*\*Design\*\* tab/);
+    expect(text).toMatch(/Website page, select the \*\*Settings\*\* tab\. Under \*\*Logos\*\*/);
+    expect(text).toMatch(/Website page, select the \*\*Settings\*\* tab\. Under \*\*Use your own domain\*\*/);
     expect(text).toContain('**Site logo**');
     expect(text).toContain('**Square logo**');
-    expect(text).not.toMatch(/\*\*Settings\*\*/);
+    expect(text).not.toContain('Site settings');
   });
 
   it('website-sections says a Payments section can be undone, and names the two new sections', () => {
@@ -74,32 +77,44 @@ describe('website editor articles', () => {
     expect(text).toContain('**Board members**');
   });
 
-  it('website-editor-overview says where Site settings is, and lists every tab', () => {
+  it('website-editor-overview names both modes, says where Pages & design is, and lists every tab', () => {
     const text = article('website-editor-overview');
-    expect(text).toMatch(/Select \*\*Site settings\*\* in the top bar/);
+    expect(text).toContain('**Simple**');
+    expect(text).toContain('**Advanced**');
+    expect(text).toMatch(/select \*\*Pages & design\*\* in the top bar/i);
+    // The settings that save at once are on the Website page now.
+    expect(text).toMatch(/\*\*Settings\*\* tab of your Website page/);
     for (const tab of SETTINGS_TABS) {
       expect(text, `the overview should name the ${tab.label} tab`).toContain(`**${tab.label}**`);
     }
   });
 
-  it('florida-website-rules sends a manager to the Records list and the editor\'s missing-records link', () => {
+  it('florida-website-rules sends a manager to the Records tab and the editor\'s missing-records link', () => {
     const text = article('florida-website-rules');
     // The Documents tool was deleted with the rail.
     expect(text).not.toMatch(/\*\*Documents\*\* tool/);
-    expect(text).toContain('**Records** list on your website home');
+    expect(text).toContain('**Records** tab on your Website page');
     expect(text).toMatch(/top bar shows a link with a warning sign and how many records are missing/);
     expect(text).not.toMatch(/\bcompliant\b|\$\d/i);
   });
 
-  it('website-design names the picker\'s Keep my current look', () => {
+  it('website-design names the Keep my current look button', () => {
     expect(article('website-design')).toContain('**Keep my current look**');
     expect(article('website-design')).not.toContain('Keep this look');
   });
 
-  it('the pages, notice, address and search articles open Site settings from the top bar', () => {
-    expect(article('website-pages')).toContain('**Site settings** in the top bar');
-    expect(article('urgent-notice')).toContain('**Site settings** in the top bar');
-    expect(article('website-domain')).toContain('**Site settings** in the top bar');
-    expect(article('website-search')).toContain('**Site settings** in the top bar');
+  it('the pages article opens Pages & design from the top bar', () => {
+    expect(article('website-pages')).toContain('**Pages & design** in the top bar');
   });
+
+  // These save at once, so they moved to the overview's Settings tab (design D).
+  it.each(['urgent-notice', 'website-domain', 'website-search'])(
+    '%s opens Settings on the Website page, not the editor',
+    (slug) => {
+      const text = article(slug);
+      expect(text).toContain('On your Website page, select the **Settings** tab.');
+      expect(text).not.toContain('Site settings');
+      expect(text).not.toContain('top bar');
+    },
+  );
 });

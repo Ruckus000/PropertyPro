@@ -261,9 +261,9 @@ export async function fillDemoCommunitySite(communityId: number): Promise<void> 
  * What is written follows the plan's kind:
  * - `switch`: the planned sections, and the look as the draft look.
  * - `already-drafted` (the look is drafted already): nothing at all.
- *   "Publish this look" runs the switch after the card's own, and whatever the
- *   manager changed in between, on the page or in the drafted colours and
- *   fonts, stays as they left it.
+ *   Picking the drafted look's card again runs the switch a second time, and
+ *   whatever the manager changed in between, on the page or in the drafted
+ *   colours and fonts, stays as they left it.
  * - `live-look` (the live look, nothing else drafted): nothing at all.
  * - `back-to-live` (the live look, another layout drafted): the sections
  *   return to the live page row for row, keeping the manager's edits, and the

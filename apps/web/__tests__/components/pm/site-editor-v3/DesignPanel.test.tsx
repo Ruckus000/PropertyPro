@@ -1,8 +1,8 @@
 /**
  * The Design panel (website builder v4, Phase 4b; Site settings, combined plan
  * Task 27). The colour set and custom colours it saves are drafts; these pin
- * what it sends and what it shows. It lists no looks: it links to the look
- * picker.
+ * what it sends and what it shows. It opens with the looks (`LookChooser`,
+ * which has its own suite), chosen in the editor rather than on another page.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -26,6 +26,12 @@ vi.mock('@/hooks/use-site-design', () => ({
   siteDesignQueryKey: (communityId: number) => ['pm', 'site', 'design', communityId] as const,
   useSiteDesign: () => ({ data: designRef.current, isError: false, refetch: vi.fn() }),
   useSaveSiteDesign: () => ({ mutate: saveMutateMock, isPending: savePendingRef.current }),
+}));
+
+// The look chooser's actions; its behaviour has its own suite (LookChooser.test.tsx).
+vi.mock('@/hooks/use-site-look', () => ({
+  useSelectLook: () => ({ mutate: vi.fn(), isPending: false }),
+  useKeepCurrentLook: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The Logos section has its own test (LogosSection.test.tsx).
@@ -85,27 +91,16 @@ beforeEach(() => {
 });
 
 describe('looks', () => {
-  it('links to the look picker for this community', () => {
+  // Revert check (production line): `<LookChooser communityId={communityId} />`
+  // in `DesignPanel.tsx`.
+  it('offers the four looks here, and no link away to another page', () => {
     renderPanel();
 
-    expect(screen.getByRole('link', { name: 'Change look' })).toHaveAttribute(
-      'href',
-      '/pm/website/looks?communityId=42',
-    );
-  });
-
-  it('lists no looks, whatever the site is on', () => {
-    for (const layoutId of ['tidewater', 'bayfront', 'heritage']) {
-      designRef.current = { live: { layoutId, themePresetSlug: 'bay-light' }, draft: {} };
-      const { unmount } = renderPanel();
-
-      expect(screen.queryByRole('radiogroup', { name: 'Look' })).not.toBeInTheDocument();
-      expect(document.querySelector('[data-testid^="design-look-"]')).toBeNull();
-      for (const name of ['Bayfront', 'Heritage', 'Palm Grove', 'Plain & Simple']) {
-        expect(screen.queryByText(name)).not.toBeInTheDocument();
-      }
-      unmount();
+    const group = screen.getByRole('group', { name: 'Look' });
+    for (const name of ['Bayfront', 'Heritage', 'Palm Grove', 'Plain & Simple']) {
+      expect(group).toContainElement(screen.getByRole('radio', { name: new RegExp(name) }));
     }
+    expect(screen.queryByRole('link', { name: 'Change look' })).not.toBeInTheDocument();
   });
 
   it('no longer offers the six colour-only templates', () => {

@@ -257,6 +257,7 @@ interface RenderOptions {
   onOpenChange?: (open: boolean) => void;
   onFixIssue?: (target: { pageId: string; slot: number }) => void;
   onGoToPages?: () => void;
+  onPublished?: () => void;
   open?: boolean;
   /**
    * Defaults to `apartment`, which has no Florida-required sections, so every
@@ -283,6 +284,7 @@ function renderSheet({
   onGoToPages = vi.fn(),
   open = true,
   communityType = 'apartment',
+  onPublished,
 }: RenderOptions = {}) {
   const element = (
     <PublishSheet
@@ -291,6 +293,7 @@ function renderSheet({
       communityId={7}
       onGoToPages={onGoToPages}
       complianceSubject={{ communityType, unitCount: null }}
+      {...(onPublished ? { onPublished } : {})}
       {...(onFixIssue ? { onFixIssue } : {})}
       {...(brandColors ? { brandColors } : {})}
       {...(layout ? { layout } : {})}
@@ -1145,6 +1148,7 @@ describe('PublishSheet — publishing', () => {
 
     expect(mutateAsync).toHaveBeenCalledWith({
       expectedPublishedAt: '2026-07-01T00:00:00.000Z',
+      markOnboardingComplete: true,
     });
     expect(toastSuccess).toHaveBeenCalledWith('Published — 1 section live.');
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -1241,7 +1245,38 @@ describe('PublishSheet — publishing', () => {
     queries.token = null;
     renderSheet();
     await user.click(screen.getByRole('button', { name: /publish changes/i }));
-    expect(mutateAsync).toHaveBeenCalledWith({ expectedPublishedAt: null });
+    expect(mutateAsync).toHaveBeenCalledWith({
+      expectedPublishedAt: null,
+      markOnboardingComplete: true,
+    });
+  });
+});
+
+describe('PublishSheet — after a publish', () => {
+  // Revert check (production line): `onPublished?.()` after the success toast
+  // in `PublishSheet.tsx`'s `onPublish`.
+  it('tells the editor once the publish succeeded, after closing', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onPublished = vi.fn();
+    renderSheet({ onOpenChange, onPublished });
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+
+    expect(onPublished).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('never on a conflict, which leaves the manager on the receipt', async () => {
+    const user = userEvent.setup();
+    mutateAsync.mockRejectedValue(new PublishConflictError('Site changed since load'));
+    const onPublished = vi.fn();
+    renderSheet({ onPublished });
+
+    await user.click(screen.getByRole('button', { name: /publish changes/i }));
+    await screen.findByTestId('publish-receipt');
+
+    expect(onPublished).not.toHaveBeenCalled();
   });
 });
 
@@ -1533,6 +1568,7 @@ describe('PublishSheet — publishing never emails', () => {
 
     expect(mutateAsync).toHaveBeenCalledWith({
       expectedPublishedAt: '2026-07-01T00:00:00.000Z',
+      markOnboardingComplete: true,
     });
     expect(mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('notifyResidents');
   });

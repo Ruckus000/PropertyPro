@@ -22,6 +22,9 @@ const requireMembershipMock = vi.hoisted(() => vi.fn());
 const featuresMock = vi.hoisted(() => vi.fn());
 const ensureChecklistMock = vi.hoisted(() => vi.fn());
 const loadWebsiteHomeMock = vi.hoisted(() => vi.fn());
+const brandingMock = vi.hoisted(() => vi.fn());
+const publicInfoMock = vi.hoisted(() => vi.fn());
+const quotaMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 vi.mock('@/lib/request/page-auth-context', () => ({
@@ -39,6 +42,14 @@ vi.mock('@/lib/services/transparency-service', () => ({
 vi.mock('@/lib/services/website-home-service', () => ({
   loadWebsiteHome: loadWebsiteHomeMock,
 }));
+vi.mock('@/lib/api/branding', () => ({
+  getBrandingForCommunity: brandingMock,
+  getCommunityPublicInfo: publicInfoMock,
+}));
+vi.mock('@/lib/services/site-settings-service', () => ({ loadSiteQuotaBytes: quotaMock }));
+// `resolveAssetsBytesUsed` is pure, but its module reads the database at load.
+vi.mock('@propertypro/db', () => ({}));
+vi.mock('@propertypro/db/unsafe', () => ({}));
 vi.mock('@/components/website-home/website-home', () => ({ WebsiteHome: () => null }));
 
 import WebsiteHomePage from '@/app/(authenticated)/pm/website/page';
@@ -94,7 +105,10 @@ beforeEach(() => {
   requireMembershipMock.mockResolvedValue({ ...MANAGER });
   featuresMock.mockResolvedValue({ hasSiteEditor: true, hasSitePolishBlocks: false });
   ensureChecklistMock.mockResolvedValue([]);
-  loadWebsiteHomeMock.mockResolvedValue({ marker: 'home-data' });
+  loadWebsiteHomeMock.mockResolvedValue({ marker: 'home-data', slug: 'sunset-condos' });
+  brandingMock.mockResolvedValue(null);
+  publicInfoMock.mockResolvedValue(null);
+  quotaMock.mockResolvedValue(null);
 });
 
 describe('website home page — access', () => {
@@ -107,6 +121,8 @@ describe('website home page — access', () => {
     // Refused before anything is written or read.
     expect(ensureChecklistMock).not.toHaveBeenCalled();
     expect(loadWebsiteHomeMock).not.toHaveBeenCalled();
+    expect(brandingMock).not.toHaveBeenCalled();
+    expect(publicInfoMock).not.toHaveBeenCalled();
   });
 
   it('redirects without the site feature, or with a lapsed subscription', async () => {
@@ -134,7 +150,7 @@ describe('website home page — loading', () => {
     ensureChecklistMock.mockImplementation(async () => order.push('checklist'));
     loadWebsiteHomeMock.mockImplementation(async () => {
       order.push('load');
-      return { marker: 'home-data' };
+      return { marker: 'home-data', slug: 'sunset-condos' };
     });
 
     const { tree } = await runPage({ communityId: '7', published: '1' });
@@ -157,6 +173,30 @@ describe('website home page — loading', () => {
     await runPage({ communityId: '7' });
 
     expect(loadWebsiteHomeMock).toHaveBeenCalledWith(7, 'user-1', { includeHistory: true });
+  });
+
+  // The Settings tab's live settings open with real values, read the way the
+  // editor page reads them (design D).
+  it('seeds the Settings tab from the branding, notice and quota reads', async () => {
+    featuresMock.mockResolvedValue({ hasSiteEditor: true, hasSitePolishBlocks: false, hasSiteCustomDomain: true });
+    brandingMock.mockResolvedValue({ tagline: 'By the bay', assetsBytesUsed: 2048 });
+    publicInfoMock.mockResolvedValue({
+      urgentNoticeText: 'Pool closed',
+      urgentNoticeExpiresAt: new Date('2026-11-10T00:00:00.000Z'),
+    });
+    quotaMock.mockResolvedValue(500);
+
+    const { tree } = await runPage({ communityId: '7' });
+
+    expect(brandingMock).toHaveBeenCalledWith(7);
+    expect(quotaMock).toHaveBeenCalledWith(7);
+    expect(findProps(tree, WebsiteHome)?.['siteSettings']).toMatchObject({
+      community: { name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718' },
+      tagline: 'By the bay',
+      initialSettings: { storage: { assetsBytesUsed: 2048, quotaBytes: 500 } },
+      hasSiteCustomDomain: true,
+      initialNotice: { text: 'Pool closed', expiresAt: '2026-11-10T00:00:00.000Z', setAt: null },
+    });
   });
 
   it('an apartment has no checklist to initialize', async () => {

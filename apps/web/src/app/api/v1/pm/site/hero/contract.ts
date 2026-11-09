@@ -31,13 +31,10 @@ export const heroBlockGetContract = defineRoute({
 // The hero fields are validated by heroBlockSchema; the body schema lifts
 // the communityId out and uses passthrough so the runner accepts the
 // adjacent hero properties. The handler re-validates with heroBlockSchema.
-//
-// `live`: true writes the published hero (the website home's Edit words /
-// Change photo); absent or false writes the draft, as the editor always has.
+// Every PATCH writes the draft.
 const heroPatchBodySchema = z
   .object({
     communityId: z.number().int().positive(),
-    live: z.boolean().optional(),
   })
   .passthrough();
 

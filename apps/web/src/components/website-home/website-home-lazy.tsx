@@ -20,6 +20,7 @@
  * upload modal, which loads both, the growth is 11.8 KiB.
  */
 import dynamic from 'next/dynamic';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const LazyAddRecordsDrawer = dynamic(
   () => import('./website-home-overlays').then((mod) => mod.AddRecordsDrawer),
@@ -39,4 +40,18 @@ export const LazyUploadDocumentModal = dynamic(
 export const LazyConfirmDialog = dynamic(
   () => import('./website-home-overlays').then((mod) => mod.ConfirmDialog),
   { ssr: false, loading: () => null },
+);
+
+/**
+ * The overview Settings tab's site settings (design D): the panels that moved
+ * out of the editor. Fetched on the tab's first visit, not with the page, for
+ * the budget reason above. Not `ssr: false`: a link straight to `?tab=settings`
+ * renders them on the server, seeded from the page's loader.
+ */
+export const LazyLiveSiteSettings = dynamic(
+  () =>
+    import('@/components/pm/site-editor-v3/settings/LiveSiteSettings').then(
+      (mod) => mod.LiveSiteSettings,
+    ),
+  { loading: () => <Skeleton className="h-40 w-full" /> },
 );
