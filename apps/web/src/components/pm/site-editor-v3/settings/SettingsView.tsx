@@ -4,7 +4,7 @@
  * The editor's Site settings view (website builder v4, Phase 5; the tools,
  * combined plan Task 27): everything about the site that is not a section on a
  * page. General (footer and site icon), Pages, Design (colours, fonts and
- * logos; looks are chosen on the look picker), Notice, Address & domain,
+ * logos, after the looks), Notice, Address & domain,
  * Search & sharing, and Access & visibility.
  *
  * Code-split by `EditorRoot` like every panel: the web JS aggregate has little

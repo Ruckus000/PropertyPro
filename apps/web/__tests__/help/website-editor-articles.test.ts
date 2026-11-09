@@ -44,15 +44,15 @@ describe('website editor articles', () => {
     expect(text).not.toMatch(/\bcompliant\b/i);
   });
 
-  it('website-design sends a manager to the look picker and keeps colours in Site settings', () => {
+  it('website-design chooses the look in the editor and keeps colours in Site settings', () => {
     const text = article('website-design');
-    expect(text).toContain('look picker');
-    expect(text).toContain('**Change look**');
-    expect(text).toContain('**Publish this look**');
+    expect(text).toContain('**Edit website**');
+    expect(text).toContain('**Look**');
     expect(text).toMatch(/\*\*Site settings\*\*[^.]*\*\*Design\*\* tab/);
-    // The old steps: a look chosen from a list in the Design panel.
-    expect(text).not.toMatch(/under \*\*Look\*\*/i);
-    expect(text).not.toMatch(/Select \*\*Design\*\*/);
+    // The look picker page and its one-click publish are gone.
+    expect(text).not.toContain('look picker');
+    expect(text).not.toContain('**Publish this look**');
+    expect(text).not.toContain('**Change look**');
   });
 
   it('website-branding puts colours and logos on the Design tab of Site settings', () => {
@@ -74,9 +74,11 @@ describe('website editor articles', () => {
     expect(text).toContain('**Board members**');
   });
 
-  it('website-editor-overview says where Site settings is, and lists every tab', () => {
+  it('website-editor-overview names both modes, says where Site settings is, and lists every tab', () => {
     const text = article('website-editor-overview');
-    expect(text).toMatch(/Select \*\*Site settings\*\* in the top bar/);
+    expect(text).toContain('**Simple**');
+    expect(text).toContain('**Advanced**');
+    expect(text).toMatch(/select \*\*Site settings\*\* in the top bar/i);
     for (const tab of SETTINGS_TABS) {
       expect(text, `the overview should name the ${tab.label} tab`).toContain(`**${tab.label}**`);
     }
@@ -91,7 +93,7 @@ describe('website editor articles', () => {
     expect(text).not.toMatch(/\bcompliant\b|\$\d/i);
   });
 
-  it('website-design names the picker\'s Keep my current look', () => {
+  it('website-design names the Keep my current look button', () => {
     expect(article('website-design')).toContain('**Keep my current look**');
     expect(article('website-design')).not.toContain('Keep this look');
   });

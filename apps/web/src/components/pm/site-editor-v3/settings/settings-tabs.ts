@@ -65,18 +65,49 @@ function first(value: ParamValue): string | undefined {
 }
 
 /**
- * Which area the editor opens on, from the page's search params.
- * `?view=settings&tab=pages` opens Site settings on Pages. An unknown tab opens
- * General; a `tab` without `view=settings` is ignored, so a stray parameter
- * never takes a manager away from their page.
+ * The editor's two modes. Simple is the welcome and the look beside a preview
+ * of the home page; Advanced is the canvas, the inspector and Site settings.
+ */
+export type EditorMode = 'simple' | 'advanced';
+
+/** A Simple-mode row a link can open: the website overview's quick edits. */
+export type SimpleItem = 'welcome' | 'look';
+
+export interface EditorLocation {
+  mode: EditorMode;
+  view: EditorView;
+  tab: SettingsTabId;
+  /** The Simple row to open first. */
+  item: SimpleItem;
+  /** `?publish=1`: open the publish review on arrival ("Review and publish"). */
+  openPublish: boolean;
+}
+
+/**
+ * Where the editor opens, from the page's search params.
+ *
+ * - `?mode=advanced` opens Advanced; anything else is Simple, except that
+ *   `?view=settings` (old links, Help screenshots) means Advanced, the only
+ *   mode with Site settings.
+ * - `?view=settings&tab=pages` opens Site settings on Pages. An unknown tab
+ *   opens General; a `tab` without `view=settings` is ignored, so a stray
+ *   parameter never takes a manager away from their page.
+ * - `?item=look` opens Simple's Look row; anything else opens the welcome.
  */
 export function parseEditorLocation(params: {
+  mode?: ParamValue;
   view?: ParamValue;
   tab?: ParamValue;
-}): { view: EditorView; tab: SettingsTabId } {
-  if (first(params.view) !== 'settings') {
-    return { view: 'website', tab: DEFAULT_SETTINGS_TAB };
-  }
+  item?: ParamValue;
+  publish?: ParamValue;
+}): EditorLocation {
+  const settings = first(params.view) === 'settings';
   const tab = first(params.tab);
-  return { view: 'settings', tab: isSettingsTabId(tab) ? tab : DEFAULT_SETTINGS_TAB };
+  return {
+    mode: settings || first(params.mode) === 'advanced' ? 'advanced' : 'simple',
+    view: settings ? 'settings' : 'website',
+    tab: settings && isSettingsTabId(tab) ? tab : DEFAULT_SETTINGS_TAB,
+    item: first(params.item) === 'look' ? 'look' : 'welcome',
+    openPublish: first(params.publish) === '1',
+  };
 }

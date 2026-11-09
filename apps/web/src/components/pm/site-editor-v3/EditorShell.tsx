@@ -1,11 +1,17 @@
 'use client';
 
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { EditorTopBar, type EditorTopBarPageProps, type EditorView } from './EditorTopBar';
+import {
+  EDITOR_HEADING_ID,
+  EditorTopBar,
+  type EditorTopBarPageProps,
+  type EditorView,
+} from './EditorTopBar';
+import type { EditorMode } from './settings/settings-tabs';
 import dynamic from 'next/dynamic';
 
-// Below 768px only — a desktop PM never renders it (v4 Phase 3: the editor's
-// first-load JavaScript is at its budget).
+// Below 768px in Advanced only — a desktop PM never renders it (v4 Phase 3: the
+// editor's first-load JavaScript is at its budget).
 const PhoneGate = dynamic(() => import('./PhoneGate').then((m) => m.PhoneGate), {
   loading: () => null,
 });
@@ -54,6 +60,9 @@ export interface EditorShellProps extends EditorTopBarPageProps {
    * deliberately minimal surface for posting an urgent notice.
    */
   banner?: React.ReactNode;
+  /** Simple or Advanced. Forwarded to the top bar's switch. */
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
   /** Which area is showing (v4 Phase 5). Forwarded to the top bar's switch. */
   view: EditorView;
   onViewChange: (view: EditorView) => void;
@@ -75,14 +84,16 @@ export interface EditorShellProps extends EditorTopBarPageProps {
 
 /**
  * The editor: the top bar, then the canvas with the inspector beside it, or
- * Site settings in their place.
+ * Site settings in their place. In Simple mode `children` is the whole body
+ * (the welcome and look beside a preview) and `inspector` is null.
  *
  * There is no tool rail (combined plan Task 28). Sections are added and edited
  * on the page itself; pages, design and the notice are Site settings tabs.
  *
- * The whole editor is unmounted below 768px rather than hidden — see PhoneGate.
- * Column heights come from the route-group layout's `h-[100dvh]`, so every
- * column scrolls independently and the page itself never does.
+ * Below 768px Advanced is unmounted rather than hidden — see PhoneGate — and
+ * Simple renders as one column. Column heights come from the route-group
+ * layout's `h-[100dvh]`, so every column scrolls independently and the page
+ * itself never does.
  */
 export function EditorShell({
   communityName,
@@ -110,6 +121,8 @@ export function EditorShell({
   changeCount,
   device,
   onDeviceChange,
+  mode,
+  onModeChange,
   view,
   onViewChange,
   settings,
@@ -127,14 +140,21 @@ export function EditorShell({
   // case: desktop renders immediately, and the small handful of phone users get
   // the gate one effect later.
   const isNarrow = useMediaQuery('(max-width: 767px)');
+  const advanced = mode === 'advanced';
 
-  if (isNarrow) {
+  if (isNarrow && advanced) {
     return (
       <PhoneGate
         publicSiteUrl={publicSiteUrl}
         communityId={communityId}
         hasPublishedSite={hasPublishedSite}
         initialNotice={initialNotice}
+        // The gate, and the button with it, unmounts on the switch; focus goes to
+        // the editor's heading rather than falling to the page.
+        onSwitchToSimple={() => {
+          onModeChange('simple');
+          requestAnimationFrame(() => document.getElementById(EDITOR_HEADING_ID)?.focus());
+        }}
       />
     );
   }
@@ -142,6 +162,9 @@ export function EditorShell({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <EditorTopBar
+        communityId={communityId}
+        mode={mode}
+        onModeChange={onModeChange}
         communityName={communityName}
         pageName={pageName}
         status={status}
@@ -177,7 +200,7 @@ export function EditorShell({
        * them under the drawer broke the guide being followed.
        */}
       <div className="group/editor relative flex min-h-0 flex-1 flex-col">
-      {view === 'settings' ? (
+      {advanced && view === 'settings' ? (
         // `relative` for the same reason as the canvas scroller below.
         <div
           data-testid="settings-scroller"

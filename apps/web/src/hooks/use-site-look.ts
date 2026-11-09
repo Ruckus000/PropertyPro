@@ -74,13 +74,15 @@ export function useKeepCurrentLook(communityId: number) {
   });
 }
 
-export function useSiteLook(communityId: number) {
-  const token = useSitePublishToken(communityId);
-  const scope = lookScope(communityId);
+/**
+ * Draft a look (`PATCH { lookId }`). Apart from `useSiteLook` so the editor's
+ * look chooser does not also load the publish token it never uses: the editor
+ * publishes through its own Publish. Shares the picker's mutation scope.
+ */
+export function useSelectLook(communityId: number) {
   const invalidateSite = useInvalidateSite();
-
-  const selectLook = useMutation<unknown, Error, LookId>({
-    scope,
+  return useMutation<unknown, Error, LookId>({
+    scope: lookScope(communityId),
     mutationFn: (lookId) =>
       requestJson(LOOK_URL, {
         method: 'PATCH',
@@ -89,6 +91,14 @@ export function useSiteLook(communityId: number) {
       }),
     onSuccess: invalidateSite,
   });
+}
+
+export function useSiteLook(communityId: number) {
+  const token = useSitePublishToken(communityId);
+  const scope = lookScope(communityId);
+  const invalidateSite = useInvalidateSite();
+
+  const selectLook = useSelectLook(communityId);
 
   const publishLook = useMutation<PublishLookResult, Error, LookId>({
     scope,

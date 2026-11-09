@@ -7,9 +7,9 @@
  * Publish (`site-design-service`). The logos at the bottom are the exception:
  * they are live as soon as they save (see `LogosSection`).
  *
- * It lists no looks. A look is a whole design (a layout, a colour set and the
- * home page's starting sections), and choosing one is the look picker's job
- * (`/pm/website/looks`); this panel links to it.
+ * It opens with the looks (`LookChooser`, shared with Simple mode). A look is a
+ * whole design (a layout, a colour set and the home page's starting sections);
+ * choosing one drafts it, like every other change here.
  *
  * The colour-set grid is `PresetCards`.
  *
@@ -18,7 +18,6 @@
  * Professional, as it always was.
  */
 
-import Link from 'next/link';
 import { toast } from 'sonner';
 import type { SiteLook } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -26,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
 import { LogosSection } from './LogosSection';
+import { LookChooser } from './LookChooser';
 import { PresetCards, type PresetCardData } from './preset-cards';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
 
@@ -97,17 +97,8 @@ export function DesignPanel({
 
   return (
     <div className="space-y-8" data-testid="tool-panel-design">
-      <section aria-labelledby="design-look-heading" className="space-y-3">
-        <h3 id="design-look-heading" className="text-sm font-semibold text-content">
-          Look
-        </h3>
-        <p className="text-sm text-content-secondary">
-          A look sets how your whole website is laid out and what your home page starts with. You
-          choose it on the look picker. Sections you&apos;ve edited stay as they are.
-        </p>
-        <Button asChild variant="outline">
-          <Link href={`/pm/website/looks?communityId=${communityId}`}>Change look</Link>
-        </Button>
+      <section aria-label="Look">
+        <LookChooser communityId={communityId} />
       </section>
 
       <section aria-labelledby="design-colours-heading" className="space-y-3">

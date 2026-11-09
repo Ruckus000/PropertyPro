@@ -151,7 +151,7 @@ export function SiteStatusBanner({
             <p className="text-sm text-content">
               You have changes that aren&apos;t published.{' '}
               <Link
-                href={`/pm/website-editor?communityId=${communityId}`}
+                href={`/pm/website-editor?communityId=${communityId}&publish=1`}
                 className="font-medium text-content-link underline"
               >
                 Review and publish

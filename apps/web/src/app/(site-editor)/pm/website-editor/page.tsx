@@ -88,12 +88,16 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     redirect('/pm/dashboard/communities?reason=invalid-selection');
   }
   const communityId = rawId;
-  // `?view=settings&tab=<id>` opens Site settings on that tab (the website
-  // home links to it). Nothing here is trusted: an unknown tab is General, and
-  // the community, role and plan checks below apply to this URL like any other.
+  // `?mode=advanced`, `?item=look`, `?publish=1` and `?view=settings&tab=<id>`
+  // say where the editor opens (the website overview links to each). Nothing
+  // here is trusted: an unknown value falls back to the default, and the
+  // community, role and plan checks below apply to this URL like any other.
   const location = parseEditorLocation({
+    mode: params['mode'],
     view: params['view'],
     tab: params['tab'],
+    item: params['item'],
+    publish: params['publish'],
   });
 
   let userId: string;
@@ -255,6 +259,9 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         initialPages={initialPages}
         initialView={location.view}
         initialSettingsTab={location.tab}
+        initialMode={location.mode}
+        initialItem={location.item}
+        openPublishOnLoad={location.openPublish}
       />
     </EditorFrame>
   );

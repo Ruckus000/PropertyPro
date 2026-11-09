@@ -86,6 +86,10 @@ vi.mock('@/hooks/use-site-design', () => ({
   useSiteDesign: () => ({ data: designRef.current, isError: false, refetch: vi.fn() }),
   useSaveSiteDesign: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock('@/hooks/use-site-look', () => ({
+  useSelectLook: () => ({ mutate: vi.fn(), isPending: false }),
+  useKeepCurrentLook: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock('@/components/pm/site-editor-v3/panels/LogosSection', () => ({
   LogosSection: () => <p>Logos section</p>,
 }));
@@ -245,22 +249,16 @@ describe('SettingsView — pages, design and notice', () => {
     expect(onSelectPage).toHaveBeenCalledWith(77);
   });
 
-  it('the Design tab links to the look picker and lists no looks', async () => {
+  it('the Design tab offers the looks in place, then the colours and logos', async () => {
     const user = userEvent.setup();
     renderView();
     await user.click(screen.getByRole('tab', { name: 'Design' }));
     const panel = screen.getByRole('tabpanel');
 
-    expect(within(panel).getByRole('link', { name: 'Change look' })).toHaveAttribute(
-      'href',
-      '/pm/website/looks?communityId=42',
-    );
-    // No look is offered here: not as a radio, and not by name.
-    expect(within(panel).queryByRole('radiogroup', { name: 'Look' })).not.toBeInTheDocument();
-    for (const name of ['Bayfront', 'Heritage', 'Palm Grove', 'Plain & Simple']) {
-      expect(within(panel).queryByText(name)).not.toBeInTheDocument();
-    }
-    // What it does keep: colour sets, your own colours and the logos.
+    // Chosen here, as a draft — no link away to another page.
+    expect(within(panel).getByRole('group', { name: 'Look' })).toBeInTheDocument();
+    expect(within(panel).queryByRole('link', { name: 'Change look' })).not.toBeInTheDocument();
+    // What it keeps: colour sets, your own colours and the logos.
     expect(within(panel).getByLabelText(/midnight coast/i)).toBeInTheDocument();
     expect(within(panel).getByRole('heading', { name: 'Your own colours' })).toBeInTheDocument();
     expect(within(panel).getByText('Logos section')).toBeInTheDocument();
@@ -306,9 +304,9 @@ describe('SettingsView — pages, design and notice', () => {
 });
 
 describe('SettingsView — the address that opens it', () => {
-  it('?view=settings&tab=pages opens Site settings on Pages', () => {
+  it('?view=settings&tab=pages opens Site settings on Pages, in Advanced', () => {
     const location = parseEditorLocation({ view: 'settings', tab: 'pages' });
-    expect(location).toEqual({ view: 'settings', tab: 'pages' });
+    expect(location).toMatchObject({ mode: 'advanced', view: 'settings', tab: 'pages' });
 
     renderView({ tabRequest: { tab: location.tab } });
     expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
@@ -318,20 +316,41 @@ describe('SettingsView — the address that opens it', () => {
   });
 
   it('opens General for an unknown tab, and the website for anything but view=settings', () => {
-    expect(parseEditorLocation({ view: 'settings', tab: 'billing' })).toEqual({
+    expect(parseEditorLocation({ view: 'settings', tab: 'billing' })).toMatchObject({
       view: 'settings',
       tab: 'general',
     });
-    expect(parseEditorLocation({ view: 'settings' })).toEqual({ view: 'settings', tab: 'general' });
-    expect(parseEditorLocation({ tab: 'pages' })).toEqual({ view: 'website', tab: 'general' });
-    expect(parseEditorLocation({ view: 'elsewhere', tab: 'pages' })).toEqual({
+    expect(parseEditorLocation({ view: 'settings' })).toMatchObject({ view: 'settings', tab: 'general' });
+    expect(parseEditorLocation({ tab: 'pages' })).toMatchObject({ view: 'website', tab: 'general' });
+    expect(parseEditorLocation({ view: 'elsewhere', tab: 'pages' })).toMatchObject({
       view: 'website',
       tab: 'general',
     });
-    expect(parseEditorLocation({ view: ['settings', 'website'], tab: ['design', 'pages'] })).toEqual({
+    expect(parseEditorLocation({ view: ['settings', 'website'], tab: ['design', 'pages'] })).toMatchObject({
       view: 'settings',
       tab: 'design',
     });
+  });
+
+  it('opens Simple unless the address asks for Advanced or for Site settings', () => {
+    expect(parseEditorLocation({})).toEqual({
+      mode: 'simple',
+      view: 'website',
+      tab: 'general',
+      item: 'welcome',
+      openPublish: false,
+    });
+    expect(parseEditorLocation({ mode: 'advanced' }).mode).toBe('advanced');
+    expect(parseEditorLocation({ mode: 'expert' }).mode).toBe('simple');
+    // Site settings are Advanced's, so an old Site settings link opens Advanced.
+    expect(parseEditorLocation({ mode: 'simple', view: 'settings' }).mode).toBe('advanced');
+  });
+
+  it("reads the overview's quick-edit row and its Review and publish", () => {
+    expect(parseEditorLocation({ item: 'look' }).item).toBe('look');
+    expect(parseEditorLocation({ item: 'contact' }).item).toBe('welcome');
+    expect(parseEditorLocation({ publish: '1' }).openPublish).toBe(true);
+    expect(parseEditorLocation({ publish: 'yes' }).openPublish).toBe(false);
   });
 });
 

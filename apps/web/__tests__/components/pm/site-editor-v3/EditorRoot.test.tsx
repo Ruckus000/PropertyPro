@@ -33,6 +33,7 @@ import { EditorRoot } from '@/components/pm/site-editor-v3/EditorRoot';
 import { useLinkedFacts } from '@/components/pm/site-editor-v3/inspector/linked-facts-context';
 import { useSectionSources } from '@/components/pm/site-editor-v3/inspector/section-sources-context';
 import { useSiteEditor } from '@/components/pm/site-editor-v3/editor-context';
+import { useSelectedSitePage } from '@/hooks/use-selected-site-page';
 import { sectionLabel } from '@/components/pm/site-editor-v3/section-label';
 import type { SiteBlockSummary } from '@/hooks/use-content-blocks';
 
@@ -53,6 +54,11 @@ const CREATED_PAGE_ID = 91;
 const inspectorLifecycle = vi.hoisted(() => [] as string[]);
 /** The source of every `next/dynamic` loader the editor declared at import. */
 const dynamicLoaders = vi.hoisted(() => [] as string[]);
+/** Where a successful publish sends the manager. */
+const routerPush = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: routerPush, replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }),
+}));
 
 /**
  * A `block_order` held by a section on SECOND_PAGE_ID, not on home.
@@ -196,15 +202,21 @@ vi.mock('next/dynamic', () => ({
         ? ({
             onFixIssue,
             onGoToPages,
+            onPublished,
             layout,
             brandColors,
           }: {
             onFixIssue: (target: { pageId: string; slot: number }) => void;
             onGoToPages: () => void;
+            onPublished?: () => void;
             layout?: string;
             brandColors?: { secondaryColor?: string };
           }) => (
             <>
+              {/* The sheet calls this only after a publish succeeds. */}
+              <button type="button" onClick={() => onPublished?.()}>
+                Publish stand-in: succeed
+              </button>
               {/* What the secondary-colour advisory needs, echoed: a parent
                   that forgot either would switch the check off silently. */}
               <p>
@@ -246,6 +258,24 @@ vi.mock('next/dynamic', () => ({
               </button>
             </>
           )
+        : // Simple mode, stubbed to echo what it is given and what it can read:
+        // the row to open, the page the editor pins it to, and the two
+        // section-form contexts. A parent that forgot the contexts would leave
+        // the Welcome showing `{{name}}`, with no error anywhere.
+        String(loader).includes('SimpleMode')
+        ? ({ initialItem }: { initialItem: string }) => {
+            const facts = useLinkedFacts();
+            const sources = useSectionSources();
+            const page = useSelectedSitePage();
+            return (
+              <>
+                <p>simple stand-in, opening {initialItem}</p>
+                <p data-testid="simple-page">{String(page)}</p>
+                <p data-testid="simple-facts">{facts === null ? 'no facts' : facts.name}</p>
+                <p data-testid="simple-layout">{String(sources.layoutId)}</p>
+              </>
+            );
+          }
         : () => null),
 }));
 
@@ -600,6 +630,14 @@ interface RootOptions {
   /** `?view=settings&tab=<id>`, as the page parses it. */
   initialView?: 'website' | 'settings';
   initialSettingsTab?: string;
+  /**
+   * Advanced by default: nearly every case here is about the canvas, the
+   * inspector or Site settings, which are Advanced's. `null` leaves the prop
+   * off, to test the editor's own default.
+   */
+  initialMode?: 'simple' | 'advanced' | null;
+  initialItem?: 'welcome' | 'look';
+  openPublishOnLoad?: boolean;
 }
 
 function rootElement({
@@ -608,6 +646,9 @@ function rootElement({
   hasPublishedSite = true,
   initialView,
   initialSettingsTab,
+  initialMode = 'advanced',
+  initialItem,
+  openPublishOnLoad,
 }: RootOptions = {}) {
   return (
     <EditorRoot
@@ -639,6 +680,9 @@ function rootElement({
       initialPages={initialPages}
       initialView={initialView}
       initialSettingsTab={initialSettingsTab as never}
+      {...(initialMode === null ? {} : { initialMode })}
+      initialItem={initialItem}
+      openPublishOnLoad={openPublishOnLoad}
     />
   );
 }
@@ -660,7 +704,7 @@ async function openPages() {
 /** Back to the page being edited, where the canvas and the inspector are. */
 async function backToWebsite() {
   if (!screen.queryByTestId('settings-stand-in')) return;
-  await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Page' }));
 }
 
 function publishButton() {
@@ -1029,7 +1073,7 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
     expect(screen.getByTestId('settings-stand-in')).toBeInTheDocument();
     expect(screen.queryByText('inspector')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Page' }));
     expect(screen.queryByTestId('settings-stand-in')).not.toBeInTheDocument();
     expect(screen.getByText('inspector')).toBeInTheDocument();
   });
@@ -1140,7 +1184,7 @@ describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
     expect(screen.getByText('Requested tab: search')).toBeInTheDocument();
 
     // The PM's own switch afterwards opens Settings on its first tab again.
-    await userEvent.click(screen.getByRole('button', { name: 'Website' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Page' }));
     await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
     expect(screen.getByText('Requested tab: general')).toBeInTheDocument();
   });
@@ -1725,7 +1769,7 @@ describe('EditorRoot — the top bar names the page being edited', () => {
     expect(screen.getByTestId('editing-page-name')).toHaveTextContent('Amenities');
     // The heading is the route's identity and must NOT churn with the page —
     // it is the breadcrumb trail's leaf.
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Website');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Edit website');
   });
 });
 
@@ -1820,6 +1864,41 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
 
     await openPages();
     expect(screen.getByText(`Editing page ${SECOND_PAGE_ID}`)).toBeInTheDocument();
+  });
+
+  // Simple pins the page to home, but Advanced comes back on the page the
+  // manager chose there. An issue on HOME, fixed from Simple, must land on home.
+  // Revert check (production line): `targetPageId === advancedPageId` in
+  // `handleGoToSlot`, back to `=== effectivePageId` WITH its dependency list
+  // back to `[effectivePageId, setMode]`. Swapping the comparison alone leaves
+  // a stale closure that happens to route correctly, and this stays green.
+  it('from Simple, lands on the issue\'s page, not the one Advanced was left on', async () => {
+    queries.draft = [
+      hero(),
+      block({ id: 1, pageId: SECOND_PAGE_ID }),
+      block({
+        id: 2,
+        pageId: HOME_PAGE_ID,
+        blockType: 'gallery',
+        blockOrder: FOREIGN_SLOT,
+        isDraft: true,
+        publishedAt: null,
+      }),
+    ];
+    renderRoot();
+    await openPages();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Simple' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+
+    expect(await screen.findByRole('button', { name: /^Gallery/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    await openPages();
+    expect(screen.getByText(`Editing page ${HOME_PAGE_ID}`)).toBeInTheDocument();
   });
 
   it('selects the offending section once the new page has mounted', async () => {
@@ -2389,5 +2468,112 @@ describe("EditorRoot — the publish sheet checks the look it is about to publis
     expect(screen.getByText(/^publish check on/)).toHaveTextContent(
       'publish check on heritage, secondary #FBF8F1',
     );
+  });
+});
+
+describe('EditorRoot — Simple and Advanced', () => {
+  beforeEach(() => {
+    window.history.replaceState(null, '', '/pm/website-editor?communityId=42');
+  });
+
+  it('opens in Simple when the address names no mode', () => {
+    renderRoot({ initialMode: null, canvasContext: STUB_CANVAS });
+    expect(screen.getByText('simple stand-in, opening welcome')).toBeInTheDocument();
+    // Advanced's surfaces are not there: no inspector, no area switch.
+    expect(screen.queryByText('inspector')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website areas' })).not.toBeInTheDocument();
+  });
+
+  it('opens the row a quick edit asked for', () => {
+    renderRoot({ initialMode: 'simple', initialItem: 'look', canvasContext: STUB_CANVAS });
+    expect(screen.getByText('simple stand-in, opening look')).toBeInTheDocument();
+  });
+
+  // Revert check (production line): the `<SectionFormContext>` around
+  // `<SimpleMode>` in `EditorRoot.tsx`. Without it the hooks fall back to null
+  // silently and the Welcome shows `{{name}}`.
+  it('gives Simple the community facts and the look its forms read', () => {
+    renderRoot({ initialMode: 'simple', canvasContext: STUB_CANVAS });
+    expect(screen.getByTestId('simple-facts')).toHaveTextContent('Sunset Condos');
+    expect(screen.getByTestId('simple-layout')).not.toHaveTextContent('null');
+  });
+
+  // Revert check (production line): `mode === 'simple' ? homePageId :` in
+  // `effectivePageId`.
+  it('always edits the home page in Simple, and keeps Advanced\'s page for Advanced', async () => {
+    renderRoot({ canvasContext: STUB_CANVAS });
+    await openPages();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit the second page' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Simple' }));
+    expect(screen.getByTestId('simple-page')).toHaveTextContent(String(HOME_PAGE_ID));
+
+    // Back in Advanced, still on Site settings, the second page is selected again.
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    expect(screen.getByText(/^Settings stand-in props:/)).toHaveTextContent(
+      `page ${SECOND_PAGE_ID}`,
+    );
+  });
+
+  it('keeps the mode in the address, and drops Advanced\'s area when going Simple', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/pm/website-editor?communityId=42&view=settings&tab=pages&item=look',
+    );
+    renderRoot({ initialView: 'settings', initialSettingsTab: 'pages', canvasContext: STUB_CANVAS });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Simple' }));
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('mode')).toBe('simple');
+    expect(params.get('communityId')).toBe('42');
+    expect(params.has('view')).toBe(false);
+    expect(params.has('tab')).toBe(false);
+    expect(params.has('item')).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+    expect(new URLSearchParams(window.location.search).get('mode')).toBe('advanced');
+  });
+
+  it('switches to Advanced when Help asks for a Site settings tab', async () => {
+    renderRoot({ initialMode: 'simple', canvasContext: STUB_CANVAS });
+    await userEvent.click(screen.getByRole('button', { name: 'Help' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings pages' }));
+    expect(screen.getByTestId('settings-stand-in')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  /** A draft that differs from what is live, so there is something to publish. */
+  function withAChange() {
+    queries.published = [hero(), block({ id: 1 })];
+    queries.draft = [
+      hero(),
+      block({ id: 2, isDraft: true, publishedAt: null, content: { heading: 'Pool rules', body: 'No glass.' } }),
+    ];
+  }
+
+  // Revert check (production line): `if (canOpenPublish) setPublishOpen(true)`
+  // in the `?publish=1` effect.
+  it('opens the publish review from the overview\'s "Review and publish", once', () => {
+    withAChange();
+    window.history.replaceState(null, '', '/pm/website-editor?communityId=42&publish=1');
+    renderRoot({ initialMode: 'simple', openPublishOnLoad: true, canvasContext: STUB_CANVAS });
+    expect(screen.getByRole('button', { name: 'Publish stand-in: succeed' })).toBeInTheDocument();
+    // Spent, so a reload after closing it does not open it again.
+    expect(new URLSearchParams(window.location.search).has('publish')).toBe(false);
+  });
+
+  it('opens no empty review from an old link when there is nothing to publish', () => {
+    window.history.replaceState(null, '', '/pm/website-editor?communityId=42&publish=1');
+    renderRoot({ initialMode: 'simple', openPublishOnLoad: true, canvasContext: STUB_CANVAS });
+    expect(screen.queryByRole('button', { name: 'Publish stand-in: succeed' })).not.toBeInTheDocument();
+    expect(new URLSearchParams(window.location.search).has('publish')).toBe(false);
+  });
+
+  // Revert check (production line): the `onPublished` prop on `<PublishSheetMount>`.
+  it('takes the manager back to the website overview after a publish', async () => {
+    withAChange();
+    renderRoot({ initialMode: 'simple', openPublishOnLoad: true, canvasContext: STUB_CANVAS });
+    await userEvent.click(screen.getByRole('button', { name: 'Publish stand-in: succeed' }));
+    expect(routerPush).toHaveBeenCalledWith('/pm/website?communityId=42&published=1');
   });
 });

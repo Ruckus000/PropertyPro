@@ -298,6 +298,8 @@ describe('Website builder v4 chrome — axe', () => {
         <SiteEditorProvider communityId={7} blocks={BLOCKS}>
           <EditorShell
             communityName="Sunset Condos"
+            mode="advanced"
+            onModeChange={() => {}}
             pageName="Home"
             pages={SITE_PAGES}
             selectedPageId={1}
@@ -757,16 +759,41 @@ describe('Website builder writers — axe', () => {
         </SectionSourcesProvider>
       </LinkedFactsProvider>,
     );
-    // The preview lines, the chips and insert buttons, "Use the look's wording",
-    // the stock photo's own controls and the upload's.
-    expect(screen.getByText('Shows as: Welcome to Harbor Pointe')).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-linked-field]').length).toBeGreaterThan(0);
-    expect(screen.getByRole('button', { name: 'Insert the community name' })).toBeInTheDocument();
+    // The words as the page shows them, "Use the look's wording", the button
+    // fields, the stock photo's own controls and the upload's.
+    expect(screen.getByLabelText(/headline/i)).toHaveValue('Welcome to Harbor Pointe');
     expect(screen.getByRole('button', { name: "Use the look's wording" })).toBeInTheDocument();
+    expect(screen.getByLabelText('Button label')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no violations in Simple mode\'s welcome form', async () => {
+    const { container } = render(
+      <LinkedFactsProvider
+        facts={{ name: 'Harbor Pointe', shortName: null, city: 'Miami', unitCount: 120 }}
+      >
+        <SectionSourcesProvider layoutId="bayfront" contact={null} ownerRecordGroups={null} recordsApply>
+          <HeroForm
+            communityId={7}
+            blockType="hero"
+            blockOrder={1}
+            variant="simple"
+            content={{
+              headline: 'Welcome to {{name}}',
+              photos: [{ stock: 'sunset', alt: 'Sunset over the water' }],
+            }}
+          />
+        </SectionSourcesProvider>
+      </LinkedFactsProvider>,
+    );
+    // Rendered, and Simple's own subset: the words and the photo, no button.
+    expect(screen.getByLabelText(/headline/i)).toHaveValue('Welcome to Harbor Pointe');
+    expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Button label')).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 

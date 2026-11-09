@@ -632,7 +632,7 @@ describe('other sections', () => {
     expect(banner).toHaveTextContent("You have changes that aren't published.");
     expect(within(banner).getByRole('link', { name: 'Review and publish' })).toHaveAttribute(
       'href',
-      `/pm/website-editor?communityId=${COMMUNITY_ID}`,
+      `/pm/website-editor?communityId=${COMMUNITY_ID}&publish=1`,
     );
     expect(banner.querySelector('svg.text-status-success')).toBeNull();
     expect(banner.querySelector('svg.text-status-info')).not.toBeNull();
@@ -681,7 +681,7 @@ describe('other sections', () => {
     const editorLinks = links.filter((link) => link.getAttribute('href')?.startsWith('/pm/website-editor'));
     expect(editorLinks).toHaveLength(1);
     expect(editorLinks[0]).toHaveAccessibleName('Advanced editor');
-    expect(editorLinks[0]).toHaveAttribute('href', `/pm/website-editor?communityId=${COMMUNITY_ID}`);
+    expect(editorLinks[0]).toHaveAttribute('href', `/pm/website-editor?communityId=${COMMUNITY_ID}&mode=advanced`);
     // Last on the page, and a text link, not a button.
     expect(links[links.length - 1]).toBe(editorLinks[0]);
   });

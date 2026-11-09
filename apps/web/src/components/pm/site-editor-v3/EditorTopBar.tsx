@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import {
   ChevronDown,
+  ChevronLeft,
   CircleHelp,
   Eye,
   LayoutTemplate,
@@ -18,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import type { SitePageSummary } from '@/hooks/use-site-pages';
 import { HELP_DRAWER_ID } from './help/drawer-id';
+import type { EditorMode } from './settings/settings-tabs';
 
 /**
  * The v4 "Editing page" picker's inputs.
@@ -47,15 +50,23 @@ export interface EditorTopBarPageProps {
 export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
 
 /**
- * The editor's two areas (v4 builder, Phase 5): the page being built, and Site
- * settings. The design also drew a Documents view; the records live on the
- * website home instead (the top bar links there), so there is no third area.
+ * Advanced mode's two areas (v4 builder, Phase 5): the page being built, and
+ * Site settings. The design also drew a Documents view; the records live on
+ * the website overview instead (the top bar links there), so there is no third.
  */
 export type EditorView = 'website' | 'settings';
 
 const VIEWS: readonly { id: EditorView; label: string; icon: LucideIcon }[] = [
-  { id: 'website', label: 'Website', icon: LayoutTemplate },
+  { id: 'website', label: 'Page', icon: LayoutTemplate },
   { id: 'settings', label: 'Site settings', icon: Settings },
+];
+
+/** The top bar's heading, which takes focus when a control that held it goes away. */
+export const EDITOR_HEADING_ID = 'site-editor-heading';
+
+const MODES: readonly { id: EditorMode; label: string }[] = [
+  { id: 'simple', label: 'Simple' },
+  { id: 'advanced', label: 'Advanced' },
 ];
 
 const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[] = [
@@ -65,7 +76,15 @@ const DEVICES: readonly { id: PreviewDevice; label: string; icon: LucideIcon }[]
 ];
 
 export interface EditorTopBarProps extends EditorTopBarPageProps {
+  /** For the "← Website" link back to the website overview. */
+  communityId: number;
   communityName: string;
+  /**
+   * Simple or Advanced. Required, both halves, for the reason the handlers
+   * below are: a switch without its handler renders and does nothing.
+   */
+  mode: EditorMode;
+  onModeChange: (mode: EditorMode) => void;
   /**
    * The site page currently being edited (Phase 11b-3).
    *
@@ -175,14 +194,22 @@ export interface EditorTopBarProps extends EditorTopBarPageProps {
  * The editor's own top bar.
  *
  * This route has no app shell, so this bar carries the page identity the
- * breadcrumb trail would otherwise provide. It is the only `<h1>` on the route.
+ * breadcrumb trail would otherwise provide, and the way back to the website
+ * overview. It is the only `<h1>` on the route.
+ *
+ * Simple mode shows only what Simple needs: no area switch, page picker or
+ * Preview (its preview is on the page). Below 768px only Simple exists, so the
+ * mode switch is hidden there too.
  *
  * Publish is disabled with an explanatory title rather than hidden when there
  * is nothing to publish — a button that vanishes is harder to find again than
  * one that explains itself.
  */
 export function EditorTopBar({
+  communityId,
   communityName,
+  mode,
+  onModeChange,
   pageName,
   status,
   requirements,
@@ -205,70 +232,133 @@ export function EditorTopBar({
   helpOpen,
   onHelpToggle,
 }: EditorTopBarProps) {
+  const advanced = mode === 'advanced';
   return (
-    <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-edge bg-surface-card px-3">
+    <div className="flex h-[60px] shrink-0 items-center gap-2 border-b border-edge bg-surface-card px-2 md:gap-3 md:px-3">
+      {/* The editor has no breadcrumb trail, so the way back is its first control. */}
+      <Link
+        href={`/pm/website?communityId=${communityId}`}
+        aria-label="Back to Website"
+        className="flex h-11 shrink-0 items-center gap-1 rounded-[var(--radius-md)] pl-1.5 pr-2.5 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-9"
+      >
+        <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        <span className="hidden sm:inline">Website</span>
+      </Link>
+
+      <span aria-hidden="true" className="h-7 w-px shrink-0 bg-edge" />
+
       {/*
        * The one block that gives way when the bar is full: the community name
        * truncates. `min-w-20` keeps the page's own heading readable; without it
        * the block shrank to nothing at 1280px.
        */}
       <span className="flex min-w-20 flex-col leading-tight">
-        <h1 className="whitespace-nowrap font-sans text-[0.9375rem] font-semibold tracking-tight text-content">Website</h1>
+        {/* Focusable by script only: where focus goes after the phone gate's "Switch to Simple". */}
+        <h1
+          id={EDITOR_HEADING_ID}
+          tabIndex={-1}
+          className="whitespace-nowrap font-sans text-[0.9375rem] font-semibold tracking-tight text-content focus:outline-none"
+        >
+          Edit website
+        </h1>
         <span className="truncate text-xs text-content-secondary">{communityName}</span>
       </span>
 
-      <span aria-hidden="true" className="h-7 w-px shrink-0 bg-edge" />
+      {/*
+       * Toggle buttons with `aria-pressed`, like the preview sizes below: two
+       * modes of one screen, not places and not a tab set (Advanced holds its
+       * own area switch, and tablists must not nest). From 768px only: a phone
+       * has room for Simple alone.
+       */}
+      <div
+        role="group"
+        aria-label="Editing mode"
+        className="hidden shrink-0 gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5 md:flex"
+      >
+        {MODES.map(({ id, label }) => {
+          const active = id === mode;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={active}
+              data-testid={`editor-mode-${id}`}
+              onClick={() => {
+                if (!active) onModeChange(id);
+              }}
+              className={cn(
+                'flex h-9 items-center rounded-[var(--radius-sm)] px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                active
+                  ? 'bg-surface-card text-content shadow-sm'
+                  : 'text-content-secondary hover:text-content',
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {advanced ? (
+        <>
+          <span aria-hidden="true" className="h-7 w-px shrink-0 bg-edge" />
+          {/*
+           * Buttons with `aria-current`, the design's own markup: the two areas
+           * are places, not a tab set. Labels hide below 1280px (icon plus
+           * accessible name only) so Publish keeps its room on an iPad — the
+           * rule Preview already follows.
+           */}
+          <nav aria-label="Website areas" className="shrink-0">
+            <div className="flex gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5">
+              {VIEWS.map(({ id, label, icon: Icon }) => {
+                const active = id === view;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-current={active ? 'page' : undefined}
+                    aria-label={label}
+                    title={label}
+                    data-testid={`editor-view-${id}`}
+                    onClick={() => {
+                      if (!active) onViewChange(id);
+                    }}
+                    className={cn(
+                      'flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
+                      active
+                        ? 'bg-surface-card text-content shadow-sm'
+                        : 'text-content-secondary hover:text-content',
+                    )}
+                  >
+                    <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                    <span className="hidden xl:inline">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </>
+      ) : null}
 
       {/*
-       * Buttons with `aria-current`, the design's own markup: the two areas are
-       * places, not a tab set. Labels hide below 1280px (icon plus accessible
-       * name only) so Publish keeps its room on an iPad — the rule Preview
-       * already follows.
+       * The page picker and preview widths describe the canvas, so they go with
+       * it. Simple always edits the home page, so it has no picker.
        */}
-      <nav aria-label="Website areas" className="shrink-0">
-        <div className="flex gap-0.5 rounded-[var(--radius-md)] bg-surface-muted p-0.5">
-          {VIEWS.map(({ id, label, icon: Icon }) => {
-            const active = id === view;
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-current={active ? 'page' : undefined}
-                aria-label={label}
-                title={label}
-                data-testid={`editor-view-${id}`}
-                onClick={() => {
-                  if (!active) onViewChange(id);
-                }}
-                className={cn(
-                  'flex h-9 items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-                  active
-                    ? 'bg-surface-card text-content shadow-sm'
-                    : 'text-content-secondary hover:text-content',
-                )}
-              >
-                <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
-                <span className="hidden xl:inline">{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* The page picker and preview widths describe the canvas, so they go with it. */}
-      {view === 'website' ? (
+      {view === 'website' || !advanced ? (
         <>
         {/*
          * Outside the `<h1>` on purpose: the heading is the route's identity and
          * must not change every time the PM switches page.
          */}
-        <PagePicker
-          pageName={pageName}
-          pages={pages}
-          selectedPageId={selectedPageId}
-          onSelectPage={onSelectPage}
-          onManagePages={onManagePages}
-        />
+        {advanced ? (
+          <PagePicker
+            pageName={pageName}
+            pages={pages}
+            selectedPageId={selectedPageId}
+            onSelectPage={onSelectPage}
+            onManagePages={onManagePages}
+          />
+        ) : null}
 
         {/*
          * Toggle buttons, not a radiogroup: each is independently operable with
@@ -337,20 +427,23 @@ export function EditorTopBar({
           <CircleHelp className="h-4 w-4" aria-hidden="true" />
           <span className="hidden 2xl:inline">Help</span>
         </Button>
-        <Button
-          ref={previewButtonRef}
-          variant="outline"
-          onClick={onPreview}
-          disabled={!canPreview}
-          title={canPreview ? 'Preview' : previewDisabledReason}
-          // Icon-only below 1024px (the v4 design's rule) so Publish stays on an
-          // iPad screen; the name is constant so the button never loses it.
-          aria-label="Preview"
-          className="px-3 lg:px-4"
-        >
-          <Eye className="h-4 w-4" aria-hidden="true" />
-          <span className="hidden lg:inline">Preview</span>
-        </Button>
+        {/* Simple shows its preview on the page, so the dialog would only repeat it. */}
+        {advanced ? (
+          <Button
+            ref={previewButtonRef}
+            variant="outline"
+            onClick={onPreview}
+            disabled={!canPreview}
+            title={canPreview ? 'Preview' : previewDisabledReason}
+            // Icon-only below 1024px (the v4 design's rule) so Publish stays on an
+            // iPad screen; the name is constant so the button never loses it.
+            aria-label="Preview"
+            className="px-3 lg:px-4"
+          >
+            <Eye className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden lg:inline">Preview</span>
+          </Button>
+        ) : null}
         <Button
           onClick={onPublish}
           disabled={!canOpenPublish}

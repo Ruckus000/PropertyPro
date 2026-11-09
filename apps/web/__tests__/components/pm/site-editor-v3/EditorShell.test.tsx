@@ -57,6 +57,10 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
     <EditorShell
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
+      // Advanced by default: most cases here are about the canvas, the area
+      // switch and the phone gate, which are Advanced's. Simple has its own.
+      mode="advanced"
+      onModeChange={() => {}}
       view="website"
       onViewChange={() => {}}
       settings={<p>settings body</p>}
@@ -95,7 +99,8 @@ function renderShell(overrides: Partial<EditorShellProps> = {}) {
       pageName="Home"
       {...overrides}
     >
-      <p>canvas</p>
+      {/* JSX children replace a spread `children`, so an override is read here. */}
+      {overrides.children ?? <p>canvas</p>}
     </EditorShell>
     </QueryClientProvider>,
   );
@@ -183,7 +188,7 @@ describe('EditorShell — composition', () => {
     renderShell();
     const headings = screen.getAllByRole('heading', { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent('Website');
+    expect(headings[0]).toHaveTextContent('Edit website');
     expect(screen.getByText('Sunset Condos')).toBeInTheDocument();
   });
 
@@ -375,10 +380,10 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Website areas' });
     expect(nav).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Website' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Page' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Site settings' })).not.toHaveAttribute('aria-current');
 
-    await user.click(screen.getByRole('button', { name: 'Website' }));
+    await user.click(screen.getByRole('button', { name: 'Page' }));
     expect(onViewChange).not.toHaveBeenCalled();
     await user.click(screen.getByRole('button', { name: 'Site settings' }));
     expect(onViewChange).toHaveBeenCalledWith('settings');
@@ -401,5 +406,60 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
     renderShell();
     expect(screen.queryByText('settings body')).not.toBeInTheDocument();
     expect(screen.getByText('canvas')).toBeInTheDocument();
+  });
+});
+
+describe('EditorShell — Simple and Advanced', () => {
+  it('links back to the website overview for this community', () => {
+    renderShell();
+    expect(screen.getByRole('link', { name: 'Back to Website' })).toHaveAttribute(
+      'href',
+      '/pm/website?communityId=42',
+    );
+  });
+
+  it('marks the current mode and asks to switch to the other', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    renderShell({ onModeChange });
+
+    const group = screen.getByRole('group', { name: 'Editing mode' });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Advanced' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Simple' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Advanced' }));
+    expect(onModeChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Simple' }));
+    expect(onModeChange).toHaveBeenCalledWith('simple');
+  });
+
+  it('in Simple, shows only Simple\'s controls and its own body', () => {
+    renderShell({ mode: 'simple', view: 'settings', children: <p>simple body</p> });
+
+    // `view` is Advanced's: Simple never shows Site settings, even if it was left there.
+    expect(screen.getByText('simple body')).toBeInTheDocument();
+    expect(screen.queryByText('settings body')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Website areas' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('editing-page-name')).not.toBeInTheDocument();
+    // Its preview is on the page, so the dialog's button would only repeat it.
+    expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Publish/ })).toBeInTheDocument();
+  });
+
+  it('works on a phone in Simple, where Advanced shows the gate', async () => {
+    isNarrowMock.value = true;
+    renderShell({ mode: 'simple', children: <p>simple body</p> });
+    expect(screen.getByText('simple body')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /bigger screen/i })).not.toBeInTheDocument();
+  });
+
+  it('offers Simple from the phone gate', async () => {
+    isNarrowMock.value = true;
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    renderShell({ onModeChange });
+    await user.click(await screen.findByRole('button', { name: 'Switch to Simple' }));
+    expect(onModeChange).toHaveBeenCalledWith('simple');
   });
 });

@@ -25,18 +25,20 @@ export interface PhoneGateProps {
   hasPublishedSite: boolean;
   /** Server-rendered current notice, so the form opens with real state. */
   initialNotice: UrgentNotice | null;
+  /** Simple mode works on a phone; this switches to it. */
+  onSwitchToSimple: () => void;
 }
 
 /**
- * Shown instead of the editor below 768px.
+ * Shown instead of Advanced mode below 768px.
  *
  * A three-column canvas editor does not work on a phone, and a gate is more
- * honest than a layout that technically renders and cannot be used.
+ * honest than a layout that technically renders and cannot be used. Simple
+ * mode (the welcome and the look) does work there, so the gate offers it.
  *
- * But one job genuinely belongs on a phone: posting a closure notice. That is
+ * And one job genuinely belongs on a phone: posting a closure notice. That is
  * the case the urgent notice exists for — a manager standing in front of a
- * flooded lobby, not at a desk. So the gate turns away editing and keeps that
- * one path open.
+ * flooded lobby, not at a desk. So the gate keeps that path open too.
  *
  * This renders the gate content only; the caller decides when to show it, so
  * the editor tree can be unmounted rather than merely hidden (a hidden editor
@@ -47,6 +49,7 @@ export function PhoneGate({
   communityId,
   hasPublishedSite,
   initialNotice,
+  onSwitchToSimple,
 }: PhoneGateProps) {
   const [noticeOpen, setNoticeOpen] = useState(false);
 
@@ -82,12 +85,15 @@ export function PhoneGate({
       <span className="flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] bg-interactive text-content-inverse">
         <Monitor className="h-[22px] w-[22px]" aria-hidden="true" />
       </span>
-      <h1 className="text-lg font-semibold text-content">Editing needs a bigger screen</h1>
+      <h1 className="text-lg font-semibold text-content">Advanced editing needs a bigger screen</h1>
       <p className="max-w-[34ch] text-base leading-relaxed text-content-secondary">
-        The website editor works on a laptop or tablet. From your phone you can still post an
-        urgent notice and view your site.
+        Pages and sections are edited on a laptop or tablet. On your phone you can change the
+        welcome and the look in Simple, post an urgent notice, or view your site.
       </p>
-      <Button type="button" onClick={() => setNoticeOpen(true)}>
+      <Button type="button" onClick={onSwitchToSimple}>
+        Switch to Simple
+      </Button>
+      <Button type="button" variant="outline" onClick={() => setNoticeOpen(true)}>
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
         Post an urgent notice
       </Button>

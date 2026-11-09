@@ -122,7 +122,7 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
 
       <p className="border-t border-edge-subtle pt-4">
         <Link
-          href={`/pm/website-editor?communityId=${communityId}`}
+          href={`/pm/website-editor?communityId=${communityId}&mode=advanced`}
           className={cn('inline-flex items-center text-sm text-content-secondary underline', TOUCH)}
         >
           Advanced editor
