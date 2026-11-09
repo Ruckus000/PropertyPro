@@ -16,7 +16,7 @@
  * moment the page was rendered, so the server and the browser print the same
  * words and nothing changes on hydration.
  */
-import { useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { CircleAlert, History } from 'lucide-react';
@@ -100,6 +100,19 @@ export function YourSiteCard({
   const [error, setError] = useState<string | null>(null);
   const [showVersions, setShowVersions] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
+  const refocusOpener = useRef(false);
+
+  // Clicking Restore closes the dialog at once, and Radix hands focus back to
+  // the opener while its loading state still disables it, so that hand-back is
+  // lost and focus falls to <body>. Once the restore settles and the opener is
+  // enabled again, put focus back, unless the person has moved it since.
+  useEffect(() => {
+    if (restoringKind !== null || !refocusOpener.current) return;
+    refocusOpener.current = false;
+    const target = opener.current;
+    const active = document.activeElement;
+    if (target?.isConnected && (active === null || active === document.body)) target.focus();
+  }, [restoringKind]);
 
   const draftLookName =
     draftLookId !== null && draftLookId !== liveLookId
@@ -126,6 +139,7 @@ export function YourSiteCard({
       setPending(null);
       setError(restoreFailure(cause));
     } finally {
+      refocusOpener.current = true;
       setRestoringKind(null);
     }
   }
