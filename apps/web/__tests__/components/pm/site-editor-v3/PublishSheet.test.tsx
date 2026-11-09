@@ -19,8 +19,9 @@
  * site-wide bucket. `change-group-site` is now reached only by a change that
  * genuinely belongs to no single page.
  */
+import { cloneElement } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TOMBSTONE_BLOCK_TYPE, type Change } from '@propertypro/shared';
 import {
@@ -1366,6 +1367,34 @@ describe('PublishSheet — discarding the draft', () => {
     );
     expect(onDiscarded).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  // Revert check (production line): `discardButtonRef.current?.focus();` in the
+  // refocus effect. The dialog's own restore lands while the button is disabled.
+  it('puts keyboard focus back on Discard after a failed discard', async () => {
+    const user = userEvent.setup();
+    discardAsync.mockRejectedValue(new Error('Server unavailable'));
+    // Mirror the real hook: pending while the request is in flight, so the
+    // button is disabled when the dialog closes.
+    const { rerender, element } = renderSheet();
+
+    await user.click(discardButton());
+    const action = within(await confirmDialog()).getByRole('button', { name: /discard changes/i });
+    discardState.isPending = true;
+    await user.click(action);
+    expect(screen.getByRole('button', { name: /discarding/i })).toBeDisabled();
+
+    discardState.isPending = false;
+    // A clone, not `element`: React skips re-rendering an identical element,
+    // so the button would never see the mutation settle.
+    rerender(cloneElement(element));
+    await waitFor(() => expect(discardButton()).toHaveFocus());
+  });
+
+  it('is unavailable while a scheduled publish is being cancelled', () => {
+    scheduleState.cancelPending = true;
+    renderSheet();
+    expect(discardButton()).toBeDisabled();
   });
 
   it('is unavailable when there is nothing to discard', () => {

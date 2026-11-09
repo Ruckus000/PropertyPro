@@ -66,7 +66,7 @@
  * whatever the next editing session happened to leave behind, unreviewed.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, Info, Undo2 } from 'lucide-react';
@@ -457,6 +457,18 @@ function PublishSheetBody({
   const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
   // The confirm has no Radix trigger (it is code-split), so it returns focus here.
   const discardButtonRef = useRef<HTMLButtonElement>(null);
+  /*
+   * After a FAILED discard, focus goes back to the Discard button. The dialog
+   * tries that itself on close, but the button is disabled (pending) at that
+   * moment, so the focus call does nothing and a keyboard user is left with
+   * focus nowhere. Wait for the button to re-enable, then focus it.
+   */
+  const refocusDiscardRef = useRef(false);
+  useEffect(() => {
+    if (!refocusDiscardRef.current || discard.isPending) return;
+    refocusDiscardRef.current = false;
+    discardButtonRef.current?.focus();
+  }, [discard.isPending]);
 
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   /*
@@ -631,6 +643,7 @@ function PublishSheetBody({
     try {
       await discard.mutateAsync();
     } catch (error) {
+      refocusDiscardRef.current = true;
       // A toast, not a receipt: a receipt describes a publish. Nothing changed,
       // and the change list on screen still says so.
       toast.error(
@@ -1015,6 +1028,7 @@ function PublishSheetBody({
               discard.isPending ||
               publish.isPending ||
               createSchedule.isPending ||
+              cancelSchedule.isPending ||
               pendingSchedule.data?.status === 'running'
             }
             loading={discard.isPending}
