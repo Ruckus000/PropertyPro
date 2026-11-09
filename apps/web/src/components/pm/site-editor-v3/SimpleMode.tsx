@@ -21,7 +21,7 @@
  * and from 768px the preview is on the left with the panel beside it, each
  * column scrolling on its own.
  */
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronDown } from 'lucide-react';
 import type { SiteFooter, SiteNav, SitePageContext } from '@/components/public-site/layouts/types';
@@ -137,7 +137,10 @@ interface RowProps {
 
 /** One disclosure row. One row is open at a time; opening another closes it. */
 function Row({ item, title, hint, open, onToggle, children }: RowProps) {
-  const regionId = useId();
+  // Not useId: under next/dynamic it differs between server and hydration, and
+  // React leaves the server's id, so aria-controls pointed at nothing. One
+  // Simple panel per page makes the item name unique.
+  const regionId = `simple-${item}-region`;
   const expanded = open === item;
   return (
     <section className="rounded-[var(--radius-md)] border border-edge bg-surface-card">

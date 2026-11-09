@@ -240,7 +240,7 @@ export function EditorTopBar({
       <Link
         href={`/pm/website?communityId=${communityId}`}
         aria-label="Back to Website"
-        className="flex h-11 shrink-0 items-center gap-1 rounded-[var(--radius-md)] pl-1.5 pr-2.5 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-9"
+        className="flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-[var(--radius-md)] pl-1.5 pr-2.5 text-sm font-medium text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:h-9"
       >
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         <span className="hidden sm:inline">Website</span>
@@ -423,7 +423,7 @@ export function EditorTopBar({
           // The editor's only way into Help now that the rail is gone, so it
           // shows at every width: an icon below 1536px, where the bar is full,
           // and named from there.
-          className="px-3"
+          className="min-w-11 px-3 md:min-w-0"
         >
           <CircleHelp className="h-4 w-4" aria-hidden="true" />
           <span className="hidden 2xl:inline">Help</span>

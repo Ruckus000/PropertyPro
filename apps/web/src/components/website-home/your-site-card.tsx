@@ -137,7 +137,7 @@ export function YourSiteCard({
           Versions
         </h2>
         <p className="text-sm text-content-secondary">
-          Every publish is kept, and an earlier one can be brought back at once.
+          Earlier publishes you can bring back.
         </p>
       </div>
 

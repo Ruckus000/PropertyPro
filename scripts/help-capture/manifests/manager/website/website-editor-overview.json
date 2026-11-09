@@ -10,7 +10,7 @@
     {
       "name": "ov-editor",
       "kind": "still",
-      "route": "/pm/website-editor?communityId={cid}",
+      "route": "/pm/website-editor?communityId={cid}&mode=advanced",
       "role": "cam",
       "community": "condo",
       "actions": [
