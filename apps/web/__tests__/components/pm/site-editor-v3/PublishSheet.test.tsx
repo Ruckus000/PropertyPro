@@ -19,8 +19,9 @@
  * site-wide bucket. `change-group-site` is now reached only by a change that
  * genuinely belongs to no single page.
  */
+import { cloneElement } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TOMBSTONE_BLOCK_TYPE, type Change } from '@propertypro/shared';
 import {
@@ -118,6 +119,8 @@ const queries = vi.hoisted(() => ({
 }));
 
 const refetch = vi.hoisted(() => vi.fn());
+const discardAsync = vi.hoisted(() => vi.fn());
+const discardState = vi.hoisted(() => ({ isPending: false }));
 
 function draftQuery() {
   return {
@@ -141,7 +144,11 @@ vi.mock('@/hooks/use-content-blocks', () => ({
   }),
   useUpsertContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useDeleteContentBlock: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
-  useDiscardDrafts: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useDiscardDrafts: () => ({
+    mutate: vi.fn(),
+    mutateAsync: discardAsync,
+    isPending: discardState.isPending,
+  }),
   useReorderBlocks: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -254,6 +261,7 @@ const PUBLISHED_OK: PublishSiteResult = {
 };
 
 interface RenderOptions {
+  onDiscarded?: () => void;
   onOpenChange?: (open: boolean) => void;
   onFixIssue?: (target: { pageId: string; slot: number }) => void;
   onGoToPages?: () => void;
@@ -285,6 +293,7 @@ function renderSheet({
   open = true,
   communityType = 'apartment',
   onPublished,
+  onDiscarded,
 }: RenderOptions = {}) {
   const element = (
     <PublishSheet
@@ -294,6 +303,7 @@ function renderSheet({
       onGoToPages={onGoToPages}
       complianceSubject={{ communityType, unitCount: null }}
       {...(onPublished ? { onPublished } : {})}
+      {...(onDiscarded ? { onDiscarded } : {})}
       {...(onFixIssue ? { onFixIssue } : {})}
       {...(brandColors ? { brandColors } : {})}
       {...(layout ? { layout } : {})}
@@ -330,6 +340,8 @@ beforeEach(() => {
     errorMessage: null,
   });
   cancelScheduleAsync.mockResolvedValue(true);
+  discardState.isPending = false;
+  discardAsync.mockResolvedValue({ discardedCount: 1 });
 });
 
 // ── the change list ────────────────────────────────────────────────────────
@@ -1277,6 +1289,195 @@ describe('PublishSheet — after a publish', () => {
     await screen.findByTestId('publish-receipt');
 
     expect(onPublished).not.toHaveBeenCalled();
+  });
+});
+
+// ── discarding ─────────────────────────────────────────────────────────────
+
+describe('PublishSheet — discarding the draft', () => {
+  function discardButton() {
+    return screen.getByRole('button', { name: /^discard changes$/i });
+  }
+  async function confirmDialog() {
+    // Code-split (next/dynamic), so it arrives a tick after the click.
+    return screen.findByRole('alertdialog');
+  }
+
+  it('offers Discard beside Publish, and asks before doing anything', async () => {
+    const user = userEvent.setup();
+    renderSheet();
+
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeEnabled();
+    await user.click(discardButton());
+
+    const dialog = await confirmDialog();
+    expect(within(dialog).getByText(/discard all unpublished changes\?/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/the 1 change listed here/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/live site stays exactly as it is/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/can't be undone/i)).toBeInTheDocument();
+    expect(discardAsync).not.toHaveBeenCalled();
+  });
+
+  // Revert check (production line): `await discard.mutateAsync();` in `onDiscard`.
+  it('discards on confirm, then closes and hands back to the editor', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const onDiscarded = vi.fn();
+    renderSheet({ onOpenChange, onDiscarded });
+
+    await user.click(discardButton());
+    const dialog = await confirmDialog();
+    await user.click(within(dialog).getByRole('button', { name: /discard changes/i }));
+
+    expect(discardAsync).toHaveBeenCalledTimes(1);
+    expect(toastSuccess).toHaveBeenCalledWith(expect.stringMatching(/discarded/i));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onDiscarded).toHaveBeenCalledTimes(1);
+    // A discard is not a publish.
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(cancelScheduleAsync).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the manager keeps editing', async () => {
+    const user = userEvent.setup();
+    const onDiscarded = vi.fn();
+    renderSheet({ onDiscarded });
+
+    await user.click(discardButton());
+    const dialog = await confirmDialog();
+    await user.click(within(dialog).getByRole('button', { name: /keep editing/i }));
+
+    expect(discardAsync).not.toHaveBeenCalled();
+    expect(onDiscarded).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('stays open and says so when the discard fails', async () => {
+    const user = userEvent.setup();
+    discardAsync.mockRejectedValue(new Error('Server unavailable'));
+    const onOpenChange = vi.fn();
+    const onDiscarded = vi.fn();
+    renderSheet({ onOpenChange, onDiscarded });
+
+    await user.click(discardButton());
+    await user.click(within(await confirmDialog()).getByRole('button', { name: /discard changes/i }));
+
+    expect(toastError).toHaveBeenCalledWith(
+      "We couldn't discard your changes. Server unavailable",
+    );
+    expect(onDiscarded).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  // Revert check (production line): `discardButtonRef.current?.focus();` in the
+  // refocus effect. The dialog's own restore lands while the button is disabled.
+  it('puts keyboard focus back on Discard after a failed discard', async () => {
+    const user = userEvent.setup();
+    discardAsync.mockRejectedValue(new Error('Server unavailable'));
+    // Mirror the real hook: pending while the request is in flight, so the
+    // button is disabled when the dialog closes.
+    const { rerender, element } = renderSheet();
+
+    await user.click(discardButton());
+    const action = within(await confirmDialog()).getByRole('button', { name: /discard changes/i });
+    discardState.isPending = true;
+    await user.click(action);
+    expect(screen.getByRole('button', { name: /discarding/i })).toBeDisabled();
+
+    discardState.isPending = false;
+    // A clone, not `element`: React skips re-rendering an identical element,
+    // so the button would never see the mutation settle.
+    rerender(cloneElement(element));
+    await waitFor(() => expect(discardButton()).toHaveFocus());
+  });
+
+  it('is unavailable while a scheduled publish is being cancelled', () => {
+    scheduleState.cancelPending = true;
+    renderSheet();
+    expect(discardButton()).toBeDisabled();
+  });
+
+  it('is unavailable when there is nothing to discard', () => {
+    queries.draft = PUBLISHED;
+    renderSheet();
+    expect(discardButton()).toBeDisabled();
+  });
+
+  it('stays available when a blocking issue stops the publish', () => {
+    queries.draft = DRAFT_WITH_BLOCKER;
+    renderSheet();
+    expect(screen.getByRole('button', { name: /publish changes/i })).toBeDisabled();
+    expect(discardButton()).toBeEnabled();
+  });
+
+  it('is unavailable while a scheduled publish is running', () => {
+    scheduleState.pending = {
+      id: 9,
+      status: 'running',
+      scheduledFor: '2026-08-01T15:00:00.000Z',
+      notifySummary: null,
+      errorMessage: null,
+    };
+    renderSheet();
+    expect(discardButton()).toBeDisabled();
+  });
+
+  describe('with a publish scheduled for later', () => {
+    beforeEach(() => {
+      scheduleState.pending = {
+        id: 9,
+        status: 'pending',
+        scheduledFor: '2026-08-01T15:00:00.000Z',
+        notifySummary: null,
+        errorMessage: null,
+      };
+    });
+
+    // Revert check (production line): `await cancelSchedule.mutateAsync();` in `onDiscard`.
+    it('says the schedule goes too, and calls it off after the discard', async () => {
+      const user = userEvent.setup();
+      const onDiscarded = vi.fn();
+      renderSheet({ onDiscarded });
+
+      await user.click(discardButton());
+      const dialog = await confirmDialog();
+      expect(within(dialog).getByText(/is called off too/i)).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: /discard changes/i }));
+
+      expect(discardAsync).toHaveBeenCalledTimes(1);
+      expect(cancelScheduleAsync).toHaveBeenCalledTimes(1);
+      expect(discardAsync.mock.invocationCallOrder[0]!).toBeLessThan(
+        cancelScheduleAsync.mock.invocationCallOrder[0]!,
+      );
+      expect(onDiscarded).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves no schedule cancelled when the discard itself fails', async () => {
+      const user = userEvent.setup();
+      discardAsync.mockRejectedValue(new Error('nope'));
+      renderSheet();
+
+      await user.click(discardButton());
+      await user.click(within(await confirmDialog()).getByRole('button', { name: /discard changes/i }));
+
+      expect(cancelScheduleAsync).not.toHaveBeenCalled();
+    });
+
+    it('stays open, with the schedule still in reach, when it cannot be called off', async () => {
+      const user = userEvent.setup();
+      cancelScheduleAsync.mockRejectedValue(new Error('nope'));
+      const onOpenChange = vi.fn();
+      const onDiscarded = vi.fn();
+      renderSheet({ onOpenChange, onDiscarded });
+
+      await user.click(discardButton());
+      await user.click(within(await confirmDialog()).getByRole('button', { name: /discard changes/i }));
+
+      expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/still set/i));
+      expect(onDiscarded).not.toHaveBeenCalled();
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+      expect(screen.getByTestId('pending-schedule')).toBeInTheDocument();
+    });
   });
 });
 
