@@ -1278,6 +1278,9 @@ export function EditorRoot({
           // A publish is the end of an edit, so the manager lands back on the
           // website overview, which says the site was updated.
           onPublished={() => router.push(`/pm/website?communityId=${communityId}&published=1`)}
+          // A discard ends the edit too. The overview shows the live site, which
+          // is what the editor would now show anyway.
+          onDiscarded={() => router.push(`/pm/website?communityId=${communityId}`)}
         />
       ) : null}
 
@@ -1322,6 +1325,7 @@ function PublishSheetMount({
   onFixIssue,
   onGoToPages,
   onPublished,
+  onDiscarded,
 }: {
   communityId: number;
   theme: CanvasContext['theme'] | null;
@@ -1330,6 +1334,7 @@ function PublishSheetMount({
   onFixIssue: (target: SlotTarget) => void;
   onGoToPages: () => void;
   onPublished: () => void;
+  onDiscarded: () => void;
 }) {
   const { movableSections, select } = useSiteEditor();
   // From the provider, not a prop: a unit count corrected in the pill this
@@ -1382,6 +1387,7 @@ function PublishSheetMount({
       onGoToPages={onGoToPages}
       complianceSubject={subject}
       onPublished={onPublished}
+      onDiscarded={onDiscarded}
     />
   );
 }

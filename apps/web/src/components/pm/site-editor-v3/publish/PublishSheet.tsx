@@ -51,9 +51,23 @@
  * it forces the PM to leave, find the Pages panel, and remember which page it
  * was — or to publish and hope. The undo is a `DELETE … { unstage: true }`,
  * which is the exact inverse of what staged the removal.
+ *
+ * ## Discard is the other way out
+ *
+ * Before this, a draft could only be escaped by publishing it. "Discard
+ * changes" sits beside Publish and throws the whole draft away through
+ * `DELETE /api/v1/pm/site/drafts` — the same whole-site scope as publish, for
+ * the reason publish is atomic. It asks first, because nothing brings a
+ * discarded draft back. A discard is the end of an edit, like a publish, so on
+ * success the editor takes the manager back to the website overview.
+ *
+ * A publish scheduled for a later time is called off with the draft: it was
+ * set up to publish these changes, and left armed it would later publish
+ * whatever the next editing session happened to leave behind, unreviewed.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { AlertTriangle, ArrowRight, Info, Undo2 } from 'lucide-react';
 import {
@@ -82,7 +96,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import type { LayoutId } from '@/components/public-site/blocks/types';
 import { contrastOptionsFor } from '@/components/public-site/layouts/look-styles';
-import { useSitePublishToken } from '@/hooks/use-content-blocks';
+import { useDiscardDrafts, useSitePublishToken } from '@/hooks/use-content-blocks';
 import {
   usePublishSite,
   PublishConflictError,
@@ -100,6 +114,12 @@ import {
   useSitePublishSchedule,
 } from '@/hooks/use-site-publish-schedule';
 import { Receipt, type ReceiptStatus } from './Receipt';
+
+// Code-split and mounted only once opened, like every other ConfirmDialog in
+// the editor: the Radix alert-dialog stack is ~31 KiB.
+const ConfirmDialog = dynamic(() => import('../ConfirmDialog').then((m) => m.ConfirmDialog), {
+  loading: () => null,
+});
 
 /**
  * Where "Fix this" sends the PM: a page AND a slot, never a slot alone.
@@ -176,6 +196,14 @@ export interface PublishSheetProps {
    * sheet just closes.
    */
   onPublished?: () => void;
+  /**
+   * Called after a discard SUCCEEDS, once the sheet has closed: the editor takes
+   * the manager back to the website overview, as it does after a publish. Not
+   * called when the discard fails, or when it succeeds but a scheduled publish
+   * could not be called off — the sheet stays open so that schedule's Cancel is
+   * still in reach. Absent, the sheet just closes.
+   */
+  onDiscarded?: () => void;
 }
 
 /**
@@ -342,6 +370,7 @@ export function PublishSheet({
   onGoToPages,
   complianceSubject,
   onPublished,
+  onDiscarded,
 }: PublishSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -368,6 +397,7 @@ export function PublishSheet({
             onOpenChange={onOpenChange}
             complianceSubject={complianceSubject}
             onPublished={onPublished}
+            onDiscarded={onDiscarded}
           />
         ) : null}
       </SheetContent>
@@ -389,6 +419,7 @@ interface BodyProps {
   onOpenChange: (open: boolean) => void;
   complianceSubject: ComplianceSubject;
   onPublished?: () => void;
+  onDiscarded?: () => void;
 }
 
 function PublishSheetBody({
@@ -400,6 +431,7 @@ function PublishSheetBody({
   onOpenChange,
   complianceSubject,
   onPublished,
+  onDiscarded,
 }: BodyProps) {
   // The same hook the top bar's Publish button reads, so the button's enabled
   // state and this sheet's change count are one computation, not two.
@@ -421,6 +453,10 @@ function PublishSheetBody({
   const tokenQuery = useSitePublishToken(communityId);
   const publish = usePublishSite(communityId);
   const unstagePage = useUnstageSitePageDelete(communityId);
+  const discard = useDiscardDrafts(communityId);
+  const [confirmDiscardOpen, setConfirmDiscardOpen] = useState(false);
+  // The confirm has no Radix trigger (it is code-split), so it returns focus here.
+  const discardButtonRef = useRef<HTMLButtonElement>(null);
 
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   /*
@@ -580,6 +616,46 @@ function PublishSheetBody({
           : "We couldn't schedule that. Please try again.",
       );
     }
+  }
+
+  /*
+   * Only a `pending` schedule is called off. A `running` one is publishing right
+   * now, and Discard is disabled for it rather than racing it.
+   */
+  const scheduleToCancel =
+    pendingSchedule.data?.status === 'pending' ? pendingSchedule.data : null;
+
+  async function onDiscard() {
+    setConfirmDiscardOpen(false);
+    setReceipt(null);
+    try {
+      await discard.mutateAsync();
+    } catch (error) {
+      // A toast, not a receipt: a receipt describes a publish. Nothing changed,
+      // and the change list on screen still says so.
+      toast.error(
+        error instanceof Error
+          ? `We couldn't discard your changes. ${error.message}`
+          : "We couldn't discard your changes. Please try again.",
+      );
+      return;
+    }
+    if (scheduleToCancel) {
+      try {
+        await cancelSchedule.mutateAsync();
+      } catch {
+        // The draft is gone but the schedule is still armed. Stay open: this
+        // sheet holds the schedule's Cancel, and the editor cannot reopen it
+        // once there are no changes left to review.
+        toast.error(
+          `Your changes were discarded, but the publish scheduled for ${new Date(scheduleToCancel.scheduledFor).toLocaleString()} is still set. Use Cancel to call it off.`,
+        );
+        return;
+      }
+    }
+    toast.success('Your unpublished changes were discarded. Your live site is unchanged.');
+    onOpenChange(false);
+    onDiscarded?.();
   }
 
   async function onPublish() {
@@ -921,26 +997,53 @@ function PublishSheetBody({
       ) : null}
 
       <div className="mt-auto flex flex-col gap-2 border-t border-edge pt-4">
-        <Button
-          type="button"
-          onClick={() => void (scheduleLater ? onSchedule() : onPublish())}
-          disabled={
-            blocked ||
-            !hasChanges ||
-            publish.isPending ||
-            createSchedule.isPending ||
-            (scheduleLater && !scheduleValid)
-          }
-          loading={publish.isPending || createSchedule.isPending}
-        >
-          {scheduleLater
-            ? createSchedule.isPending
-              ? 'Scheduling…'
-              : 'Schedule publish'
-            : publish.isPending
-              ? 'Publishing…'
-              : 'Publish changes'}
-        </Button>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row">
+          {/*
+            * Outline, not the filled destructive variant: one filled button per
+            * region, and that is Publish. The danger colour still says what this
+            * does. NOT disabled by `blocked` — discarding is a way out of a draft
+            * that cannot be published.
+            */}
+          <Button
+            ref={discardButtonRef}
+            type="button"
+            variant="outline"
+            className="text-status-danger hover:bg-status-danger-bg hover:text-status-danger"
+            onClick={() => setConfirmDiscardOpen(true)}
+            disabled={
+              !hasChanges ||
+              discard.isPending ||
+              publish.isPending ||
+              createSchedule.isPending ||
+              pendingSchedule.data?.status === 'running'
+            }
+            loading={discard.isPending}
+          >
+            {discard.isPending ? 'Discarding…' : 'Discard changes'}
+          </Button>
+          <Button
+            type="button"
+            className="sm:flex-1"
+            onClick={() => void (scheduleLater ? onSchedule() : onPublish())}
+            disabled={
+              blocked ||
+              !hasChanges ||
+              publish.isPending ||
+              createSchedule.isPending ||
+              discard.isPending ||
+              (scheduleLater && !scheduleValid)
+            }
+            loading={publish.isPending || createSchedule.isPending}
+          >
+            {scheduleLater
+              ? createSchedule.isPending
+                ? 'Scheduling…'
+                : 'Schedule publish'
+              : publish.isPending
+                ? 'Publishing…'
+                : 'Publish changes'}
+          </Button>
+        </div>
         <p className="text-xs text-content-secondary" data-testid="publish-hint">
           {blocked
             ? 'Fix the problems above before publishing.'
@@ -953,6 +1056,25 @@ function PublishSheetBody({
                 : 'All of these changes go live at once.'}
         </p>
       </div>
+
+      {confirmDiscardOpen ? (
+        <ConfirmDialog
+          open
+          onOpenChange={setConfirmDiscardOpen}
+          restoreFocusTo={discardButtonRef}
+          title="Discard all unpublished changes?"
+          description={`This throws away ${diff.changes.length === 1 ? 'the 1 change' : `all ${diff.changes.length} changes`} listed here. Your live site stays exactly as it is.${
+            scheduleToCancel
+              ? ` The publish you scheduled for ${new Date(scheduleToCancel.scheduledFor).toLocaleString()} is called off too.`
+              : ''
+          } This can't be undone.`}
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          destructive
+          pending={discard.isPending}
+          onConfirm={() => void onDiscard()}
+        />
+      ) : null}
     </div>
   );
 }
