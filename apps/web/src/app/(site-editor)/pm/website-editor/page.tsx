@@ -99,6 +99,13 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     item: params['item'],
     publish: params['publish'],
   });
+  // The settings that save at once (General, Notice, Address & domain, Search
+  // & sharing, Access) moved to the website overview's Settings tab. Old links
+  // and Help screenshots still name them; the overview runs its own gates, and
+  // only the validated community id is carried.
+  if (location.settingsMoved) {
+    redirect(`/pm/website?communityId=${communityId}&tab=settings`);
+  }
 
   let userId: string;
   try {
@@ -132,15 +139,14 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
     // `loadCanvasContext` above already reads it, so this resolves from the
     // same request-scoped result rather than issuing a second SELECT.
     getBrandingForCommunity(communityId),
-    // The Site panel's storage meter. Usage is resolved from the same cached
-    // `branding` read as the settings below — no extra query — but the quota
-    // needs the plan, and that IS a lookup of its own. Through the service's
-    // degrading helper, not the raw lookup: a hiccup there leaves the meter
-    // usage-only rather than taking the whole editor down for a manager who
-    // came to move a block (the same trade `loadInitialPages` makes), and it
-    // is the same helper the route uses, so the seeded number is the one a
-    // refetch would return — `initialData` is fresh for the provider's
-    // staleTime, and a first paint that disagrees with it is a visible jump.
+    // The storage half of the seeded site-settings record. The editor shows no
+    // storage meter (that is on the website overview's Settings tab), but the
+    // seed is one shared query record, so it carries what a refetch returns.
+    // Usage comes from the cached `branding` read below; the quota needs the
+    // plan, a lookup of its own. Through the service's degrading helper, not
+    // the raw lookup: a hiccup there leaves the record usage-only rather than
+    // taking the whole editor down for a manager who came to move a block (the
+    // same trade `loadInitialPages` makes).
     loadSiteQuotaBytes(communityId),
     // v4 Phase 2b: decides whether Florida's website rules apply at all.
     // `null` = unknown (pre-0081 rows the backfill could not recover).
@@ -212,7 +218,6 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         communityId={communityId}
         communityName={membership.communityName}
         publicSiteUrl={communityInfo ? buildCommunityUrl(communityInfo.slug, '/') : null}
-        hasSiteCustomDomain={features.hasSiteCustomDomain}
         hasSiteCustomCss={features.hasSiteCustomCss}
         // Gates three rows inside the Add panel, not the panel.
         hasPolishBlocks={features.hasSitePolishBlocks}
@@ -232,7 +237,7 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
             : null
         }
         // Phase 8. Same trick as the notice: derived from reads already made,
-        // so the Site panel paints real values instead of a spinner. The
+        // so the canvas footer paints real values instead of a spinner. The
         // resolvers are total, so malformed branding yields defaults here
         // rather than throwing during render.
         siteIdentity={{
@@ -243,7 +248,6 @@ export default async function WebsiteEditorV3Page({ searchParams }: PageProps) {
         unitCount={unitCount}
         // The route is admin-only too; this only decides whether to OFFER it.
         canEditUnitCount={membership.isAdmin}
-        tagline={branding?.tagline ?? null}
         initialSiteSettings={{
           settings: resolveSiteSettings(branding),
           footer: resolveFooterSettings(branding),

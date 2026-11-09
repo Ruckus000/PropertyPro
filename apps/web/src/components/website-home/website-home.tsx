@@ -15,7 +15,9 @@
  *   missing, and quick ways into the editor's Welcome and Look.
  * - **Records** (condos and HOAs): the Florida records list (`MissingRecordsAlert`).
  * - **Versions**: restore an earlier publish (`YourSiteCard`).
- * - **Settings**: the transparency page and the contact details the site shows.
+ * - **Settings**: everything that takes effect when saved: the contact details
+ *   the site shows, the transparency page, and the site settings that moved out
+ *   of the editor (`LiveSiteSettings`, loaded on the tab's first visit).
  *
  * Everything comes from the page's loader (`loadWebsiteHome`, D19); nothing
  * here reads the server on render. Dates print in the community's time zone,
@@ -32,12 +34,14 @@ import { TransparencyToggle } from '@/components/transparency/transparency-toggl
 import { useUrlView } from '@/hooks/use-url-view';
 import { LOOK_SUMMARIES } from '@/lib/site-looks/look-summaries';
 import type { WebsiteHomeData } from '@/lib/services/website-home-service';
+import type { LiveSiteSettingsProps } from '@/components/pm/site-editor-v3/settings/LiveSiteSettings';
 import { LookPreviewFrame } from './look-preview-frame';
 import { MissingRecordsAlert } from './missing-records-alert';
 import { SiteDetailsCard } from './site-details-card';
 import { SiteStatusBanner } from './site-status-banner';
 import { SiteStatusList } from './site-status-list';
 import { TOUCH } from './touch';
+import { LazyLiveSiteSettings } from './website-home-lazy';
 import { YourSiteCard } from './your-site-card';
 
 export interface WebsiteHomeProps {
@@ -49,6 +53,14 @@ export interface WebsiteHomeProps {
   now: string;
   /** The community's IANA time zone. */
   timeZone: string;
+  /**
+   * The Settings tab's site settings, seeded from the page's loader. The rest of
+   * what they need (the address, whether the site is public) is in `data`.
+   */
+  siteSettings: Pick<
+    LiveSiteSettingsProps,
+    'community' | 'tagline' | 'initialSettings' | 'hasSiteCustomDomain' | 'initialNotice'
+  >;
 }
 
 const FALLBACK_TIME_ZONE = 'America/New_York';
@@ -78,7 +90,7 @@ function draftSummary(pendingDraftCount: number, lookDrafted: boolean): string {
   return `${n} ${n === 1 ? 'change' : 'changes'} saved as a draft, not live yet`;
 }
 
-export function WebsiteHome({ communityId, data, published, now, timeZone }: WebsiteHomeProps) {
+export function WebsiteHome({ communityId, data, published, now, timeZone, siteSettings }: WebsiteHomeProps) {
   const { facts, records } = data;
   const hasRecordsList = facts.communityType !== 'apartment';
   const { view: requested, setView } = useUrlView<WebsiteTab>('tab', coerceTab);
@@ -323,6 +335,12 @@ export function WebsiteHome({ communityId, data, published, now, timeZone }: Web
               <TransparencyToggle communityId={communityId} subdomain={data.slug} />
             </section>
           )}
+          <LazyLiveSiteSettings
+            communityId={communityId}
+            {...siteSettings}
+            publicSiteUrl={facts.siteUrl}
+            hasPublishedSite={data.sitePublished}
+          />
         </section>
       </TabsContent>
     </Tabs>

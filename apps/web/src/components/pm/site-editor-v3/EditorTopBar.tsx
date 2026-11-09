@@ -34,7 +34,7 @@ export interface EditorTopBarPageProps {
   pages: readonly SitePageSummary[];
   selectedPageId: number | null;
   onSelectPage: (pageId: number) => void;
-  /** Opens Site settings on its Pages tab. */
+  /** Opens Pages & design on its Pages tab. */
   onManagePages: () => void;
   /**
    * Draft changes waiting to publish, shown as a count on the button. The count
@@ -51,14 +51,15 @@ export type PreviewDevice = 'desktop' | 'tablet' | 'phone';
 
 /**
  * Advanced mode's two areas (v4 builder, Phase 5): the page being built, and
- * Site settings. The design also drew a Documents view; the records live on
+ * Pages & design (the site-wide settings that save at once are on the website
+ * overview). The design also drew a Documents view; the records live on
  * the website overview instead (the top bar links there), so there is no third.
  */
 export type EditorView = 'website' | 'settings';
 
 const VIEWS: readonly { id: EditorView; label: string; icon: LucideIcon }[] = [
   { id: 'website', label: 'Page', icon: LayoutTemplate },
-  { id: 'settings', label: 'Site settings', icon: Settings },
+  { id: 'settings', label: 'Pages & design', icon: Settings },
 ];
 
 /** The top bar's heading, which takes focus when a control that held it goes away. */

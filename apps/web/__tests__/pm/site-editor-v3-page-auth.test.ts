@@ -169,26 +169,52 @@ describe('v3 editor page — which area it opens on', () => {
     });
   }
 
-  it('?view=settings&tab=pages opens Site settings on Pages', async () => {
+  it('?view=settings&tab=pages opens Pages & design on Pages', async () => {
     const props = findEditorRootProps(await renderWith({ view: 'settings', tab: 'pages' }));
 
     expect(props?.['initialView']).toBe('settings');
     expect(props?.['initialSettingsTab']).toBe('pages');
   });
 
-  it('opens the website on General settings when the address names neither', async () => {
+  it('opens the website, with Pages as the settings tab, when the address names neither', async () => {
     const props = findEditorRootProps(await renderWith({}));
 
     expect(props?.['initialView']).toBe('website');
-    expect(props?.['initialSettingsTab']).toBe('general');
+    expect(props?.['initialSettingsTab']).toBe('pages');
   });
 
-  it('opens General for a tab it does not know, and ignores a tab with no view', async () => {
+  it('opens Pages for a tab it does not know, and ignores a tab with no view', async () => {
     const unknown = findEditorRootProps(await renderWith({ view: 'settings', tab: 'billing' }));
-    expect(unknown?.['initialSettingsTab']).toBe('general');
+    expect(unknown?.['initialSettingsTab']).toBe('pages');
 
     const stray = findEditorRootProps(await renderWith({ tab: 'pages' }));
     expect(stray?.['initialView']).toBe('website');
+  });
+
+  // The settings that save at once moved to the website overview (design D);
+  // old links and Help screenshots still name them. The overview runs its own
+  // gates, so the redirect carries only the validated community id.
+  // Revert check (production line): the `if (location.settingsMoved)` redirect.
+  it.each(['general', 'notice', 'address', 'search', 'access'])(
+    '?view=settings&tab=%s goes to the overview Settings tab',
+    async (tab) => {
+      await expect(renderWith({ view: 'settings', tab })).rejects.toThrow(
+        'NEXT_REDIRECT:/pm/website?communityId=7&tab=settings',
+      );
+    },
+  );
+
+  it('does not send a stray tab with no view to the overview', async () => {
+    const props = findEditorRootProps(await renderWith({ tab: 'notice' }));
+    expect(props?.['initialView']).toBe('website');
+  });
+
+  it('still refuses a bad community id before the overview redirect', async () => {
+    await expect(
+      WebsiteEditorV3Page({
+        searchParams: Promise.resolve({ communityId: '../x', view: 'settings', tab: 'notice' } as Record<string, string>),
+      }),
+    ).rejects.toThrow('NEXT_REDIRECT:/pm/dashboard/communities?reason=invalid-selection');
   });
 
   it('still refuses a manager without the site editor, whatever the address asks for', async () => {

@@ -5,7 +5,7 @@
  *
  * The front door to the association's website: where it stands, the Florida
  * records still missing, earlier versions to restore, and the settings that
- * take effect when saved. Everything about what the site says or how it looks
+ * take effect when saved (including those that moved out of the editor). Everything about what the site says or how it looks
  * is changed in the editor (`/pm/website-editor`), behind **Edit website**. The
  * editor's Publish lands back here with `published=1`.
  *
@@ -33,6 +33,10 @@ import { hasRole, PM_MANAGER_ROLES } from '@/lib/api/role-guard';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
 import { loadWebsiteHome } from '@/lib/services/website-home-service';
+import { getBrandingForCommunity, getCommunityPublicInfo } from '@/lib/api/branding';
+import { loadSiteQuotaBytes } from '@/lib/services/site-settings-service';
+import { resolveAssetsBytesUsed } from '@/lib/site-assets/quota';
+import { resolveFooterSettings, resolveSiteSettings } from '@/lib/site-editor/site-settings';
 import { PageBody } from '@/components/shared/page-body';
 import { WebsiteHome } from '@/components/website-home/website-home';
 
@@ -83,9 +87,15 @@ export default async function WebsiteHomePage({ searchParams }: PageProps) {
     await ensureTransparencyChecklistInitialized(communityId, membership.communityType);
   }
 
-  const data = await loadWebsiteHome(communityId, userId!, {
-    includeHistory: features.hasSitePolishBlocks,
-  });
+  // The Settings tab's seed, read the way the editor page reads it. The two
+  // community reads are request-cached, and `loadWebsiteHome` makes the same
+  // ones, so this adds only the storage quota.
+  const [data, branding, communityInfo, siteQuotaBytes] = await Promise.all([
+    loadWebsiteHome(communityId, userId!, { includeHistory: features.hasSitePolishBlocks }),
+    getBrandingForCommunity(communityId),
+    getCommunityPublicInfo(communityId),
+    loadSiteQuotaBytes(communityId),
+  ]);
 
   return (
     <PageBody>
@@ -96,6 +106,30 @@ export default async function WebsiteHomePage({ searchParams }: PageProps) {
         published={params['published'] === '1'}
         now={new Date().toISOString()}
         timeZone={membership.timezone}
+        siteSettings={{
+          community: {
+            name: membership.communityName,
+            slug: data.slug,
+            communityType: membership.communityType as 'condo_718' | 'hoa_720' | 'apartment',
+          },
+          tagline: branding?.tagline ?? null,
+          initialSettings: {
+            settings: resolveSiteSettings(branding),
+            footer: resolveFooterSettings(branding),
+            storage: {
+              assetsBytesUsed: resolveAssetsBytesUsed(branding),
+              quotaBytes: siteQuotaBytes,
+            },
+          },
+          hasSiteCustomDomain: features.hasSiteCustomDomain,
+          initialNotice: communityInfo?.urgentNoticeText
+            ? {
+                text: communityInfo.urgentNoticeText,
+                expiresAt: communityInfo.urgentNoticeExpiresAt?.toISOString() ?? null,
+                setAt: null,
+              }
+            : null,
+        }}
       />
     </PageBody>
   );

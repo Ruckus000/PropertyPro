@@ -126,7 +126,7 @@ describe('HelpDrawer — the guide list', () => {
     ]);
     // Not listed twice: a guide shown first is left out of its group.
     expect(
-      within(section('Site settings')).getAllByRole('button').map((b) => b.textContent),
+      within(section('Website settings')).getAllByRole('button').map((b) => b.textContent),
     ).toEqual([
       expect.stringContaining('Use your own domain'),
       expect.stringContaining('Show up in search results'),
@@ -134,12 +134,16 @@ describe('HelpDrawer — the guide list', () => {
     expect(screen.queryByRole('region', { name: 'Editing your site' })).not.toBeInTheDocument();
   });
 
-  it('puts the Settings guides first while Settings is showing', () => {
+  // The domain and search guides are listed under their group, not first: their
+  // settings are on the website overview, not in Pages & design.
+  it('puts the Pages & design guides first while Pages & design is showing', () => {
     renderDrawer({ view: 'settings' });
     expect(
-      within(section('Help with Site settings')).getAllByRole('button').map((b) => b.textContent),
+      within(section('Help with Pages & design')).getAllByRole('button').map((b) => b.textContent),
+    ).toEqual([expect.stringContaining('Publish your changes')]);
+    expect(
+      within(section('Website settings')).getAllByRole('button').map((b) => b.textContent),
     ).toEqual([
-      expect.stringContaining('Publish your changes'),
       expect.stringContaining('Use your own domain'),
       expect.stringContaining('Show up in search results'),
     ]);
@@ -192,9 +196,9 @@ describe('HelpDrawer — reading a guide', () => {
     const user = userEvent.setup();
     renderDrawer();
     await user.click(screen.getByRole('button', { name: /use your own domain/i }));
-    await user.click(screen.getByRole('button', { name: 'Open Address & domain' }));
+    await user.click(screen.getByRole('button', { name: 'Open Settings on your Website page' }));
     expect(onClose).toHaveBeenCalledTimes(1);
-    expect(onShowMe).toHaveBeenCalledWith({ kind: 'settings', tab: 'address' });
+    expect(onShowMe).toHaveBeenCalledWith({ kind: 'website-settings' });
     expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
       onShowMe.mock.invocationCallOrder[0]!,
     );
@@ -272,7 +276,8 @@ describe('HelpDrawer — "Show me" after the tool rail', () => {
     [/add, move or remove a section/i, 'Add a part', { kind: 'add' }],
     [/change the look/i, 'Open Design', { kind: 'settings', tab: 'design' }],
     [/colours and logos/i, 'Open Design', { kind: 'settings', tab: 'design' }],
-    [/post an urgent notice/i, 'Open Notice', { kind: 'settings', tab: 'notice' }],
+    // The notice saves at once, so it is on the website overview's Settings tab.
+    [/post an urgent notice/i, 'Open Settings on your Website page', { kind: 'website-settings' }],
   ] as const)('%s: "%s" asks for %o', async (title, label, action) => {
     await showMe(title, label);
     expect(onShowMe).toHaveBeenCalledWith(action);
@@ -291,19 +296,19 @@ describe('HelpDrawer — "Show me" after the tool rail', () => {
     },
   );
 
-  it('lists the pages, design, branding and notice guides first in Site settings', () => {
+  it('lists the pages, design and branding guides first in Pages & design, and not the notice', () => {
     renderDrawer({ view: 'settings' });
-    const first = within(section('Help with Site settings'))
+    const first = within(section('Help with Pages & design'))
       .getAllByRole('button')
       .map((b) => b.textContent);
     for (const title of [
       'Add and manage pages',
       'Change the look',
       'Colours and logos',
-      'Post an urgent notice',
     ]) {
       expect(first).toContainEqual(expect.stringContaining(title));
     }
+    expect(first).not.toContainEqual(expect.stringContaining('Post an urgent notice'));
   });
 });
 

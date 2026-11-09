@@ -127,8 +127,6 @@ export interface EditorRootProps {
   communityId: number;
   communityName: string;
   publicSiteUrl: string | null;
-  /** Whether the plan includes a custom domain (Settings → Address & domain). */
-  hasSiteCustomDomain: boolean;
   /**
    * `hasSitePolishBlocks` — whether the plan includes the FAQ / Gallery /
    * Amenities blocks the Add panel offers.
@@ -142,16 +140,16 @@ export interface EditorRootProps {
   /**
    * Phase 7 urgent notice. Both values come from the page's existing
    * `getCommunityPublicInfo` read, so they cost no extra query — and passing
-   * them down means the notice panel and the phone gate open with real state
-   * instead of a spinner, which matters for the one tool in this editor that
-   * gets used under time pressure.
+   * them down means the phone gate's notice form opens with real state
+   * instead of a spinner, which matters for a tool used under time pressure.
+   * (On a wider screen the notice is on the website overview's Settings tab.)
    */
   hasPublishedSite: boolean;
   initialNotice: UrgentNotice | null;
   /**
    * Phase 8 site settings. Like the notice above, both come from reads the page
-   * already makes, so the Site panel opens with real values rather than a
-   * spinner and costs no extra query.
+   * already makes. They seed the shared site-settings query, which the canvas
+   * footer reads, so it paints real values rather than a spinner.
    */
   siteIdentity: SitePanelProps['community'];
   /**
@@ -161,7 +159,6 @@ export interface EditorRootProps {
   unitCount: number | null;
   /** Whether this viewer may correct `unitCount` (community admin). */
   canEditUnitCount: boolean;
-  tagline: string | null;
   initialSiteSettings: SiteSettingsRecord | undefined;
   /**
    * The colour-set catalog (`site_theme_presets`) for the Design panel. The
@@ -199,7 +196,7 @@ export interface EditorRootProps {
    * Absent means the Website view, as every link to the editor has always meant.
    */
   initialView?: EditorView;
-  /** The Site settings tab to open on when `initialView` is `'settings'`. */
+  /** The Pages & design tab to open on when `initialView` is `'settings'`. */
   initialSettingsTab?: SettingsTabId;
   /** Simple or Advanced, from `?mode=` (`parseEditorLocation`). Simple when absent. */
   initialMode?: EditorMode;
@@ -289,7 +286,6 @@ export function EditorRoot({
   communityId,
   communityName,
   publicSiteUrl,
-  hasSiteCustomDomain,
   hasPolishBlocks,
   canvasContext: serverCanvasContext,
   hasPublishedSite,
@@ -297,7 +293,6 @@ export function EditorRoot({
   siteIdentity,
   unitCount,
   canEditUnitCount,
-  tagline,
   initialSiteSettings,
   presets,
   hasSiteCustomCss,
@@ -969,11 +964,13 @@ export function EditorRoot({
         openAdd(null, null);
       } else if (action.kind === 'settings') {
         openSettingsTab(action.tab);
+      } else if (action.kind === 'website-settings') {
+        router.push(`/pm/website?communityId=${communityId}&tab=settings`);
       } else {
         setPublishOpen(true);
       }
     },
-    [openAdd, openSettingsTab],
+    [openAdd, openSettingsTab, router, communityId],
   );
 
   return (
@@ -1073,11 +1070,6 @@ export function EditorRoot({
           view === 'settings' ? (
             <SettingsView
               communityId={communityId}
-              community={siteIdentity}
-              tagline={tagline}
-              initialSettings={initialSiteSettings}
-              publicSiteUrl={publicSiteUrl}
-              hasSiteCustomDomain={hasSiteCustomDomain}
               tabRequest={settingsTabRequest}
               onTabChange={setSettingsTab}
               pagesPanel={{
@@ -1092,7 +1084,6 @@ export function EditorRoot({
                 hasSiteCustomCss,
                 theme: resolveStylingTheme(canvasContext),
               }}
-              noticePanel={{ hasPublishedSite, initialNotice }}
             />
           ) : null
         }

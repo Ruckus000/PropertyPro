@@ -8,7 +8,8 @@
  * Everything on the page is real, the transparency switch included (its
  * settings read is answered by a stub `fetch`). The overlays the page loads on
  * a click are not opened here; the drawer and dialog are audited in their own
- * tests.
+ * tests. So are the live site settings on the Settings tab
+ * (`LiveSiteSettings.test.tsx`), which are stood in for here.
  *
  * Each case first asserts that the page's own content rendered, because an axe
  * run over a container that rendered nothing passes trivially.
@@ -23,6 +24,10 @@ import type { WebsiteHomeData } from '@/lib/services/website-home-service';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock('@/components/website-home/website-home-lazy', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/website-home/website-home-lazy')>()),
+  LazyLiveSiteSettings: () => <p>Live site settings</p>,
+}));
 const { tabRef } = vi.hoisted(() => ({ tabRef: { value: null as string | null } }));
 vi.mock('@/hooks/use-url-view', async () => {
   const { useState } = await import('react');
@@ -119,7 +124,14 @@ function renderHome(data: WebsiteHomeData) {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   return render(
-    <WebsiteHome communityId={42} data={data} published={false} now="2026-10-29T16:00:00.000Z" timeZone="America/New_York" />,
+    <WebsiteHome communityId={42} data={data} published={false} now="2026-10-29T16:00:00.000Z" timeZone="America/New_York"
+      siteSettings={{
+        community: { name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718' },
+        tagline: null,
+        hasSiteCustomDomain: false,
+        initialNotice: null,
+      }}
+    />,
     { wrapper },
   );
 }
@@ -179,6 +191,7 @@ describe('website overview — axe', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Details on your site' })).toBeInTheDocument();
     expect(await screen.findByRole('checkbox', { name: 'Enable compliance transparency page' })).toBeInTheDocument();
+    expect(screen.getByText('Live site settings')).toBeInTheDocument();
 
     expect(await axe(container)).toHaveNoViolations();
   });

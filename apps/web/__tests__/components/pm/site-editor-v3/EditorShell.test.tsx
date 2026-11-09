@@ -381,11 +381,11 @@ describe('EditorShell — Website · Settings switch (v4 Phase 5)', () => {
     const nav = screen.getByRole('navigation', { name: 'Website areas' });
     expect(nav).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Page' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: 'Site settings' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('button', { name: 'Pages & design' })).not.toHaveAttribute('aria-current');
 
     await user.click(screen.getByRole('button', { name: 'Page' }));
     expect(onViewChange).not.toHaveBeenCalled();
-    await user.click(screen.getByRole('button', { name: 'Site settings' }));
+    await user.click(screen.getByRole('button', { name: 'Pages & design' }));
     expect(onViewChange).toHaveBeenCalledWith('settings');
   });
 

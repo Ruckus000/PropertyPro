@@ -58,7 +58,7 @@ export interface CanvasProps {
   /** The page being edited; names the empty-state hero on a sub-page (D18). */
   page?: SitePageContext;
   /**
-   * Opens Site settings on Pages. When given, the header is an editable region of the
+   * Opens Pages & design on Pages. When given, the header is an editable region of the
    * canvas — the navigation bar — the way each block is a section. Nav links
    * come from pages, so "edit the navigation" means "manage the pages".
    */

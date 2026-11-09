@@ -97,13 +97,11 @@ vi.mock('next/dynamic', () => ({
             onTabChange,
             pagesPanel,
             designPanel,
-            noticePanel,
           }: {
             tabRequest?: { tab: string } | null;
             onTabChange?: (tab: string) => void;
             pagesPanel: PagesStandInProps;
             designPanel: { presets: unknown[]; hasSiteCustomCss: boolean };
-            noticePanel: { hasPublishedSite: boolean };
           }) => (
             <>
               <p data-testid="settings-stand-in">Requested tab: {tabRequest?.tab ?? 'none'}</p>
@@ -114,8 +112,7 @@ vi.mock('next/dynamic', () => ({
                 Settings stand-in: edit the second page
               </button>
               <p>
-                Settings stand-in props: page {String(pagesPanel.selectedPageId)}, published{' '}
-                {String(noticePanel.hasPublishedSite)}, custom css{' '}
+                Settings stand-in props: page {String(pagesPanel.selectedPageId)}, custom css{' '}
                 {String(designPanel.hasSiteCustomCss)}, {designPanel.presets.length} colour sets
               </p>
               <PagesStandIn {...pagesPanel} />
@@ -386,8 +383,7 @@ const HELP_ACTIONS: ReadonlyArray<readonly [string, unknown]> = [
   ['add', { kind: 'add' }],
   ['settings pages', { kind: 'settings', tab: 'pages' }],
   ['settings design', { kind: 'settings', tab: 'design' }],
-  ['settings notice', { kind: 'settings', tab: 'notice' }],
-  ['settings search', { kind: 'settings', tab: 'search' }],
+  ['website settings', { kind: 'website-settings' }],
   ['publish', { kind: 'publish' }],
 ];
 
@@ -655,7 +651,6 @@ function rootElement({
       communityId={42}
       communityName="Sunset Condos"
       publicSiteUrl="https://sunset-condos.example.com/"
-      hasSiteCustomDomain
       hasPolishBlocks
       // Null on purpose by default: takes the degraded-canvas branch, so the
       // whole block-view tree stays out of this test.
@@ -670,7 +665,6 @@ function rootElement({
         communityType: 'condo_718',
         city: 'Miami',
       }}
-      tagline={null}
       initialSiteSettings={undefined}
       presets={[]}
       hasSiteCustomCss={false}
@@ -698,7 +692,7 @@ function renderRoot(options: RootOptions = {}) {
  */
 async function openPages() {
   if (screen.queryByTestId('settings-stand-in')) return;
-  await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Pages & design' }));
 }
 
 /** Back to the page being edited, where the canvas and the inspector are. */
@@ -1069,7 +1063,7 @@ describe('EditorRoot — the Settings view (v4 Phase 5)', () => {
   it('switches to Settings and back', async () => {
     renderRoot();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pages & design' }));
     expect(screen.getByTestId('settings-stand-in')).toBeInTheDocument();
     expect(screen.queryByText('inspector')).not.toBeInTheDocument();
 
@@ -1094,12 +1088,12 @@ describe('EditorRoot — Site settings opened from the address (combined plan Ta
     expect(screen.queryByText(/Requested tab/)).not.toBeInTheDocument();
   });
 
-  it('hands the Pages, Design and Notice tabs what the tools had', () => {
+  it('hands the Pages and Design tabs what the tools had', () => {
     renderRoot({ initialView: 'settings', hasPublishedSite: false });
 
     expect(
       screen.getByText(
-        `Settings stand-in props: page ${HOME_PAGE_ID}, published false, custom css false, 0 colour sets`,
+        `Settings stand-in props: page ${HOME_PAGE_ID}, custom css false, 0 colour sets`,
       ),
     ).toBeInTheDocument();
   });
@@ -1151,9 +1145,7 @@ describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
   it.each([
     ['settings pages', 'pages'],
     ['settings design', 'design'],
-    ['settings notice', 'notice'],
-    ['settings search', 'search'],
-  ])('"Show me: %s" closes the drawer and opens Site settings on %s', async (label, tab) => {
+  ])('"Show me: %s" closes the drawer and opens Pages & design on %s', async (label, tab) => {
     renderRoot();
     await userEvent.click(helpButton());
     await userEvent.click(screen.getByRole('button', { name: `Show me: ${label}` }));
@@ -1177,16 +1169,26 @@ describe('EditorRoot — the Help drawer (v4 Phase 3)', () => {
     expect(screen.queryByTestId('settings-stand-in')).not.toBeInTheDocument();
   });
 
-  it('"Show me" for a Settings tab asks Settings for it, once', async () => {
+  // The urgent notice, domain and search settings save at once, so they moved
+  // to the website overview's Settings tab (design D). Their guides go there.
+  it('"Show me" for a setting on the website overview goes to its Settings tab', async () => {
     renderRoot();
     await userEvent.click(helpButton());
-    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings search' }));
-    expect(screen.getByText('Requested tab: search')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: website settings' }));
+
+    expect(routerPush).toHaveBeenCalledWith('/pm/website?communityId=42&tab=settings');
+  });
+
+  it('"Show me" for a Pages & design tab asks for it, once', async () => {
+    renderRoot();
+    await userEvent.click(helpButton());
+    await userEvent.click(screen.getByRole('button', { name: 'Show me: settings design' }));
+    expect(screen.getByText('Requested tab: design')).toBeInTheDocument();
 
     // The PM's own switch afterwards opens Settings on its first tab again.
     await userEvent.click(screen.getByRole('button', { name: 'Page' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
-    expect(screen.getByText('Requested tab: general')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Pages & design' }));
+    expect(screen.getByText('Requested tab: pages')).toBeInTheDocument();
   });
 });
 
@@ -1845,7 +1847,7 @@ describe('EditorRoot — "Fix this" reaches a section on another page', () => {
   // Revert check: `setView('website')` in `handleGoToSlot`.
   it("Publish's Fix this from Settings returns to the page", async () => {
     renderRoot();
-    await userEvent.click(screen.getByRole('button', { name: 'Site settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pages & design' }));
     await userEvent.click(screen.getByRole('button', { name: /Publish/ }));
     await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
 

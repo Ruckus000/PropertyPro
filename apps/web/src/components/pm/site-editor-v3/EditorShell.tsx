@@ -88,7 +88,7 @@ export interface EditorShellProps extends EditorTopBarPageProps {
  * (the welcome and look beside a preview) and `inspector` is null.
  *
  * There is no tool rail (combined plan Task 28). Sections are added and edited
- * on the page itself; pages, design and the notice are Site settings tabs.
+ * on the page itself; pages and design are the Pages & design tabs.
  *
  * Below 768px Advanced is unmounted rather than hidden — see PhoneGate — and
  * Simple renders as one column. Column heights come from the route-group

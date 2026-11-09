@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * The Design panel (website builder v4, Phase 4b; Site settings, combined plan
- * Task 27): colour set, fonts, on Professional custom colours, and the logos.
- * Colour, font and custom-colour changes save as a draft and go live on
- * Publish (`site-design-service`). The logos at the bottom are the exception:
- * they are live as soon as they save (see `LogosSection`).
+ * The Design panel (website builder v4, Phase 4b; Pages & design, design D): the
+ * look, the colour set, fonts and, on Professional, custom colours. All of them
+ * save as a draft and go live on Publish (`site-design-service`). The logos,
+ * which are live as soon as they save, are on the website overview's Settings
+ * tab (`LiveSiteSettings`).
  *
  * It opens with the looks (`LookChooser`, shared with Simple mode). A look is a
  * whole design (a layout, a colour set and the home page's starting sections);
@@ -24,7 +24,6 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSaveSiteDesign, useSiteDesign } from '@/hooks/use-site-design';
-import { LogosSection } from './LogosSection';
 import { LookChooser } from './LookChooser';
 import { PresetCards, type PresetCardData } from './preset-cards';
 import { StylingPanel, type StylingPanelTheme } from './StylingPanel';
@@ -156,7 +155,6 @@ export function DesignPanel({
         <StylingPanel communityId={communityId} hasSiteCustomCss={hasSiteCustomCss} theme={theme} />
       </section>
 
-      <LogosSection communityId={communityId} />
     </div>
   );
 }

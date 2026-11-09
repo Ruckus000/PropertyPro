@@ -29,6 +29,7 @@ const { refreshMock, lazyProps, tabRef } = vi.hoisted(() => ({
     upload: null as null | Record<string, unknown>,
     drawer: null as null | Record<string, unknown>,
     notApplicable: null as null | Record<string, unknown>,
+    liveSettings: null as null | Record<string, unknown>,
   },
 }));
 
@@ -75,6 +76,10 @@ vi.mock('@/components/website-home/website-home-lazy', () => ({
       </div>
     );
   },
+  LazyLiveSiteSettings: (props: Record<string, unknown>) => {
+    lazyProps.liveSettings = props;
+    return <p>Live site settings</p>;
+  },
   LazyConfirmDialog: (props: { title: string; description: string; confirmLabel: string; onConfirm: () => void }) => (
     <div role="alertdialog" aria-label={props.title}>
       <p>{props.description}</p>
@@ -88,6 +93,12 @@ vi.mock('@/components/website-home/website-home-lazy', () => ({
 import { WebsiteHome } from '@/components/website-home/website-home';
 
 const COMMUNITY_ID = 42;
+const SITE_SETTINGS = {
+  community: { name: 'Sunset Condos', slug: 'sunset-condos', communityType: 'condo_718' as const },
+  tagline: null,
+  hasSiteCustomDomain: false,
+  initialNotice: null,
+};
 const NOW = '2026-10-29T16:00:00.000Z';
 
 interface Call {
@@ -168,7 +179,7 @@ function renderHome(d: WebsiteHomeData = data(), { published = false } = {}) {
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   render(
-    <WebsiteHome communityId={COMMUNITY_ID} data={d} published={published} now={NOW} timeZone="America/New_York" />,
+    <WebsiteHome communityId={COMMUNITY_ID} data={d} published={published} now={NOW} timeZone="America/New_York" siteSettings={SITE_SETTINGS} />,
     { wrapper },
   );
   return userEvent.setup();
@@ -443,7 +454,7 @@ describe('records', () => {
     const before = data({}, { candidates: { [BUDGET.itemId]: [{ documentId: 30, title: '2025 Budget' }] } });
     const ui = (d: WebsiteHomeData) => (
       <QueryClientProvider client={client}>
-        <WebsiteHome communityId={COMMUNITY_ID} data={d} published={false} now={NOW} timeZone="America/New_York" />
+        <WebsiteHome communityId={COMMUNITY_ID} data={d} published={false} now={NOW} timeZone="America/New_York" siteSettings={SITE_SETTINGS} />
       </QueryClientProvider>
     );
     const { rerender } = render(ui(before));
@@ -725,6 +736,27 @@ describe('settings', () => {
     expect(screen.getByText(/These take effect when you save them/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Transparency page' })).toBeInTheDocument();
     expect(screen.getByText('Transparency switch for sunset-condos')).toBeInTheDocument();
+  });
+
+  // The settings that save at once moved here from the editor (design D).
+  it("holds the live site settings, handed the page's address and publish state", () => {
+    lazyProps.liveSettings = null;
+    renderHome();
+
+    expect(screen.getByText('Live site settings')).toBeInTheDocument();
+    expect(lazyProps.liveSettings).toMatchObject({
+      communityId: COMMUNITY_ID,
+      ...SITE_SETTINGS,
+      publicSiteUrl: data().facts.siteUrl,
+      hasPublishedSite: data().sitePublished,
+    });
+  });
+
+  it('does not load the live site settings on another tab', () => {
+    tabRef.value = null;
+    lazyProps.liveSettings = null;
+    renderHome();
+    expect(lazyProps.liveSettings).toBeNull();
   });
 });
 
