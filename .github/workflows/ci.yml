@@ -288,7 +288,10 @@ jobs:
   # read the emitted build output from disk, so they must share a job with it.
   perf-check:
     name: perf-check
-    runs-on: ubuntu-latest
+    # ponytail: pinned because ubuntu-latest moved to 26.04 (2026-11-10) and
+    # Playwright 1.58 cannot install Chromium there. Trigger: a Playwright
+    # release that supports ubuntu26.04 lands in the lockfile — unpin then.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     env:

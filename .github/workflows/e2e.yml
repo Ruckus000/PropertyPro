@@ -91,7 +91,10 @@ concurrency:
 jobs:
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    # ponytail: pinned because ubuntu-latest moved to 26.04 (2026-11-10) and
+    # Playwright 1.58 cannot install Chromium there. Trigger: a Playwright
+    # release that supports ubuntu26.04 lands in the lockfile — unpin then.
+    runs-on: ubuntu-24.04
     # Budgeted, not guessed. The allowlist takes 8.3 min locally at one worker
     # (measured end to end through this exact config; the full 35-block suite
     # was 11.1 min). Setup is the larger half and is all fixed cost:
