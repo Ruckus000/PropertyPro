@@ -1,5 +1,6 @@
 import type { SQL } from 'drizzle-orm';
 import type { PgTable, TableConfig } from 'drizzle-orm/pg-core';
+import type { AuditEventParams } from '../utils/audit-logger';
 
 /**
  * Scoped client type surface.
@@ -126,4 +127,25 @@ export interface ScopedClient {
     table: ScopedTable,
     additionalWhere?: SQL,
   ) => Promise<ScopedRow[]>;
+
+  /**
+   * Write a `compliance_audit_log` row for THIS community, through THIS
+   * client's connection. `communityId` is taken from the client, not the caller.
+   *
+   * Inside `transaction`, that means the audit row commits or rolls back with
+   * the writes it describes. Going through the default connection instead
+   * would leave a permanent row for a write that rolled back (the table is
+   * append-only), and would need a second pooled connection while the
+   * transaction holds one.
+   */
+  logAudit: (params: Omit<AuditEventParams, 'communityId'>) => Promise<void>;
+
+  /**
+   * Run `fn` in one database transaction. The client passed to `fn` keeps this
+   * client's tenant scoping; every write made through it (including
+   * `logAudit` and `postLedgerEntry(tx, …)`) commits together or not at all.
+   * Make no Stripe or other network calls inside `fn`: they hold the
+   * connection open.
+   */
+  transaction: <T>(fn: (tx: ScopedClient) => Promise<T>) => Promise<T>;
 }

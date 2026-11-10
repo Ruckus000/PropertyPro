@@ -144,15 +144,15 @@ line says where.
 - **Resident payments** are gated per community (`assessmentPaymentsEnabled`) and are not
   launching. `STRIPE_CONNECT_CLIENT_ID` is unset, which now returns a typed 503 rather than
   a raw 500.
-  - Before it can launch, three money items are open (ponytail audit #17). (1) Finance
-    events (`payment_intent.succeeded`, `charge.refunded`, `charge.dispute.created`) are
-    created on connected accounts, so they arrive on a **Connect** webhook endpoint with
-    its own signing secret; the route verifies only `STRIPE_WEBHOOK_SECRET`
-    (`webhooks/stripe/route.ts:665`) and the cutover runbook registers only the nine
-    platform events, so no payment would be credited. (2) The finance fence and the
-    ledger writes must commit in one transaction (`FinanceWebhookFenceConflict` in
-    `finance-service.ts`). (3) No `charge.dispute.closed` handler exists, so a won
-    dispute leaves a phantom debt.
+  - The three money items from ponytail audit #17 are fixed in code: the route verifies
+    the Connect endpoint's `STRIPE_CONNECT_WEBHOOK_SECRET` and checks that a
+    connected-account event comes from the community's own account; the finance fence
+    and its ledger writes commit in one transaction; `charge.dispute.closed` reverses a
+    won dispute. What remains is setup and a decision, not code: register the Connect
+    endpoint and set `STRIPE_CONNECT_WEBHOOK_SECRET` and `STRIPE_CONNECT_CLIENT_ID`
+    ([cutover runbook](runbooks/stripe-live-cutover.md) §3), decide chargeback liability
+    and the matching terms, then prove one real payment, refund and dispute on a single
+    community before turning `assessmentPaymentsEnabled` on anywhere else.
 - **PM lead notification** deferred — leads are captured and visible in admin `/leads`;
   only the push is missing, and there is no inbox to push to until item 3.
 - **`docs/gtm/03-LAUNCH-READINESS.md` is stale.** Its B1–B4 blockers are all resolved or

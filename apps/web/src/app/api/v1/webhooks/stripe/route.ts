@@ -602,6 +602,16 @@ async function handleCheckoutSessionExpired(
 // ---------------------------------------------------------------------------
 
 async function handleStripeEvent(event: Stripe.Event): Promise<void> {
+  // A Connect event comes from an association's own Stripe account, which may
+  // run its own checkouts and subscriptions. Those must never reach the
+  // platform handlers below (signup provisioning, PropertyPro's own billing).
+  // Only the finance handlers read connected-account events, and they check
+  // that the account belongs to the community the payment names.
+  if (event.account) {
+    await processFinanceStripeEvent(event);
+    return;
+  }
+
   switch (event.type) {
     case 'checkout.session.completed':
       await handleCheckoutSessionCompleted(event.data.object as Stripe.Checkout.Session, event.id, event.created);
@@ -647,11 +657,33 @@ async function handleStripeEvent(event: Stripe.Event): Promise<void> {
       break;
   }
 
-  // WS-66: finance payment lifecycle events are dispatched here too. They are
-  // created on CONNECTED accounts, so in production they arrive only through a
-  // Connect endpoint with its own secret, which this route cannot verify yet
-  // (LAUNCH-BLOCKERS, resident payments).
+  // WS-66: finance events for any PaymentIntent created on the platform account
+  // (none since direct charges; kept for older intents).
   await processFinanceStripeEvent(event);
+}
+
+/**
+ * Verify against the platform secret, then the Connect secret if one is set.
+ * Throws the platform secret's error when neither matches, so the log reads
+ * the same as before the Connect endpoint existed.
+ */
+function constructEventWithEitherSecret(
+  rawBody: string,
+  sig: string,
+  platformSecret: string,
+  connectSecret: string | undefined,
+): Stripe.Event {
+  const stripe = getStripeClient();
+  try {
+    return stripe.webhooks.constructEvent(rawBody, sig, platformSecret);
+  } catch (platformErr) {
+    if (!connectSecret) throw platformErr;
+    try {
+      return stripe.webhooks.constructEvent(rawBody, sig, connectSecret);
+    } catch {
+      throw platformErr;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -676,9 +708,14 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
     return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 500 });
   }
 
+  // Two Stripe endpoints deliver here, each with its own signing secret: the
+  // platform endpoint (PropertyPro's own billing) and the Connect endpoint
+  // (events on associations' connected accounts — resident payments, refunds,
+  // disputes). A signature valid under either secret came from Stripe.
+  const connectWebhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
   let event: Stripe.Event;
   try {
-    event = getStripeClient().webhooks.constructEvent(rawBody, sig, webhookSecret);
+    event = constructEventWithEitherSecret(rawBody, sig, webhookSecret, connectWebhookSecret);
   } catch (err) {
     logStripeWebhookEvent('warn', 'Stripe webhook signature verification failed', {
       errorCode: STRIPE_WEBHOOK_ERROR_CODES.SIGNATURE_INVALID,

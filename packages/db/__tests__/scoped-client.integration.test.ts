@@ -11,12 +11,16 @@ import postgres from 'postgres';
 import * as schema from '../src/schema';
 import { communities } from '../src/schema/communities';
 import { units } from '../src/schema/units';
+import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { TenantContextMissing } from '../src/errors/TenantContextMissing';
 
 // Skip entirely if no DATABASE_URL is set
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 const TEST_HARD_DELETE_CONFLICT_UNIT = '__test_hard_delete_conflict__';
 type CreateScopedClient = typeof import('../src/scoped-client').createScopedClient;
+
+const TX_ROLLBACK_UNIT = '__test_tx_rollback__';
+const TX_COMMIT_UNIT = '__test_tx_commit__';
 
 describeDb('scoped-client (integration)', () => {
   let sql: ReturnType<typeof postgres>;
@@ -43,6 +47,8 @@ describeDb('scoped-client (integration)', () => {
     await db.delete(units).where(eq(units.unitNumber, '__test_qbid_cross__'));
     await db.delete(units).where(eq(units.unitNumber, '__test_qwhere_cross__'));
     await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
+    await db.delete(units).where(eq(units.unitNumber, TX_COMMIT_UNIT));
+    await db.delete(units).where(eq(units.unitNumber, TX_ROLLBACK_UNIT));
     await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
     await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
 
@@ -91,6 +97,8 @@ describeDb('scoped-client (integration)', () => {
       await db.delete(units).where(eq(units.unitNumber, '__test_qid_a__'));
       await db.delete(units).where(eq(units.unitNumber, '__test_restore_a__'));
       await db.delete(units).where(eq(units.unitNumber, TEST_HARD_DELETE_CONFLICT_UNIT));
+      await db.delete(units).where(eq(units.unitNumber, TX_COMMIT_UNIT));
+      await db.delete(units).where(eq(units.unitNumber, TX_ROLLBACK_UNIT));
       await db.delete(communities).where(eq(communities.slug, '__test_community_a__'));
       await db.delete(communities).where(eq(communities.slug, '__test_community_b__'));
     }
@@ -342,5 +350,51 @@ describeDb('scoped-client (integration)', () => {
     expect(afterSoftDelete).toHaveLength(0);
 
     await db.delete(units).where(eq(units.unitNumber, unitNumber));
+  });
+
+  describe('transaction', () => {
+    it('rolls back every write, audit row included, when the callback throws', async () => {
+      // The payment webhook depends on this: the finance fence, the ledger
+      // entries and their audit rows must all vanish together on a failure,
+      // or a retry is skipped with the payment half-recorded.
+      // If this ever fails, the audit row it committed is permanent
+      // (compliance_audit_log is append-only) and blocks afterAll from deleting
+      // community A; reset the local DB (`pnpm db:test-local:reset`).
+      const marker = `tx-rollback-${Date.now()}`;
+      const client = createScopedClient(communityAId, db);
+
+      await expect(
+        client.transaction(async (tx) => {
+          await tx.insert(units, { unitNumber: TX_ROLLBACK_UNIT });
+          await tx.logAudit({
+            userId: null,
+            action: 'create',
+            resourceType: 'unit',
+            resourceId: marker,
+          });
+          throw new Error('ledger write failed');
+        }),
+      ).rejects.toThrow('ledger write failed');
+
+      const unitRows = await db.select().from(units).where(eq(units.unitNumber, TX_ROLLBACK_UNIT));
+      const auditRows = await db
+        .select()
+        .from(complianceAuditLog)
+        .where(eq(complianceAuditLog.resourceId, marker));
+      expect(unitRows).toHaveLength(0);
+      expect(auditRows).toHaveLength(0);
+    });
+
+    it('commits the writes, scoped to the client\'s community, when the callback succeeds', async () => {
+      // Control for the rollback case.
+      const client = createScopedClient(communityAId, db);
+      await client.transaction(async (tx) => {
+        await tx.insert(units, { unitNumber: TX_COMMIT_UNIT, communityId: communityBId });
+      });
+
+      const rows = await db.select().from(units).where(eq(units.unitNumber, TX_COMMIT_UNIT));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.communityId).toBe(communityAId);
+    });
   });
 });
