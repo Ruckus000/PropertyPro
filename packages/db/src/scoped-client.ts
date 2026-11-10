@@ -33,6 +33,7 @@ import type { TenantContext } from './tenant-context';
 import type { ScopedClient, ScopedDynamicBuilder, ScopedRow } from './types/scoped-client';
 import { TenantContextMissing } from './errors/TenantContextMissing';
 import { db as defaultDb } from './drizzle';
+import { logAuditEvent, type AuditExecutor } from './utils/audit-logger';
 
 export type { ScopedClient } from './types/scoped-client';
 
@@ -554,6 +555,22 @@ export function createScopedClient(
       }
 
       return execDelete(database, table, combineFilters(filters));
+    },
+
+    async logAudit(params) {
+      await logAuditEvent(
+        { ...params, communityId: ctx.communityId },
+        database as unknown as AuditExecutor,
+      );
+    },
+
+    async transaction(fn) {
+      // A Drizzle transaction handle has the same select/insert/update/delete
+      // surface as the db instance, so the scoped client can run on it as-is.
+      const runner = database as unknown as {
+        transaction<R>(cb: (tx: DbInstance) => Promise<R>): Promise<R>;
+      };
+      return runner.transaction((tx) => fn(createScopedClient(ctx.communityId, tx)));
     },
   };
 }

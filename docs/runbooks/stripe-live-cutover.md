@@ -212,8 +212,8 @@ operation that has already half-completed.
 
 1. In the Stripe dashboard, create a **live-mode** webhook endpoint pointing at
    `https://www.getpropertypro.com/api/v1/webhooks/stripe`, subscribed to the
-   nine events the route actually handles
-   (`apps/web/src/app/api/v1/webhooks/stripe/route.ts:606-635`):
+   nine events the route actually handles (the `switch` in `handleStripeEvent`,
+   `apps/web/src/app/api/v1/webhooks/stripe/route.ts`):
 
    | | |
    |---|---|
@@ -223,22 +223,37 @@ operation that has already half-completed.
    | `invoice.payment_failed` | `invoice.payment_succeeded` |
    | `price.updated` | |
 
-   Copy its `whsec_…`. This covers platform billing only. Resident payments
-   (finance events on connected accounts) also need a **Connect** endpoint with
-   its own secret, which the route cannot verify yet; see the resident-payments
-   bullet in `docs/LAUNCH-BLOCKERS.md`.
+   Copy its `whsec_…`. This covers platform billing only.
+
+   **Resident payments need a second endpoint.** Under direct charges, payments,
+   refunds and disputes happen on each association's connected account, so Stripe
+   sends them only to a **Connect** endpoint ("Events on connected accounts").
+   Create one at the **same URL**, subscribed to exactly these four:
+
+   | | |
+   |---|---|
+   | `payment_intent.succeeded` | `charge.refunded` |
+   | `charge.dispute.created` | `charge.dispute.closed` |
+
+   Its `whsec_…` goes in `STRIPE_CONNECT_WEBHOOK_SECRET`. The route tries the
+   platform secret first, then this one. A connected-account event only ever
+   reaches the finance handlers, never signup or billing, and only when the
+   sending account is the one connected to the community the payment names.
+   Skip this endpoint while no community has `assessmentPaymentsEnabled`.
 2. Update the env vars in Vercel production — `--no-sensitive`, because a
    sensitive var is written back by `vercel pull` as the literal `[SENSITIVE]`
    and then **inlined into the build**:
    - `property-pro-web`: `STRIPE_SECRET_KEY`,
      `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+     (and `STRIPE_CONNECT_WEBHOOK_SECRET` if the Connect endpoint exists — it
+     is mode-specific too, so it changes with the others)
    - `property-pro-admin`: `STRIPE_SECRET_KEY`
 
    > **Update all three web vars together, and redeploy once.** Do not deploy
    > between them. One partial state loses live events *permanently and
    > silently*: `STRIPE_WEBHOOK_SECRET` live while `STRIPE_SECRET_KEY` is still
    > test. A live event then passes signature verification, reaches the mode
-   > guard at `webhooks/stripe/route.ts:688` — `getExpectedLivemode()` reads
+   > guard in `webhooks/stripe/route.ts` — `getExpectedLivemode()` reads
    > `STRIPE_SECRET_KEY` (`stripe-service.ts:318`), so it expects test — and is
    > dropped with a **200** before the idempotency fence. 200 means handled, so
    > Stripe never retries and the event leaves no row in

@@ -19,6 +19,7 @@ import {
   units,
   users,
   type PaginatedResult,
+  type ScopedClient,
   type PaginationInput,
 } from '@propertypro/db';
 import { mergeCommunitySettings } from '@/lib/services/community-settings-service';
@@ -218,6 +219,7 @@ const STRIPE_FINANCE_EVENT_TYPES: ReadonlySet<string> = new Set([
   'payment_intent.succeeded',
   'charge.refunded',
   'charge.dispute.created',
+  'charge.dispute.closed',
 ]);
 
 const FINANCE_WEBHOOK_ERROR_CODES = {
@@ -227,6 +229,8 @@ const FINANCE_WEBHOOK_ERROR_CODES = {
   REFUND_PREVIOUS_ATTRIBUTES_MISSING: 'FINANCE_WEBHOOK_REFUND_PREVIOUS_ATTRIBUTES_MISSING',
   REFUND_INVALID_INCREMENTAL_AMOUNT: 'FINANCE_WEBHOOK_REFUND_INVALID_INCREMENTAL_AMOUNT',
   DISPUTE_CHARGE_ID_MISSING: 'FINANCE_WEBHOOK_DISPUTE_CHARGE_ID_MISSING',
+  DISPUTE_OPENING_ENTRY_MISSING: 'FINANCE_WEBHOOK_DISPUTE_OPENING_ENTRY_MISSING',
+  CONNECTED_ACCOUNT_MISMATCH: 'FINANCE_WEBHOOK_CONNECTED_ACCOUNT_MISMATCH',
   UNHANDLED_EVENT_PROCESSING_ERROR: 'FINANCE_WEBHOOK_UNHANDLED_EVENT_PROCESSING_ERROR',
 } as const;
 
@@ -238,6 +242,7 @@ type FinanceWebhookCategory =
   | 'idempotency'
   | 'reconciliation'
   | 'dependency'
+  | 'authorization'
   | 'processing';
 
 interface FinanceWebhookLogContext {
@@ -2121,61 +2126,96 @@ export async function getConnectStatus(
 }
 
 /**
- * An event whose finance fence row already exists reached processing again.
+ * The finance fence and every write it guards, in ONE transaction.
  *
- * This is NOT treated as "already processed, skip". The fence is inserted
- * BEFORE the payable update, ledger postings, rent-payment insert and fine
- * update, and none of that runs in one transaction with it — so an existing
- * fence cannot tell "fully processed" from "failed halfway". Skipping would
- * silently drop whatever the failed attempt never wrote; re-processing would
- * double-post the ledger (`ledger_entries` has no unique key). Failing loudly
- * keeps the platform fence's `processedAt` null, so the event stays visible
- * (Sentry, 500s, Stripe's retry dashboard) for a human to reconcile.
+ * The fence row (`finance_stripe_webhook_events`) is inserted first, then
+ * `work` writes the payable update, ledger entries and their audit rows through
+ * the same transaction client. All of it commits or none of it does, so an
+ * existing fence row means the event was fully processed, and a redelivery is
+ * skipped. That matters because `ledger_entries` has no unique key: this
+ * transaction is the only thing stopping a retry from posting a payment twice.
  *
- * ponytail: the real fix is fence + writes in one transaction. Its first
- * trigger (roadmap 3.T2, the finance characterization tests) fired at
- * dc3c04f3f on 2026-09-30. Trigger now: a real community turns on
- * `assessmentPaymentsEnabled`, or the first live finance event
- * (`finance_stripe_webhook_events` held 0 rows in production on 2026-09-28).
- * Prerequisite: a scoped-client transaction. Tracked in LAUNCH-BLOCKERS.
+ * `work` must make no Stripe calls. Do those before calling this, so the
+ * transaction never holds a pooled connection open over the network.
+ *
+ * Returns false when the event had already been processed.
  */
-export class FinanceWebhookFenceConflict extends Error {
-  constructor(readonly eventId: string) {
-    super(`Finance webhook event ${eventId} was already fenced; refusing to skip or re-process it`);
-    this.name = 'FinanceWebhookFenceConflict';
-  }
-}
-
-async function recordFinanceStripeEvent(
+async function runFinanceEventWrites(
   communityId: number,
   event: Stripe.Event,
-): Promise<void> {
-  const scoped = createScopedClient(communityId);
+  work: (tx: ScopedClient) => Promise<void>,
+): Promise<boolean> {
   try {
-    await scoped.insert(financeStripeWebhookEvents, {
-      stripeEventId: event.id,
-      eventType: event.type,
-      payload: {
-        id: event.id,
-        type: event.type,
-        created: event.created,
-      },
+    await createScopedClient(communityId).transaction(async (tx) => {
+      await tx.insert(financeStripeWebhookEvents, {
+        stripeEventId: event.id,
+        eventType: event.type,
+        payload: {
+          id: event.id,
+          type: event.type,
+          created: event.created,
+        },
+      });
+      await work(tx);
     });
+    return true;
   } catch (err) {
     if (isNamedUniqueViolation(err, 'finance_stripe_webhook_events_event_id_unique')) {
-      logFinanceWebhookEvent('error', 'Finance webhook event already fenced; needs reconciliation', {
+      logFinanceWebhookEvent('info', 'Finance webhook event already processed; skipping', {
         eventId: event.id,
         eventType: event.type,
         communityId,
         errorCode: FINANCE_WEBHOOK_ERROR_CODES.DUPLICATE_EVENT,
         category: 'idempotency',
         metricName: 'finance_webhook_event',
-        outcome: 'failure',
+        outcome: 'duplicate',
       });
-      throw new FinanceWebhookFenceConflict(event.id);
+      return false;
     }
     throw err;
   }
+}
+
+/**
+ * Whether a finance event may write to `communityId`.
+ *
+ * A Connect event is signed by Stripe, but it comes from an association's own
+ * Stripe account, and whoever controls that account writes the PaymentIntent
+ * metadata the handlers trust (`communityId`, `payableId`, `unitId`). Without
+ * this check one association's account could mark another community's dues
+ * paid. So the event's `account` must be the account connected to the
+ * community its metadata names.
+ *
+ * A platform-account event (no `account`) can only come from a PaymentIntent
+ * created with PropertyPro's own key, so its metadata is ours.
+ */
+async function eventAccountOwnsCommunity(
+  event: Stripe.Event,
+  communityId: number,
+): Promise<boolean> {
+  if (!event.account) return true;
+
+  const scoped = createScopedClient(communityId);
+  const [record] = await scoped.selectFrom<{ stripeAccountId: string }>(
+    stripeConnectedAccounts,
+    { stripeAccountId: stripeConnectedAccounts.stripeAccountId },
+  );
+  if (record?.stripeAccountId === event.account) return true;
+
+  logFinanceWebhookEvent('error', 'Finance webhook event came from an account not connected to its community', {
+    eventId: event.id,
+    eventType: event.type,
+    communityId,
+    errorCode: FINANCE_WEBHOOK_ERROR_CODES.CONNECTED_ACCOUNT_MISMATCH,
+    category: 'authorization',
+    metricName: 'finance_webhook_event',
+    outcome: 'skipped',
+    payloadSnippet: {
+      eventAccount: event.account,
+      communityHasConnectedAccount: Boolean(record),
+    },
+  });
+  return false;
 }
 
 /**
@@ -2352,7 +2392,9 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     return;
   }
 
-  await recordFinanceStripeEvent(communityId, event);
+  if (!(await eventAccountOwnsCommunity(event, communityId))) {
+    return;
+  }
 
   // Out-of-order defense: if the latest charge is already fully refunded, a delayed
   // payment_intent.succeeded event must not flip the line item back to paid.
@@ -2395,71 +2437,33 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
     return;
   }
 
-  const scoped = createScopedClient(communityId);
-  if (payable.payableType === 'assessment_line_item') {
-    await scoped.update(
-      assessmentLineItems,
-      {
-        status: 'paid',
-        paidAt: new Date(),
-        paymentIntentId: freshIntent.id,
-      },
-      eq(assessmentLineItems.id, payable.payableId),
-    );
-  } else {
-    await scoped.update(
-      rentObligations,
-      { status: 'paid' },
-      eq(rentObligations.id, payable.payableId),
-    );
-  }
-
   const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
   const paymentMethod = parseMetadataString(metadata, 'paymentMethod') as 'card' | 'us_bank_account' | null;
   const paymentAmount = freshIntent.amount_received > 0 ? freshIntent.amount_received : freshIntent.amount;
 
-  await postLedgerEntry(scoped, {
-    entryType: 'payment',
-    amountCents: -Math.abs(paymentAmount),
-    description: `Payment received for payable #${payable.payableId}`,
-    sourceType: 'payment',
-    sourceId: freshIntent.id,
-    unitId,
-    userId: payerUserId,
-    metadata: {
-      payableType,
-      payableId,
-      payableSourceType: payable.payableSourceType,
-      payableSourceId: payable.payableSourceId,
-      lineItemId: payable.payableId,
-      assessmentLineItemId: payable.payableId,
-      assessmentId: payable.assessmentId ?? undefined,
-      stripePaymentIntentId: freshIntent.id,
-      stripeFeeActualCents,
-      paymentMethod: paymentMethod ?? undefined,
-    },
-    createdByUserId: payerUserId,
-  });
+  const processed = await runFinanceEventWrites(communityId, event, async (tx) => {
+    if (payable.payableType === 'assessment_line_item') {
+      await tx.update(
+        assessmentLineItems,
+        {
+          status: 'paid',
+          paidAt: new Date(),
+          paymentIntentId: freshIntent.id,
+        },
+        eq(assessmentLineItems.id, payable.payableId),
+      );
+    } else {
+      await tx.update(
+        rentObligations,
+        { status: 'paid' },
+        eq(rentObligations.id, payable.payableId),
+      );
+    }
 
-  if (payable.payableType === 'rent_obligation' && payable.leaseId) {
-    await scoped.insert(rentPayments, {
-      leaseId: payable.leaseId,
-      obligationId: payable.payableId,
-      unitId,
-      residentId: payerUserId,
-      amountCents: paymentAmount,
-      paymentMethod: paymentMethod ?? null,
-      externalReference: freshIntent.id,
-      notes: 'Recorded via Stripe webhook',
-    });
-  }
-
-  // Post a separate convenience fee ledger entry when the owner paid a fee
-  if (convenienceFeeCents > 0) {
-    await postLedgerEntry(scoped, {
-      entryType: 'fee',
-      amountCents: convenienceFeeCents,
-      description: 'Convenience fee for online payment',
+    await postLedgerEntry(tx, {
+      entryType: 'payment',
+      amountCents: -Math.abs(paymentAmount),
+      description: `Payment received for payable #${payable.payableId}`,
       sourceType: 'payment',
       sourceId: freshIntent.id,
       unitId,
@@ -2471,17 +2475,59 @@ async function handlePaymentIntentSucceeded(event: Stripe.Event): Promise<void> 
         payableSourceId: payable.payableSourceId,
         lineItemId: payable.payableId,
         assessmentLineItemId: payable.payableId,
+        assessmentId: payable.assessmentId ?? undefined,
         stripePaymentIntentId: freshIntent.id,
-        convenienceFeeCents,
+        stripeFeeActualCents,
         paymentMethod: paymentMethod ?? undefined,
       },
       createdByUserId: payerUserId,
     });
-  }
 
-  // Rent obligation ids live in another table and can equal a fine's line item id.
-  if (payable.payableType === 'assessment_line_item') {
-    await markViolationFinePaidForLineItem(communityId, payable.payableId, payerUserId);
+    if (payable.payableType === 'rent_obligation' && payable.leaseId) {
+      await tx.insert(rentPayments, {
+        leaseId: payable.leaseId,
+        obligationId: payable.payableId,
+        unitId,
+        residentId: payerUserId,
+        amountCents: paymentAmount,
+        paymentMethod: paymentMethod ?? null,
+        externalReference: freshIntent.id,
+        notes: 'Recorded via Stripe webhook',
+      });
+    }
+
+    // Post a separate convenience fee ledger entry when the owner paid a fee
+    if (convenienceFeeCents > 0) {
+      await postLedgerEntry(tx, {
+        entryType: 'fee',
+        amountCents: convenienceFeeCents,
+        description: 'Convenience fee for online payment',
+        sourceType: 'payment',
+        sourceId: freshIntent.id,
+        unitId,
+        userId: payerUserId,
+        metadata: {
+          payableType,
+          payableId,
+          payableSourceType: payable.payableSourceType,
+          payableSourceId: payable.payableSourceId,
+          lineItemId: payable.payableId,
+          assessmentLineItemId: payable.payableId,
+          stripePaymentIntentId: freshIntent.id,
+          convenienceFeeCents,
+          paymentMethod: paymentMethod ?? undefined,
+        },
+        createdByUserId: payerUserId,
+      });
+    }
+
+    // Rent obligation ids live in another table and can equal a fine's line item id.
+    if (payable.payableType === 'assessment_line_item') {
+      await markViolationFinePaidForLineItem(tx, payable.payableId, payerUserId);
+    }
+  });
+  if (!processed) {
+    return;
   }
 
   // Fire-and-forget payment confirmation email — never block webhook processing
@@ -2542,7 +2588,9 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  await recordFinanceStripeEvent(communityId, event);
+  if (!(await eventAccountOwnsCommunity(event, communityId))) {
+    return;
+  }
 
   const payable = await getPayableById(communityId, payableType, payableId);
   if (!payable) {
@@ -2560,7 +2608,6 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     });
     return;
   }
-  const scoped = createScopedClient(communityId);
 
   // Use the event snapshot for deterministic behavior — not the fresh retrieve,
   // which may include refunds from concurrent events.
@@ -2621,70 +2668,34 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  // Only reset payable status AFTER validating the refund amount — avoid modifying
-  // state if the event data is corrupt.
-  if (isFullRefund) {
-    if (payable.payableType === 'assessment_line_item') {
-      await scoped.update(
-        assessmentLineItems,
-        {
-          status: 'pending',
-          paidAt: null,
-        },
-        eq(assessmentLineItems.id, payable.payableId),
-      );
-    } else {
-      await scoped.update(
-        rentObligations,
-        { status: 'pending' },
-        eq(rentObligations.id, payable.payableId),
-      );
-    }
-  }
-
   const convenienceFeeCents = parseMetadataInt(metadata, 'convenienceFeeCents') ?? 0;
 
-  await postLedgerEntry(scoped, {
-    entryType: 'refund',
-    amountCents: Math.abs(incrementalRefundCents),
-    description: `Refund posted for payable #${payable.payableId}.`,
-    sourceType: 'payment',
-    sourceId: charge.id,
-    unitId,
-    userId: payerUserId,
-    metadata: {
-      payableType,
-      payableId,
-      payableSourceType: payable.payableSourceType,
-      payableSourceId: payable.payableSourceId,
-      lineItemId: payable.payableId,
-      assessmentLineItemId: payable.payableId,
-      assessmentId: payable.assessmentId ?? undefined,
-      stripeChargeId: charge.id,
-    },
-    createdByUserId: payerUserId,
-  });
+  await runFinanceEventWrites(communityId, event, async (tx) => {
+    // Only reset payable status AFTER validating the refund amount — avoid modifying
+    // state if the event data is corrupt.
+    if (isFullRefund) {
+      if (payable.payableType === 'assessment_line_item') {
+        await tx.update(
+          assessmentLineItems,
+          {
+            status: 'pending',
+            paidAt: null,
+          },
+          eq(assessmentLineItems.id, payable.payableId),
+        );
+      } else {
+        await tx.update(
+          rentObligations,
+          { status: 'pending' },
+          eq(rentObligations.id, payable.payableId),
+        );
+      }
+    }
 
-  if (payable.payableType === 'rent_obligation' && payable.leaseId) {
-    await scoped.insert(rentPayments, {
-      leaseId: payable.leaseId,
-      obligationId: payable.payableId,
-      unitId,
-      residentId: payerUserId,
-      amountCents: -Math.abs(incrementalRefundCents),
-      paymentMethod: paymentIntent?.payment_method_types?.[0] ?? null,
-      externalReference: charge.id,
-      notes: `Refund reversal recorded via Stripe webhook (${event.id})`,
-    });
-  }
-
-  // Reverse the convenience fee ledger entry on full refund so the owner's
-  // balance doesn't show a phantom fee charge.
-  if (isFullRefund && convenienceFeeCents > 0) {
-    await postLedgerEntry(scoped, {
-      entryType: 'adjustment',
-      amountCents: -convenienceFeeCents,
-      description: `Convenience fee reversal for refunded payment (payable #${payable.payableId})`,
+    await postLedgerEntry(tx, {
+      entryType: 'refund',
+      amountCents: Math.abs(incrementalRefundCents),
+      description: `Refund posted for payable #${payable.payableId}.`,
       sourceType: 'payment',
       sourceId: charge.id,
       unitId,
@@ -2696,23 +2707,76 @@ async function handleChargeRefunded(event: Stripe.Event): Promise<void> {
         payableSourceId: payable.payableSourceId,
         lineItemId: payable.payableId,
         assessmentLineItemId: payable.payableId,
+        assessmentId: payable.assessmentId ?? undefined,
         stripeChargeId: charge.id,
-        convenienceFeeCents,
-        reason: 'full_refund_fee_reversal',
       },
       createdByUserId: payerUserId,
     });
-  }
+
+    if (payable.payableType === 'rent_obligation' && payable.leaseId) {
+      await tx.insert(rentPayments, {
+        leaseId: payable.leaseId,
+        obligationId: payable.payableId,
+        unitId,
+        residentId: payerUserId,
+        amountCents: -Math.abs(incrementalRefundCents),
+        paymentMethod: paymentIntent?.payment_method_types?.[0] ?? null,
+        externalReference: charge.id,
+        notes: `Refund reversal recorded via Stripe webhook (${event.id})`,
+      });
+    }
+
+    // Reverse the convenience fee ledger entry on full refund so the owner's
+    // balance doesn't show a phantom fee charge.
+    if (isFullRefund && convenienceFeeCents > 0) {
+      await postLedgerEntry(tx, {
+        entryType: 'adjustment',
+        amountCents: -convenienceFeeCents,
+        description: `Convenience fee reversal for refunded payment (payable #${payable.payableId})`,
+        sourceType: 'payment',
+        sourceId: charge.id,
+        unitId,
+        userId: payerUserId,
+        metadata: {
+          payableType,
+          payableId,
+          payableSourceType: payable.payableSourceType,
+          payableSourceId: payable.payableSourceId,
+          lineItemId: payable.payableId,
+          assessmentLineItemId: payable.payableId,
+          stripeChargeId: charge.id,
+          convenienceFeeCents,
+          reason: 'full_refund_fee_reversal',
+        },
+        createdByUserId: payerUserId,
+      });
+    }
+  });
 }
 
-async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
+interface DisputeContext {
+  dispute: Stripe.Dispute;
+  chargeId: string;
+  communityId: number;
+  unitId: number;
+  payerUserId: string;
+  payableType: PayableType | null;
+  payableId: number | null;
+}
+
+/**
+ * Re-reads a dispute and the PaymentIntent behind it, and returns the payment's
+ * metadata. Shared by `charge.dispute.created` and `charge.dispute.closed`.
+ * Returns null (after logging) when the event cannot be tied to a community.
+ */
+async function resolveDisputeContext(event: Stripe.Event): Promise<DisputeContext | null> {
   const stripe = getStripeClient();
   const requestOptions = connectRequestOptions(event);
   const dispute = event.data.object as Stripe.Dispute;
   const freshDispute = await stripe.disputes.retrieve(dispute.id, undefined, requestOptions);
   const chargeId = typeof freshDispute.charge === 'string' ? freshDispute.charge : null;
   if (!chargeId) {
-    logFinanceWebhookEvent('warn', 'Skipping charge.dispute.created because dispute charge is missing', {
+    logFinanceWebhookEvent('warn', `Skipping ${event.type} because dispute charge is missing`, {
       eventId: event.id,
       eventType: event.type,
       errorCode: FINANCE_WEBHOOK_ERROR_CODES.DISPUTE_CHARGE_ID_MISSING,
@@ -2721,7 +2785,7 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
       outcome: 'skipped',
       payloadSnippet: { disputeId: dispute.id },
     });
-    return;
+    return null;
   }
 
   const freshCharge = await stripe.charges.retrieve(
@@ -2740,7 +2804,7 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
   const unitId = parseMetadataInt(metadata, 'unitId');
   const payerUserId = parseMetadataString(metadata, 'userId');
   if (!communityId || !unitId || !payerUserId) {
-    logFinanceWebhookEvent('warn', 'Skipping charge.dispute.created due to missing metadata', {
+    logFinanceWebhookEvent('warn', `Skipping ${event.type} due to missing metadata`, {
       eventId: event.id,
       eventType: event.type,
       communityId: communityId ?? null,
@@ -2758,28 +2822,158 @@ async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
         hasUserId: Boolean(payerUserId),
       },
     });
+    return null;
+  }
+
+  return {
+    dispute: freshDispute,
+    chargeId,
+    communityId,
+    unitId,
+    payerUserId,
+    payableType,
+    payableId,
+  };
+}
+
+async function handleChargeDisputeCreated(event: Stripe.Event): Promise<void> {
+  const ctx = await resolveDisputeContext(event);
+  if (!ctx) return;
+  if (!(await eventAccountOwnsCommunity(event, ctx.communityId))) return;
+
+  const { dispute, chargeId, payableType, payableId } = ctx;
+  await runFinanceEventWrites(ctx.communityId, event, async (tx) => {
+    await postLedgerEntry(tx, {
+      entryType: 'fee',
+      amountCents: Math.abs(dispute.amount),
+      description: `Dispute opened (${dispute.reason})`,
+      sourceType: 'payment',
+      sourceId: dispute.id,
+      unitId: ctx.unitId,
+      userId: ctx.payerUserId,
+      metadata: {
+        payableType: payableType ?? undefined,
+        payableId: payableId ?? undefined,
+        lineItemId: payableType === 'assessment_line_item' ? payableId ?? undefined : undefined,
+        stripeChargeId: chargeId,
+        notes: `Dispute reason: ${dispute.reason}`,
+      },
+      createdByUserId: ctx.payerUserId,
+    });
+  });
+}
+
+/**
+ * Dispute statuses that mean the association keeps the disputed money:
+ * it won, or a payment inquiry closed without becoming a chargeback.
+ * `lost` leaves the opening entry standing, which is correct: the payment was
+ * taken back. Anything else (`prevented`, or an unexpected status) is logged
+ * and left for a person to reconcile, because a prevented dispute can arrive
+ * with its own refund and reversing here would credit the resident twice.
+ */
+const DISPUTE_STATUSES_THAT_RESTORE_PAYMENT: ReadonlySet<string> = new Set(['won', 'warning_closed']);
+
+/**
+ * How long a `charge.dispute.closed` with no opening entry is retried before it
+ * is given up on. Stripe does not order events, so the close can arrive before
+ * `charge.dispute.created` has committed (or while it waits on its own retry).
+ * Throwing rolls the fence back and makes Stripe redeliver the close later.
+ * Past this age the opening is taken to be one that was never recorded, and the
+ * close is skipped rather than retried forever.
+ */
+const DISPUTE_OPENING_RETRY_WINDOW_SECONDS = 24 * 60 * 60;
+
+export class DisputeOpeningNotYetRecorded extends Error {
+  constructor(readonly disputeId: string) {
+    super(`Dispute ${disputeId} closed before its opening entry was recorded; retrying`);
+    this.name = 'DisputeOpeningNotYetRecorded';
+  }
+}
+
+/**
+ * `charge.dispute.created` posts the disputed amount back onto the resident's
+ * balance. When the association wins, that charge must be reversed, or the
+ * resident is shown a debt they already paid.
+ */
+async function handleChargeDisputeClosed(event: Stripe.Event): Promise<void> {
+  const ctx = await resolveDisputeContext(event);
+  if (!ctx) return;
+  if (!(await eventAccountOwnsCommunity(event, ctx.communityId))) return;
+
+  const { dispute, chargeId, payableType, payableId } = ctx;
+  if (!DISPUTE_STATUSES_THAT_RESTORE_PAYMENT.has(dispute.status)) {
+    logFinanceWebhookEvent('info', 'Dispute closed without restoring the payment; opening entry stands', {
+      eventId: event.id,
+      eventType: event.type,
+      communityId: ctx.communityId,
+      payableType,
+      payableId,
+      category: 'reconciliation',
+      metricName: 'finance_webhook_event',
+      outcome: 'skipped',
+      reason: `dispute_status_${dispute.status}`,
+      payloadSnippet: { disputeId: dispute.id, chargeId },
+    });
     return;
   }
 
-  await recordFinanceStripeEvent(communityId, event);
+  await runFinanceEventWrites(ctx.communityId, event, async (tx) => {
+    // Reverse exactly what `charge.dispute.created` posted, and only once.
+    const entries = await tx.selectFrom<{ id: number; entryType: LedgerEntryType; amountCents: number }>(
+      ledgerEntries,
+      {
+        id: ledgerEntries.id,
+        entryType: ledgerEntries.entryType,
+        amountCents: ledgerEntries.amountCents,
+      },
+      and(eq(ledgerEntries.sourceType, 'payment'), eq(ledgerEntries.sourceId, dispute.id)),
+    );
+    const opening = entries.find((entry) => entry.entryType === 'fee');
+    const alreadyReversed = entries.some((entry) => entry.entryType === 'adjustment');
+    const eventAgeSeconds = Date.now() / 1000 - event.created;
+    if (!opening && !alreadyReversed && eventAgeSeconds < DISPUTE_OPENING_RETRY_WINDOW_SECONDS) {
+      throw new DisputeOpeningNotYetRecorded(dispute.id);
+    }
+    if (!opening || alreadyReversed) {
+      logFinanceWebhookEvent('warn', 'Dispute closed but there is no unreversed opening entry to reverse', {
+        eventId: event.id,
+        eventType: event.type,
+        communityId: ctx.communityId,
+        payableType,
+        payableId,
+        errorCode: FINANCE_WEBHOOK_ERROR_CODES.DISPUTE_OPENING_ENTRY_MISSING,
+        category: 'reconciliation',
+        metricName: 'finance_webhook_event',
+        outcome: 'skipped',
+        payloadSnippet: {
+          disputeId: dispute.id,
+          hasOpeningEntry: Boolean(opening),
+          alreadyReversed,
+        },
+      });
+      return;
+    }
 
-  const scoped = createScopedClient(communityId);
-  await postLedgerEntry(scoped, {
-    entryType: 'fee',
-    amountCents: Math.abs(freshDispute.amount),
-    description: `Dispute opened (${freshDispute.reason})`,
-    sourceType: 'payment',
-    sourceId: freshDispute.id,
-    unitId,
-    userId: payerUserId,
-    metadata: {
-      payableType: payableType ?? undefined,
-      payableId: payableId ?? undefined,
-      lineItemId: payableType === 'assessment_line_item' ? payableId ?? undefined : undefined,
-      stripeChargeId: chargeId,
-      notes: `Dispute reason: ${freshDispute.reason}`,
-    },
-    createdByUserId: payerUserId,
+    await postLedgerEntry(tx, {
+      entryType: 'adjustment',
+      amountCents: -Math.abs(opening.amountCents),
+      description: dispute.status === 'won'
+        ? 'Dispute won; disputed payment restored'
+        : 'Payment inquiry closed; disputed payment restored',
+      sourceType: 'payment',
+      sourceId: dispute.id,
+      unitId: ctx.unitId,
+      userId: ctx.payerUserId,
+      metadata: {
+        payableType: payableType ?? undefined,
+        payableId: payableId ?? undefined,
+        lineItemId: payableType === 'assessment_line_item' ? payableId ?? undefined : undefined,
+        stripeChargeId: chargeId,
+        originalEntryId: opening.id,
+        notes: `Dispute closed: ${dispute.status}`,
+      },
+      createdByUserId: ctx.payerUserId,
+    });
   });
 }
 
@@ -2798,6 +2992,9 @@ export async function processFinanceStripeEvent(event: Stripe.Event): Promise<vo
         break;
       case 'charge.dispute.created':
         await handleChargeDisputeCreated(event);
+        break;
+      case 'charge.dispute.closed':
+        await handleChargeDisputeClosed(event);
         break;
       default:
         break;

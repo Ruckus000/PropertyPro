@@ -8,6 +8,8 @@ const {
   insertMock,
   selectFromMock,
   updateMock,
+  logAuditMock,
+  transactionState,
   assessmentLineItemsTable,
   rentObligationsTable,
   rentPaymentsTable,
@@ -16,6 +18,7 @@ const {
   violationFinesTable,
   violationsTable,
   stripeConnectedAccountsTable,
+  ledgerEntriesTable,
   unitsTable,
   userRolesTable,
   usersTable,
@@ -35,6 +38,11 @@ const {
   insertMock: vi.fn(),
   selectFromMock: vi.fn(),
   updateMock: vi.fn(),
+  logAuditMock: vi.fn(),
+  // Every write made through a client that is NOT the one a
+  // `scoped.transaction` callback received, so a test can tell whether the
+  // writes went through the transaction.
+  transactionState: { writesOutside: [] as string[] },
   assessmentLineItemsTable: {
     id: Symbol('assessment_line_items.id'),
     unitId: Symbol('assessment_line_items.unit_id'),
@@ -62,7 +70,17 @@ const {
     id: Symbol('violations.id'),
     unitId: Symbol('violations.unit_id'),
   },
-  stripeConnectedAccountsTable: { id: Symbol('stripe_connected_accounts.id') },
+  stripeConnectedAccountsTable: {
+    id: Symbol('stripe_connected_accounts.id'),
+    stripeAccountId: Symbol('stripe_connected_accounts.stripe_account_id'),
+  },
+  ledgerEntriesTable: {
+    id: Symbol('ledger_entries.id'),
+    entryType: Symbol('ledger_entries.entry_type'),
+    amountCents: Symbol('ledger_entries.amount_cents'),
+    sourceType: Symbol('ledger_entries.source_type'),
+    sourceId: Symbol('ledger_entries.source_id'),
+  },
   unitsTable: { id: Symbol('units.id') },
   userRolesTable: { id: Symbol('user_roles.id') },
   usersTable: { id: Symbol('users.id'), email: Symbol('users.email'), fullName: Symbol('users.full_name') },
@@ -91,6 +109,7 @@ vi.mock('@propertypro/db', () => ({
   violationFines: violationFinesTable,
   violations: violationsTable,
   stripeConnectedAccounts: stripeConnectedAccountsTable,
+  ledgerEntries: ledgerEntriesTable,
   units: unitsTable,
   userRoles: userRolesTable,
   users: usersTable,
@@ -122,23 +141,42 @@ vi.mock('@propertypro/db/unsafe', () => ({
 
 import {
   describePaymentForReceipt,
-  FinanceWebhookFenceConflict,
+  DisputeOpeningNotYetRecorded,
   processFinanceStripeEvent,
 } from '../../src/lib/services/finance-service';
 import { drizzleUniqueViolation } from '../helpers/pg-errors';
 
 interface MockScopedClient {
+  /** True only for the client a `transaction` callback receives. */
+  inTransaction: boolean;
   insert: typeof insertMock;
   selectFrom: typeof selectFromMock;
   update: typeof updateMock;
+  logAudit: typeof logAuditMock;
+  transaction: <T>(fn: (tx: MockScopedClient) => Promise<T>) => Promise<T>;
 }
 
-function makeScopedClient(): MockScopedClient {
+function makeScopedClient(inTransaction = false): MockScopedClient {
+  // Records a write made through a client outside the transaction, then forwards it.
+  const track = <A extends unknown[], R>(name: string, mock: (...args: A) => R) =>
+    (...args: A): R => {
+      if (!inTransaction) transactionState.writesOutside.push(name);
+      return mock(...args);
+    };
   return {
-    insert: insertMock,
+    inTransaction,
+    insert: track('insert', insertMock),
     selectFrom: selectFromMock,
-    update: updateMock,
-  };
+    update: track('update', updateMock),
+    logAudit: track('logAudit', logAuditMock),
+    // Stands in for a real transaction: the callback gets its own client, and
+    // an error it throws propagates, as a rollback would. Rollback itself is
+    // the driver's job; scoped-client.test.ts pins that the callback's client
+    // runs on the transaction handle.
+    async transaction(fn) {
+      return fn(makeScopedClient(true));
+    },
+  } as MockScopedClient;
 }
 
 function makeEvent(
@@ -160,10 +198,29 @@ function makeEvent(
   } as unknown as Stripe.Event;
 }
 
+/**
+ * Makes community 11's connected Stripe account `accountId`, keeping whatever
+ * the current selectFrom stub answers for every other table.
+ */
+function connectCommunityTo(accountId: string | null) {
+  const previous = selectFromMock.getMockImplementation();
+  selectFromMock.mockImplementation((table: unknown, ...rest: unknown[]) => {
+    if (table === stripeConnectedAccountsTable) {
+      return Promise.resolve(accountId ? [{ stripeAccountId: accountId }] : []);
+    }
+    return previous ? previous(table, ...rest) : Promise.resolve([]);
+  });
+}
+
 describe('processFinanceStripeEvent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    transactionState.writesOutside = [];
     createScopedClientMock.mockImplementation(() => makeScopedClient());
+    postLedgerEntryMock.mockImplementation(async (client: MockScopedClient) => {
+      if (!client.inTransaction) transactionState.writesOutside.push('postLedgerEntry');
+      return { id: 991 };
+    });
     insertMock.mockResolvedValue([{ id: 1 }]);
     selectFromMock.mockImplementation((table: unknown) => {
       if (table === assessmentLineItemsTable) {
@@ -187,7 +244,6 @@ describe('processFinanceStripeEvent', () => {
       return Promise.resolve([]);
     });
     updateMock.mockResolvedValue([{ id: 44 }]);
-    postLedgerEntryMock.mockResolvedValue({ id: 991 });
   });
 
   it('posts payment ledger entries and marks line items paid for payment_intent.succeeded', async () => {
@@ -275,6 +331,7 @@ describe('processFinanceStripeEvent', () => {
       charges: { retrieve: chargesRetrieve },
     });
 
+    connectCommunityTo('acct_123');
     const connectEvent = {
       ...makeEvent('payment_intent.succeeded', 'evt_fin_connect_1', { id: 'pi_connect_1' }),
       account: 'acct_123',
@@ -532,12 +589,12 @@ describe('processFinanceStripeEvent', () => {
     });
   });
 
-  it('refuses — loudly, writing nothing — an event whose finance fence already exists', async () => {
-    // The fence cannot tell "fully processed" from "failed halfway" (it is
-    // written before the ledger, not atomically with it), so neither skipping
-    // nor re-processing is safe. See FinanceWebhookFenceConflict.
-    // Revert-check: classify the fence conflict as "skip" (return early) and
-    // the rejects assertion below goes red.
+  it('skips, writing nothing, an event whose finance fence already exists', async () => {
+    // The fence row commits in the same transaction as the writes it guards,
+    // so an existing fence means the event was fully processed. A redelivery
+    // must neither throw (Stripe would retry forever) nor post the payment again.
+    // Revert-check: rethrow the unique violation in runFinanceEventWrites and
+    // the resolves assertion below goes red.
     insertMock.mockRejectedValueOnce(
       drizzleUniqueViolation('finance_stripe_webhook_events_event_id_unique'),
     );
@@ -557,18 +614,152 @@ describe('processFinanceStripeEvent', () => {
 
     getStripeClientMock.mockReturnValue({
       paymentIntents: { retrieve: paymentIntentRetrieve },
-      charges: { retrieve: vi.fn() },
+      charges: {
+        retrieve: vi.fn().mockResolvedValue({ id: 'ch_duplicate', amount: 25000, amount_refunded: 0 }),
+      },
     });
 
     await expect(
       processFinanceStripeEvent(
         makeEvent('payment_intent.succeeded', 'evt_fin_dup', { id: 'pi_duplicate' }),
       ),
-    ).rejects.toBeInstanceOf(FinanceWebhookFenceConflict);
+    ).resolves.toBeUndefined();
 
-    expect(selectFromMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalled();
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('writes the fence, the payable update and every ledger entry inside one transaction', async () => {
+    // Revert-check: run the writes on a client made outside the transaction
+    // (createScopedClient(communityId) instead of `tx`) and writesOutside fills.
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: {
+        retrieve: vi.fn().mockResolvedValue({
+          id: 'pi_tx_1',
+          metadata: {
+            communityId: '11',
+            lineItemId: '44',
+            unitId: '88',
+            userId: 'user-11',
+            convenienceFeeCents: '300',
+          },
+          amount_received: 25300,
+          amount: 25300,
+          latest_charge: 'ch_tx_1',
+        }),
+      },
+      charges: {
+        retrieve: vi.fn().mockResolvedValue({ id: 'ch_tx_1', amount: 25300, amount_refunded: 0 }),
+      },
+    });
+
+    await processFinanceStripeEvent(
+      makeEvent('payment_intent.succeeded', 'evt_fin_tx', { id: 'pi_tx_1' }),
+    );
+
+    // Control: the writes happened at all (fence, payable, payment + fee).
+    expect(insertMock).toHaveBeenCalledWith(
+      financeStripeWebhookEventsTable,
+      expect.objectContaining({ stripeEventId: 'evt_fin_tx' }),
+    );
+    expect(updateMock).toHaveBeenCalledWith(
+      assessmentLineItemsTable,
+      expect.objectContaining({ status: 'paid' }),
+      expect.anything(),
+    );
+    expect(postLedgerEntryMock).toHaveBeenCalledTimes(2);
+    expect(transactionState.writesOutside).toEqual([]);
+  });
+
+  it('lets a failed ledger write fail the whole event, so Stripe retries it', async () => {
+    // With the fence in the same transaction, a failure rolls the fence back
+    // too, and the retry processes the event from scratch.
+    postLedgerEntryMock.mockRejectedValueOnce(new Error('connection reset'));
+    getStripeClientMock.mockReturnValue({
+      paymentIntents: {
+        retrieve: vi.fn().mockResolvedValue({
+          id: 'pi_fail_1',
+          metadata: { communityId: '11', lineItemId: '44', unitId: '88', userId: 'user-11' },
+          amount_received: 25000,
+          amount: 25000,
+          latest_charge: 'ch_fail_1',
+        }),
+      },
+      charges: {
+        retrieve: vi.fn().mockResolvedValue({ id: 'ch_fail_1', amount: 25000, amount_refunded: 0 }),
+      },
+    });
+
+    await expect(
+      processFinanceStripeEvent(
+        makeEvent('payment_intent.succeeded', 'evt_fin_fail', { id: 'pi_fail_1' }),
+      ),
+    ).rejects.toThrow('connection reset');
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  describe('events from a connected account', () => {
+    function stubIntent(id: string) {
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id,
+            metadata: { communityId: '11', lineItemId: '44', unitId: '88', userId: 'user-11' },
+            amount_received: 25000,
+            amount: 25000,
+            latest_charge: `ch_${id}`,
+          }),
+        },
+        charges: {
+          retrieve: vi.fn().mockResolvedValue({ id: `ch_${id}`, amount: 25000, amount_refunded: 0 }),
+        },
+      });
+    }
+
+    function connectEvent(id: string, account: string): Stripe.Event {
+      return {
+        ...makeEvent('payment_intent.succeeded', id, { id: 'pi_spoof' }),
+        account,
+      } as unknown as Stripe.Event;
+    }
+
+    it('refuses a payment whose metadata names a community connected to a different account', async () => {
+      // Whoever controls acct_attacker writes the metadata. It names community
+      // 11, whose dues must not be marked paid by an account it never connected.
+      // Revert-check: make eventAccountOwnsCommunity return true and this reddens.
+      connectCommunityTo('acct_community_11');
+      stubIntent('pi_spoof');
+
+      await processFinanceStripeEvent(connectEvent('evt_spoof', 'acct_attacker'));
+
+      expect(insertMock).not.toHaveBeenCalled();
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a connected-account payment for a community with no connected account', async () => {
+      connectCommunityTo(null);
+      stubIntent('pi_spoof');
+
+      await processFinanceStripeEvent(connectEvent('evt_spoof_2', 'acct_attacker'));
+
+      expect(updateMock).not.toHaveBeenCalled();
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('records a payment from the account the community connected', async () => {
+      // Control for the two refusals above.
+      connectCommunityTo('acct_community_11');
+      stubIntent('pi_ok');
+
+      await processFinanceStripeEvent(connectEvent('evt_ok', 'acct_community_11'));
+
+      expect(postLedgerEntryMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ entryType: 'payment', amountCents: -25000 }),
+      );
+    });
   });
 
   it('ignores delayed payment_intent.succeeded events when latest charge is fully refunded', async () => {
@@ -793,6 +984,110 @@ describe('processFinanceStripeEvent', () => {
         sourceId: 'dp_1',
       }),
     );
+  });
+
+  describe('charge.dispute.closed', () => {
+    // `charge.dispute.created` posted the disputed $12 back onto the balance
+    // as a 'fee' entry sourced from the dispute id.
+    const openingEntry = { id: 501, entryType: 'fee', amountCents: 1200 };
+
+    function stubDispute(status: string, ledger: Array<Record<string, unknown>>) {
+      getStripeClientMock.mockReturnValue({
+        paymentIntents: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'pi_dispute_1',
+            metadata: { communityId: '11', unitId: '88', userId: 'user-11' },
+          }),
+        },
+        charges: {
+          retrieve: vi.fn().mockResolvedValue({ id: 'ch_dispute_1', payment_intent: 'pi_dispute_1' }),
+        },
+        disputes: {
+          retrieve: vi.fn().mockResolvedValue({
+            id: 'dp_1',
+            charge: 'ch_dispute_1',
+            amount: 1200,
+            reason: 'fraudulent',
+            status,
+          }),
+        },
+      });
+      selectFromMock.mockImplementation((table: unknown) =>
+        Promise.resolve(table === ledgerEntriesTable ? ledger : []),
+      );
+    }
+
+    const closed = () =>
+      processFinanceStripeEvent(makeEvent('charge.dispute.closed', 'evt_dispute_closed', { id: 'dp_1' }));
+
+    it('reverses the opening charge when the association wins', async () => {
+      // Revert-check: drop the 'charge.dispute.closed' case from the dispatcher
+      // and this reddens: the resident keeps a $12 debt they already paid.
+      stubDispute('won', [openingEntry]);
+      await closed();
+
+      expect(postLedgerEntryMock).toHaveBeenCalledTimes(1);
+      expect(postLedgerEntryMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          entryType: 'adjustment',
+          amountCents: -1200,
+          sourceType: 'payment',
+          sourceId: 'dp_1',
+          unitId: 88,
+          metadata: expect.objectContaining({ originalEntryId: 501 }),
+        }),
+      );
+      expect(transactionState.writesOutside).toEqual([]);
+    });
+
+    it('reverses the opening charge when a payment inquiry closes', async () => {
+      stubDispute('warning_closed', [openingEntry]);
+      await closed();
+
+      expect(postLedgerEntryMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ entryType: 'adjustment', amountCents: -1200 }),
+      );
+    });
+
+    it('leaves the opening charge standing when the association loses', async () => {
+      stubDispute('lost', [openingEntry]);
+      await closed();
+
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('does not credit a dispute whose opening was never recorded', async () => {
+      // makeEvent stamps `created: 1`, far outside the retry window.
+      stubDispute('won', []);
+      await closed();
+
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('retries a recent close that arrived before its opening, instead of fencing it', async () => {
+      // Stripe does not order events. If this close were fenced as processed,
+      // the later `created` would post a debt nothing ever reverses.
+      // Revert-check: delete the DisputeOpeningNotYetRecorded throw and this
+      // resolves instead of rejecting.
+      stubDispute('won', []);
+      const recent = {
+        ...makeEvent('charge.dispute.closed', 'evt_dispute_closed_early', { id: 'dp_1' }),
+        created: Math.floor(Date.now() / 1000) - 60,
+      } as unknown as Stripe.Event;
+
+      await expect(processFinanceStripeEvent(recent)).rejects.toBeInstanceOf(DisputeOpeningNotYetRecorded);
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('does not reverse the same dispute twice', async () => {
+      stubDispute('won', [openingEntry, { id: 502, entryType: 'adjustment', amountCents: -1200 }]);
+      await closed();
+
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
   });
 });
 

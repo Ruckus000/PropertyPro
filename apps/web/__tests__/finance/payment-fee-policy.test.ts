@@ -124,10 +124,19 @@ interface MockScopedClient {
   insert: typeof insertMock;
   selectFrom: typeof selectFromMock;
   update: typeof updateMock;
+  logAudit: () => Promise<void>;
+  transaction: <T>(fn: (tx: MockScopedClient) => Promise<T>) => Promise<T>;
 }
 
 function makeScopedClient(): MockScopedClient {
-  return { insert: insertMock, selectFrom: selectFromMock, update: updateMock };
+  return {
+    insert: insertMock,
+    selectFrom: selectFromMock,
+    update: updateMock,
+    logAudit: async () => {},
+    // The webhook writes through the transaction's client; run it inline.
+    transaction: (fn) => fn(makeScopedClient()),
+  };
 }
 
 function makeEvent(

@@ -89,6 +89,7 @@ const { userRoles } = await import('../src/schema/user-roles');
 const { communities } = await import('../src/schema/communities');
 // Global table fixture: users has no communityId column (id is UUID PK, not community_id FK)
 const { users } = await import('../src/schema/users');
+const { complianceAuditLog } = await import('../src/schema/compliance-audit-log');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -329,6 +330,85 @@ describe('createScopedClient', () => {
       expect(whereArg).toBeDefined();
     });
   });
+});
+
+describe('transaction', () => {
+  /** A stand-in transaction handle, distinct from the default db. */
+  function makeTxHandle() {
+    const values = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 1 }]) });
+    return { insert: vi.fn().mockReturnValue({ values }), values };
+  }
+
+  it('runs the callback on a client bound to the transaction, keeping the tenant scope', async () => {
+    // Revert-check: build the callback's client on `database` instead of `tx`
+    // and the insert lands on the outer db, so txHandle.insert is never called.
+    const txHandle = makeTxHandle();
+    mockDb.transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) => fn(txHandle));
+
+    const client = createScopedClient(42);
+    await client.transaction(async (tx) => {
+      expect(tx.communityId).toBe(42);
+      await tx.insert(units, { unitNumber: '101', communityId: 999 });
+    });
+
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(txHandle.insert).toHaveBeenCalledWith(units);
+    expect(txHandle.values).toHaveBeenCalledWith(expect.objectContaining({ communityId: 42 }));
+    // Control: nothing reached the default db outside the transaction.
+    expect(mockInsertInto).not.toHaveBeenCalled();
+  });
+
+  it('rejects with the callback\'s error, so the driver rolls back', async () => {
+    const client = createScopedClient(42);
+    await expect(
+      client.transaction(async () => {
+        throw new Error('ledger write failed');
+      }),
+    ).rejects.toThrow('ledger write failed');
+  });
+
+  it('returns the callback\'s value', async () => {
+    const client = createScopedClient(42);
+    await expect(client.transaction(async () => 'done')).resolves.toBe('done');
+  });
+});
+
+describe('logAudit', () => {
+  it('writes the audit row for the client\'s own community, whatever the caller passes', async () => {
+    const client = createScopedClient(42);
+    await client.logAudit({
+      userId: null,
+      action: 'create',
+      resourceType: 'ledger_entry',
+      resourceId: '7',
+      // Not part of the type; a caller that smuggles one in must not win.
+      ...({ communityId: 999 } as object),
+    });
+
+    expect(mockInsertInto).toHaveBeenCalledWith(complianceAuditLog);
+    expect(mockValues).toHaveBeenCalledWith(
+      expect.objectContaining({ communityId: 42, resourceType: 'ledger_entry', resourceId: '7' }),
+    );
+  });
+
+  it('writes through the transaction when called on a transaction client', async () => {
+    // Revert-check: make logAudit call logAuditEvent(params) with no executor
+    // and the row goes to the default db, outside the transaction.
+    const txHandle = makeTxHandleForAudit();
+    mockDb.transaction.mockImplementationOnce(async (fn: (tx: unknown) => Promise<unknown>) => fn(txHandle));
+
+    await createScopedClient(42).transaction(async (tx) => {
+      await tx.logAudit({ userId: null, action: 'create', resourceType: 'ledger_entry', resourceId: '7' });
+    });
+
+    expect(txHandle.insert).toHaveBeenCalledWith(complianceAuditLog);
+    expect(mockInsertInto).not.toHaveBeenCalled();
+  });
+
+  function makeTxHandleForAudit() {
+    const values = vi.fn().mockResolvedValue(undefined);
+    return { insert: vi.fn().mockReturnValue({ values }) };
+  }
 });
 
 describe('unscoped mutation guard', () => {

@@ -8,7 +8,6 @@ import {
 import { and, desc, eq, gte, lte } from '../filters';
 import type { ScopedClient } from '../types/scoped-client';
 import { ledgerEntries } from '../schema/ledger-entries';
-import { logAuditEvent } from '../utils/audit-logger';
 
 export interface PostLedgerEntryParams {
   entryType: LedgerEntryType;
@@ -89,12 +88,13 @@ export async function postLedgerEntry(
     throw new Error('Failed to insert ledger entry');
   }
 
-  await logAuditEvent({
+  // Through the client's own connection, so a ledger entry posted inside
+  // `scoped.transaction` is audited inside it too.
+  await scopedClient.logAudit({
     userId: entry.createdByUserId ?? null,
     action: 'create',
     resourceType: 'ledger_entry',
     resourceId: String(id),
-    communityId: scopedClient.communityId,
     newValues: {
       entryType: entry.entryType,
       amountCents: entry.amountCents,

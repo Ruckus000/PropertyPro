@@ -31,8 +31,6 @@
  *
  * - `notification-digest-queue.ts` keeps its own variant (it also treats a
  *   `/unique/i` message as a duplicate); see the note there.
- * - `finance-service.ts` `recordFinanceStripeEvent` deliberately does NOT treat
- *   a fenced event as "already processed" — see `FinanceWebhookFenceConflict`.
  *
  * @see docs/audits/2026-09-22-refactor-audit-and-cleanup-roadmap.md (SVC-06)
  */

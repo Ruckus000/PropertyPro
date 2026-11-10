@@ -27,6 +27,7 @@ import { NextRequest } from 'next/server';
 // ---------------------------------------------------------------------------
 const {
   constructEventMock,
+  processFinanceStripeEventMock,
   getExpectedLivemodeMock,
   retrieveCheckoutSessionMock,
   retrieveSubscriptionMock,
@@ -70,6 +71,7 @@ const {
 
   return {
     constructEventMock: vi.fn(),
+    processFinanceStripeEventMock: vi.fn().mockResolvedValue(undefined),
     getExpectedLivemodeMock: vi.fn(() => null as boolean | null),
     retrieveCheckoutSessionMock: vi.fn(),
     retrieveSubscriptionMock: vi.fn(),
@@ -171,6 +173,10 @@ vi.mock('@/lib/services/stripe-service', () => ({
     if (typeof sub?.current_period_end === 'number') return new Date(sub.current_period_end * 1000);
     return null;
   },
+}));
+
+vi.mock('@/lib/services/finance-service', () => ({
+  processFinanceStripeEvent: processFinanceStripeEventMock,
 }));
 
 vi.mock('@/lib/services/payment-alert-scheduler', () => ({
@@ -312,6 +318,7 @@ describe('POST /api/v1/webhooks/stripe', () => {
     getExpectedLivemodeMock.mockReturnValue(null);
     // Default env
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+    delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
   });
 
   // -------------------------------------------------------------------------
@@ -375,6 +382,97 @@ describe('POST /api/v1/webhooks/stripe', () => {
 
       expect(constructEventMock).toHaveBeenCalledWith(rawBody, 'sig_xyz', 'whsec_test');
       expect(res.status).toBe(200);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 1b. Connect endpoint — events on associations' connected accounts
+  // -------------------------------------------------------------------------
+
+  describe('Connect endpoint', () => {
+    /** Accepts only a signature made with `secret`, as Stripe's verifier does. */
+    function signedWith(secret: string, event: Record<string, unknown>) {
+      constructEventMock.mockImplementation((_body: string, _sig: string, tried: string) => {
+        if (tried !== secret) throw new Error('No signatures found matching the expected signature');
+        return event;
+      });
+    }
+
+    const connectPayment = {
+      ...makeEvent('payment_intent.succeeded', { id: 'pi_resident_1' }, 'evt_connect_001'),
+      account: 'acct_association_1',
+    };
+
+    it('accepts an event signed with the Connect secret and hands it to the finance handlers', async () => {
+      // Revert-check: verify against STRIPE_WEBHOOK_SECRET only and this is a
+      // 400 — the resident's payment is never credited.
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect';
+      signedWith('whsec_connect', connectPayment);
+      setupDb();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(constructEventMock).toHaveBeenLastCalledWith('{}', 'valid-sig', 'whsec_connect');
+      expect(processFinanceStripeEventMock).toHaveBeenCalledWith(connectPayment);
+    });
+
+    it('rejects a Connect-signed event when no Connect secret is configured', async () => {
+      signedWith('whsec_connect', connectPayment);
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(400);
+      expect(processFinanceStripeEventMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects an event signed with neither secret', async () => {
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect';
+      signedWith('whsec_someone_else', connectPayment);
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(400);
+      expect(processFinanceStripeEventMock).not.toHaveBeenCalled();
+    });
+
+    it('never runs signup provisioning for a checkout on an association\'s own account', async () => {
+      // An association's Stripe account can run its own Checkout. That event
+      // carries `account` and must not reach handleCheckoutSessionCompleted.
+      // Revert-check: delete the `if (event.account)` early return in
+      // handleStripeEvent and retrieveCheckoutSessionMock is called.
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect';
+      const foreignCheckout = {
+        ...makeEvent(
+          'checkout.session.completed',
+          { id: 'cs_assoc_1', status: 'complete', metadata: { signupRequestId: 'req-abc' } },
+          'evt_connect_002',
+        ),
+        account: 'acct_association_1',
+      };
+      signedWith('whsec_connect', foreignCheckout);
+      setupDb();
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(retrieveCheckoutSessionMock).not.toHaveBeenCalled();
+      expect(runProvisioningMock).not.toHaveBeenCalled();
+      expect(processFinanceStripeEventMock).toHaveBeenCalledWith(foreignCheckout);
+    });
+
+    it('still verifies platform events with the platform secret first', async () => {
+      // Control: the platform endpoint is unchanged when a Connect secret exists.
+      process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect';
+      const platformEvent = makeEvent('invoice.payment_succeeded', { customer: 'cus_abc' });
+      signedWith('whsec_test', platformEvent);
+      setupDb({ selectRows: [{ eventId: 'evt_test_001', processedAt: new Date() }] });
+
+      const res = await POST(makeRequest());
+
+      expect(res.status).toBe(200);
+      expect(constructEventMock).toHaveBeenCalledTimes(1);
+      expect(constructEventMock).toHaveBeenCalledWith('{}', 'valid-sig', 'whsec_test');
     });
   });
 

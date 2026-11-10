@@ -18,6 +18,7 @@ import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
 import type {
   ArcSubmissionStatus,
   FiningCommitteeMember,
+  ScopedClient,
   ViolationFineStatus,
   ViolationSeverity,
   ViolationStatus,
@@ -1228,13 +1229,17 @@ export async function withdrawArcSubmissionForCommunity(
   return record;
 }
 
+/**
+ * Marks the pending fine billed by `lineItemId` as paid. Takes the caller's
+ * scoped client so the payment webhook can run it inside the same transaction
+ * as the payment it records; the audit row goes through that client too.
+ */
 export async function markViolationFinePaidForLineItem(
-  communityId: number,
+  scoped: ScopedClient,
   lineItemId: number,
   actorUserId: string,
   requestId?: string | null,
 ): Promise<number | null> {
-  const scoped = createScopedClient(communityId);
   const [fine] = await scoped.selectFrom<ViolationFineRecord>(
     violationFines,
     {},
@@ -1247,12 +1252,11 @@ export async function markViolationFinePaidForLineItem(
   const paidAt = new Date();
   await scoped.update(violationFines, { status: 'paid', paidAt }, eq(violationFines.id, fine.id));
 
-  await logAuditEvent({
+  await scoped.logAudit({
     userId: actorUserId,
     action: 'update',
     resourceType: 'violation_fine',
     resourceId: String(fine.id),
-    communityId,
     oldValues: {
       status: fine.status,
       paidAt: fine.paidAt,
