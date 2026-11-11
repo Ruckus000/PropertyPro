@@ -7,11 +7,12 @@
  * why they live here and not in the shell.
  */
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { PlanBadge } from '@propertypro/ui';
 import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
 import { PropertyProTile } from '@/components/brand/property-pro-mark';
-import { tabsInScope } from './nav-config';
+import { isPmPortfolioPath, tabsInScope } from './nav-config';
 
 /**
  * The desktop rail's place in the shell with the flag on: empty while the tab
@@ -24,7 +25,8 @@ export function DesktopNavSlot({ hasCommunity, children }: { hasCommunity: boole
 
 /**
  * Top-bar brand (D29): the rail header's tile, the community name and, from `lg`,
- * the plan. Not a switcher — switching stays in ProfileMenu's "Switch Community".
+ * the plan. On the PM portfolio pages, which have no rail, it is the PropertyPro
+ * mark linking home to Communities, at every width. Not a switcher — switching stays in ProfileMenu's "Switch Community".
  * Absent whenever the drawer or rail stands in for the tabs (R24), since it has its
  * own. AppTopBar decides at which widths this is shown.
  */
@@ -39,6 +41,21 @@ export function ShellBrandSlot({
 }) {
   const pathname = usePathname();
   if (!tabsInScope(hasCommunity, pathname)) return null;
+  // The portfolio pages have no rail header, so the brand is the way home.
+  if (isPmPortfolioPath(pathname ?? '')) {
+    return (
+      <Link
+        href="/pm/dashboard/communities"
+        aria-label="PropertyPro, all communities"
+        className="flex min-h-11 min-w-0 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus md:min-h-0 md:gap-3"
+      >
+        <PropertyProTile />
+        {/* Smaller on a phone: beside search, help, alerts and the avatar there
+            is ~139px at 375px wide; the wordmark at text-base needs 152. */}
+        <span className="min-w-0 truncate text-sm font-semibold text-content md:text-base">PropertyPro</span>
+      </Link>
+    );
+  }
   const planId = plan ? resolvePlanId(plan) : null;
   return (
     <div className="flex min-w-0 items-center gap-3">

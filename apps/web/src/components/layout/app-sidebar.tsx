@@ -27,10 +27,8 @@ import {
 import {
   NAV_ITEMS,
   NAV_SECTIONS,
-  PM_NAV_ITEMS,
   getVisibleItemsWithPlanGate,
   getActiveItemId,
-  isPmPortfolioPath,
   resolveDashboardHref,
   resolveLapsedAdmin,
   resolveNavItemHref,
@@ -115,17 +113,16 @@ export function AppSidebar({
   const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
-  // Only the cross-community PM *portfolio* routes swap in PM_NAV_ITEMS.
-  // Community-scoped pages that merely live under /pm/ — the website editor
-  // above all — keep the normal community nav (see isPmPortfolioPath).
-  const isPmContext = isPmPortfolioPath(pathname);
+  // The shell never mounts this sidebar on the PM portfolio pages (they have no
+  // rail; see AppShell). Community-scoped pages that merely live under /pm/ —
+  // the website editor above all — get the normal community nav here.
   const resolvedPlanId = plan ? resolvePlanId(plan) : null;
 
   // With no community in scope, community-scoped items can't build a real
   // destination. Rather than sending every one of them to /select-community —
   // which throws the destination away and, on that page, navigates nowhere at
   // all — render them as buttons that open the picker and keep the destination.
-  const needsCommunityPicker = !isPmContext && communityId === null;
+  const needsCommunityPicker = communityId === null;
 
   // A lapsed community locks ADMIN reads only (see resolveLapsedAdmin).
   const lapsedAdmin = resolveLapsedAdmin(isLapsed, role);
@@ -137,7 +134,7 @@ export function AppSidebar({
     role,
     communityType,
     features,
-    isPmContext,
+    isPmContext: false,
     lapsedAdmin,
   });
 
@@ -159,34 +156,24 @@ export function AppSidebar({
     return {};
   };
 
-  const allVisible: NavItemWithGateStatus[] = isPmContext
-    ? PM_NAV_ITEMS.map((i) => ({
-        ...i,
-        planLocked: false,
-        upgradePlanName: null,
-        upgradePlanId: null,
-        upgradeFeatureKey: null,
-      }))
-    : getVisibleItemsWithPlanGate(
-        NAV_ITEMS,
-        role,
-        features,
-        communityType,
-        resolvedPlanId,
-        isUnitOwner,
-        lapsedAdmin,
-      );
+  const allVisible: NavItemWithGateStatus[] = getVisibleItemsWithPlanGate(
+    NAV_ITEMS,
+    role,
+    features,
+    communityType,
+    resolvedPlanId,
+    isUnitOwner,
+    lapsedAdmin,
+  );
   // Without a community there is no role, and the shared role-visibility gate
   // (lib/navigation/role-visibility.ts) hides every role-gated item for a null
   // role — so the picker never routes someone into a permission-denied page.
 
   const visibleById = new Map(allVisible.map((item) => [item.id, item] as const));
-  const useSlimNav = !isPmContext && shouldUseSlimNav(role, resolvedPlanId);
-  const baseSections: readonly NavSection[] = isPmContext
-    ? [{ label: null, items: PM_NAV_ITEMS }]
-    : useSlimNav
-      ? buildSlimNavSections(visibleById, NAV_SECTIONS)
-      : NAV_SECTIONS;
+  const useSlimNav = shouldUseSlimNav(role, resolvedPlanId);
+  const baseSections: readonly NavSection[] = useSlimNav
+    ? buildSlimNavSections(visibleById, NAV_SECTIONS)
+    : NAV_SECTIONS;
   const childParentById = new Map<string, string>();
 
   for (const section of baseSections) {
@@ -210,11 +197,10 @@ export function AppSidebar({
         ? undefined
         : // One-hop destination for the dashboard item: avoids the /dashboard →
           // /dashboard/apartment server redirect for lease-tracking communities.
-          // Everything else goes through resolveNavItemHref, which keeps PM
-          // portfolio items working with communityId = null.
-          !isPmContext && communityId && item.id === 'dashboard'
+          // Everything else goes through resolveNavItemHref.
+          communityId && item.id === 'dashboard'
           ? resolveDashboardHref(communityId, features)
-          : resolveNavItemHref(item, communityId, isPmContext),
+          : resolveNavItemHref(item, communityId, false),
       ariaHasPopup: opensDialog ? 'dialog' : undefined,
       trailingBadge: item.planLocked ? <PlanBadge variant="pro" /> : undefined,
       ...(opensDialog ? {} : badgeFor(item)),
@@ -263,14 +249,13 @@ export function AppSidebar({
   const activeId = getActiveItemId(allVisible, pathname, searchParams.toString()) ?? '';
 
   // Brand header / community switcher. The switcher renders a flat searchable
-  // community list for multi-community users; single-community users and the PM
-  // portal (isPmContext) fall back to a static brand header inside the component.
+  // community list for multi-community users; single-community users fall back
+  // to a static brand header inside the component.
   const header = (
     <SidebarTenantSwitcher
       communityId={communityId}
       communityName={communityName}
       expanded={resolvedExpanded}
-      staticOnly={isPmContext}
     />
   );
 

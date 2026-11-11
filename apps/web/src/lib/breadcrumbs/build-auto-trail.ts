@@ -86,6 +86,7 @@ export function buildAutoTrail(
     if (isDigits(seg) && segments[i - 1] === 'communities') continue; // the tenant id itself
     if (seg === 'pm' && i === 0) continue; // PM portal root → covered by Home crumb
     if (seg === 'dashboard' && (i === 0 || segments[i - 1] === 'pm')) continue; // dashboard root
+    if (seg === 'portfolio' && segments[i - 1] === 'pm') continue; // no /pm/portfolio page: a crumb would 404
 
     const finalHref =
       communityId != null && !isPathScoped(href) ? `${href}?communityId=${communityId}` : href;

@@ -19,6 +19,7 @@ import { ViewToggle, getStoredViewMode, storeViewMode, type ViewMode } from './V
 import { AddCommunityModal } from './add-community-modal';
 import { CommunityAddedModal } from './CommunityAddedModal';
 import { SiteSetupBanner } from './SiteSetupBanner';
+import { PortfolioTools } from './PortfolioTools';
 import { BulkAnnouncementDialog } from './BulkAnnouncementDialog';
 
 // Loaded on demand: it closes by default, and its upload rules and redaction
@@ -29,7 +30,12 @@ const BulkDocumentDialog = dynamic(() => import('./BulkDocumentDialog').then((m)
 
 const VALID_TYPES = new Set(['condo_718', 'hoa_720', 'apartment']);
 
-export function PmDashboardClient() {
+export interface PmDashboardClientProps {
+  /** The actor's plan includes portfolio templates (server-checked). */
+  showTemplates?: boolean;
+}
+
+export function PmDashboardClient({ showTemplates = false }: PmDashboardClientProps = {}) {
   const searchParams = useSearchParams();
 
   const rawType = searchParams.get('communityType') ?? undefined;
@@ -136,6 +142,7 @@ export function PmDashboardClient() {
               </>
             )}
             <CommunityFilters />
+            <PortfolioTools showTemplates={showTemplates} />
             <ViewToggle value={viewMode} onChange={handleViewChange} />
             <button
               type="button"

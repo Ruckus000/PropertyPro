@@ -7,6 +7,7 @@
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { isPmAdminInAnyCommunity } from '@/lib/api/pm-communities';
+import { userHasPortfolioTemplatesAccess } from '@/lib/services/site-portfolio-template-service';
 import { PmDashboardClient } from '@/components/pm/PmDashboardClient';
 import { redirectIfSupportSession } from '@/lib/support/support-scope';
 
@@ -23,5 +24,8 @@ export default async function PmCommunitiesPage() {
     redirect('/dashboard');
   }
 
-  return <PmDashboardClient />;
+  // Templates is a plan feature: link to it only for people who have it.
+  const showTemplates = await userHasPortfolioTemplatesAccess(userId);
+
+  return <PmDashboardClient showTemplates={showTemplates} />;
 }
