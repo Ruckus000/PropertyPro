@@ -143,7 +143,6 @@ vi.mock('@/hooks/use-visitors', () => ({
 }));
 
 import { DocumentsTable } from '@/components/documents/documents-table';
-import { PortfolioTable } from '@/components/pm/PortfolioTable';
 import { DelinquencyTable } from '@/components/finance/delinquency-table';
 import { LedgerTable } from '@/components/finance/ledger-table';
 import { ArcSubmissionsTab } from '@/components/violations/ArcSubmissionsTab';
@@ -196,24 +195,6 @@ describe('documents', () => {
     );
 
     expect(screen.getByText('Budget 2026')).toBeDefined();
-  });
-});
-
-describe('pm portfolio', () => {
-  it('renders a community row', () => {
-    render(
-      <PortfolioTable
-        data={[{ communityId: 3, communityName: 'Sunset Condos' }] as never}
-        totalCount={1}
-        isLoading={false}
-        pagination={{ pageIndex: 0, pageSize: 10 }}
-        onPaginationChange={vi.fn()}
-        sorting={[]}
-        onSortingChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Sunset Condos')).toBeDefined();
   });
 });
 

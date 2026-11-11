@@ -2,18 +2,18 @@
  * Column types for the shared `DataTable`.
  *
  * These used to come from `@tanstack/react-table`. The library is still in the
- * repo — `pm/portfolio-data-table.tsx` uses it for row selection, pagination and
- * sorting — but it is no longer on the path the other eight tables take, because
- * it cost 57.9 KiB on seven routes to do work none of them asked for:
+ * repo (the shared `DataTableColumnHeader` and `DataTablePagination` take its
+ * types) but no screen's table runs on it, because it cost 57.9 KiB on seven
+ * routes to do work none of them asked for:
  * `useReactTable` was passed only `getCoreRowModel()`, with `manualSorting` and
  * `manualPagination` both on, and 86 of 91 render-context usages across every
  * consumer were `row.original`.
  *
  * The shapes below are deliberately a SUBSET of TanStack's, not a reinvention:
  * every existing column definition type-checks against them unchanged. Anything
- * a column might reach for that is missing here is missing on purpose — if you
- * need sorting, selection or pagination, you need `PortfolioDataTable`, which
- * still has the real library behind it.
+ * a column might reach for that is missing here is missing on purpose. The
+ * Communities page, the one screen with selection and server sorting, keeps a
+ * set of ids and a sort state of its own (`pm/communities/CommunityTable.tsx`).
  */
 import type { ReactNode } from 'react';
 

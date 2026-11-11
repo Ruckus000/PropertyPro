@@ -32,7 +32,9 @@ test.describe('PM Add Community Flow', () => {
       timeout: 30_000,
     });
 
-    const addButton = page.getByRole('button', { name: /add community/i });
+    // Exact: from three communities the gallery's Add Community tile also
+    // carries the words ("Add Community Set up a new association").
+    const addButton = page.getByRole('button', { name: 'Add Community', exact: true });
     await expect(addButton).toBeVisible();
     // This block PASSES today, but it had the same latent bug as the two specs
     // that did not: a click before hydration is SWALLOWED, not delayed, so the
