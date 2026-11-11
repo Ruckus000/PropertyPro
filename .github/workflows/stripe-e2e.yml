@@ -261,9 +261,16 @@ jobs:
         if: steps.gate.outputs.configured == 'true'
         run: pnpm tsx scripts/seed-stripe-test-prices.ts --apply
 
+      # Same bounded apt fallback as ci.yml's perf-check (see the comment there).
+      # ponytail: the fallback skips apt's fonts. Trigger: a spec starts comparing
+      # screenshots, or Chromium fails to launch after the warning below.
       - name: Install Playwright browsers
         if: steps.gate.outputs.configured == 'true'
-        run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
+        run: |
+          timeout 180 pnpm --filter @propertypro/web exec playwright install --with-deps chromium || {
+            echo "::warning::apt unreachable or slow; installing Chromium without OS packages (only fonts are skipped)"
+            pnpm --filter @propertypro/web exec playwright install chromium
+          }
 
       # GitHub runners do not ship the Stripe CLI. Pinned rather than `latest`:
       # this binary decides whether webhooks reach the app at all, so a silent
