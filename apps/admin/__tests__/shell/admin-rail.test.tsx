@@ -21,11 +21,11 @@ describe('AdminRail', () => {
   it('expands on hover when not pinned and collapses on leave', () => {
     const { container } = render(<AdminRail activeId="inbox" counts={counts} pinned={false} onPinnedChange={() => {}} user={user} />);
     const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
-    expect(nav.className).toContain('w-[72px]');
+    expect(nav.className).toContain('w-[4.5rem]');
     fireEvent.mouseEnter(container.firstChild as Element);
-    expect(nav.className).toContain('w-[260px]');
+    expect(nav.className).toContain('w-[16.25rem]');
     fireEvent.mouseLeave(container.firstChild as Element);
-    expect(nav.className).toContain('w-[72px]');
+    expect(nav.className).toContain('w-[4.5rem]');
   });
   it('pin button toggles and is announced', () => {
     const onPinnedChange = vi.fn();
@@ -75,7 +75,7 @@ describe('AdminRail', () => {
       );
       const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
       // Open immediately — no mouseEnter, no prior pin — breaking the closed loop.
-      expect(nav.className).toContain('w-[260px]');
+      expect(nav.className).toContain('w-[16.25rem]');
       expect(screen.getByRole('link', { name: /^Inbox\b/ })).toBeTruthy();
     } finally {
       window.matchMedia = originalMatchMedia;
@@ -121,7 +121,7 @@ describe('AdminRail', () => {
   // device whose `matchMedia` says it cannot hover; the effect widens it after
   // mount (the test above). Reverting the `useState`/`useEffect` pair in
   // AdminRail.tsx to a render-body `window.matchMedia(...)` read makes this go
-  // red with `w-[260px]` in the server markup while the rest of the file stays
+  // red with `w-[16.25rem]` in the server markup while the rest of the file stays
   // green.
   it('renders the collapsed rail on the server even for a device that cannot hover', () => {
     const originalMatchMedia = window.matchMedia;
@@ -140,8 +140,8 @@ describe('AdminRail', () => {
       const markup = renderToStaticMarkup(
         <AdminRail activeId="inbox" counts={counts} pinned={false} onPinnedChange={() => {}} user={user} />,
       );
-      expect(markup).toContain('w-[72px]');
-      expect(markup).not.toContain('w-[260px]');
+      expect(markup).toContain('w-[4.5rem]');
+      expect(markup).not.toContain('w-[16.25rem]');
     } finally {
       window.matchMedia = originalMatchMedia;
     }

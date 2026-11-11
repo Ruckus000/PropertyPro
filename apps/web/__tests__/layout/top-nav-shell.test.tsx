@@ -78,8 +78,15 @@ describe('ShellTopNav', () => {
     });
     // One wrapper, and its rule is TopNav's own: no second border-b here.
     const wrapper = container.firstElementChild as HTMLElement;
-    expect(wrapper).toHaveClass('hidden', 'lg:block');
+    expect(wrapper).toHaveClass('lg:hidden');
     expect(wrapper.className).not.toContain('border-b');
+  });
+
+  it('atDesktop shows the row at lg and up too (the flag swapped the rail for it)', () => {
+    const { container } = render(<ShellTopNav {...BASE} atDesktop />);
+
+    const wrapper = container.firstElementChild as HTMLElement;
+    expect(wrapper).not.toHaveClass('lg:hidden');
   });
 
   it('badge counts reach the model links', () => {

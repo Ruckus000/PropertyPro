@@ -49,26 +49,26 @@ const HelpDocsModal = dynamic<HelpDocsModalProps>(
 const HELP_DOCS_MODAL_ENABLED =
   process.env.NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED === 'true';
 
-// The top-nav flag (D23; see top-nav-flag.ts) is read INLINE at each site below,
-// never through the TOP_NAV_ENABLED constant, which does not fold across modules.
-// The tabs are on unless the variable is exactly 'false' (a kill switch).
-// next.config.ts always defines the variable, so each condition compares two
-// string literals that webpack folds at parse time: a kill-switched build drops
-// these import()s and emits none of top-nav-shell.tsx, top-nav-slots.tsx or their
-// dependencies. Every pathname read lives in those two modules, so that shell
-// calls no hook it did not call before the flag existed.
-const ShellTopNav =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
-    ? dynamic<ShellTopNavProps>(() => import('./top-nav-shell').then((m) => m.ShellTopNav), {
-        loading: () => null,
-      })
-    : null;
-const ShellBrandSlot =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
-    ? dynamic(() => import('./top-nav-slots').then((m) => m.ShellBrandSlot), { loading: () => null })
-    : null;
+// The tab row and the top-bar brand are how a PHONE navigates (below `lg`), in every
+// build, so both are always loaded. The desktop is the rail by default; the top-nav
+// flag (D23; see top-nav-flag.ts) swaps the rail for the same tabs at `lg` and up
+// when the variable is exactly 'true'. That flag is read INLINE below, never through
+// the TOP_NAV_ENABLED constant, which does not fold across modules: next.config.ts
+// always defines it, so the condition compares two string literals that webpack
+// folds at parse time, and a default build drops the DesktopNavSlot import().
+// ponytail: the tab row and brand also mount on desktop in a default build, hidden by lg:hidden, so they
+// run their hooks and build the model per navigation for nothing (the badge queries share the rail's
+// keys: no extra requests). A matchMedia gate would risk an SSR mismatch. Trigger: the tab row's
+// render shows up in a navigation profile, or any ask to render it below lg only.
+const ShellTopNav = dynamic<ShellTopNavProps>(
+  () => import('./top-nav-shell').then((m) => m.ShellTopNav),
+  { loading: () => null },
+);
+const ShellBrandSlot = dynamic(() => import('./top-nav-slots').then((m) => m.ShellBrandSlot), {
+  loading: () => null,
+});
 const DesktopNavSlot =
-  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false'
+  process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true'
     ? dynamic(() => import('./top-nav-slots').then((m) => m.DesktopNavSlot), { loading: () => null })
     : null;
 
@@ -126,7 +126,7 @@ interface AppShellProps {
   demoInfo?: DemoDetectionResult | null;
 }
 
-function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'false', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw
@@ -218,6 +218,8 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
     userName: user?.fullName ?? null,
     plan: community?.plan ?? null,
   };
+  // Tabs replace the rail at `lg`+ only in a flag-on build (DesktopNavSlot is null otherwise).
+  const tabsAtDesktop = topNav && DesktopNavSlot !== null;
   const desktopRail = (
     <div className="hidden lg:block">
       <AppSidebar {...sidebarProps} />
@@ -259,27 +261,25 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED !== 'fals
           userEmail={user?.email ?? null}
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
+          brandAtDesktop={tabsAtDesktop}
           brand={
-            topNav && ShellBrandSlot ? (
-              <ShellBrandSlot
-                hasCommunity={community != null}
-                communityName={community?.name ?? null}
-                plan={community?.plan ?? null}
-              />
-            ) : undefined
+            <ShellBrandSlot
+              hasCommunity={community != null}
+              communityName={community?.name ?? null}
+              plan={community?.plan ?? null}
+            />
           }
         />
-        {topNav && ShellTopNav && (
-          <ShellTopNav
-            communityId={community?.id ?? null}
-            communityType={community?.type ?? null}
-            role={role}
-            isUnitOwner={isUnitOwner ?? false}
-            features={features}
-            isLapsed={isLapsed}
-            plan={community?.plan ?? null}
-          />
-        )}
+        <ShellTopNav
+          atDesktop={tabsAtDesktop}
+          communityId={community?.id ?? null}
+          communityType={community?.type ?? null}
+          role={role}
+          isUnitOwner={isUnitOwner ?? false}
+          features={features}
+          isLapsed={isLapsed}
+          plan={community?.plan ?? null}
+        />
         <ShellBreadcrumbs role={role} community={community} features={features} />
         <SubscriptionBillingBanners
           role={role}

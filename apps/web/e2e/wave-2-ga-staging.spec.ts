@@ -6,7 +6,6 @@
  */
 import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
-import { clickWhenHydrated } from './helpers/hydration';
 
 const PALM_SLUG = 'palm-shores-hoa';
 const PALM_ORIGIN = `http://${PALM_SLUG}.localtest.me:3002`;
@@ -63,18 +62,13 @@ test.describe('Wave 2 GA staging (founding admin)', () => {
         timeout: 60_000,
       });
     }
-    // Its accessible name gains "N pending join requests" when any are waiting.
-    await expect(nav.getByRole('link', { name: /^Directory(,? ?\d+ pending join requests?)?$/ })).toBeVisible();
+    // Its accessible name gains ", N pending join requests" when any are waiting.
+    await expect(nav.getByRole('link', { name: /^Directory(, \d+ pending join requests?)?$/ })).toBeVisible();
 
-    const more = nav.getByRole('button', { name: /^More$/i });
-    await expect(more).toBeVisible();
+    await expect(nav.getByRole('button', { name: /^More$/i })).toBeVisible();
 
-    // Essentials keeps them reachable but plan-locked: buttons (they open the
-    // upgrade dialog) in the More panel, each with its Pro pill.
-    await clickWhenHydrated(more);
-    const panel = page.getByRole('dialog', { name: 'More pages' });
     for (const label of ['Operations', 'Payments']) {
-      await expect(panel.getByRole('button', { name: new RegExp(`^${label}`) })).toBeVisible();
+      await expect(nav.getByRole('button', { name: label, exact: true })).toBeVisible();
     }
   });
 

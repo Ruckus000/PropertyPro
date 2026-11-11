@@ -77,11 +77,13 @@ export function SidebarTenantSwitcher({
   );
 
   // Single-community users and the PM portal get a non-interactive brand header.
-  // Reserving the same h-16 height in both branches prevents a layout shift when
-  // the (client-fetched) community count resolves.
+  // Reserving the same height in both branches prevents a layout shift when the
+  // (client-fetched) community count resolves. From `lg` the header is 3.5rem of
+  // content plus its 1px rule (`box-content`), the same as AppTopBar's `lg:h-14`
+  // row plus its `border-b`, so the rail's rule and the top bar's rule meet.
   if (!canSwitch) {
     return (
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--border-default)] px-3">
+      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--border-default)] px-3 lg:box-content lg:h-14">
         {brandMark}
         {labelBlock}
       </div>
@@ -89,7 +91,7 @@ export function SidebarTenantSwitcher({
   }
 
   return (
-    <div className="h-16 shrink-0 border-b border-[var(--border-default)] px-2 py-2">
+    <div className="h-16 shrink-0 border-b border-[var(--border-default)] px-2 py-2 lg:box-content lg:flex lg:h-14 lg:items-center lg:py-0">
       <Popover
         open={open}
         onOpenChange={setOpen}
@@ -98,7 +100,7 @@ export function SidebarTenantSwitcher({
           <button
             type="button"
             aria-label="Switch community"
-            className="flex h-12 w-full items-center gap-3 rounded-[10px] px-1.5 text-left transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+            className="flex h-12 w-full items-center gap-3 rounded-md px-1.5 text-left transition-colors duration-150 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
           >
             {brandMark}
             {labelBlock}

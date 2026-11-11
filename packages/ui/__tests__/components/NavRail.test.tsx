@@ -225,15 +225,15 @@ describe("NavRail", () => {
     it("uses expanded width classes", () => {
       renderNavRail({ expanded: true });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-[260px]");
-      expect(nav.className).toContain("min-w-[260px]");
+      expect(nav.className).toContain("w-[16.25rem]");
+      expect(nav.className).toContain("min-w-[16.25rem]");
     });
 
     it("uses collapsed width classes", () => {
       renderNavRail({ expanded: false });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-[72px]");
-      expect(nav.className).toContain("min-w-[72px]");
+      expect(nav.className).toContain("w-[4.5rem]");
+      expect(nav.className).toContain("min-w-[4.5rem]");
     });
 
     it("label container toggles opacity class", () => {
@@ -434,6 +434,21 @@ describe("NavRail", () => {
       fireEvent.click(button);
 
       expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it("eases the width only after the toggle, not when the root font size changes", () => {
+      renderNavRail({ onToggle: vi.fn() });
+      const nav = screen.getByRole("navigation");
+      expect(nav.className).not.toContain("transition-[width,min-width]");
+
+      fireEvent.click(screen.getByLabelText("Collapse sidebar"));
+      expect(nav.className).toContain("transition-[width,min-width]");
+
+      // jsdom has no TransitionEvent, so fireEvent would drop propertyName: build the event by hand.
+      const end = new Event("transitionend", { bubbles: true });
+      Object.defineProperty(end, "propertyName", { value: "width" });
+      fireEvent(nav, end);
+      expect(nav.className).not.toContain("transition-[width,min-width]");
     });
 
     it("shows expand label when collapsed", () => {

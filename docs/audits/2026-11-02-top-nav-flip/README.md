@@ -59,3 +59,8 @@ budget has little room left for the next shell change.
 `manager-hoa-essentials-1024-more.jpg`, `manager-hoa-essentials-1440-upgrade.jpg`,
 `tenant-1024-more.jpg`, `longname-root-1024.jpg`, `pm-portfolio-1440.jpg`,
 `no-community-1440.jpg` (rail fallback), `tenant-390-drawer.jpg` (phone drawer, unchanged).
+
+> **Superseded 2026-11-11.** The default was flipped back: the desktop rail is the navigation at `lg`
+> and up, and `NEXT_PUBLIC_TOP_NAV_ENABLED=true` is now the opt-in that swaps it for these tabs. Phones
+> (below `lg`) use the same tab row in every build, with the hamburger and drawer kept only where no
+> community is in scope. The evidence above describes the flag-on desktop layout.

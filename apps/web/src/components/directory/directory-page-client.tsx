@@ -856,8 +856,8 @@ export function DirectoryPageClient({
                   onToggleBuilding={toggleBuilding}
                 />
               ) : (
-                // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it. Trigger: the top-nav flag is removed.
-                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-16rem)]'} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
+                // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it: always below lg (phones navigate with the tabs), and at lg+ only with the top-nav flag. Trigger: the top-nav flag is removed.
+                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-19rem)] lg:h-[calc(100dvh-16rem)]'} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
                   <UnitsSplitList
                     units={filteredUnits}
                     hasOwnerRole={hasOwnerRole}
