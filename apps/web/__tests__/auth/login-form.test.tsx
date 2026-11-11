@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { routerMock, signInWithPasswordMock, createBrowserClientMock } = vi.hoisted(() => ({
@@ -23,7 +24,11 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: createBrowserClientMock }));
+// The helper is the REAL one: faking the classification would test the fake.
+vi.mock('@/lib/supabase/client', async () => ({
+  ...(await import('@propertypro/db/supabase/auth-error')),
+  createBrowserClient: createBrowserClientMock,
+}));
 
 import { LoginForm } from '../../src/components/auth/login-form';
 
@@ -39,7 +44,7 @@ describe('LoginForm', () => {
 
   it('clears stale auth errors when credentials change', async () => {
     signInWithPasswordMock.mockResolvedValueOnce({
-      error: { message: 'Invalid login credentials' },
+      error: new AuthApiError('Invalid login credentials', 400, 'invalid_credentials'),
     });
 
     const { container } = render(<LoginForm returnTo="/dashboard" />);
@@ -65,6 +70,29 @@ describe('LoginForm', () => {
     await waitFor(() => {
       expect(screen.queryByRole('alert')).toBeNull();
     });
+  });
+
+  it('does not show the browser fetch text (which names the Supabase host) for a network failure', async () => {
+    // signInWithPassword RETURNS this rather than throwing it, so the form's catch
+    // never sees it. Safari's wording appends the project host.
+    signInWithPasswordMock.mockResolvedValueOnce({
+      error: new AuthRetryableFetchError('Load failed (abc123xyz.supabase.co)', 0),
+    });
+
+    const { container } = render(<LoginForm returnTo="/dashboard" />);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'user@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+
+    await act(async () => {
+      fireEvent.submit(container.querySelector('form') as HTMLFormElement);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent("couldn't reach the sign-in service");
+    });
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/supabase|abc123xyz|Load failed/);
+    expect(screen.getByRole('button', { name: 'Sign In' })).not.toBeDisabled();
+    expect(routerMock.replace).not.toHaveBeenCalled();
   });
 
   it('shows an error and re-enables the button when the auth client cannot be loaded', async () => {
@@ -126,7 +154,9 @@ describe('LoginForm', () => {
   });
 
   it('does not show the loader when sign-in fails', async () => {
-    signInWithPasswordMock.mockResolvedValueOnce({ error: { message: 'Invalid login credentials' } });
+    signInWithPasswordMock.mockResolvedValueOnce({
+      error: new AuthApiError('Invalid login credentials', 400, 'invalid_credentials'),
+    });
     const { container } = render(<LoginForm returnTo="/dashboard" destinationName="Sunset Condos" />);
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'user@example.com' } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'bad' } });

@@ -14,6 +14,7 @@
  */
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { getSafeAuthErrorMessage } from '@propertypro/db/supabase/auth-error';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { safeReturnTo } from '@/lib/auth/safe-return-to';
@@ -85,9 +86,10 @@ function MfaForm() {
       });
       if (cancelled) return;
       if (enrollError || !enrolled) {
+        const setupFailed = 'Could not start authenticator setup.';
         setStep({
           kind: 'failed',
-          message: enrollError?.message ?? 'Could not start authenticator setup.',
+          message: enrollError ? getSafeAuthErrorMessage(enrollError, setupFailed) : setupFailed,
         });
         return;
       }
@@ -113,11 +115,22 @@ function MfaForm() {
         factorId: step.factorId,
         code: code.trim(),
       });
-      if (verifyError) throw new Error(verifyError.message);
+      if (verifyError) {
+        setError(
+          getSafeAuthErrorMessage(
+            verifyError,
+            "We couldn't reach the verification service. Please try again.",
+          ),
+        );
+        setCode('');
+        return;
+      }
       router.push(returnTo);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed');
+    } catch {
+      // Fixed text: an exception's message can carry internals, and auth-js
+      // rethrows anything that is not an AuthError.
+      setError('Verification failed');
       setCode('');
     } finally {
       setIsVerifying(false);

@@ -305,8 +305,15 @@ jobs:
       - name: Enable per-community legal gates on the demo communities
         run: pnpm demo:enable-gates
 
+      # Same bounded apt fallback as ci.yml's perf-check (see the comment there).
+      # ponytail: the fallback skips apt's fonts. Trigger: a spec starts comparing
+      # screenshots, or Chromium fails to launch after the warning below.
       - name: Install Playwright browsers
-        run: pnpm --filter @propertypro/web exec playwright install --with-deps chromium
+        run: |
+          timeout 180 pnpm --filter @propertypro/web exec playwright install --with-deps chromium || {
+            echo "::warning::apt unreachable or slow; installing Chromium without OS packages (only fonts are skipped)"
+            pnpm --filter @propertypro/web exec playwright install chromium
+          }
 
       # The heap budgets in playwright.ci.config.ts (6GB web + 2GB admin) were
       # chosen against GitHub's DOCUMENTED runner size, not a measurement of

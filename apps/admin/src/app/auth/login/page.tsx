@@ -9,6 +9,7 @@
  */
 import { useState, useMemo, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { getSafeAuthErrorMessage } from '@propertypro/db/supabase/auth-error';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { safeReturnTo } from '@/lib/auth/safe-return-to';
@@ -100,7 +101,8 @@ function LoginForm() {
 
     try {
       if (!supabase) {
-        throw new Error('Missing Supabase configuration');
+        setError('Missing Supabase configuration');
+        return;
       }
 
       const { error: authError } = await supabase.auth.signInWithPassword({
@@ -109,15 +111,23 @@ function LoginForm() {
       });
 
       if (authError) {
-        throw new Error(authError.message);
+        setError(
+          getSafeAuthErrorMessage(
+            authError,
+            "We couldn't reach the sign-in service. Please try again.",
+          ),
+        );
+        return;
       }
 
       // Middleware will verify platform_admin_users and redirect to /auth/login?error=access_denied
       // if this user isn't an admin. On success it passes through to returnTo.
       router.push(returnTo);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+    } catch {
+      // Fixed text: an exception's message can carry internals, and auth-js
+      // rethrows anything that is not an AuthError.
+      setError('Authentication failed');
     } finally {
       setIsLoading(false);
     }
@@ -176,7 +186,10 @@ function LoginForm() {
             </div>
 
             {error && (
-              <p className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger">
+              <p
+                role="alert"
+                className="rounded-md border border-status-danger-border bg-status-danger-bg px-3 py-2 text-sm text-status-danger"
+              >
                 {error}
               </p>
             )}

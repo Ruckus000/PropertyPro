@@ -328,8 +328,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # `--with-deps` runs apt, which on this image only adds fonts (Chromium's
+      # libraries are preinstalled); the browser itself comes from cdn.playwright.dev.
+      # Bounded because an unreachable Ubuntu mirror retries for ~10 min, which
+      # would eat this job's 15-minute budget (2026-11-11 runner DNS outage).
+      # ponytail: the fallback skips apt's fonts. Trigger: a spec starts comparing
+      # screenshots, or Chromium fails to launch after the warning below.
       - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          timeout 180 pnpm exec playwright install --with-deps chromium || {
+            echo "::warning::apt unreachable or slow; installing Chromium without OS packages (only fonts are skipped)"
+            pnpm exec playwright install chromium
+          }
 
       # Next's incremental compiler cache. Turbo reports "0 cached, 8 total" on
       # every run, so both Next apps are otherwise compiled cold each time.

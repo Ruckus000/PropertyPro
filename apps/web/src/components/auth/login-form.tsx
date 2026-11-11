@@ -18,6 +18,8 @@ interface LoginFormProps {
  */
 const ENTERING_TIMEOUT_MS = 20_000;
 
+const UNREACHABLE = "We couldn't reach the sign-in service. Please try again.";
+
 const INPUT_CLASS =
   'h-12 w-full rounded-sm border border-edge-strong bg-surface-card px-4 text-base text-content transition-colors duration-quick placeholder:text-content-placeholder focus-visible:border-interactive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus';
 
@@ -59,13 +61,16 @@ export function LoginForm({ returnTo, destinationName = null }: LoginFormProps) 
     try {
       // Loaded on submit, not at module scope: the Supabase client is ~180 KiB
       // and nothing on this page needs it before the user signs in.
-      const { createBrowserClient } = await import('@/lib/supabase/client');
-      ({ error: signInError } = await createBrowserClient().auth.signInWithPassword({
+      const { createBrowserClient, getSafeAuthErrorMessage } = await import('@/lib/supabase/client');
+      const { error } = await createBrowserClient().auth.signInWithPassword({
         email,
         password,
-      }));
+      });
+      // signInWithPassword RETURNS a network failure rather than throwing it, and
+      // its message can name the Supabase host, so it is never rendered raw.
+      signInError = error ? { message: getSafeAuthErrorMessage(error, UNREACHABLE) } : null;
     } catch {
-      signInError = { message: "We couldn't reach the sign-in service. Please try again." };
+      signInError = { message: UNREACHABLE };
     }
 
     setLoading(false);

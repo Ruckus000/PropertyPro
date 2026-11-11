@@ -44,6 +44,9 @@ const ALLOWED_DB_SUBPATHS = new Set<string>([
   '@propertypro/db/unsafe',
   '@propertypro/db/seed/seed-community',
   '@propertypro/db/supabase/cookie-config',
+  // Pure classifier over supabase-js auth errors (which message may reach a
+  // screen). No DB or service-role access, like cookie-config above.
+  '@propertypro/db/supabase/auth-error',
   // Request-scoped audit actor (AsyncLocalStorage). No DB access of its own —
   // it only merges support-session attribution into audit-row metadata.
   '@propertypro/db/audit-actor',
