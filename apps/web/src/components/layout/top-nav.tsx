@@ -56,8 +56,13 @@ export function TopNav({ model, communityId, upgrade }: TopNavProps) {
     <>
       <nav aria-label="Main navigation" className="flex items-center border-b border-edge">
         {/* The tabs scroll sideways if they ever outgrow the row (a long label,
-            large text); More sits outside the scroller so it is never cut off. */}
-        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] xl:gap-1 [&::-webkit-scrollbar]:hidden">
+            large text); More sits outside the scroller so it is never cut off.
+            `relative` makes the scroller the containing block of each count's
+            `sr-only` sentence (position: absolute). Without it the nearest
+            positioned ancestor is the root, so `overflow-x-auto` does not clip
+            a sentence whose tab is scrolled off to the right, and it widens the
+            whole page: 447px of scroll width at 375px on a manager's dashboard. */}
+        <div className="relative flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] xl:gap-1 [&::-webkit-scrollbar]:hidden">
           {model.tabs.map((tab) =>
             tab.planLocked ? (
               <button
