@@ -27,6 +27,11 @@ function makeCommunity(overrides: Partial<PortfolioCommunity>): PortfolioCommuni
     siteOnboardingCompletedAt: null,
     sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
+    slug: 'test-community',
+    pastDeadlineCount: 0,
+    overdueDuesCents: null,
+    status: 'on_track',
+    brandColor: null,
     ...overrides,
   };
 }

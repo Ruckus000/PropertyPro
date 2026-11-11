@@ -19,7 +19,12 @@
  *     → requireAuthenticatedUserId
  *     → isPmAdminInAnyCommunity(userId)   (inArray over PM_SCOPE_DB_ROLES)
  *     → throw ForbiddenError if !isPm
- *   → getPortfolioDashboard(userId, query)
+ *   → buildPortfolioSummary(userId, query)
+ *
+ * The summary adds each community's measured status (compliance score and
+ * past-deadline count from the Compliance page's own rule, overdue dues where
+ * the plan includes finance), the unfiltered portfolio count and the saved-view
+ * counts. The response stays `{ data: <result> }`; every new field is additive.
  *
  * The literal ForbiddenError message
  * (`'This endpoint is only available to property managers'`) is preserved
@@ -37,16 +42,15 @@
  * required.
  */
 import { runRoute } from '@propertypro/api-contract';
-// AUTHZ: Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
-import { getPortfolioDashboard } from '@propertypro/db/unsafe';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
+import { buildPortfolioSummary } from '@/lib/pm/portfolio-summary';
 import { pmDashboardSummaryContract } from './contract';
 
 export const GET = withErrorHandler(
   runRoute(pmDashboardSummaryContract, async ({ query, req }) => {
     const userId = await requirePmPortfolioAccess(req);
 
-    return await getPortfolioDashboard(userId, query);
+    return await buildPortfolioSummary(userId, query);
   }),
 );

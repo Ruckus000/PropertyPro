@@ -657,4 +657,79 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     const dashboard = await getPortfolioDashboard(pmUserId, { communityType: 'condo_718' });
     expect(dashboard.kpis.complianceScore).toBe(100);
   });
+
+  it('findPortfolioStatusInputsUnscoped returns facts, live checklist rows and every linked document state', async () => {
+    await db
+      .update(communities)
+      .set({ subscriptionPlan: 'professional', unitCount: 72, branding: { primaryColor: '#1C5A52' } })
+      .where(eq(communities.id, communityAId));
+
+    const docBase = {
+      communityId: communityAId,
+      fileSize: 1024,
+      mimeType: 'application/pdf',
+    };
+    const [posted, draft, deleted] = await db
+      .insert(documents)
+      .values([
+        { ...docBase, title: 'Posted', filePath: `communities/${communityAId}/documents/posted.pdf`, fileName: 'posted.pdf' },
+        { ...docBase, title: 'Draft', filePath: `communities/${communityAId}/documents/draft.pdf`, fileName: 'draft.pdf', postedAt: null },
+        { ...docBase, title: 'Deleted', filePath: `communities/${communityAId}/documents/deleted.pdf`, fileName: 'deleted.pdf', deletedAt: new Date() },
+      ])
+      .returning({ id: documents.id });
+
+    await db.insert(complianceChecklistItems).values([
+      { communityId: communityAId, templateKey: 'test_status_posted', title: 'Posted', category: 'governing_documents', documentId: posted!.id },
+      { communityId: communityAId, templateKey: 'test_status_draft', title: 'Draft', category: 'governing_documents', documentId: draft!.id },
+      { communityId: communityAId, templateKey: 'test_status_deleted_doc', title: 'Deleted doc', category: 'governing_documents', documentId: deleted!.id },
+      { communityId: communityAId, templateKey: 'test_status_row_deleted', title: 'Row deleted', category: 'governing_documents', deletedAt: new Date() },
+      // An apartment's rows are not asked for, so must not come back.
+      { communityId: communityBId, templateKey: 'test_status_apartment', title: 'Apartment', category: 'operations' },
+    ]);
+
+    const { findPortfolioStatusInputsUnscoped } = await import('../src/unsafe');
+    const result = await findPortfolioStatusInputsUnscoped([communityAId, communityBId], [communityAId]);
+
+    expect(result.facts.get(communityAId)).toEqual({
+      subscriptionPlan: 'professional',
+      unitCount: 72,
+      branding: { primaryColor: '#1C5A52' },
+    });
+    expect(result.facts.has(communityBId)).toBe(true);
+
+    expect(result.checklistRows.map((r) => r.communityId)).toEqual([communityAId, communityAId, communityAId]);
+    expect(result.checklistRows.map((r) => r.documentId).sort()).toEqual(
+      [posted!.id, draft!.id, deleted!.id].sort(),
+    );
+
+    expect(result.documentStates.get(posted!.id)).toEqual({ deletedAt: null, isDraft: false });
+    expect(result.documentStates.get(draft!.id)).toEqual({ deletedAt: null, isDraft: true });
+    expect(result.documentStates.get(deleted!.id)?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it('findPortfolioStatusInputsUnscoped reads nothing for an empty set', async () => {
+    const { findPortfolioStatusInputsUnscoped } = await import('../src/unsafe');
+    const result = await findPortfolioStatusInputsUnscoped([], []);
+    expect(result.facts.size).toBe(0);
+    expect(result.checklistRows).toEqual([]);
+  });
+
+  it('treats % and _ in a search literally', async () => {
+    const { findManagedCommunitiesPortfolioUnscoped } = await import('../src/unsafe');
+    // As a wildcard "_" matches any one character, so "PM Portfolio_A" would
+    // match the name "PM Portfolio A". Literally it matches neither the name
+    // nor the slug (the slug has no space).
+    expect(await findManagedCommunitiesPortfolioUnscoped(pmUserId, { search: 'PM Portfolio_A' })).toEqual([]);
+    expect(await findManagedCommunitiesPortfolioUnscoped(pmUserId, { search: '%' })).toEqual([]);
+    const literal = await findManagedCommunitiesPortfolioUnscoped(pmUserId, { search: '__test_pm_portfolio_a' });
+    expect(literal.map((r) => r.communityId)).toEqual([communityAId]);
+  });
+
+  it('getPortfolioDashboard returns every row when unpaginated', async () => {
+    const { getPortfolioDashboard } = await import('../src/unsafe');
+    const paged = await getPortfolioDashboard(pmUserId, { limit: 1 });
+    expect(paged.communities).toHaveLength(1);
+    const all = await getPortfolioDashboard(pmUserId, { limit: 1, unpaginated: true });
+    expect(all.communities.map((r) => r.communityId).sort()).toEqual([communityAId, communityBId].sort());
+  });
 });

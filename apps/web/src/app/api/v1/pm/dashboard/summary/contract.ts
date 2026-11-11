@@ -40,6 +40,7 @@
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 import { COMMUNITY_TYPES } from '@propertypro/shared';
+import { PORTFOLIO_SORT_KEYS, PORTFOLIO_VIEWS } from '@/lib/pm/portfolio-summary-keys';
 
 /**
  * Query shape — preserved byte-identical to the pre-migration
@@ -48,8 +49,10 @@ import { COMMUNITY_TYPES } from '@propertypro/shared';
  *
  *   - `communityType`: filter to a single community type
  *   - `search`: case-insensitive substring match on community name
- *   - `sortBy`: one of 6 columns; service applies a stable secondary
- *     order on `communityId` internally
+ *   - `view`: a saved view (`needs_attention`, `overdue_dues`), filtered after
+ *     each community's status is derived
+ *   - `sortBy`: a column or derived field (`status`, `complianceScore`,
+ *     `pastDeadlineCount`, `overdueDuesCents`); ties fall back to name
  *   - `sortDir`: ascending / descending
  *   - `limit`: page size, clamped 1..100
  *   - `offset`: standard offset pagination; service does NOT use cursor
@@ -59,16 +62,9 @@ import { COMMUNITY_TYPES } from '@propertypro/shared';
 export const pmDashboardSummaryQuerySchema = z.object({
   communityType: z.enum(COMMUNITY_TYPES).optional(),
   search: z.string().trim().min(1).max(100).optional(),
-  sortBy: z
-    .enum([
-      'communityName',
-      'totalUnits',
-      'residentCount',
-      'openMaintenanceRequests',
-      'occupancyRate',
-      'outstandingBalanceCents',
-    ])
-    .optional(),
+  // The Communities page's saved views; applied after status is derived.
+  view: z.enum(PORTFOLIO_VIEWS).optional(),
+  sortBy: z.enum(PORTFOLIO_SORT_KEYS).optional(),
   sortDir: z.enum(['asc', 'desc']).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   offset: z.coerce.number().int().min(0).optional(),

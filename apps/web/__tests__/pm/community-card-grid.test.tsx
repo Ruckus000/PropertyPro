@@ -23,6 +23,11 @@ const communities: PortfolioCommunity[] = [
     siteOnboardingCompletedAt: null,
     sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
+    slug: 'sunset-condos',
+    pastDeadlineCount: 0,
+    overdueDuesCents: 225000,
+    status: 'needs_attention',
+    brandColor: null,
   },
   {
     communityId: 3,
@@ -39,6 +44,11 @@ const communities: PortfolioCommunity[] = [
     siteOnboardingCompletedAt: null,
     sitePublishedAt: null,
     hasUnpublishedSiteDrafts: false,
+    slug: 'sunset-ridge-apartments',
+    pastDeadlineCount: null,
+    overdueDuesCents: null,
+    status: 'not_tracked',
+    brandColor: null,
   },
 ];
 

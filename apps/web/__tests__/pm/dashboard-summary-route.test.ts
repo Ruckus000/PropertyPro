@@ -29,6 +29,9 @@ const {
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   isPmAdminInAnyCommunityMock: vi.fn(),
+  // The route now calls buildPortfolioSummary (lib/pm/portfolio-summary),
+  // which owns the db reads; this mock stands in for it. The name is kept so
+  // the cases below read as before.
   getPortfolioDashboardMock: vi.fn(),
 }));
 
@@ -38,7 +41,10 @@ vi.mock('@/lib/api/auth', () => ({
 
 vi.mock('@propertypro/db/unsafe', () => ({
   isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock,
-  getPortfolioDashboard: getPortfolioDashboardMock,
+}));
+
+vi.mock('@/lib/pm/portfolio-summary', () => ({
+  buildPortfolioSummary: getPortfolioDashboardMock,
 }));
 
 import { GET } from '../../src/app/api/v1/pm/dashboard/summary/route';
@@ -105,6 +111,7 @@ describe('pm/dashboard/summary route', () => {
     expect(getPortfolioDashboardMock).toHaveBeenCalledWith('user-pm-1', {
       communityType: undefined,
       search: undefined,
+      view: undefined,
       sortBy: undefined,
       sortDir: undefined,
       limit: undefined,
@@ -131,6 +138,7 @@ describe('pm/dashboard/summary route', () => {
     expect(getPortfolioDashboardMock).toHaveBeenCalledWith('user-pm-1', {
       communityType: 'condo_718',
       search: 'Sunset',
+      view: undefined,
       sortBy: 'totalUnits',
       sortDir: 'desc',
       limit: 25,
@@ -210,4 +218,43 @@ describe('pm/dashboard/summary route', () => {
     expect(res.status).toBe(400);
     expect(getPortfolioDashboardMock).not.toHaveBeenCalled();
   });
+
+  it('forwards the saved view', async () => {
+    const req = new NextRequest(
+      'http://localhost:3000/api/v1/pm/dashboard/summary?view=needs_attention',
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    expect(getPortfolioDashboardMock).toHaveBeenCalledWith(
+      'user-pm-1',
+      expect.objectContaining({ view: 'needs_attention' }),
+    );
+  });
+
+  it('returns 400 for an unknown saved view', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/pm/dashboard/summary?view=everything');
+    const res = await GET(req);
+
+    expect(res.status).toBe(400);
+    expect(getPortfolioDashboardMock).not.toHaveBeenCalled();
+  });
+
+  // The table's Compliance column sorted with sortBy=complianceScore, which the
+  // contract used to reject with a 400, so that sort never worked.
+  it.each(['complianceScore', 'status', 'pastDeadlineCount', 'overdueDuesCents'])(
+    'accepts sortBy=%s',
+    async (sortBy) => {
+      const req = new NextRequest(
+        `http://localhost:3000/api/v1/pm/dashboard/summary?sortBy=${sortBy}`,
+      );
+      const res = await GET(req);
+
+      expect(res.status).toBe(200);
+      expect(getPortfolioDashboardMock).toHaveBeenCalledWith(
+        'user-pm-1',
+        expect.objectContaining({ sortBy }),
+      );
+    },
+  );
 });

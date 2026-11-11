@@ -5,6 +5,7 @@ import { db } from '../drizzle';
 import { assessmentLineItems } from '../schema/assessment-line-items';
 import { communities } from '../schema/communities';
 import { complianceChecklistItems } from '../schema/compliance-checklist-items';
+import { documents } from '../schema/documents';
 import { leases } from '../schema/leases';
 import { leaseCurrentOnSql, leaseExpiringBetweenSql } from './lease-current';
 import { maintenanceRequests } from '../schema/maintenance-requests';
@@ -95,7 +96,10 @@ export async function findManagedCommunitiesPortfolioUnscoped(
   }
 
   if (filters.search) {
-    const pattern = `%${filters.search.trim()}%`;
+    // Literal match: `%` and `_` in what the user typed are not wildcards.
+    // Postgres ILIKE's default escape character is backslash.
+    const escaped = filters.search.trim().replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    const pattern = `%${escaped}%`;
     conditions.push(or(ilike(communities.name, pattern), ilike(communities.slug, pattern))!);
   }
 
@@ -289,6 +293,12 @@ export interface DashboardFilters extends PortfolioQueryFilters {
   sortDir?: 'asc' | 'desc';
   limit?: number;
   offset?: number;
+  /**
+   * Return every row, unsorted beyond the name order, and ignore limit/offset.
+   * For callers that derive more per-row data and then sort and page
+   * themselves (the Communities page summary).
+   */
+  unpaginated?: boolean;
 }
 
 export interface PortfolioDashboardResult {
@@ -487,6 +497,10 @@ export async function getPortfolioDashboard(
     outstandingBalanceCents: delinquencyMap.get(row.communityId) ?? 0,
   }));
 
+  if (filters.unpaginated) {
+    return { kpis, communities: communityRows, totalCount: communityRows.length };
+  }
+
   // 5. Sort
   const { sortBy = 'communityName', sortDir = 'asc' } = filters;
   communityRows.sort((a, b) => {
@@ -506,6 +520,123 @@ export async function getPortfolioDashboard(
   const paginated = communityRows.slice(offset, offset + limit);
 
   return { kpis, communities: paginated, totalCount };
+}
+
+// ─── Per-community status inputs (Communities page) ───
+
+export interface PortfolioCommunityStatusFacts {
+  /** Raw `communities.subscription_plan`; the caller resolves it to plan features. */
+  subscriptionPlan: string | null;
+  /** Declared unit/parcel count — what the website rule's size threshold reads. */
+  unitCount: number | null;
+  /** Raw `communities.branding` JSON; the caller resolves the live look. */
+  branding: unknown;
+}
+
+export interface PortfolioChecklistRow {
+  communityId: number;
+  isApplicable: boolean;
+  documentId: number | null;
+  documentPostedAt: Date | null;
+  deadline: Date | null;
+  rollingWindow: unknown;
+}
+
+export interface PortfolioLinkedDocumentState {
+  deletedAt: Date | null;
+  /** `posted_at` is null: owners cannot see it, so it satisfies nothing. */
+  isDraft: boolean;
+}
+
+export interface PortfolioStatusInputs {
+  facts: Map<number, PortfolioCommunityStatusFacts>;
+  /** Live (not soft-deleted) checklist rows of the condo/HOA communities asked for. */
+  checklistRows: PortfolioChecklistRow[];
+  /** Every document linked from those rows, soft-deleted ones included. */
+  documentStates: Map<number, PortfolioLinkedDocumentState>;
+}
+
+/**
+ * Everything the Communities page needs to derive each community's status,
+ * read in a fixed number of queries however many communities there are:
+ * one for the community facts, one for the checklist rows, one for the
+ * documents those rows link.
+ *
+ * The rows are returned raw on purpose. The status rule (`withDerivedStatus`
+ * in apps/web) is the one the Compliance page uses; deriving it here in SQL
+ * would make a third copy of it.
+ *
+ * **Authorization contract:** callers MUST pass only community ids the actor
+ * manages (from `findManagedCommunitiesPortfolioUnscoped`).
+ */
+export async function findPortfolioStatusInputsUnscoped(
+  communityIds: readonly number[],
+  checklistCommunityIds: readonly number[],
+): Promise<PortfolioStatusInputs> {
+  const facts = new Map<number, PortfolioCommunityStatusFacts>();
+  if (communityIds.length === 0) {
+    return { facts, checklistRows: [], documentStates: new Map() };
+  }
+
+  const [factRows, checklistRows] = await Promise.all([
+    db
+      .select({
+        communityId: communities.id,
+        subscriptionPlan: communities.subscriptionPlan,
+        unitCount: communities.unitCount,
+        branding: communities.branding,
+      })
+      .from(communities)
+      .where(inArray(communities.id, [...communityIds])),
+    checklistCommunityIds.length === 0
+      ? Promise.resolve([] as PortfolioChecklistRow[])
+      : db
+          .select({
+            communityId: complianceChecklistItems.communityId,
+            isApplicable: complianceChecklistItems.isApplicable,
+            documentId: complianceChecklistItems.documentId,
+            documentPostedAt: complianceChecklistItems.documentPostedAt,
+            deadline: complianceChecklistItems.deadline,
+            rollingWindow: complianceChecklistItems.rollingWindow,
+          })
+          .from(complianceChecklistItems)
+          .where(
+            and(
+              inArray(complianceChecklistItems.communityId, [...checklistCommunityIds]),
+              isNull(complianceChecklistItems.deletedAt),
+            ),
+          ),
+  ]);
+
+  for (const row of factRows) {
+    facts.set(row.communityId, {
+      subscriptionPlan: row.subscriptionPlan ?? null,
+      unitCount: row.unitCount ?? null,
+      branding: row.branding ?? null,
+    });
+  }
+
+  const linkedIds = [
+    ...new Set(
+      checklistRows
+        .map((row) => row.documentId)
+        .filter((id): id is number => typeof id === 'number'),
+    ),
+  ];
+  const documentStates = new Map<number, PortfolioLinkedDocumentState>();
+  if (linkedIds.length > 0) {
+    // Soft-deleted documents included: a deleted file must read as "not
+    // posted", which needs its row.
+    const docRows = await db
+      .select({ id: documents.id, deletedAt: documents.deletedAt, postedAt: documents.postedAt })
+      .from(documents)
+      .where(inArray(documents.id, linkedIds));
+    for (const row of docRows) {
+      documentStates.set(row.id, { deletedAt: row.deletedAt ?? null, isDraft: row.postedAt === null });
+    }
+  }
+
+  return { facts, checklistRows, documentStates };
 }
 
 // ─── Report Query Types ───
