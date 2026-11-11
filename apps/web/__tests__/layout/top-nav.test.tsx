@@ -218,6 +218,40 @@ describe('TopNav', () => {
     expect(screen.getByText('1 missing record')).toHaveClass('sr-only');
   });
 
+  // `sr-only` is `position: absolute`. An `overflow` box clips an absolute
+  // descendant only when that box, or something between them, is its
+  // containing block — i.e. is positioned. With every ancestor static, the
+  // sentence of a tab scrolled off to the right escaped the scroller and
+  // widened the page (scrollWidth 447 at 375px on a manager's dashboard).
+  // jsdom does no layout, so this pins the structure the browser needs; the
+  // geometry itself is probed by e2e/responsive-overflow.spec.ts.
+  it("each count's sr-only sentence is clipped by the tab scroller, not the page", () => {
+    renderNav(
+      model({
+        tabs: [link('dashboard', { active: true }), link('directory', { badge: 3 }), link('website', { badge: 1 })],
+      }),
+    );
+    const sentences = [screen.getByText('3 pending join requests'), screen.getByText('1 missing record')];
+    const POSITIONED = ['relative', 'absolute', 'fixed', 'sticky'];
+    for (const sentence of sentences) {
+      const scroller = sentence.closest('.overflow-x-auto');
+      expect(scroller, `${sentence.textContent}: not inside the tab scroller`).not.toBeNull();
+      let containingBlock: Element | null = null;
+      for (let el = sentence.parentElement; el; el = el.parentElement) {
+        if (POSITIONED.some((cls) => el!.classList.contains(cls))) {
+          containingBlock = el;
+          break;
+        }
+        if (el === scroller) break;
+      }
+      expect(
+        containingBlock,
+        `${sentence.textContent}: no positioned box between it and the scroller, so the scroller cannot clip it`,
+      ).not.toBeNull();
+      expect(scroller!.contains(containingBlock)).toBe(true);
+    }
+  });
+
   it('axe with More open → no violations', async () => {
     const user = userEvent.setup();
     const { baseElement } = renderNav(

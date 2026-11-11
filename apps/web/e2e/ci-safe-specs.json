@@ -104,6 +104,13 @@
     "against the agent sandbox (dev server + local Supabase + demo seed) before being",
     "added: all 7 responsive-overflow blocks and all 8 detector blocks passed.",
     "",
+    "2026-11-11: `responsive-overflow` gains a `dashboard` block (7 -> 8), so",
+    "expectedTestCount goes 68 -> 69 (`--list | grep -c chromium` on",
+    "playwright.ci.config.ts: 69). It covers the phone tab row, whose count",
+    "sentence escaped an unpositioned scroller and widened the page to 447px at",
+    "375px. MEASURED against the agent sandbox: red with the fix reverted, all 8",
+    "responsive-overflow blocks green with it.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -128,5 +135,5 @@
     "support-access.spec.ts",
     "target-size-detector.spec.ts"
   ],
-  "expectedTestCount": 68
+  "expectedTestCount": 69
 }

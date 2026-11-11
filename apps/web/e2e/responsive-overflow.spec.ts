@@ -43,6 +43,17 @@ import { findSmallTargets } from './helpers/target-size';
  */
 const VIEWPORTS = [375, 414, 768, 1024, 1280, 1440] as const;
 
+/**
+ * A response a block must see before it measures, keyed by block label, for a
+ * bleed that only exists once client data has rendered. It waits for the
+ * response rather than for the element it renders, so a seed with nothing to
+ * show still passes for the right reason instead of timing out.
+ */
+const SETTLE_ON: Partial<Record<string, string>> = {
+  // The Website tab's missing-records count (`useNavBadges`).
+  dashboard: '/api/v1/pm/site/records-alert',
+};
+
 async function expectNoBleed(page: Page, where: string) {
   const pageScroll = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
@@ -99,8 +110,19 @@ test.describe('responsive overflow', () => {
     ['meetings', (id: number) => `/communities/${id}/meetings`],
     ['announcements composer', (id: number) => `/announcements/new?communityId=${id}`],
     ['settings', (id: number) => `/settings?communityId=${id}`],
+    // Added 2026-11-11. The first community route here that is not a section
+    // page, and the only one whose bleed lived in the SHELL rather than the
+    // page: below lg the tab row's Website tab sits past 375px, and its count's
+    // `sr-only` sentence (position: absolute) escaped the tab scroller, which
+    // was not positioned, widening the page to 447px. The page-level
+    // `scrollWidth` assertion is the one that catches it; `findOverflows`
+    // cannot, because a 1px `sr-only` box is not what it looks for. The count
+    // arrives from a client query after `main` paints, so this block waits for
+    // that response (see SETTLE_ON) — without the wait it passed with the bug.
+    ['dashboard', (id: number) => `/dashboard?communityId=${id}`],
   ] as const) {
     test(`${label} does not bleed from 375px to 1440px`, async ({ page }) => {
+      const settleOn = SETTLE_ON[label];
       // Pinned: an unpinned demo user lands in Palm Shores (Essentials), where several
       // of these surfaces render "Upgrade now" instead of the layout under test.
       const { communityId } = await loginAs(page, 'cam', {
@@ -110,11 +132,22 @@ test.describe('responsive overflow', () => {
 
       for (const width of VIEWPORTS) {
         await page.setViewportSize({ width, height: 900 });
+        // Registered before the navigation, so a fast response cannot be missed.
+        const settled = settleOn
+          ? page.waitForResponse((response) => response.url().includes(settleOn))
+          : null;
         await page.goto(buildPath(communityId), { waitUntil: 'domcontentloaded' });
         // Layout is only meaningful once the client tree has painted; a server-rendered
         // heading appears before hydration by definition (see helpers/hydration.ts).
         await page.locator('main').waitFor({ state: 'visible' });
         await page.evaluate(() => document.fonts.ready);
+        if (settled) {
+          await settled;
+          // One more frame, so React has committed what that response rendered.
+          await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+          );
+        }
         await expectNoBleed(page, `${label} @ ${width}px`);
         // WCAG 2.5.8 (AA) floor at phone width. The project's 44px rule is pinned
         // by class tests on the shared primitives; this catches anything under 24.
