@@ -226,7 +226,8 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // so the route itself no longer needs the allowance.
   resolve(repoRoot, 'apps/web/src/lib/services/twilio-webhook-service.ts'),
   // Phase 2C: PM dashboard — cross-community KPI aggregation + report queries
-  resolve(repoRoot, 'apps/web/src/app/api/v1/pm/dashboard/summary/route.ts'),
+  // PM Communities summary: cross-community status inputs (moved out of the summary route).
+  resolve(repoRoot, 'apps/web/src/lib/pm/portfolio-summary.ts'),
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/reports/[reportType]/route.ts'),
   // Phase 2C: Bulk operations — cross-community announcements + document uploads
   resolve(repoRoot, 'apps/web/src/app/api/v1/pm/bulk/announcements/route.ts'),

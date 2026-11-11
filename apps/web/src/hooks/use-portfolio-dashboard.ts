@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { CommunityType } from '@propertypro/shared';
 import { requestJson } from '@/lib/api/request-json';
+import type { PortfolioView } from '@/lib/pm/portfolio-summary-keys';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -11,6 +12,7 @@ import { requestJson } from '@/lib/api/request-json';
 export interface PortfolioFilters {
   communityType?: CommunityType;
   search?: string;
+  view?: PortfolioView;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   limit?: number;
@@ -49,6 +51,15 @@ export interface PortfolioCommunity {
   sitePublishedAt: string | null;
   /** True when the community has unpublished draft site blocks. */
   hasUnpublishedSiteDrafts: boolean;
+  slug: string;
+  /** Checklist items past their posting deadline; null for apartments. */
+  pastDeadlineCount: number | null;
+  /** Overdue dues in cents; null when the plan has no finance, or for apartments. */
+  overdueDuesCents: number | null;
+  /** Measured status: see apps/web/src/lib/pm/portfolio-summary.ts. */
+  status: 'needs_attention' | 'on_track' | 'not_tracked';
+  /** The live look's primary colour for the site thumbnail, or null. */
+  brandColor: string | null;
 }
 
 export interface PortfolioDashboardData {
@@ -62,6 +73,9 @@ export interface PortfolioDashboardData {
   };
   communities: PortfolioCommunity[];
   totalCount: number;
+  /** Every managed community, unfiltered (the page picks its layout from this). */
+  portfolioCount: number;
+  viewCounts: { all: number; needsAttention: number; overdueDues: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -95,7 +109,18 @@ interface RawDashboardResponse {
   kpis: RawDashboardKpis;
   communities: PortfolioCommunity[];
   totalCount: number;
+  portfolioCount: number;
+  viewCounts: { all: number; needsAttention: number; overdueDues: number };
 }
+
+/**
+ * Table column ids that differ from the server's sort keys. The balance
+ * column's id is the client-side `outstandingBalance`; sending it as-is was
+ * rejected by the summary contract (400), so sorting by it never worked.
+ */
+const SORT_KEY_BY_COLUMN: Record<string, string> = {
+  outstandingBalance: 'outstandingBalanceCents',
+};
 
 function deltaToTrend(delta: number | null): 'up' | 'down' | 'neutral' {
   if (delta === null || delta === 0) return 'neutral';
@@ -120,7 +145,8 @@ async function fetchPortfolioDashboard(
 
   if (filters.communityType) params.set('communityType', filters.communityType);
   if (filters.search) params.set('search', filters.search);
-  if (filters.sortBy) params.set('sortBy', filters.sortBy);
+  if (filters.view) params.set('view', filters.view);
+  if (filters.sortBy) params.set('sortBy', SORT_KEY_BY_COLUMN[filters.sortBy] ?? filters.sortBy);
   if (filters.sortDir) params.set('sortDir', filters.sortDir);
   if (filters.limit !== undefined) params.set('limit', String(filters.limit));
   if (filters.offset !== undefined) params.set('offset', String(filters.offset));
@@ -141,6 +167,8 @@ async function fetchPortfolioDashboard(
       };
     }),
     totalCount: raw.totalCount,
+    portfolioCount: raw.portfolioCount,
+    viewCounts: raw.viewCounts,
   };
 }
 
