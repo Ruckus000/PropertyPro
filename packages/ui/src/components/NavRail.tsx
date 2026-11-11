@@ -311,7 +311,7 @@ export function NavRail({
         >
           <span
             className={cn(
-              "truncate text-[0.9375rem] leading-snug",
+              "truncate text-sm leading-snug",
               isHighlighted
                 ? "font-semibold text-[var(--nav-text-active)]"
                 : "font-medium text-[var(--nav-text-inactive)]",
@@ -322,7 +322,7 @@ export function NavRail({
           {badge !== null && badge > 0 && (
             <span
               className={cn(
-                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold",
+                "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-semibold",
                 badgePillClasses[badgeVariant] ?? "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
               )}
             >
@@ -347,7 +347,7 @@ export function NavRail({
     hasChildren: boolean;
   }) =>
     cn(
-      "relative flex h-11 w-full items-center gap-3 rounded-[10px] border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
+      "relative flex h-11 w-full items-center gap-3 rounded-md border border-transparent px-3 text-left transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
       isActive
         ? "bg-[var(--nav-bg-active)] text-[var(--nav-text-active)]"
         : containsActiveChild
@@ -358,7 +358,7 @@ export function NavRail({
 
   const subItemClassName = (isActive: boolean) =>
     cn(
-      "flex h-11 md:h-9 items-center justify-between rounded-[10px] px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
+      "flex h-11 md:h-9 items-center justify-between rounded-md px-3 text-left text-sm transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
       isActive
         ? "bg-[var(--nav-bg-active)] font-medium text-[var(--nav-text-active)]"
         : "text-[var(--nav-text-muted)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)]",
@@ -379,7 +379,7 @@ export function NavRail({
         {badge !== null && badge > 0 && (
           <span
             className={cn(
-              "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-[10px] px-1.5 text-xs font-semibold",
+              "ml-2 inline-flex h-5 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-semibold",
               badgeVariant === "danger"
                 ? "bg-[var(--status-danger)] text-[var(--text-inverse)]"
                 : "bg-[var(--nav-badge-bg)] text-[var(--nav-text-active)]",
@@ -427,7 +427,7 @@ export function NavRail({
       aria-label="Main navigation"
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--nav-border-divider)] bg-[var(--nav-surface)] text-[var(--nav-text-inactive)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
-        expanded ? "w-[260px] min-w-[260px]" : "w-[72px] min-w-[72px]",
+        expanded ? "w-[16.25rem] min-w-[16.25rem]" : "w-[4.5rem] min-w-[4.5rem]",
       )}
     >
       {header}
@@ -463,7 +463,7 @@ export function NavRail({
                       aria-controls={sectionContentId}
                       onClick={() => onSectionToggle?.(section.label as string)}
                       data-testid="section-label"
-                      className="flex min-h-11 md:min-h-0 w-full items-center justify-between gap-2 rounded-[10px] px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+                      className="flex min-h-11 md:min-h-0 w-full items-center justify-between gap-2 rounded-md px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
                     >
                       <span className="truncate">{section.label}</span>
                       <span
@@ -561,7 +561,7 @@ export function NavRail({
                                     [navItem.id]: !isExpanded,
                                   }))
                                 }
-                                className="flex h-11 w-10 shrink-0 items-center justify-center rounded-[10px] text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
+                                className="flex h-11 w-10 shrink-0 items-center justify-center rounded-md text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]"
                               >
                                 <span
                                   aria-hidden="true"

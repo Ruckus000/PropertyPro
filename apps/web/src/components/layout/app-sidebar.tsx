@@ -3,7 +3,7 @@
 /**
  * AppSidebar — Wraps NavRail with app-specific navigation, routing, and brand header.
  *
- * Renders the dark collapsible sidebar matching the PropertyProRedesign.jsx mockup.
+ * Renders the light, collapsible desktop rail (and the phone drawer) in the app shell.
  * Navigation items are filtered by role and community features.
  * Plan-locked items are shown with a "Pro" pill (via NavRail.trailingBadge) and
  * open an UpgradeDialog when clicked.

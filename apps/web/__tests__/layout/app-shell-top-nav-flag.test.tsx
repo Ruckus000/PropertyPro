@@ -2,13 +2,13 @@
 /**
  * AppShell with and without the top-nav flag (D23, D29).
  *
- * The tabs are ON unless the variable is exactly 'false' (the kill switch). With
- * them on, the tab row replaces the desktop rail wrapper under the top bar and the
- * brand (tile, community name, plan) comes first in the top bar. With the kill
- * switch the shell renders as it did before the tabs: the rail wrapper, no brand
+ * The desktop rail is the default; the tabs are ON only when the variable is exactly
+ * 'true'. With them on, the tab row replaces the desktop rail wrapper under the top bar
+ * and the brand (tile, community name, plan) comes first in the top bar. In the default
+ * build the shell renders as it did before the tabs: the rail wrapper, no brand
  * slot, and no pathname read. The mobile hamburger is the same either way.
  *
- * The flag is read inline from `process.env` at module load (so a kill-switched
+ * The flag is read inline from `process.env` at module load (so a default
  * build drops the tab row's imports), so each case stubs the variable and imports
  * a fresh copy of the shell. `ShellTopNav` and `AppSidebar` are stubbed: their own
  * tests cover what they render; this file covers WHERE the shell mounts them.
@@ -32,8 +32,8 @@ vi.mock('@/components/layout/app-sidebar', () => ({
 // Only the tab row is stubbed; the brand and rail slots (top-nav-slots.tsx, which
 // own the pathname reads) are real.
 vi.mock('@/components/layout/top-nav-shell', () => ({
-  ShellTopNav: () => (
-    <div className="hidden lg:block">
+  ShellTopNav: ({ atDesktop }: { atDesktop?: boolean }) => (
+    <div data-testid="top-nav-wrapper" className={atDesktop ? 'block' : 'lg:hidden'}>
       <nav aria-label="Main navigation" data-testid="top-nav" />
     </div>
   ),
@@ -82,54 +82,65 @@ function renderShell(
   );
 }
 
-describe('AppShell — kill switch (NEXT_PUBLIC_TOP_NAV_ENABLED=false)', () => {
+describe('AppShell — default build (NEXT_PUBLIC_TOP_NAV_ENABLED unset): the desktop rail', () => {
   let FlagOffAppShell: Shell;
 
   beforeEach(async () => {
     nav.pathname = '/dashboard';
     usePathnameSpy.mockClear();
-    FlagOffAppShell = await loadShell('false');
+    // Unset is the default build: next.config.ts also maps unset to 'false'.
+    FlagOffAppShell = await loadShell(undefined);
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
   });
 
-  it('desktop sidebar present, no TopNav, no brand slot', () => {
-    const { container } = renderShell(FlagOffAppShell);
+  it('desktop sidebar present; the tab row and brand are phone-only (lg:hidden)', async () => {
+    renderShell(FlagOffAppShell);
 
     const sidebar = screen.getByTestId('desktop-sidebar');
     expect(sidebar.parentElement).toHaveClass('hidden', 'lg:block');
-    expect(screen.queryByTestId('top-nav')).toBeNull();
-    // No brand: the top bar holds only the drawer trigger, search and utilities.
-    expect(screen.queryByText('Sunset Condos')).toBeNull();
-    expect(container.querySelector('header > div > div.hidden.lg\\:flex')).toBeNull();
+    // The tab row is how a phone navigates; at lg the rail stands in for it.
+    expect(await screen.findByTestId('top-nav-wrapper')).toHaveClass('lg:hidden');
+    // So is the brand: the rail's own header names the community at lg.
+    const brand = (await screen.findByText('Sunset Condos')).closest('div')?.parentElement;
+    expect(brand).toHaveClass('lg:hidden');
   });
 
-  it('reads no pathname: a flag-off shell calls no navigation hook (re-render per navigation)', () => {
+  it('phone with a community: no hamburger (the tabs are the way in), search collapses to an icon', async () => {
     renderShell(FlagOffAppShell);
-    renderShell(FlagOffAppShell, { withCommunity: false });
+    await screen.findByTestId('top-nav');
 
-    expect(usePathnameSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
+    const search = screen.getByRole('button', { name: /^Search documents/ });
+    expect(search).toHaveClass('w-11');
   });
 
-  it('topNav={true} cannot mount tabs in a kill-switched build, which never loads them', () => {
+  it('phone with no community: the hamburger and drawer stay, there is no brand', () => {
+    nav.pathname = '/select-community';
+    renderShell(FlagOffAppShell, { plan: null, withCommunity: false });
+
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toHaveClass('lg:hidden');
+    expect(screen.getByRole('button', { name: /^Search documents/ })).not.toHaveClass('w-11');
+    expect(screen.queryByText('Sunset Condos')).toBeNull();
+  });
+
+  it('topNav={true} cannot swap the rail for tabs in a default build, which never loads that slot', async () => {
     renderShell(FlagOffAppShell, { topNav: true });
 
     expect(screen.getByTestId('desktop-sidebar').parentElement).toHaveClass('hidden', 'lg:block');
-    expect(screen.queryByTestId('top-nav')).toBeNull();
-    expect(usePathnameSpy).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('top-nav-wrapper')).toHaveClass('lg:hidden');
   });
 });
 
-describe('AppShell — top tabs on (the default)', () => {
+describe('AppShell — top tabs opt-in (NEXT_PUBLIC_TOP_NAV_ENABLED=true)', () => {
   let FlagOnAppShell: Shell;
 
   beforeEach(async () => {
     nav.pathname = '/dashboard';
     usePathnameSpy.mockClear();
-    // Unset is the default build: next.config.ts also maps unset to 'true'.
-    FlagOnAppShell = await loadShell(undefined);
+    FlagOnAppShell = await loadShell('true');
   });
 
   afterEach(() => {
@@ -146,11 +157,11 @@ describe('AppShell — top tabs on (the default)', () => {
     expect(header.nextElementSibling?.contains(screen.getByTestId('top-nav'))).toBe(true);
   });
 
-  it("an explicit 'true' also turns the tabs on", async () => {
-    const Explicit = await loadShell('true');
+  it("an explicit 'false' keeps the rail", async () => {
+    const Explicit = await loadShell('false');
     renderShell(Explicit);
-    expect(await screen.findByTestId('top-nav')).toBeInTheDocument();
-    expect(screen.queryByTestId('desktop-sidebar')).toBeNull();
+    expect(screen.getByTestId('desktop-sidebar')).toBeInTheDocument();
+    expect(screen.queryByTestId('top-nav')).toBeNull();
   });
 
   it('topNav={false} keeps the rail in a flag-on build', async () => {
@@ -161,10 +172,10 @@ describe('AppShell — top tabs on (the default)', () => {
     expect(screen.queryByText('Sunset Condos')).toBeNull();
   });
 
-  it('mobile drawer trigger still present', () => {
+  it('with a community there is no hamburger: the tabs are the way in at every width', async () => {
     renderShell(FlagOnAppShell);
-    const trigger = screen.getByRole('button', { name: 'Open navigation' });
-    expect(trigger).toHaveClass('lg:hidden');
+    await screen.findByTestId('top-nav');
+    expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
   });
 
   it('top bar shows community name and plan badge', async () => {
@@ -174,7 +185,8 @@ describe('AppShell — top tabs on (the default)', () => {
     expect(header).toHaveTextContent('Sunset Condos');
     expect(header).toHaveTextContent('Professional');
     // Desktop only: below lg the hamburger + drawer carry the brand.
-    expect(screen.getByText('Sunset Condos').closest('div.hidden')).toHaveClass('lg:flex');
+    // Shown on a phone too (it names the community there); at lg it shrinks to its content.
+    expect(screen.getByText('Sunset Condos').closest('div')?.parentElement).toHaveClass('lg:flex-none');
   });
 
   it('a community with no plan shows the name and no plan badge', async () => {
@@ -196,6 +208,8 @@ describe('AppShell — top tabs on (the default)', () => {
     expect(sidebar.parentElement).toHaveClass('hidden', 'lg:block');
     const header = document.querySelector('header') as HTMLElement;
     expect(header).not.toHaveTextContent('PropertyPro');
+    // Nothing to tab through, so the phone keeps the hamburger and its drawer.
+    expect(screen.getByRole('button', { name: 'Open navigation' })).toBeInTheDocument();
   });
 
   it('on a PM portfolio path with no community shows TopNav', async () => {

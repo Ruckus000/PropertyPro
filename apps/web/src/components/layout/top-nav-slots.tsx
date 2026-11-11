@@ -1,11 +1,10 @@
 'use client';
 
 /**
- * The shell's two other top-nav-flag slots (flag on, `lg` and up): the top-bar
- * brand and the desktop rail's place. Both read the pathname, which is why they
- * live here and not in the shell: the shell loads this module with `next/dynamic`
- * behind an inline flag check, so a flag-off shell neither ships them nor calls a
- * navigation hook it did not call before the flag existed.
+ * The shell's two other top-nav slots: the top-bar brand (a phone's only
+ * identification of the community; the rail's header does it at `lg`) and, with
+ * the top-nav flag on, the desktop rail's place. Both read the pathname, which is
+ * why they live here and not in the shell.
  */
 import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
@@ -16,11 +15,11 @@ import { isPmPortfolioPath } from './nav-config';
 
 /**
  * Whether the tabs have anything to list: a community, or the cross-community PM
- * portfolio routes. With neither (e.g. /select-community) the tab model is empty
- * and the hamburger is lg:hidden, which would leave no navigation at lg+; the
- * rail handles that state on purpose (its community picker), so it stays (R24).
+ * portfolio routes. With neither (e.g. /select-community) the tab model is empty,
+ * so a phone falls back to the hamburger and drawer (its community picker) and,
+ * with the flag on, the desktop keeps the rail (R24).
  */
-function tabsInScope(hasCommunity: boolean, pathname: string | null): boolean {
+export function tabsInScope(hasCommunity: boolean, pathname: string | null): boolean {
   return hasCommunity || isPmPortfolioPath(pathname ?? '');
 }
 
@@ -34,9 +33,10 @@ export function DesktopNavSlot({ hasCommunity, children }: { hasCommunity: boole
 }
 
 /**
- * Top-bar brand (D29): the rail header's tile, the community name and the plan.
- * Not a switcher — switching stays in ProfileMenu's "Switch Community". Absent
- * whenever the rail stands in for the tabs (R24), since the rail has its own.
+ * Top-bar brand (D29): the rail header's tile, the community name and, from `lg`,
+ * the plan. Not a switcher — switching stays in ProfileMenu's "Switch Community".
+ * Absent whenever the drawer or rail stands in for the tabs (R24), since it has its
+ * own. AppTopBar decides at which widths this is shown.
  */
 export function ShellBrandSlot({
   hasCommunity,
@@ -54,12 +54,16 @@ export function ShellBrandSlot({
     <div className="flex min-w-0 items-center gap-3">
       <PropertyProTile />
       <span
-        className="max-w-[16rem] truncate text-sm font-semibold text-content"
+        className="min-w-0 max-w-[16rem] truncate text-sm font-semibold text-content"
         title={communityName ?? undefined}
       >
         {communityName ?? 'PropertyPro'}
       </span>
-      {planId ? <PlanBadge label={PLAN_FEATURES[planId].displayName} /> : null}
+      {planId ? (
+        <span className="hidden lg:inline-flex">
+          <PlanBadge label={PLAN_FEATURES[planId].displayName} />
+        </span>
+      ) : null}
     </div>
   );
 }

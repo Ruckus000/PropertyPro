@@ -225,15 +225,15 @@ describe("NavRail", () => {
     it("uses expanded width classes", () => {
       renderNavRail({ expanded: true });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-[260px]");
-      expect(nav.className).toContain("min-w-[260px]");
+      expect(nav.className).toContain("w-[16.25rem]");
+      expect(nav.className).toContain("min-w-[16.25rem]");
     });
 
     it("uses collapsed width classes", () => {
       renderNavRail({ expanded: false });
       const nav = screen.getByRole("navigation");
-      expect(nav.className).toContain("w-[72px]");
-      expect(nav.className).toContain("min-w-[72px]");
+      expect(nav.className).toContain("w-[4.5rem]");
+      expect(nav.className).toContain("min-w-[4.5rem]");
     });
 
     it("label container toggles opacity class", () => {

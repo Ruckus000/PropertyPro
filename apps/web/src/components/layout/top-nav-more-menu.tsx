@@ -83,7 +83,7 @@ export function TopNavMoreMenu({
         align="end"
         collisionPadding={16}
         aria-label="More pages"
-        className="w-screen max-w-xl p-4"
+        className="w-[calc(100vw-2rem)] max-w-xl p-4"
       >
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           {groups.map((group) => {
