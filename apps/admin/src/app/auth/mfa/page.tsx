@@ -14,7 +14,7 @@
  */
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
-import { isAuthApiError, isAuthSessionMissingError } from '@supabase/supabase-js';
+import { getSafeAuthErrorMessage } from '@propertypro/db/supabase/auth-error';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { safeReturnTo } from '@/lib/auth/safe-return-to';
@@ -86,14 +86,10 @@ function MfaForm() {
       });
       if (cancelled) return;
       if (enrollError || !enrolled) {
-        // Only an AuthApiError was written by the Supabase server; anything else is
-        // the browser's raw fetch text, which Safari suffixes with the project host.
+        const setupFailed = 'Could not start authenticator setup.';
         setStep({
           kind: 'failed',
-          message:
-            enrollError && isAuthApiError(enrollError)
-              ? enrollError.message
-              : 'Could not start authenticator setup.',
+          message: enrollError ? getSafeAuthErrorMessage(enrollError, setupFailed) : setupFailed,
         });
         return;
       }
@@ -120,19 +116,21 @@ function MfaForm() {
         code: code.trim(),
       });
       if (verifyError) {
-        // A revoked session is not a network problem: retrying can never work.
-        throw new Error(
-          isAuthApiError(verifyError)
-            ? verifyError.message
-            : isAuthSessionMissingError(verifyError)
-              ? 'Your session has expired. Sign out and sign in again.'
-              : "We couldn't reach the verification service. Please try again.",
+        setError(
+          getSafeAuthErrorMessage(
+            verifyError,
+            "We couldn't reach the verification service. Please try again.",
+          ),
         );
+        setCode('');
+        return;
       }
       router.push(returnTo);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed');
+    } catch {
+      // Fixed text: an exception's message can carry internals, and auth-js
+      // rethrows anything that is not an AuthError.
+      setError('Verification failed');
       setCode('');
     } finally {
       setIsVerifying(false);

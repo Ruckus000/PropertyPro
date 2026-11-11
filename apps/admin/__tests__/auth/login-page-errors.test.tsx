@@ -44,9 +44,8 @@ async function submitCredentials(container: HTMLElement): Promise<void> {
   });
 }
 
-/** The error paragraph is the only `<p>` carrying the danger styling. */
 function errorText(container: HTMLElement): string | null {
-  return container.querySelector('p.text-status-danger')?.textContent ?? null;
+  return container.querySelector('[role="alert"]')?.textContent ?? null;
 }
 
 describe('admin login page error text', () => {
@@ -97,6 +96,20 @@ describe('admin login page error text', () => {
 
     await waitFor(() => expect(errorText(container)).toContain("couldn't reach the sign-in service"));
     expect(errorText(container)).not.toMatch(HOST_LEAK);
+  });
+
+  it('shows fixed text, not the message, when something other than an AuthError is thrown', async () => {
+    // auth-js rethrows anything that is not an AuthError (a storage or lock failure).
+    signInWithPasswordMock.mockRejectedValueOnce(
+      new Error('lock:sb-admin-auth-token timed out for abc123xyz.supabase.co'),
+    );
+    const { container } = render(<LoginPage />);
+
+    await submitCredentials(container);
+
+    await waitFor(() => expect(errorText(container)).toBe('Authentication failed'));
+    expect(errorText(container)).not.toMatch(HOST_LEAK);
+    expect(routerMock.push).not.toHaveBeenCalled();
   });
 
   it('navigates and shows no error on success', async () => {

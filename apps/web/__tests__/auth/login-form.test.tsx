@@ -24,7 +24,11 @@ vi.mock('next/link', () => ({
   ),
 }));
 
-vi.mock('@/lib/supabase/client', () => ({ createBrowserClient: createBrowserClientMock }));
+// The helper is the REAL one: faking the classification would test the fake.
+vi.mock('@/lib/supabase/client', async () => ({
+  ...(await import('@propertypro/db/supabase/auth-error')),
+  createBrowserClient: createBrowserClientMock,
+}));
 
 import { LoginForm } from '../../src/components/auth/login-form';
 

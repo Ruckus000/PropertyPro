@@ -135,6 +135,20 @@ describe('admin MFA page error text', () => {
       expect(alertText(container)).not.toMatch(HOST_LEAK);
     });
 
+    it('shows fixed text, not the message, when something other than an AuthError is thrown', async () => {
+      withVerifiedFactor();
+      mfa.challengeAndVerify.mockRejectedValueOnce(
+        new Error('lock:sb-admin-auth-token timed out for abc123xyz.supabase.co'),
+      );
+      const { container } = render(<MfaPage />);
+
+      await submitCode(container);
+
+      await waitFor(() => expect(alertText(container)).toBe('Verification failed'));
+      expect(alertText(container)).not.toMatch(HOST_LEAK);
+      expect(routerMock.push).not.toHaveBeenCalled();
+    });
+
     it('navigates and shows no error on success', async () => {
       withVerifiedFactor();
       mfa.challengeAndVerify.mockResolvedValueOnce({ data: {}, error: null });
@@ -159,6 +173,15 @@ describe('admin MFA page error text', () => {
       await waitFor(() =>
         expect(alertText(container)).toBe('Maximum number of verified factors reached'),
       );
+    });
+
+    it('tells an operator with a revoked session to sign in again, not that setup failed', async () => {
+      withNoFactor();
+      mfa.enroll.mockResolvedValueOnce({ data: null, error: new AuthSessionMissingError() });
+      const { container } = render(<MfaPage />);
+
+      await waitFor(() => expect(alertText(container)).toContain('Sign out and sign in again'));
+      expect(alertText(container)).not.toContain('Could not start');
     });
 
     it('hides the browser fetch text for a network failure and shows the fixed fallback', async () => {

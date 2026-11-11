@@ -61,19 +61,14 @@ export function LoginForm({ returnTo, destinationName = null }: LoginFormProps) 
     try {
       // Loaded on submit, not at module scope: the Supabase client is ~180 KiB
       // and nothing on this page needs it before the user signs in.
-      const [{ createBrowserClient }, { isAuthApiError }] = await Promise.all([
-        import('@/lib/supabase/client'),
-        import('@supabase/supabase-js'),
-      ]);
+      const { createBrowserClient, getSafeAuthErrorMessage } = await import('@/lib/supabase/client');
       const { error } = await createBrowserClient().auth.signInWithPassword({
         email,
         password,
       });
-      // signInWithPassword RETURNS a network failure rather than throwing it. Only
-      // an AuthApiError was written by the Supabase server; anything else is the
-      // browser's raw fetch text, which Safari suffixes with the project host
-      // ("Load failed (<ref>.supabase.co)"). Show our own copy for those.
-      signInError = error && !isAuthApiError(error) ? { message: UNREACHABLE } : error;
+      // signInWithPassword RETURNS a network failure rather than throwing it, and
+      // its message can name the Supabase host, so it is never rendered raw.
+      signInError = error ? { message: getSafeAuthErrorMessage(error, UNREACHABLE) } : null;
     } catch {
       signInError = { message: UNREACHABLE };
     }

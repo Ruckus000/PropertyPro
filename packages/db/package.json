@@ -39,6 +39,11 @@
       "import": "./src/supabase/cookie-config.ts",
       "default": "./src/supabase/cookie-config.ts"
     },
+    "./supabase/auth-error": {
+      "types": "./src/supabase/auth-error.ts",
+      "import": "./src/supabase/auth-error.ts",
+      "default": "./src/supabase/auth-error.ts"
+    },
     "./constants": {
       "types": "./src/constants/index.ts",
       "import": "./src/constants/index.ts",
