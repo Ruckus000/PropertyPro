@@ -37,7 +37,7 @@ export default function ConsoleRootLoading() {
       aria-label="Loading console"
       className="flex h-screen overflow-hidden"
     >
-      {/* Collapsed rail — AdminRail's own unpinned width is w-[72px]. */}
+      {/* Collapsed rail — AdminRail's own unpinned width is w-[4.5rem] (72px at admin's fixed 16px root). */}
       <div className="flex h-full w-[72px] shrink-0 flex-col items-center gap-4 border-r border-edge-subtle bg-surface-card py-4">
         <Block className="size-7 rounded-sm" />
         <Block className="size-6 rounded-sm" />

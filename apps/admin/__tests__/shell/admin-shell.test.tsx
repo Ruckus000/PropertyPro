@@ -193,7 +193,7 @@ describe('AdminShell', () => {
     );
 
     const nav = container.querySelector('nav[aria-label="Main navigation"]')!;
-    expect(nav.className).toContain('w-[260px]');
+    expect(nav.className).toContain('w-[16.25rem]');
 
     fireEvent.click(screen.getByRole('button', { name: /collapse navigation/i }));
     expect(localStorage.getItem('ppro-admin-nav-pinned')).toBe('false');
