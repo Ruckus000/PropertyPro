@@ -444,7 +444,10 @@ describe("NavRail", () => {
       fireEvent.click(screen.getByLabelText("Collapse sidebar"));
       expect(nav.className).toContain("transition-[width,min-width]");
 
-      fireEvent.transitionEnd(nav, { propertyName: "width" });
+      // jsdom has no TransitionEvent, so fireEvent would drop propertyName: build the event by hand.
+      const end = new Event("transitionend", { bubbles: true });
+      Object.defineProperty(end, "propertyName", { value: "width" });
+      fireEvent(nav, end);
       expect(nav.className).not.toContain("transition-[width,min-width]");
     });
 
