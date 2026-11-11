@@ -36,6 +36,12 @@ describe('buildAutoTrail', () => {
     expect(trail?.leafIsDynamic).toBe(false);
   });
 
+  it('skips the /pm/portfolio segment, which has no page of its own', () => {
+    const trail = buildAutoTrail('/pm/portfolio/templates', null);
+    expect(trail?.items).toEqual([]);
+    expect(trail?.currentLabel).toBe('Templates');
+  });
+
   it('keeps /pm/... portal hrefs path-scoped and drops the pm/dashboard roots', () => {
     const trail = buildAutoTrail('/pm/dashboard/communities', 2);
     expect(trail?.items).toEqual([]);

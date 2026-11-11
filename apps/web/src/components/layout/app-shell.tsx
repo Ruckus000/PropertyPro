@@ -16,12 +16,14 @@
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
+import { usePathname } from 'next/navigation';
 import { X } from 'lucide-react';
 import { resolveLifecycleState } from '@propertypro/shared';
 import type { CommunityRole, CommunityFeatures, CommunityType } from '@propertypro/shared';
 import type { ResourceAccessMap } from '@/lib/db/access-control';
 import { AppSidebar } from './app-sidebar';
 import { AppTopBar } from './app-top-bar';
+import { isPmPortfolioPath } from './nav-config';
 import { PageContainer, PAGE_GUTTER_X } from './page-container';
 import { ShellBreadcrumbs } from './shell-breadcrumbs';
 import { SidebarProvider, useSidebar } from './sidebar-context';
@@ -142,6 +144,11 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
       freeAccessExpiresAt: freeAccessExpiresAt ?? null,
     }) === 'lapsed';
   const { mobileOpen, setMobileOpen } = useSidebar();
+  // The PM portfolio pages (Communities, Reports, Templates) have no rail, tabs
+  // or drawer: Website needs a community, so the rail held only two links, which
+  // live in the Communities toolbar instead. The brand in the top bar is the way
+  // home. A community's own navigation returns once one is chosen.
+  const portfolioPage = isPmPortfolioPath(usePathname() ?? '');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchReady, setSearchReady] = useState(false);
 
@@ -220,7 +227,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
   };
   // Tabs replace the rail at `lg`+ only in a flag-on build (DesktopNavSlot is null otherwise).
   const tabsAtDesktop = topNav && DesktopNavSlot !== null;
-  const desktopRail = (
+  const desktopRail = portfolioPage ? null : (
     <div className="hidden lg:block">
       <AppSidebar {...sidebarProps} />
     </div>
@@ -236,23 +243,25 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
         desktopRail
       )}
 
-      {/* Mobile drawer overlay */}
-      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent
-          side="left"
-          className="w-[260px] border-0 bg-transparent p-0 shadow-none sm:w-[260px] sm:max-w-none [&>button]:hidden"
-        >
-          <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-          <div className="relative z-10 h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <AppSidebar
-              expandedOverride={true}
-              showCollapseToggle={false}
-              onNavigate={closeMobileNav}
-              {...sidebarProps}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Mobile drawer overlay (none on the portfolio pages: nothing to list) */}
+      {!portfolioPage && (
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent
+            side="left"
+            className="w-[260px] border-0 bg-transparent p-0 shadow-none sm:w-[260px] sm:max-w-none [&>button]:hidden"
+          >
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+            <div className="relative z-10 h-full overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              <AppSidebar
+                expandedOverride={true}
+                showCollapseToggle={false}
+                onNavigate={closeMobileNav}
+                {...sidebarProps}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* Main content area — inert when mobile drawer is open to trap focus */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={mobileOpen || undefined}>
@@ -261,7 +270,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
           userEmail={user?.email ?? null}
           communityId={community?.id ?? null}
           onSearchOpen={openSearch}
-          brandAtDesktop={tabsAtDesktop}
+          brandAtDesktop={tabsAtDesktop || portfolioPage}
           brand={
             <ShellBrandSlot
               hasCommunity={community != null}

@@ -104,13 +104,14 @@ describe('ShellTopNav', () => {
     expect(state.badgeArgs).toMatchObject({ lapsedAdmin: false });
   });
 
-  it('a PM portfolio path is a PM context and lists the PM items', () => {
+  it('renders nothing on a PM portfolio path: those pages have no tab row', () => {
     state.pathname = '/pm/dashboard/communities';
-    render(<ShellTopNav {...BASE} communityId={null} communityType={null} role={null} features={null} plan={null} />);
+    const { container } = render(
+      <ShellTopNav {...BASE} communityId={null} communityType={null} role={null} features={null} plan={null} />,
+    );
 
     expect(state.badgeArgs).toMatchObject({ isPmContext: true, communityId: null });
-    expect(state.topNavProps?.model.tabs.map((t) => t.id)).toContain('communities');
-    expect(state.topNavProps?.upgrade).toMatchObject({ currentPlanId: null, currentPlanRaw: null });
+    expect(container).toBeEmptyDOMElement();
   });
 
   it('renders nothing when no tab can be built', () => {

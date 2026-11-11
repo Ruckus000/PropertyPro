@@ -8,7 +8,6 @@ import {
 import {
   NAV_ITEMS,
   NAV_SECTIONS,
-  PM_NAV_ITEMS,
   buildSlimNavSections,
   getVisibleItemsWithPlanGate,
 } from '../../src/components/layout/nav-config';
@@ -148,14 +147,16 @@ describe('buildTopNavModel', () => {
     );
   });
 
-  it('PM path gives PM tabs only', () => {
-    const model = buildTopNavModel(
-      input({ pathname: '/pm/dashboard/communities', role: 'property_manager', communityId: null }),
-    );
-    expect(tabIds(model)).toEqual(PM_NAV_ITEMS.map((n) => n.id));
-    expect(model.moreGroups).toEqual([]);
-    expect(model.tabs.find((t) => t.id === 'communities')?.active).toBe(true);
-    expect(model.tabs.find((t) => t.id === 'communities')?.href).toBe('/pm/dashboard/communities');
+  // Including when a community is in scope (e.g. the page opened on a
+  // community's own host): the portfolio pages never show a community's tabs.
+  it.each([
+    ['/pm/dashboard/communities', null],
+    ['/pm/reports', null],
+    ['/pm/portfolio/templates', null],
+    ['/pm/dashboard/communities', 7],
+  ] as const)('PM portfolio path %s (community %s) gives no tabs', (pathname, communityId) => {
+    const model = buildTopNavModel(input({ pathname, role: 'property_manager', communityId }));
+    expect(model).toEqual({ tabs: [], moreGroups: [], moreHasActive: false, moreHasBadge: false });
   });
 
   it('lapsed admin gets dashboard only', () => {

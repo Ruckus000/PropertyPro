@@ -8,8 +8,8 @@
  *   communities (+ an "all communities overview" link). A search box appears
  *   only when the list grows past SEARCH_THRESHOLD, so the common case (1–3
  *   communities) stays a plain list with no command-palette overhead.
- * - Users with a single community — and the PM portal (`staticOnly`) — get a
- *   static brand header instead of a switcher.
+ * - Users with a single community get a static brand header instead of a
+ *   switcher.
  *
  * Reuses `useUserCommunities` + `buildCommunityDashboardUrl` (no duplicated
  * fetch logic). The popover is portaled, so it styles with GLOBAL semantic
@@ -44,20 +44,17 @@ interface SidebarTenantSwitcherProps {
   communityName: string | null;
   /** Sidebar expanded (label visible) vs collapsed (icon-only) rail state. */
   expanded: boolean;
-  /** PM portal: always render the static brand header, never the switcher. */
-  staticOnly?: boolean;
 }
 
 export function SidebarTenantSwitcher({
   communityId,
   communityName,
   expanded,
-  staticOnly = false,
 }: SidebarTenantSwitcherProps) {
   const [open, setOpen] = useState(false);
   const { data } = useUserCommunities();
   const communities = data ?? [];
-  const canSwitch = !staticOnly && communities.length >= 2;
+  const canSwitch = communities.length >= 2;
   const showSearch = communities.length > SEARCH_THRESHOLD;
 
   const brandMark = <PropertyProTile />;
@@ -76,7 +73,7 @@ export function SidebarTenantSwitcher({
     </div>
   );
 
-  // Single-community users and the PM portal get a non-interactive brand header.
+  // Single-community users get a non-interactive brand header.
   // Reserving the same height in both branches prevents a layout shift when the
   // (client-fetched) community count resolves. From `lg` the header is 3.5rem of
   // content plus its 1px rule (`box-content`), the same as AppTopBar's `lg:h-14`

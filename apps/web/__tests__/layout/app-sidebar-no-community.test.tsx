@@ -119,14 +119,7 @@ describe('AppSidebar PM context', () => {
     expect(screen.queryByRole('link', { name: /templates/i })).toBeNull();
   });
 
-  it('still shows the PM portfolio nav on portfolio routes', async () => {
-    mockPathname = '/pm/dashboard/communities';
-    renderSidebar(null);
-
-    expect(await screen.findByRole('link', { name: /templates/i })).toHaveAttribute(
-      'href',
-      '/pm/portfolio/templates',
-    );
-    expect(screen.queryByRole('link', { name: /documents/i })).toBeNull();
-  });
+  // The portfolio routes no longer mount this sidebar at all (AppShell; see
+  // app-shell-top-nav-flag.test.tsx), so the 4-item PM nav it used to swap in
+  // there is gone.
 });

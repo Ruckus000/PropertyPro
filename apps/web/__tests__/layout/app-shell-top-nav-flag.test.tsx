@@ -126,14 +126,25 @@ describe('AppShell — default build (NEXT_PUBLIC_TOP_NAV_ENABLED unset): the de
     expect(screen.queryByText('Sunset Condos')).toBeNull();
   });
 
-  it('phone on a PM portfolio path with no community: tabs and brand, no hamburger', async () => {
+  // The portfolio pages have no rail, tab row or drawer: the brand links home and
+  // the Communities toolbar links to Reports and Templates. (No tabs is pinned by
+  // top-nav-model / top-nav-shell; ShellTopNav is mocked here.)
+  it('a PM portfolio path has no rail and no hamburger; the brand links home at every width', async () => {
     nav.pathname = '/pm/dashboard/communities';
     renderShell(FlagOffAppShell, { plan: null, withCommunity: false });
 
-    await screen.findByTestId('top-nav');
+    expect(screen.queryByTestId('desktop-sidebar')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
-    const brand = (await screen.findByText('PropertyPro')).closest('div')?.parentElement;
-    expect(brand).toHaveClass('lg:hidden');
+    const brand = await screen.findByRole('link', { name: 'PropertyPro, all communities' });
+    expect(brand).toHaveAttribute('href', '/pm/dashboard/communities');
+    expect(brand.parentElement).not.toHaveClass('lg:hidden');
+  });
+
+  it('a community-scoped /pm page keeps the rail', async () => {
+    nav.pathname = '/pm/website';
+    renderShell(FlagOffAppShell);
+
+    expect(screen.getByTestId('desktop-sidebar').parentElement).toHaveClass('hidden', 'lg:block');
   });
 
   it('topNav={true} cannot swap the rail for tabs in a default build, which never loads that slot', async () => {
@@ -165,6 +176,15 @@ describe('AppShell — top tabs opt-in (NEXT_PUBLIC_TOP_NAV_ENABLED=true)', () =
     // The tab row sits under the top bar, before the page content.
     const header = document.querySelector('header') as HTMLElement;
     expect(header.nextElementSibling?.contains(screen.getByTestId('top-nav'))).toBe(true);
+  });
+
+  it('a PM portfolio path has no rail and shows the brand at desktop', async () => {
+    nav.pathname = '/pm/dashboard/communities';
+    renderShell(FlagOnAppShell, { plan: null, withCommunity: false });
+
+    expect(screen.queryByTestId('desktop-sidebar')).toBeNull();
+    const brand = await screen.findByRole('link', { name: 'PropertyPro, all communities' });
+    expect(brand.parentElement).toHaveClass('lg:flex-none');
   });
 
   it("an explicit 'false' keeps the rail", async () => {

@@ -131,6 +131,14 @@ export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbs
     currentLabel = leaf.label;
   }
 
+  // A crumb that links to this very page repeats the leaf: on Communities the
+  // home crumb is "Communities" and so is the page, which read as
+  // "Communities › Communities". Drop it.
+  const last = items[items.length - 1];
+  if (last && last.href.split('?')[0] === pathname && last.label === currentLabel) {
+    items = items.slice(0, -1);
+  }
+
   // A lone crumb has nothing to navigate to (e.g. resident sitting on their
   // own dashboard) — hide the strip entirely.
   if (items.length === 0) return null;

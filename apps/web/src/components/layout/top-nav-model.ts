@@ -12,7 +12,6 @@
 import {
   NAV_ITEMS,
   NAV_SECTIONS,
-  PM_NAV_ITEMS,
   buildSlimNavSections,
   getActiveItemId,
   getVisibleItemsWithPlanGate,
@@ -105,26 +104,12 @@ function badgeFor(
 export function buildTopNavModel(input: TopNavInput): TopNavModel {
   const { pathname, search, communityId, badges } = input;
 
-  // Cross-community PM portfolio routes carry no tenant, so this branch must
-  // come before the "no community" check — the rail swaps in PM_NAV_ITEMS here
-  // with a null community too.
-  if (isPmPortfolioPath(pathname)) {
-    const activeId = getActiveItemId(PM_NAV_ITEMS, pathname, search);
-    return {
-      ...EMPTY_MODEL,
-      tabs: PM_NAV_ITEMS.map((item) => ({
-        id: item.id,
-        label: item.label,
-        href: resolveNavItemHref(item, communityId, true),
-        active: item.id === activeId,
-        badge: null,
-        planLocked: false,
-        upgradePlanName: null,
-        upgradePlanId: null,
-        upgradeFeatureKey: null,
-      })),
-    };
-  }
+  // The PM portfolio pages (Communities, Reports, Templates) have no navigation:
+  // the Communities toolbar links to Reports and Templates, and a community's own
+  // tabs appear once one is chosen. Checked before the community is, because a
+  // community can still be in scope here (the page opened on a community's own
+  // host) and its tabs must not show.
+  if (isPmPortfolioPath(pathname)) return EMPTY_MODEL;
 
   // No community (e.g. /select-community): that page IS the picker, so no tabs.
   if (communityId === null) return EMPTY_MODEL;
