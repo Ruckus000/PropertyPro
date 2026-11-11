@@ -436,6 +436,18 @@ describe("NavRail", () => {
       expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
+    it("eases the width only after the toggle, not when the root font size changes", () => {
+      renderNavRail({ onToggle: vi.fn() });
+      const nav = screen.getByRole("navigation");
+      expect(nav.className).not.toContain("transition-[width,min-width]");
+
+      fireEvent.click(screen.getByLabelText("Collapse sidebar"));
+      expect(nav.className).toContain("transition-[width,min-width]");
+
+      fireEvent.transitionEnd(nav, { propertyName: "width" });
+      expect(nav.className).not.toContain("transition-[width,min-width]");
+    });
+
     it("shows expand label when collapsed", () => {
       const onToggle = vi.fn();
       renderNavRail({ expanded: false, onToggle });

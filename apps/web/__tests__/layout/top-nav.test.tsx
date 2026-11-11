@@ -99,6 +99,8 @@ describe('TopNav', () => {
     await user.click(more);
     expect(more).toHaveAttribute('aria-expanded', 'true');
     const panel = await screen.findByRole('dialog', { name: 'More pages' });
+    // Capped to the viewport minus a gutter: w-screen pushed the page sideways on a 375px phone.
+    expect(panel).toHaveClass('w-[calc(100vw-2rem)]', 'max-w-xl');
     expect(within(panel).getByText('Community')).toBeInTheDocument();
     expect(within(panel).getByRole('link', { name: 'Payments' })).toBeInTheDocument();
     expect(within(panel).getByText("Can't find it? Search every page and record.")).toBeInTheDocument();

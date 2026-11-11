@@ -56,6 +56,10 @@ const HELP_DOCS_MODAL_ENABLED =
 // the TOP_NAV_ENABLED constant, which does not fold across modules: next.config.ts
 // always defines it, so the condition compares two string literals that webpack
 // folds at parse time, and a default build drops the DesktopNavSlot import().
+// ponytail: the tab row and brand also mount on desktop in a default build, hidden by lg:hidden, so they
+// run their hooks and build the model per navigation for nothing (the badge queries share the rail's
+// keys: no extra requests). A matchMedia gate would risk an SSR mismatch. Trigger: the tab row's
+// render shows up in a navigation profile, or any ask to render it below lg only.
 const ShellTopNav = dynamic<ShellTopNavProps>(
   () => import('./top-nav-shell').then((m) => m.ShellTopNav),
   { loading: () => null },

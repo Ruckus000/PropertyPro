@@ -126,6 +126,16 @@ describe('AppShell — default build (NEXT_PUBLIC_TOP_NAV_ENABLED unset): the de
     expect(screen.queryByText('Sunset Condos')).toBeNull();
   });
 
+  it('phone on a PM portfolio path with no community: tabs and brand, no hamburger', async () => {
+    nav.pathname = '/pm/dashboard/communities';
+    renderShell(FlagOffAppShell, { plan: null, withCommunity: false });
+
+    await screen.findByTestId('top-nav');
+    expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
+    const brand = (await screen.findByText('PropertyPro')).closest('div')?.parentElement;
+    expect(brand).toHaveClass('lg:hidden');
+  });
+
   it('topNav={true} cannot swap the rail for tabs in a default build, which never loads that slot', async () => {
     renderShell(FlagOffAppShell, { topNav: true });
 
@@ -187,6 +197,9 @@ describe('AppShell — top tabs opt-in (NEXT_PUBLIC_TOP_NAV_ENABLED=true)', () =
     // Desktop only: below lg the hamburger + drawer carry the brand.
     // Shown on a phone too (it names the community there); at lg it shrinks to its content.
     expect(screen.getByText('Sunset Condos').closest('div')?.parentElement).toHaveClass('lg:flex-none');
+    // Search is an icon on a phone and the full field again from lg.
+    expect(screen.getByRole('search')).toHaveClass('flex-none', 'lg:flex-1');
+    expect(screen.getByRole('button', { name: /^Search documents/ })).toHaveClass('w-11', 'lg:w-full');
   });
 
   it('a community with no plan shows the name and no plan badge', async () => {

@@ -211,11 +211,12 @@ describe('DirectoryPageClient — split view offset (D30)', () => {
     return list as HTMLElement;
   }
 
-  it('directory split view uses the taller offset only when flag on', async () => {
+  it('directory split view uses the taller offset below lg always, and at lg+ only with the flag on', async () => {
     flag.on = false;
     const off = await openSplit();
-    expect(off.className).toContain('h-[calc(100dvh-16rem)]');
-    expect(off.className).not.toContain('h-[calc(100dvh-19rem)]');
+    // A phone has the tab row in every build; the desktop has the rail (no row).
+    expect(off.className).toContain('h-[calc(100dvh-19rem)]');
+    expect(off.className).toContain('lg:h-[calc(100dvh-16rem)]');
     cleanup();
 
     flag.on = true;

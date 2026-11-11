@@ -11,17 +11,7 @@ import { usePathname } from 'next/navigation';
 import { PlanBadge } from '@propertypro/ui';
 import { PLAN_FEATURES, resolvePlanId } from '@propertypro/shared';
 import { PropertyProTile } from '@/components/brand/property-pro-mark';
-import { isPmPortfolioPath } from './nav-config';
-
-/**
- * Whether the tabs have anything to list: a community, or the cross-community PM
- * portfolio routes. With neither (e.g. /select-community) the tab model is empty,
- * so a phone falls back to the hamburger and drawer (its community picker) and,
- * with the flag on, the desktop keeps the rail (R24).
- */
-export function tabsInScope(hasCommunity: boolean, pathname: string | null): boolean {
-  return hasCommunity || isPmPortfolioPath(pathname ?? '');
-}
+import { tabsInScope } from './nav-config';
 
 /**
  * The desktop rail's place in the shell with the flag on: empty while the tab
@@ -54,7 +44,7 @@ export function ShellBrandSlot({
     <div className="flex min-w-0 items-center gap-3">
       <PropertyProTile />
       <span
-        className="min-w-0 max-w-[16rem] truncate text-sm font-semibold text-content"
+        className="min-w-0 max-w-[16rem] line-clamp-2 break-words text-sm font-semibold leading-tight text-content lg:line-clamp-1"
         title={communityName ?? undefined}
       >
         {communityName ?? 'PropertyPro'}

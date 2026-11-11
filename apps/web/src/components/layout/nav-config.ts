@@ -466,6 +466,17 @@ export function isPmPortfolioPath(pathname: string): boolean {
 }
 
 /**
+ * Whether the tabs have anything to list: a community, or the cross-community PM
+ * portfolio routes. With neither (e.g. /select-community) the tab model is empty,
+ * so a phone falls back to the hamburger and drawer (its community picker) and,
+ * with the top-nav flag on, the desktop keeps the rail (R24). The top bar, the
+ * brand slot and the rail slot all ask this, so they cannot drift apart.
+ */
+export function tabsInScope(hasCommunity: boolean, pathname: string | null): boolean {
+  return hasCommunity || isPmPortfolioPath(pathname ?? '');
+}
+
+/**
  * Resolve a sidebar item's destination href.
  *
  * PM portfolio routes (PM_NAV_ITEMS) are cross-community — their href

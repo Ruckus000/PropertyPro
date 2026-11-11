@@ -13,7 +13,7 @@ import type { ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import { CircleHelp, Menu, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { isPmPortfolioPath } from './nav-config';
+import { tabsInScope } from './nav-config';
 import { useHelpWidget } from '@/components/help/help-widget-provider';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { ProfileMenu } from './profile-menu';
@@ -33,8 +33,7 @@ interface AppTopBarProps {
 export function AppTopBar({ userName, userEmail, communityId, onSearchOpen, brand, brandAtDesktop = false }: AppTopBarProps) {
   const { setMobileOpen } = useSidebar();
   const pathname = usePathname();
-  // Same scope as the tab row and the brand slot: a community, or the PM portfolio.
-  const tabsOnPhone = communityId !== null || isPmPortfolioPath(pathname);
+  const tabsOnPhone = tabsInScope(communityId !== null, pathname);
   const { toggle: toggleHelp } = useHelpWidget();
 
   return (

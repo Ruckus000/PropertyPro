@@ -182,6 +182,10 @@ export function NavRail({
   onSectionToggle,
 }: NavRailProps) {
   const navRef = useRef<HTMLElement | null>(null);
+  // The width eases only after the collapse/expand button. The width is in rem, so
+  // a change of the fluid root font size (a window resize) would otherwise animate
+  // it too; the flag clears when the width transition ends.
+  const [animateWidth, setAnimateWidth] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>(() =>
     sections.reduce<Record<string, boolean>>((state, section) => {
       for (const item of section.items) {
@@ -425,8 +429,12 @@ export function NavRail({
     <nav
       ref={navRef}
       aria-label="Main navigation"
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && event.propertyName === "width") setAnimateWidth(false);
+      }}
       className={cn(
-        "relative flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--nav-border-divider)] bg-[var(--nav-surface)] text-[var(--nav-text-inactive)] transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
+        "relative flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--nav-border-divider)] bg-[var(--nav-surface)] text-[var(--nav-text-inactive)]",
+        animateWidth && "transition-[width,min-width] duration-250 ease-[cubic-bezier(0.4,0,0.2,1)]",
         expanded ? "w-[16.25rem] min-w-[16.25rem]" : "w-[4.5rem] min-w-[4.5rem]",
       )}
     >
@@ -606,7 +614,10 @@ export function NavRail({
         <div className="border-t border-[var(--nav-divider)]">
           <button
             type="button"
-            onClick={onToggle}
+            onClick={() => {
+              setAnimateWidth(true);
+              onToggle();
+            }}
             aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
               "flex min-h-11 md:min-h-0 w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
