@@ -18,6 +18,8 @@ interface LoginFormProps {
  */
 const ENTERING_TIMEOUT_MS = 20_000;
 
+const UNREACHABLE = "We couldn't reach the sign-in service. Please try again.";
+
 const INPUT_CLASS =
   'h-12 w-full rounded-sm border border-edge-strong bg-surface-card px-4 text-base text-content transition-colors duration-quick placeholder:text-content-placeholder focus-visible:border-interactive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus';
 
@@ -59,13 +61,21 @@ export function LoginForm({ returnTo, destinationName = null }: LoginFormProps) 
     try {
       // Loaded on submit, not at module scope: the Supabase client is ~180 KiB
       // and nothing on this page needs it before the user signs in.
-      const { createBrowserClient } = await import('@/lib/supabase/client');
-      ({ error: signInError } = await createBrowserClient().auth.signInWithPassword({
+      const [{ createBrowserClient }, { isAuthApiError }] = await Promise.all([
+        import('@/lib/supabase/client'),
+        import('@supabase/supabase-js'),
+      ]);
+      const { error } = await createBrowserClient().auth.signInWithPassword({
         email,
         password,
-      }));
+      });
+      // signInWithPassword RETURNS a network failure rather than throwing it. Only
+      // an AuthApiError was written by the Supabase server; anything else is the
+      // browser's raw fetch text, which Safari suffixes with the project host
+      // ("Load failed (<ref>.supabase.co)"). Show our own copy for those.
+      signInError = error && !isAuthApiError(error) ? { message: UNREACHABLE } : error;
     } catch {
-      signInError = { message: "We couldn't reach the sign-in service. Please try again." };
+      signInError = { message: UNREACHABLE };
     }
 
     setLoading(false);

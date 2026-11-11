@@ -9,6 +9,7 @@
  */
 import { useState, useMemo, useEffect } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { isAuthApiError } from '@supabase/supabase-js';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { safeReturnTo } from '@/lib/auth/safe-return-to';
@@ -109,7 +110,13 @@ function LoginForm() {
       });
 
       if (authError) {
-        throw new Error(authError.message);
+        // Only an AuthApiError was written by the Supabase server. Anything else is
+        // the browser's raw fetch text, which Safari suffixes with the project host.
+        throw new Error(
+          isAuthApiError(authError)
+            ? authError.message
+            : "We couldn't reach the sign-in service. Please try again.",
+        );
       }
 
       // Middleware will verify platform_admin_users and redirect to /auth/login?error=access_denied

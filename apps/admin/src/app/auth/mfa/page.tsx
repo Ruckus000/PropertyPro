@@ -14,6 +14,7 @@
  */
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
+import { isAuthApiError, isAuthSessionMissingError } from '@supabase/supabase-js';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ADMIN_COOKIE_OPTIONS } from '@/lib/auth/cookie-config';
 import { safeReturnTo } from '@/lib/auth/safe-return-to';
@@ -85,9 +86,14 @@ function MfaForm() {
       });
       if (cancelled) return;
       if (enrollError || !enrolled) {
+        // Only an AuthApiError was written by the Supabase server; anything else is
+        // the browser's raw fetch text, which Safari suffixes with the project host.
         setStep({
           kind: 'failed',
-          message: enrollError?.message ?? 'Could not start authenticator setup.',
+          message:
+            enrollError && isAuthApiError(enrollError)
+              ? enrollError.message
+              : 'Could not start authenticator setup.',
         });
         return;
       }
@@ -113,7 +119,16 @@ function MfaForm() {
         factorId: step.factorId,
         code: code.trim(),
       });
-      if (verifyError) throw new Error(verifyError.message);
+      if (verifyError) {
+        // A revoked session is not a network problem: retrying can never work.
+        throw new Error(
+          isAuthApiError(verifyError)
+            ? verifyError.message
+            : isAuthSessionMissingError(verifyError)
+              ? 'Your session has expired. Sign out and sign in again.'
+              : "We couldn't reach the verification service. Please try again.",
+        );
+      }
       router.push(returnTo);
       router.refresh();
     } catch (err) {
