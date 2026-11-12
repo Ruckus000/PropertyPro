@@ -24,10 +24,14 @@ export const STATUS_CONFIG = {
   completed: { variant: "success", label: "Completed", icon: "success", priority: 50 },
   satisfied: { variant: "success", label: "Satisfied", icon: "success", priority: 45 },
   certified: { variant: "success", label: "Certified", icon: "success", priority: 48 },
+  // Maintenance-request lifecycle (submitted → acknowledged → in_progress →
+  // resolved → closed). Labels match the mobile maintenance list.
+  resolved: { variant: "success", label: "Resolved", icon: "success", priority: 52 },
 
   pending: { variant: "warning", label: "Due Soon", icon: "warning", priority: 10 },
   due_soon: { variant: "warning", label: "Due Soon", icon: "warning", priority: 10 },
   assigned: { variant: "warning", label: "Assigned", icon: "warning", priority: 18 },
+  acknowledged: { variant: "warning", label: "Acknowledged", icon: "warning", priority: 19 },
   in_progress: { variant: "warning", label: "In Progress", icon: "warning", priority: 20 },
   review: { variant: "warning", label: "Under Review", icon: "warning", priority: 15 },
 

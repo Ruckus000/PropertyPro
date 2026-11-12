@@ -100,6 +100,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
 
   return (
     <FeatureGate feature="hasFinance" communityId={communityId}>
+      <PageHeader title="Payments" />
       <PaymentPortal
         communityId={communityId}
         userRole={membership.role}

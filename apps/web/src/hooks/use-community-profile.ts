@@ -13,7 +13,8 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiRequestError, requestJson } from '@/lib/api/request-json';
+import { requestJson } from '@/lib/api/request-json';
+import { retryUnlessRefused } from '@/lib/api/retry-unless-refused';
 import type {
   CommunityProfilePatchBody,
   CommunityProfilePayload,
@@ -24,17 +25,6 @@ export type CommunityProfilePatch = Omit<CommunityProfilePatchBody, 'communityId
 
 export function communityProfileQueryKey(communityId: number) {
   return ['community-profile', communityId] as const;
-}
-
-/**
- * The app's usual three retries, except for a refusal. A 4xx answer (a lapsed
- * subscription, a role that may not read this) will not change on a second
- * asking, and retrying it keeps a skeleton on screen for about seven seconds
- * before the reason appears.
- */
-function retryUnlessRefused(failureCount: number, error: Error): boolean {
-  if (error instanceof ApiRequestError && error.status >= 400 && error.status < 500) return false;
-  return failureCount < 3;
 }
 
 export function useCommunityProfile(communityId: number) {

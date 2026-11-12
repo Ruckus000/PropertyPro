@@ -11,6 +11,18 @@ import {
 const CATEGORIES = ['plumbing', 'electrical', 'hvac', 'general', 'other'] as const;
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
+/**
+ * Display labels, written out rather than derived by capitalising the value:
+ * `hvac` is an acronym, and first-letter capitalisation rendered it "Hvac".
+ */
+const CATEGORY_LABELS: Record<(typeof CATEGORIES)[number], string> = {
+  plumbing: 'Plumbing',
+  electrical: 'Electrical',
+  hvac: 'HVAC',
+  general: 'General',
+  other: 'Other',
+};
+
 const formSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500),
   unitLabel: z
@@ -191,7 +203,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c.charAt(0).toUpperCase() + c.slice(1)}
+                {CATEGORY_LABELS[c]}
               </option>
             ))}
           </select>

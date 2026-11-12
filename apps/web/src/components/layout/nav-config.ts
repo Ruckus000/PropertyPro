@@ -318,7 +318,11 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'ARC Requests',
     icon: ClipboardCheck,
     href: (cid) => `/arc-requests?communityId=${cid}`,
-    visibility: 'admin',
+    // Intentionally NO `visibility` gate: owners and tenants submit ARC
+    // applications (`requireArcSubmitterRole` admits exactly `resident`), and
+    // the page role-branches to `ResidentArcRequests` for them. Managers get the
+    // review inbox from the same link. `hasARC` is a condo/HOA type feature, so
+    // apartments never see it.
     featureKey: 'hasARC',
     navTier: 'more',
     matchPrefixes: ['/arc-requests'],
@@ -368,14 +372,16 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
   navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage']),
-  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
+  // `arc-requests` sits beside `violations-report`, not under Admin: residents
+  // see it too (they submit ARC applications), and an "Admin" heading over a
+  // resident's own requests would be wrong.
+  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report', 'arc-requests']),
   navSection('Admin', [
     'compliance',
     'directory',
     'contracts',
     'esign',
     'violations-inbox',
-    'arc-requests',
     'move-in-out',
     'audit-trail',
   ]),
