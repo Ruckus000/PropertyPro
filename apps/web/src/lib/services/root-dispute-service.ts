@@ -92,9 +92,9 @@ export async function openDispute(
  * never sees two roots mid-statement.
  *
  * Billing follows root (`moveBillingOwnershipWithRootTx`): when `from` owns the
- * billing group this community is in and is root of nothing else in it, the
- * group passes to `to`. Refused (409, nothing changes) when `to` already owns a
- * different group.
+ * billing group this community is in and is root of nothing else in it, or the
+ * owner no longer manages any community in it, the group passes to `to`.
+ * Refused (409, nothing changes) when `to` already owns a different group.
  */
 export async function transferRoot(
   communityId: number,
@@ -150,17 +150,22 @@ export async function transferRoot(
     return move;
   });
 
-  const billingMoved = billing.outcome === 'moved' ? billing.billingGroupId : null;
   await logAuditEvent({
     userId: fromUserId,
     action: 'root_transferred',
     resourceType: 'community',
     resourceId: String(communityId),
     communityId,
-    oldValues: { root: fromUserId, ...(billingMoved !== null && { billingGroupOwner: fromUserId }) },
+    oldValues: {
+      root: fromUserId,
+      ...(billing.outcome === 'moved' && { billingGroupOwner: billing.previousOwnerUserId }),
+    },
     newValues: {
       root: toUserId,
-      ...(billingMoved !== null && { billingGroupOwner: toUserId, billingGroupId: billingMoved }),
+      ...(billing.outcome === 'moved' && {
+        billingGroupOwner: toUserId,
+        billingGroupId: billing.billingGroupId,
+      }),
     },
   });
 }

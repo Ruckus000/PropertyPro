@@ -14,7 +14,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 // AUTHZ: platform-admin-only reassignment (requirePlatformAdmin gate above); reassignRootOp performs the atomic cross-community root swap.
-import { reassignRootOp, RoleOpForbiddenError } from '@propertypro/db/unsafe';
+import { reassignRootOp, RoleOpForbiddenError, RootOpConflictError } from '@propertypro/db/unsafe';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { parseJsonBody } from '@/lib/api/parse-body';
 
@@ -49,8 +49,14 @@ export const POST = withAdminErrorHandler(async (request: NextRequest) => {
         { status: 403 },
       );
     }
-    // RoleOpForbiddenError above is an intentional, user-facing outcome and
-    // keeps its message. Anything else is an internal failure: rethrow so the
+    if (err instanceof RootOpConflictError) {
+      return NextResponse.json(
+        { error: { code: 'CONFLICT', message: err.message } },
+        { status: 409 },
+      );
+    }
+    // The two errors above are intentional, user-facing outcomes and keep
+    // their messages. Anything else is an internal failure: rethrow so the
     // wrapper reports it and returns the opaque 500.
     throw err;
   }
