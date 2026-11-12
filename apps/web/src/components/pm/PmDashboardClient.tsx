@@ -27,7 +27,6 @@ import { cn } from '@/lib/utils';
 import { PORTFOLIO_VIEWS, type PortfolioView } from '@/lib/pm/portfolio-summary-keys';
 import { defaultViewMode, pickTier, typeLabel } from '@/lib/pm/communities-page';
 import { getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
-import { AddCommunityModal } from './add-community-modal';
 import { CommunityAddedModal } from './CommunityAddedModal';
 import { SiteSetupBanner } from './SiteSetupBanner';
 import { BulkAnnouncementDialog } from './BulkAnnouncementDialog';
@@ -39,6 +38,13 @@ import { BulkActionBar } from './communities/BulkActionBar';
 // Loaded on demand: it closes by default, and its upload rules and redaction
 // field would otherwise put the dashboard over the web JS budget (perf-check).
 const BulkDocumentDialog = dynamic(() => import('./BulkDocumentDialog').then((m) => m.BulkDocumentDialog), {
+  loading: () => null,
+});
+
+// Same reason: the add form carries Stripe checkout and the reauth step, and
+// only a billing-owner root ever opens it. Mounted on first open, so no other
+// visitor fetches it either.
+const AddCommunityModal = dynamic(() => import('./add-community-modal').then((m) => m.AddCommunityModal), {
   loading: () => null,
 });
 
@@ -106,6 +112,7 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
   const [selected, setSelected] = useState<ReadonlyMap<number, string>>(new Map());
   const [selecting, setSelecting] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addMounted, setAddMounted] = useState(false);
   const [bulkAnnouncementOpen, setBulkAnnouncementOpen] = useState(false);
   const [bulkDocumentOpen, setBulkDocumentOpen] = useState(false);
 
@@ -190,7 +197,12 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
 
   const filtered = Boolean(communityType || search || view);
   const showBulkBar = viewMode === 'list' && selected.size > 0;
-  const openAdd = addAccess.data?.allowed ? () => setIsAddModalOpen(true) : undefined;
+  const openAdd = addAccess.data?.allowed
+    ? () => {
+        setAddMounted(true);
+        setIsAddModalOpen(true);
+      }
+    : undefined;
 
   function renderEmpty() {
     if (!data) return null;
@@ -361,7 +373,9 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
         />
       )}
 
-      {openAdd && <AddCommunityModal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />}
+      {openAdd && addMounted && (
+        <AddCommunityModal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      )}
 
       {/* Confirmation shown when Stripe checkout returns after adding a community. */}
       <CommunityAddedModal />
