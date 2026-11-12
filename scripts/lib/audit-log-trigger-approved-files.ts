@@ -6,6 +6,7 @@
 export const AUDIT_LOG_TRIGGER_APPROVED_FILES = [
   'apps/web/__tests__/integration/helpers/multi-tenant-test-kit.ts',
   'apps/web/__tests__/elections/vote-integration.test.ts',
+  'packages/db/__tests__/add-community-billing.integration.test.ts',
   'packages/db/__tests__/reconcile-auth-user-id.integration.test.ts',
   'packages/db/src/seed/community/users.ts',
 ] as const;

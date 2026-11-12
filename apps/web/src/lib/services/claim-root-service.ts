@@ -4,8 +4,12 @@
 // @propertypro/db/unsafe. This file MUST be added to WEB_UNSAFE_IMPORT_ALLOWLIST
 // in scripts/verify-scoped-db-access.ts (the // AUTHZ comment alone is insufficient
 // — both guards apply; this is the #718 two-guard lesson).
-// AUTHZ: findMyRootlessCommunities (cross-community) resolves the caller's own rootless property_manager memberships; self-scoped to the session user (see the file-level rationale above).
-import { findMyRootlessCommunities } from '@propertypro/db/unsafe';
+// AUTHZ: findMyRootlessCommunities (cross-community) resolves the caller's own rootless property_manager memberships; claimRootOp runs the claim and the billing move in one unscoped transaction, only after the property_manager + rootless checks below.
+import {
+  claimRootOp,
+  findMyRootlessCommunities,
+  type BillingOwnershipMove,
+} from '@propertypro/db/unsafe';
 import { createScopedClient, logAuditEvent, userRoles } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 import { ForbiddenError } from '@/lib/api/errors';
@@ -52,15 +56,12 @@ export async function claimRoot(
     return { communityId, claimed: false, reason: 'already_claimed' };
   }
 
-  // 3. Flip my row to root_manager — the one-root index makes a concurrent
-  //    winner exclusive (the loser hits a 23505 unique violation).
+  // 3. Flip my row to root_manager, with billing following root in the same
+  //    transaction. The one-root index makes a concurrent winner exclusive (the
+  //    loser hits a 23505 unique violation).
+  let billing: BillingOwnershipMove;
   try {
-    await scoped.update(
-      userRoles,
-      // scoped-client auto-stamps updatedAt for tables that have the column.
-      { role: 'root_manager' },
-      and(eq(userRoles.userId, userId), eq(userRoles.role, 'property_manager')),
-    );
+    billing = await claimRootOp(communityId, userId);
   } catch (err: unknown) {
     // Another manager claimed root first: `user_roles_one_root_per_community`.
     if (isNamedUniqueViolation(err, 'user_roles_one_root_per_community')) {
@@ -75,7 +76,16 @@ export async function claimRoot(
     resourceType: 'community',
     resourceId: String(communityId),
     communityId,
-    newValues: { role: 'root_manager' },
+    ...(billing.outcome === 'moved' && {
+      oldValues: { billingGroupOwner: billing.previousOwnerUserId },
+    }),
+    newValues: {
+      role: 'root_manager',
+      ...(billing.outcome === 'moved' && {
+        billingGroupOwner: userId,
+        billingGroupId: billing.billingGroupId,
+      }),
+    },
   });
 
   // Best-effort: a Resend/notification failure must NOT 500 a claim that already

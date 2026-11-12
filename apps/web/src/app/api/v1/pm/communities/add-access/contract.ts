@@ -6,8 +6,8 @@
  * Communities page ask this before showing Add Community; the POST asks the
  * same question again (`requireAddCommunityAccess`).
  *
- * Read-only on purpose: `GET /api/v1/billing-groups/mine`, which this
- * replaces, created a billing group as a side effect of being asked.
+ * Read-only on purpose: asking must never create or claim a billing group.
+ * The group is set up by the first add (`POST /api/v1/pm/communities`).
  *
  * `permission` is metadata only; the runner does not enforce it.
  */

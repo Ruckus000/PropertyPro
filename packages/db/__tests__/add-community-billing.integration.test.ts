@@ -4,16 +4,19 @@
  *   - `findAddCommunityFactsUnscoped` reads the caller's own billing groups and
  *     management roles, skipping deleted ones.
  *   - `moveBillingOwnershipWithRootTx` passes a billing group to a community's
- *     new root when the old root owned it and is root of nothing else in it.
+ *     new root when the old root owned it and is root of nothing else in it, or
+ *     when the owner manages nothing in the group any more. `claimRootOp` and
+ *     `reassignRootOp` run it in their own transactions.
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { and, eq, inArray, like } from 'drizzle-orm';
+import { and, eq, inArray, like, sql as dsql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
 import { billingGroups } from '../src/schema/billing-groups';
 import { communities } from '../src/schema/communities';
+import { complianceAuditLog } from '../src/schema/compliance-audit-log';
 import { userRoles } from '../src/schema/user-roles';
 import { users } from '../src/schema/users';
 
@@ -29,10 +32,31 @@ describeDb('add community: facts and billing ownership (integration)', () => {
   const from = randomUUID();
   const to = randomUUID();
   const other = randomUUID();
+  /** An owner whose account is gone: no users row and no roles. */
+  const gone = randomUUID();
+  /** An owner who still has an account but has left the group. */
+  const leaver = randomUUID();
 
+  /**
+   * reassignRootOp writes compliance_audit_log, which is append-only and holds
+   * its community with ON DELETE restrict. Remove only this file's rows, under
+   * the shared audit-maintenance advisory lock (same as
+   * reconcile-auth-user-id.integration.test.ts), then the communities.
+   */
   async function clean() {
-    await db.delete(communities).where(like(communities.slug, `${SLUG_PREFIX}%`));
-    await db.delete(billingGroups).where(like(billingGroups.stripeCustomerId, `${CUSTOMER_PREFIX}%`));
+    await db.transaction(async (tx) => {
+      const ids = (
+        await tx.select({ id: communities.id }).from(communities).where(like(communities.slug, `${SLUG_PREFIX}%`))
+      ).map((r) => Number(r.id));
+      if (ids.length > 0) {
+        await tx.execute(dsql`SELECT pg_advisory_xact_lock(817, 1)`);
+        await tx.execute(dsql`alter table compliance_audit_log disable trigger compliance_audit_log_append_only_guard`);
+        await tx.delete(complianceAuditLog).where(inArray(complianceAuditLog.communityId, ids));
+        await tx.execute(dsql`alter table compliance_audit_log enable trigger compliance_audit_log_append_only_guard`);
+        await tx.delete(communities).where(inArray(communities.id, ids));
+      }
+      await tx.delete(billingGroups).where(like(billingGroups.stripeCustomerId, `${CUSTOMER_PREFIX}%`));
+    });
   }
 
   async function group(owner: string, key: string, deleted = false): Promise<number> {
@@ -103,11 +127,12 @@ describeDb('add community: facts and billing ownership (integration)', () => {
     sqlClient = postgres(process.env.DATABASE_URL!, { prepare: false });
     db = drizzle(sqlClient, { schema });
     await clean();
-    await db.delete(users).where(inArray(users.id, [from, to, other]));
+    await db.delete(users).where(inArray(users.id, [from, to, other, leaver]));
     await db.insert(users).values([
       { id: from, email: `from+${SLUG_PREFIX}@example.com`, fullName: 'Outgoing Root' },
       { id: to, email: `to+${SLUG_PREFIX}@example.com`, fullName: 'Incoming Root' },
       { id: other, email: `other+${SLUG_PREFIX}@example.com`, fullName: 'Someone Else' },
+      { id: leaver, email: `leaver+${SLUG_PREFIX}@example.com`, fullName: 'Left The Portfolio' },
     ]);
   });
 
@@ -115,7 +140,7 @@ describeDb('add community: facts and billing ownership (integration)', () => {
 
   afterAll(async () => {
     await clean();
-    await db.delete(users).where(inArray(users.id, [from, to, other]));
+    await db.delete(users).where(inArray(users.id, [from, to, other, leaver]));
     await sqlClient.end();
   });
 
@@ -160,7 +185,7 @@ describeDb('add community: facts and billing ownership (integration)', () => {
       await grant(to, a, 'property_manager');
       await grant(other, b, 'root_manager');
 
-      expect(await transfer(a)).toEqual({ outcome: 'moved', billingGroupId: g });
+      expect(await transfer(a)).toEqual({ outcome: 'moved', billingGroupId: g, previousOwnerUserId: from });
       expect(await ownerOf(g)).toBe(to);
     });
 
@@ -185,17 +210,34 @@ describeDb('add community: facts and billing ownership (integration)', () => {
       await grant(from, gone, 'root_manager');
       await grant(to, a, 'property_manager');
 
-      expect(await transfer(a)).toEqual({ outcome: 'moved', billingGroupId: g });
+      expect(await transfer(a)).toEqual({ outcome: 'moved', billingGroupId: g, previousOwnerUserId: from });
     });
 
-    it('leaves a group the old root never owned', async () => {
+    it('leaves a group the old root never owned while its owner still manages a community in it', async () => {
       const g = await group(other, 'g');
       const a = await community('a', g);
+      const b = await community('b', g);
       await grant(from, a, 'root_manager');
       await grant(to, a, 'property_manager');
+      await grant(other, b, 'property_manager');
 
       expect(await transfer(a)).toEqual({ outcome: 'kept' });
       expect(await ownerOf(g)).toBe(other);
+    });
+
+    it('passes an orphaned group (its owner manages nothing in it) to the new root', async () => {
+      const g = await group(leaver, 'g');
+      const a = await community('a', g);
+      const b = await community('b', g);
+      await grant(from, a, 'root_manager');
+      await grant(to, a, 'property_manager');
+      // A role outside the group, or in a deleted community of it, does not count.
+      await grant(leaver, await community('elsewhere', null), 'root_manager');
+      await grant(leaver, await community('deleted', g, { deleted: true }), 'property_manager');
+      await grant(other, b, 'root_manager');
+
+      expect(await transfer(a)).toEqual({ outcome: 'moved', billingGroupId: g, previousOwnerUserId: leaver });
+      expect(await ownerOf(g)).toBe(to);
     });
 
     it('does nothing for a community with no billing group', async () => {
@@ -224,6 +266,87 @@ describeDb('add community: facts and billing ownership (integration)', () => {
         .set({ role: 'root_manager' })
         .where(and(eq(userRoles.communityId, a), eq(userRoles.userId, from)));
       await expect(transfer(a)).rejects.toThrow('refused');
+      expect(await rootOf(a)).toEqual([from]);
+      expect(await ownerOf(g)).toBe(from);
+    });
+  });
+  describe('claimRootOp', () => {
+    it('makes the claimer root and hands them an orphaned group', async () => {
+      const g = await group(gone, 'g');
+      const a = await community('a', g);
+      await grant(to, a, 'property_manager');
+
+      expect(await unsafe.claimRootOp(a, to)).toEqual({ outcome: 'moved', billingGroupId: g, previousOwnerUserId: gone });
+      expect(await rootOf(a)).toEqual([to]);
+      expect(await ownerOf(g)).toBe(to);
+    });
+
+    it('keeps the group with an owner who still manages a community in it', async () => {
+      const g = await group(other, 'g');
+      const a = await community('a', g);
+      const b = await community('b', g);
+      await grant(to, a, 'property_manager');
+      await grant(other, b, 'property_manager');
+
+      expect(await unsafe.claimRootOp(a, to)).toEqual({ outcome: 'kept' });
+      expect(await rootOf(a)).toEqual([to]);
+      expect(await ownerOf(g)).toBe(other);
+    });
+
+    it('still claims when the claimer owns another group, and leaves billing alone', async () => {
+      const g = await group(gone, 'g');
+      await group(to, 'theirs');
+      const a = await community('a', g);
+      await grant(to, a, 'property_manager');
+
+      expect(await unsafe.claimRootOp(a, to)).toEqual({ outcome: 'target_owns_other_group', billingGroupId: g });
+      expect(await rootOf(a)).toEqual([to]);
+      expect(await ownerOf(g)).toBe(gone);
+    });
+  });
+
+  describe('reassignRootOp', () => {
+    it('moves billing from the demoted root to the new one, and audits both', async () => {
+      const g = await group(from, 'g');
+      const a = await community('a', g);
+      await grant(from, a, 'root_manager');
+      await grant(to, a, 'property_manager');
+
+      await unsafe.reassignRootOp({ communityId: a, newUserId: to, actingUserId: other });
+
+      expect(await rootOf(a)).toEqual([to]);
+      expect(await ownerOf(g)).toBe(to);
+      const [audit] = await db
+        .select({ oldValues: complianceAuditLog.oldValues, newValues: complianceAuditLog.newValues })
+        .from(complianceAuditLog)
+        .where(and(eq(complianceAuditLog.communityId, a), eq(complianceAuditLog.action, 'root_reassigned')));
+      expect(audit).toEqual({
+        oldValues: { root: from, billingGroupOwner: from },
+        newValues: { root: to, billingGroupOwner: to, billingGroupId: g },
+      });
+    });
+
+    it('hands the orphaned group of a rootless community to the new root', async () => {
+      const g = await group(gone, 'g');
+      const a = await community('a', g);
+      await grant(to, a, 'property_manager');
+
+      await unsafe.reassignRootOp({ communityId: a, newUserId: to, actingUserId: other });
+
+      expect(await rootOf(a)).toEqual([to]);
+      expect(await ownerOf(g)).toBe(to);
+    });
+
+    it('refuses with RootOpConflictError, changing nothing, when the new root owns another group', async () => {
+      const g = await group(from, 'g');
+      await group(to, 'theirs');
+      const a = await community('a', g);
+      await grant(from, a, 'root_manager');
+      await grant(to, a, 'property_manager');
+
+      await expect(
+        unsafe.reassignRootOp({ communityId: a, newUserId: to, actingUserId: other }),
+      ).rejects.toBeInstanceOf(unsafe.RootOpConflictError);
       expect(await rootOf(a)).toEqual([from]);
       expect(await ownerOf(g)).toBe(from);
     });

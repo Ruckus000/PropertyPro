@@ -31,7 +31,8 @@
  * - `console.error(..., err.message)` — server-side logging, not a response.
  * - A `.message` read from a project-owned domain error class listed in
  *   `ALLOWED_DOMAIN_ERRORS` — e.g. `RoleOpForbiddenError`, whose message is a
- *   deliberate, user-facing explanation of a 403.
+ *   deliberate, user-facing explanation of a 403, or `RootOpConflictError`
+ *   for the 409 when billing cannot follow root.
  *
  * Escape hatch: `// admin-error-leak:exempt — <reason>` on the offending line.
  */
@@ -47,7 +48,7 @@ const EXEMPT = 'admin-error-leak:exempt';
  * shown to the caller. Add here only when the message is a written sentence,
  * not a database or vendor string.
  */
-const ALLOWED_DOMAIN_ERRORS = ['RoleOpForbiddenError'];
+const ALLOWED_DOMAIN_ERRORS = ['RoleOpForbiddenError', 'RootOpConflictError'];
 
 /**
  * Any `.message` read. Deliberately NOT anchored to a bare identifier: a first

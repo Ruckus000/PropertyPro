@@ -105,13 +105,18 @@ export {
  * operation; callers MUST verify a platform-admin session (apps/admin
  * `requirePlatformAdmin`) before invoking it. The op enforces the
  * property_manager-only target guard internally and throws
- * `RoleOpForbiddenError` (map to 403) for an ineligible target.
- * `moveBillingOwnershipWithRootTx` runs inside a root transfer's transaction;
- * the caller MUST already have authorized that transfer (current-root check).
+ * `RoleOpForbiddenError` (map to 403) for an ineligible target and
+ * `RootOpConflictError` (map to 409) when billing cannot follow root.
+ * `moveBillingOwnershipWithRootTx` runs inside a root change's transaction;
+ * the caller MUST already have authorized that change (current-root check).
+ * `claimRootOp` MUST only run after the caller verified the user is a
+ * property_manager of that community and it has no root (`claimRoot`).
  */
 export {
   reassignRootOp,
+  claimRootOp,
   RoleOpForbiddenError,
+  RootOpConflictError,
   moveBillingOwnershipWithRootTx,
   type BillingOwnershipMove,
   type ReassignRootOpParams,

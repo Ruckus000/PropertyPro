@@ -36,7 +36,7 @@
  * Response modeling: LOOSE `z.unknown()` per drain #18 precedent. The
  * route returns `PricingImpactResult` from `calculatePricingImpact`. The
  * consumer (`useBillingGroupPreview` in
- * `apps/web/src/hooks/use-add-community.ts:81-108`) declares its own
+ * `apps/web/src/hooks/use-add-community.ts`) declares its own
  * `PricingPreview` TS interface and reads `json.data as PricingPreview`,
  * pinning the wire shape on the client side. Loose modeling avoids
  * coupling the contract to internal billing types (`PricingImpactResult`,

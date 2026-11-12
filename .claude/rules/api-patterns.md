@@ -128,7 +128,7 @@ matters, and later drains have followed them.
 
 | Shape | Precedent | Notes |
 |---|---|---|
-| No-input session-anchored | drain #1 `me/communities`, #6 `billing-groups/mine`, #8 `overview` | `request: {}` |
+| No-input session-anchored | drain #1 `me/communities`, #8 `overview` | `request: {}` |
 | Query-only tenant-scoped | drain #2 `users/names`, #5 `notifications/unread-count` | Use `resolveEffectiveCommunityId(req, query.communityId)` |
 | Params + query | drain #3 `ledger/balance/[unitId]`, #11 `polls/[id]/my-vote`, #14 `polls/[id]/results` | Runner awaits Next.js 15's `Promise<params>` shape |
 | Body PATCH with audit log | drain #4 `community/contact`, #13 `payments/fee-policy` | Two contracts in one file; preserve audit log payload byte-identical |

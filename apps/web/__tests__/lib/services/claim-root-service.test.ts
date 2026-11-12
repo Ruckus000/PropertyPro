@@ -7,6 +7,7 @@ const {
   updateMock,
   findMyRootlessCommunitiesMock,
   notifyRootClaimedMock,
+  claimRootOpMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn(),
@@ -14,6 +15,7 @@ const {
   updateMock: vi.fn(),
   findMyRootlessCommunitiesMock: vi.fn(),
   notifyRootClaimedMock: vi.fn(),
+  claimRootOpMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -29,6 +31,7 @@ vi.mock('@propertypro/db', () => ({
 
 vi.mock('@propertypro/db/unsafe', () => ({
   findMyRootlessCommunities: findMyRootlessCommunitiesMock,
+  claimRootOp: claimRootOpMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -52,6 +55,7 @@ beforeEach(() => {
   });
   logAuditEventMock.mockResolvedValue(undefined);
   notifyRootClaimedMock.mockResolvedValue(undefined);
+  claimRootOpMock.mockResolvedValue({ outcome: 'kept' });
 });
 
 describe('claimRoot', () => {
@@ -60,12 +64,11 @@ describe('claimRoot', () => {
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
     // (2) no existing root_manager
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockResolvedValueOnce([{ id: 7 }]);
 
     const result = await claimRoot('user-1', 42);
 
     expect(result).toEqual({ communityId: 42, claimed: true });
-    expect(updateMock).toHaveBeenCalledTimes(1);
+    expect(claimRootOpMock).toHaveBeenCalledWith(42, 'user-1');
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'user-1',
@@ -78,11 +81,38 @@ describe('claimRoot', () => {
     expect(notifyRootClaimedMock).toHaveBeenCalledWith(42, 'user-1');
   });
 
+  it('records billing in the audit entry when the claim took over an orphaned group', async () => {
+    selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
+    selectFromMock.mockResolvedValueOnce([]);
+    claimRootOpMock.mockResolvedValueOnce({ outcome: 'moved', billingGroupId: 5, previousOwnerUserId: 'gone-1' });
+
+    await claimRoot('user-1', 42);
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'root_claimed',
+        oldValues: { billingGroupOwner: 'gone-1' },
+        newValues: { role: 'root_manager', billingGroupOwner: 'user-1', billingGroupId: 5 },
+      }),
+    );
+  });
+
+  it('records only the role when billing stays put', async () => {
+    selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
+    selectFromMock.mockResolvedValueOnce([]);
+    claimRootOpMock.mockResolvedValueOnce({ outcome: 'target_owns_other_group', billingGroupId: 5 });
+
+    expect(await claimRoot('user-1', 42)).toEqual({ communityId: 42, claimed: true });
+    const entry = logAuditEventMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(entry.newValues).toEqual({ role: 'root_manager' });
+    expect(entry).not.toHaveProperty('oldValues');
+  });
+
   it('throws ForbiddenError when the caller is not a property_manager', async () => {
     selectFromMock.mockResolvedValueOnce([]); // not a PM here
 
     await expect(claimRoot('user-1', 42)).rejects.toBeInstanceOf(ForbiddenError);
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(claimRootOpMock).not.toHaveBeenCalled();
   });
 
   it('returns already_claimed when the community already has a root', async () => {
@@ -92,13 +122,13 @@ describe('claimRoot', () => {
     const result = await claimRoot('user-1', 42);
 
     expect(result).toEqual({ communityId: 42, claimed: false, reason: 'already_claimed' });
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(claimRootOpMock).not.toHaveBeenCalled();
   });
 
   it('returns already_claimed on a 23505 unique violation during update', async () => {
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]); // PM here
     selectFromMock.mockResolvedValueOnce([]); // no root yet
-    updateMock.mockRejectedValueOnce(drizzleUniqueViolation('user_roles_one_root_per_community'));
+    claimRootOpMock.mockRejectedValueOnce(drizzleUniqueViolation('user_roles_one_root_per_community'));
 
     const result = await claimRoot('user-1', 42);
 
@@ -109,7 +139,7 @@ describe('claimRoot', () => {
   it('rethrows non-unique-violation update errors', async () => {
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockRejectedValueOnce(new Error('connection lost'));
+    claimRootOpMock.mockRejectedValueOnce(new Error('connection lost'));
 
     await expect(claimRoot('user-1', 42)).rejects.toThrow('connection lost');
   });
@@ -117,7 +147,6 @@ describe('claimRoot', () => {
   it('still resolves claimed:true when notify fails (best-effort)', async () => {
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockResolvedValueOnce([{ id: 7 }]);
     notifyRootClaimedMock.mockRejectedValueOnce(new Error('resend down'));
 
     const result = await claimRoot('user-1', 42);
@@ -135,11 +164,9 @@ describe('claimAllRoots', () => {
     // community 1: success
     selectFromMock.mockResolvedValueOnce([{ id: 7 }]);
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockResolvedValueOnce([{ id: 7 }]);
     // community 2: success
     selectFromMock.mockResolvedValueOnce([{ id: 8 }]);
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockResolvedValueOnce([{ id: 8 }]);
 
     const results = await claimAllRoots('user-1');
 
@@ -159,7 +186,6 @@ describe('claimAllRoots', () => {
     // community 2: success
     selectFromMock.mockResolvedValueOnce([{ id: 8 }]);
     selectFromMock.mockResolvedValueOnce([]);
-    updateMock.mockResolvedValueOnce([{ id: 8 }]);
 
     const results = await claimAllRoots('user-1');
 

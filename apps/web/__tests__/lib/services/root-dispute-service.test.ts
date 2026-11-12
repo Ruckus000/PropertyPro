@@ -138,7 +138,7 @@ describe('root-dispute-service', () => {
           transaction: (cb: (t: unknown) => Promise<unknown>) => cb(tx),
         });
         scopedSelectFromMock.mockResolvedValueOnce([{ userId: 'to-1', role: 'property_manager' }]);
-        moveBillingMock.mockResolvedValue({ outcome: 'moved', billingGroupId: 9 });
+        moveBillingMock.mockResolvedValue({ outcome: 'moved', billingGroupId: 9, previousOwnerUserId: 'owner-0' });
 
         await transferRoot(7, 'from-1', 'to-1');
 
@@ -153,7 +153,7 @@ describe('root-dispute-service', () => {
         expect(logAuditEventMock).toHaveBeenCalledWith(
           expect.objectContaining({
             action: 'root_transferred',
-            oldValues: { root: 'from-1', billingGroupOwner: 'from-1' },
+            oldValues: { root: 'from-1', billingGroupOwner: 'owner-0' },
             newValues: { root: 'to-1', billingGroupOwner: 'to-1', billingGroupId: 9 },
           }),
         );
