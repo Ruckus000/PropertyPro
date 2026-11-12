@@ -1,6 +1,8 @@
 // AUTHZ: P3-PRE-03: PM portfolio cross-community read boundary
 import {
   findManagedCommunitiesPortfolioUnscoped,
+  findManagedCommunityIdsUnscoped,
+  hasOpenAddCommunityCheckoutUnscoped,
   isPmAdminInAnyCommunity,
   type PortfolioQueryFilters,
 } from '@propertypro/db/unsafe';
@@ -39,4 +41,22 @@ export async function listManagedCommunitiesForPm(
   if (filters.search) dbFilters.search = filters.search;
 
   return findManagedCommunitiesPortfolioUnscoped(pmUserId, dbFilters);
+}
+
+/**
+ * The one community `userId` manages, or null when they manage none or
+ * several. Counts what the Communities summary counts: property or root
+ * manager in a community that is not deleted.
+ */
+export async function findSoleManagedCommunityId(userId: string): Promise<number | null> {
+  const ids = await findManagedCommunityIdsUnscoped(userId, 2);
+  return ids.length === 1 ? ids[0]! : null;
+}
+
+/**
+ * Whether `userId` has an Add Community checkout still open or being set up
+ * (see `hasOpenAddCommunityCheckoutUnscoped`).
+ */
+export async function hasOpenAddCommunityCheckout(userId: string): Promise<boolean> {
+  return hasOpenAddCommunityCheckoutUnscoped(userId);
 }

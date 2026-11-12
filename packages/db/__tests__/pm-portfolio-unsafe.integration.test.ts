@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, like } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../src/schema';
@@ -189,6 +189,90 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
         .set({ deletedAt: null })
         .where(and(eq(communities.id, communityCId), eq(communities.slug, COMMUNITY_C_SLUG)));
     }
+  });
+
+  describe('findManagedCommunityIdsUnscoped (the one-community redirect)', () => {
+    it('lists managed communities lowest id first, up to the limit', async () => {
+      const { findManagedCommunityIdsUnscoped } = await import('../src/unsafe');
+      const both = [communityAId, communityBId].sort((a, b) => a - b);
+
+      await expect(findManagedCommunityIdsUnscoped(pmUserId, 2)).resolves.toEqual(both);
+      await expect(findManagedCommunityIdsUnscoped(pmUserId, 1)).resolves.toEqual([both[0]]);
+    });
+
+    it('counts a manager of one community as one, ignoring where they are a resident', async () => {
+      const { findManagedCommunityIdsUnscoped } = await import('../src/unsafe');
+      await expect(findManagedCommunityIdsUnscoped(mixedRoleUserId, 2)).resolves.toEqual([communityAId]);
+    });
+
+    it('finds nothing for a resident', async () => {
+      const { findManagedCommunityIdsUnscoped } = await import('../src/unsafe');
+      await expect(findManagedCommunityIdsUnscoped(outsiderUserId, 2)).resolves.toEqual([]);
+    });
+
+    it('sees an Add Community checkout only while it is open or being set up', async () => {
+      const { hasOpenAddCommunityCheckoutUnscoped } = await import('../src/unsafe');
+      const userId = randomUUID();
+      const hour = 60 * 60 * 1000;
+      const row = (
+        tag: string,
+        o: { status: string; kind?: string; expiresAt?: Date | null; authUserId?: string },
+      ) => ({
+        signupRequestId: `it-${tag}-${randomUUID()}`,
+        authUserId: o.authUserId ?? userId,
+        primaryContactName: 'PM Admin',
+        email: 'pm-add@placeholder.local',
+        emailNormalized: `it-${tag}-${randomUUID()}@placeholder.local`,
+        communityName: `Checkout ${tag}`,
+        address: '1 Main St, Miami, FL 33101',
+        county: 'FL',
+        unitCount: 30,
+        communityType: 'condo_718' as const,
+        planKey: 'essentials',
+        candidateSlug: `it-${tag}-${randomUUID().slice(0, 8)}`,
+        termsAcceptedAt: new Date(),
+        status: o.status,
+        expiresAt: o.expiresAt === undefined ? new Date(Date.now() + hour) : o.expiresAt,
+        payload: { kind: o.kind ?? 'add_to_group' },
+      });
+      const check = () => hasOpenAddCommunityCheckoutUnscoped(userId);
+
+      try {
+        // Not open: finished, expired, past its expiry, a public signup, a row
+        // with no expiry (written before every row had one), someone else's.
+        await db.insert(schema.pendingSignups).values([
+          row('done', { status: 'completed' }),
+          row('expired', { status: 'expired' }),
+          row('stale', { status: 'checkout_started', expiresAt: new Date(Date.now() - hour) }),
+          row('public', { status: 'checkout_started', kind: 'public_signup' }),
+          row('noexpiry', { status: 'checkout_started', expiresAt: null }),
+          row('other', { status: 'checkout_started', authUserId: randomUUID() }),
+        ]);
+        await expect(check()).resolves.toBe(false);
+
+        await db.insert(schema.pendingSignups).values(row('paid', { status: 'payment_completed' }));
+        await expect(check()).resolves.toBe(true);
+      } finally {
+        await db
+          .delete(schema.pendingSignups)
+          .where(and(like(schema.pendingSignups.signupRequestId, 'it-%'), like(schema.pendingSignups.communityName, 'Checkout %')));
+      }
+    });
+
+    it('leaves out a deleted community', async () => {
+      const { findManagedCommunityIdsUnscoped } = await import('../src/unsafe');
+      await expect(findManagedCommunityIdsUnscoped(deletedOnlyPmUserId, 2)).resolves.toEqual([communityCId]);
+
+      await db.update(communities).set({ deletedAt: new Date() }).where(eq(communities.id, communityCId));
+      try {
+        await expect(findManagedCommunityIdsUnscoped(deletedOnlyPmUserId, 2)).resolves.toEqual([]);
+      } finally {
+        await db
+          .update(communities)
+          .set({ deletedAt: null })
+          .where(and(eq(communities.id, communityCId), eq(communities.slug, COMMUNITY_C_SLUG)));
+      }
+    });
   });
 
   it('returns only communities where PM user has property_manager_admin role', async () => {

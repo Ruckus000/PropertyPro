@@ -20,10 +20,11 @@ export type UserCommunity = Infer<typeof meCommunitiesContract>[number];
  * so the hook returns `UserCommunity[]` directly — callers read it via
  * `useQuery`'s own `data` field (no awkward `.data.data` access).
  */
-export function useUserCommunities() {
+export function useUserCommunities(options: { enabled?: boolean } = {}) {
   return useQuery<UserCommunity[]>({
     queryKey: ['user-communities'],
     queryFn: () => requestJson<UserCommunity[]>('/api/v1/me/communities'),
     staleTime: 60_000,
+    enabled: options.enabled ?? true,
   });
 }

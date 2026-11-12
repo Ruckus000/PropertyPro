@@ -42,6 +42,8 @@ export type { DigestFrequency } from './queries/notification-digest';
  */
 export {
   isPmAdminInAnyCommunity,
+  findManagedCommunityIdsUnscoped,
+  hasOpenAddCommunityCheckoutUnscoped,
   findManagedCommunitiesPortfolioUnscoped,
   getPortfolioDashboard,
   findPortfolioStatusInputsUnscoped,

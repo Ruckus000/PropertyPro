@@ -18,6 +18,7 @@ const {
   listManagedCommunitiesForPmMock,
   resolvePmDashboardTargetMock,
   userHasPortfolioTemplatesAccessMock,
+  findSoleManagedCommunityIdMock,
 } = vi.hoisted(() => ({
   redirectMock: vi.fn((url: string) => {
     throw new Error(`NEXT_REDIRECT:${url}`);
@@ -27,6 +28,7 @@ const {
   listManagedCommunitiesForPmMock: vi.fn(),
   resolvePmDashboardTargetMock: vi.fn(),
   userHasPortfolioTemplatesAccessMock: vi.fn(),
+  findSoleManagedCommunityIdMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
@@ -37,7 +39,10 @@ vi.mock('@/lib/request/page-auth-context', () => ({
 vi.mock('@/lib/api/pm-communities', () => ({
   isPmAdminInAnyCommunity: isPmAdminInAnyCommunityMock,
   listManagedCommunitiesForPm: listManagedCommunitiesForPmMock,
+  findSoleManagedCommunityId: findSoleManagedCommunityIdMock,
+  hasOpenAddCommunityCheckout: vi.fn(async () => false),
 }));
+
 vi.mock('@/lib/api/community-context', () => ({
   resolvePmDashboardTarget: resolvePmDashboardTargetMock,
 }));
@@ -64,7 +69,7 @@ const SUPPORT = new Headers({
 });
 
 const AGGREGATE_PAGES = [
-  ['pm/dashboard/communities', () => PmCommunitiesPage()],
+  ['pm/dashboard/communities', () => PmCommunitiesPage({ searchParams: Promise.resolve({}) })],
   ['pm/reports', () => PmReportsPage()],
   ['pm/portfolio/templates', () => PortfolioTemplatesPage()],
 ] as const;
@@ -78,6 +83,8 @@ beforeEach(() => {
     { communityId: 6, communityName: 'Not consented' },
   ]);
   userHasPortfolioTemplatesAccessMock.mockResolvedValue(true);
+  // Two managed communities: Communities renders rather than redirecting.
+  findSoleManagedCommunityIdMock.mockResolvedValue(null);
 });
 
 describe.each(AGGREGATE_PAGES)('%s (portfolio aggregate)', (_name, render) => {
@@ -87,6 +94,7 @@ describe.each(AGGREGATE_PAGES)('%s (portfolio aggregate)', (_name, render) => {
     await expect(render()).rejects.toThrow(/^NEXT_REDIRECT:\/dashboard$/);
     expect(isPmAdminInAnyCommunityMock).not.toHaveBeenCalled();
     expect(listManagedCommunitiesForPmMock).not.toHaveBeenCalled();
+    expect(findSoleManagedCommunityIdMock).not.toHaveBeenCalled();
   });
 
   it('control: renders for a PM outside a support session', async () => {
