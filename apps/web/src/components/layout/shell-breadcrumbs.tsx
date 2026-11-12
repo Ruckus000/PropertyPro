@@ -31,6 +31,7 @@ import type { BreadcrumbLink } from '@/lib/breadcrumbs/types';
 import { isPmPortfolioPath, resolveDashboardHref } from './nav-config';
 import { resolveHomeDestination } from '@/lib/utils/home-destination';
 import { buildAutoTrail } from '@/lib/breadcrumbs/build-auto-trail';
+import { useUserCommunities } from '@/hooks/use-user-communities';
 
 interface ShellBreadcrumbsCommunity {
   id: number;
@@ -68,6 +69,20 @@ function readPageTitle(): string | undefined {
 
 export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbsProps) {
   const pathname = usePathname();
+  const isPm = role != null && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role);
+
+  // Communities sends someone who manages one community straight back to it,
+  // so for them a "Communities" crumb is a link that goes nowhere. Shown only
+  // once the list confirms more than one; the switcher already loads it.
+  const { data: userCommunities } = useUserCommunities({ enabled: isPm && community != null });
+  const managedCount = userCommunities
+    ? new Set(
+        userCommunities
+          .filter((c) => (PM_SCOPE_DB_ROLES as readonly string[]).includes(c.role))
+          .map((c) => c.id),
+      ).size
+    : undefined;
+  const showPortfolioCrumb = managedCount !== undefined && managedCount > 1;
 
   // Hostname is only needed for the rare tenant-less Home fallback. Default to
   // '/dashboard' on first render (server + hydration) to avoid a mismatch,
@@ -111,7 +126,7 @@ export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbs
 
   if (HIDE_PATHS.has(pathname)) return null;
 
-  const homeItems = buildHomeCrumbs({ pathname, role, community, features, homeFallbackHref });
+  const homeItems = buildHomeCrumbs({ pathname, isPm, community, features, homeFallbackHref, showPortfolioCrumb });
   const trail = buildAutoTrail(pathname, community?.id ?? null);
   const h1Label = h1 && h1.path === pathname ? h1.label : null;
 
@@ -179,18 +194,19 @@ export function ShellBreadcrumbs({ role, community, features }: ShellBreadcrumbs
 
 function buildHomeCrumbs({
   pathname,
-  role,
+  isPm,
   community,
   features,
   homeFallbackHref,
+  showPortfolioCrumb,
 }: {
   pathname: string;
-  role: CommunityRole | null;
+  isPm: boolean;
   community: ShellBreadcrumbsCommunity | null;
   features: CommunityFeatures | null;
   homeFallbackHref: string;
+  showPortfolioCrumb: boolean;
 }): BreadcrumbLink[] {
-  const isPm = role != null && (PM_SCOPE_DB_ROLES as readonly string[]).includes(role);
 
   // On the PM portfolio itself, the root is always the communities list. Label
   // matches the PM sidebar entry for /pm/dashboard/communities ('Communities',
@@ -201,12 +217,13 @@ function buildHomeCrumbs({
     return [{ label: 'Communities', href: '/pm/dashboard/communities' }];
   }
 
-  // PM viewing a specific community: communities list → community dashboard.
+  // PM viewing a specific community: communities list → community dashboard,
+  // or just the dashboard for someone who manages only this one.
   if (isPm && community) {
-    return [
-      { label: 'Communities', href: '/pm/dashboard/communities' },
-      { label: community.name, href: resolveDashboardHref(community.id, features) },
-    ];
+    const dashboard = { label: community.name, href: resolveDashboardHref(community.id, features) };
+    return showPortfolioCrumb
+      ? [{ label: 'Communities', href: '/pm/dashboard/communities' }, dashboard]
+      : [dashboard];
   }
 
   // Resident / board / owner within a community.

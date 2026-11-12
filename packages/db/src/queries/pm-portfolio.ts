@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { unionAll } from 'drizzle-orm/pg-core';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { db } from '../drizzle';
@@ -9,6 +9,7 @@ import { documents } from '../schema/documents';
 import { leases } from '../schema/leases';
 import { leaseCurrentOnSql, leaseExpiringBetweenSql } from './lease-current';
 import { maintenanceRequests } from '../schema/maintenance-requests';
+import { pendingSignups } from '../schema/pending-signups';
 import { siteBlocks } from '../schema/site-blocks';
 import { units } from '../schema/units';
 import { userRoles } from '../schema/user-roles';
@@ -72,6 +73,59 @@ export async function isPmAdminInAnyCommunity(
     .limit(1);
 
   return row.length > 0;
+}
+
+/**
+ * The ids of the communities `userId` manages (property or root manager, not
+ * deleted), lowest first, at most `limit` of them. The Communities page asks
+ * for two to learn whether there is exactly one, and if so which.
+ *
+ * Cross-community by design, like `isPmAdminInAnyCommunity`: it reads only
+ * the caller's own role rows.
+ */
+export async function findManagedCommunityIdsUnscoped(userId: string, limit: number): Promise<number[]> {
+  const rows = await db
+    .select({ communityId: userRoles.communityId })
+    .from(userRoles)
+    .innerJoin(communities, eq(communities.id, userRoles.communityId))
+    .where(
+      and(
+        eq(userRoles.userId, userId),
+        inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
+        isNull(communities.deletedAt),
+      ),
+    )
+    .groupBy(userRoles.communityId)
+    .orderBy(asc(userRoles.communityId))
+    .limit(limit);
+  return rows.map((r) => Number(r.communityId));
+}
+
+/**
+ * Whether `userId` has an Add Community checkout that is still open, or paid
+ * but not yet set up. The Communities page stays put while one exists rather
+ * than sending a one-community manager to their dashboard: a second community
+ * is on its way, and its confirmation lands on that page.
+ *
+ * `pending_signups` is a global table (no community yet); this reads only the
+ * caller's own rows.
+ */
+export async function hasOpenAddCommunityCheckoutUnscoped(userId: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: pendingSignups.id })
+    .from(pendingSignups)
+    .where(
+      and(
+        eq(pendingSignups.authUserId, userId),
+        inArray(pendingSignups.status, ['checkout_started', 'payment_completed', 'provisioning']),
+        sql`${pendingSignups.payload}->>'kind' = 'add_to_group'`,
+        // Every add-to-group row is written with an expiry; one without is a
+        // leftover from before that, not a checkout in progress.
+        gt(pendingSignups.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }
 
 /**
