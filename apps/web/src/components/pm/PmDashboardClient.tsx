@@ -22,12 +22,11 @@ import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
 import { usePortfolioDashboard, type PortfolioCommunity } from '@/hooks/use-portfolio-dashboard';
-import { useBillingGroup } from '@/hooks/use-billing-group';
+import { useAddCommunityAccess } from '@/hooks/use-add-community';
 import { cn } from '@/lib/utils';
 import { PORTFOLIO_VIEWS, type PortfolioView } from '@/lib/pm/portfolio-summary-keys';
 import { defaultViewMode, pickTier, typeLabel } from '@/lib/pm/communities-page';
 import { getStoredViewMode, storeViewMode, type ViewMode } from './ViewToggle';
-import { AddCommunityModal } from './add-community-modal';
 import { CommunityAddedModal } from './CommunityAddedModal';
 import { SiteSetupBanner } from './SiteSetupBanner';
 import { BulkAnnouncementDialog } from './BulkAnnouncementDialog';
@@ -39,6 +38,13 @@ import { BulkActionBar } from './communities/BulkActionBar';
 // Loaded on demand: it closes by default, and its upload rules and redaction
 // field would otherwise put the dashboard over the web JS budget (perf-check).
 const BulkDocumentDialog = dynamic(() => import('./BulkDocumentDialog').then((m) => m.BulkDocumentDialog), {
+  loading: () => null,
+});
+
+// Same reason: the add form carries Stripe checkout and the reauth step, and
+// only a billing-owner root ever opens it. Mounted on first open, so no other
+// visitor fetches it either.
+const AddCommunityModal = dynamic(() => import('./add-community-modal').then((m) => m.AddCommunityModal), {
   loading: () => null,
 });
 
@@ -106,11 +112,12 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
   const [selected, setSelected] = useState<ReadonlyMap<number, string>>(new Map());
   const [selecting, setSelecting] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addMounted, setAddMounted] = useState(false);
   const [bulkAnnouncementOpen, setBulkAnnouncementOpen] = useState(false);
   const [bulkDocumentOpen, setBulkDocumentOpen] = useState(false);
 
-  const billingGroupQuery = useBillingGroup();
-  const billingGroupId = billingGroupQuery.data?.data.billingGroupId ?? null;
+  // Add Community is the portfolio billing owner's, while root in it.
+  const addAccess = useAddCommunityAccess();
 
   // A bulk send must only reach communities the user can see, so a new search,
   // type or view starts the selection over.
@@ -190,8 +197,12 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
 
   const filtered = Boolean(communityType || search || view);
   const showBulkBar = viewMode === 'list' && selected.size > 0;
-  const addDisabled = !billingGroupId;
-  const openAdd = () => setIsAddModalOpen(true);
+  const openAdd = addAccess.data?.allowed
+    ? () => {
+        setAddMounted(true);
+        setIsAddModalOpen(true);
+      }
+    : undefined;
 
   function renderEmpty() {
     if (!data) return null;
@@ -201,11 +212,7 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
           icon={Building2}
           title="Add your first community"
           description="Set up a community to start managing documents, compliance and residents."
-          action={
-            <Button onClick={openAdd} disabled={addDisabled}>
-              Add Community
-            </Button>
-          }
+          action={openAdd && <Button onClick={openAdd}>Add Community</Button>}
         />
       );
     }
@@ -255,7 +262,6 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
           communities={rows}
           showAddTile={!filtered && data.totalCount === rows.length}
           onAdd={openAdd}
-          addDisabled={addDisabled}
         />
       );
     }
@@ -286,14 +292,6 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
       />
       {/* The toolbar below leads with the count; the title is for the breadcrumb and screen readers. */}
       <PageHeader title="Communities" hideHelpButton />
-
-      {billingGroupQuery.isError && (
-        <AlertBanner
-          status="warning"
-          title="Portfolio billing needs attention"
-          description={billingGroupQuery.error.message}
-        />
-      )}
 
       {isLoading && !data ? (
         <LoadingState />
@@ -331,7 +329,6 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
               setSelecting(true);
             }}
             onAdd={openAdd}
-            addDisabled={addDisabled}
           />
 
           {isError && (
@@ -376,7 +373,9 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
         />
       )}
 
-      <AddCommunityModal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} billingGroupId={billingGroupId} />
+      {openAdd && addMounted && (
+        <AddCommunityModal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      )}
 
       {/* Confirmation shown when Stripe checkout returns after adding a community. */}
       <CommunityAddedModal />

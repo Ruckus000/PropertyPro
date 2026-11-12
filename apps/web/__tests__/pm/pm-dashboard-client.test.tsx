@@ -4,8 +4,7 @@
  *
  * Covers: the layout each portfolio size gets, the remembered cards/list
  * choice, bulk selection, the saved views and filters (which live in the
- * URL), the empty / loading / error states, and the Add Community button's
- * billing gate.
+ * URL), the empty / loading / error states, and who sees Add Community.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
@@ -17,7 +16,7 @@ const h = vi.hoisted(() => ({
   replace: vi.fn(),
   push: vi.fn(),
   dashboard: vi.fn(),
-  billing: vi.fn(),
+  access: vi.fn(),
   lastFilters: null as unknown,
 }));
 
@@ -34,8 +33,8 @@ vi.mock('@/hooks/use-portfolio-dashboard', () => ({
   },
 }));
 
-vi.mock('@/hooks/use-billing-group', () => ({
-  useBillingGroup: () => h.billing(),
+vi.mock('@/hooks/use-add-community', () => ({
+  useAddCommunityAccess: () => h.access(),
 }));
 
 vi.mock('@/components/pm/add-community-modal', () => ({
@@ -105,7 +104,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.params = new URLSearchParams();
   window.localStorage.clear();
-  h.billing.mockReturnValue({ data: { data: { billingGroupId: 7 } }, isError: false });
+  h.access.mockReturnValue({ data: { allowed: true, billingGroupId: 7 } });
 });
 
 afterEach(cleanup);
@@ -370,15 +369,25 @@ describe('site state', () => {
 });
 
 describe('Add Community', () => {
-  it('is disabled until the billing group is known', () => {
-    h.billing.mockReturnValue({ data: undefined, isError: false });
+  it('is not offered to someone the add rule refuses', () => {
+    h.access.mockReturnValue({ data: { allowed: false, billingGroupId: null } });
+    serve(portfolio(5));
+    render(<PmDashboardClient />);
+
+    expect(screen.queryByRole('button', { name: 'Add Community' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Set up a new association/ })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('is not offered while the answer is still loading', () => {
+    h.access.mockReturnValue({ data: undefined });
     serve(portfolio(2));
     render(<PmDashboardClient />);
 
-    expect(screen.getByRole('button', { name: 'Add Community' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Add Community' })).toBeNull();
   });
 
-  it('opens the form once the billing group is known', async () => {
+  it('opens the form for the portfolio billing owner who is root', async () => {
     serve(portfolio(2));
     render(<PmDashboardClient />);
 
@@ -386,12 +395,11 @@ describe('Add Community', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Add a community');
   });
 
-  it('shows the billing warning with its message', () => {
-    h.billing.mockReturnValue({ data: undefined, isError: true, error: new Error('boom') });
-    serve(portfolio(2));
+  it('opens the same form from the gallery tile', async () => {
+    serve(portfolio(5));
     render(<PmDashboardClient />);
 
-    expect(screen.getByText('Portfolio billing needs attention')).toBeInTheDocument();
-    expect(screen.getByText('boom')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Set up a new association/ }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Add a community');
   });
 });

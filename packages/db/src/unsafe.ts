@@ -44,6 +44,7 @@ export {
   isPmAdminInAnyCommunity,
   findManagedCommunityIdsUnscoped,
   hasOpenAddCommunityCheckoutUnscoped,
+  findAddCommunityFactsUnscoped,
   findManagedCommunitiesPortfolioUnscoped,
   getPortfolioDashboard,
   findPortfolioStatusInputsUnscoped,
@@ -52,6 +53,7 @@ export {
   getOccupancyTrendsReport,
   getViolationSummaryReport,
   getDelinquencyAgingReport,
+  type AddCommunityFacts,
   type ManagedCommunityPortfolioRow,
   type DashboardCommunityRow,
   type DashboardKpis,
@@ -104,10 +106,14 @@ export {
  * `requirePlatformAdmin`) before invoking it. The op enforces the
  * property_manager-only target guard internally and throws
  * `RoleOpForbiddenError` (map to 403) for an ineligible target.
+ * `moveBillingOwnershipWithRootTx` runs inside a root transfer's transaction;
+ * the caller MUST already have authorized that transfer (current-root check).
  */
 export {
   reassignRootOp,
   RoleOpForbiddenError,
+  moveBillingOwnershipWithRootTx,
+  type BillingOwnershipMove,
   type ReassignRootOpParams,
 } from './ops/root-ops';
 

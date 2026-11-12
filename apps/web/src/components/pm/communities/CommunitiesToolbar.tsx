@@ -154,8 +154,8 @@ interface CommunitiesToolbarProps {
   onViewModeChange: (mode: ViewMode) => void;
   showTemplates: boolean;
   onSelectCommunities: () => void;
-  onAdd: () => void;
-  addDisabled: boolean;
+  /** Absent when the user may not add a community: the button is not shown. */
+  onAdd?: () => void;
 }
 
 export function CommunitiesToolbar({
@@ -176,7 +176,6 @@ export function CommunitiesToolbar({
   showTemplates,
   onSelectCommunities,
   onAdd,
-  addDisabled,
 }: CommunitiesToolbarProps) {
   const chooser = tier === 'chooser';
   const wide = tier === 'grouped' || tier === 'dense';
@@ -245,16 +244,17 @@ export function CommunitiesToolbar({
         <PortfolioTools showTemplates={showTemplates} onSelectCommunities={onSelectCommunities} />
         <span aria-hidden="true" className="mx-1 hidden h-5 w-px bg-edge md:block" />
         <ViewToggle value={viewMode} onChange={onViewModeChange} />
-        <Button
-          variant={chooser ? 'outline' : 'default'}
-          onClick={onAdd}
-          disabled={addDisabled}
-          aria-label="Add Community"
-          className="w-11 px-0 md:w-auto md:px-3"
-        >
-          <Plus aria-hidden="true" />
-          <span className="hidden md:inline">Add Community</span>
-        </Button>
+        {onAdd && (
+          <Button
+            variant={chooser ? 'outline' : 'default'}
+            onClick={onAdd}
+            aria-label="Add Community"
+            className="w-11 px-0 md:w-auto md:px-3"
+          >
+            <Plus aria-hidden="true" />
+            <span className="hidden md:inline">Add Community</span>
+          </Button>
+        )}
       </div>
     </div>
     {!chooser && viewTabs}

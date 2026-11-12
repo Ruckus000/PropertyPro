@@ -44,7 +44,6 @@ import * as templateApply from '../../src/app/api/v1/pm/portfolio/templates/[id]
 import * as pmCommunities from '../../src/app/api/v1/pm/communities/route';
 import * as pmReports from '../../src/app/api/v1/pm/reports/[reportType]/route';
 import * as pmDashboardSummary from '../../src/app/api/v1/pm/dashboard/summary/route';
-import * as billingGroupsMine from '../../src/app/api/v1/billing-groups/mine/route';
 
 type Handler = (req: NextRequest, ctx?: unknown) => Promise<Response>;
 
@@ -146,12 +145,6 @@ const CASES: Case[] = [
     verb: 'GET',
     handler: pmDashboardSummary.GET as Handler,
     path: '/api/v1/pm/dashboard/summary',
-  },
-  {
-    file: 'billing-groups/mine/route.ts',
-    verb: 'GET',
-    handler: billingGroupsMine.GET as Handler,
-    path: '/api/v1/billing-groups/mine',
   },
 ];
 

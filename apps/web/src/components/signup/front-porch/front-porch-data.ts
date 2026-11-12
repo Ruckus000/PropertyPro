@@ -78,12 +78,7 @@ export const REQUIREMENT_GROUP_LABELS = {
   operations: 'Operations',
 } as const;
 
-/** Florida ZIPs run 32004–34997; PropertyPro Florida serves Florida only. */
-export function isFloridaZip(zip: string): boolean {
-  if (!/^\d{5}$/.test(zip)) return false;
-  const n = Number(zip);
-  return n >= 32004 && n <= 34997;
-}
+export { isFloridaZip } from '@/lib/auth/signup-schema';
 
 export function maskEmail(email: string): string {
   const [local, domain] = email.split('@');

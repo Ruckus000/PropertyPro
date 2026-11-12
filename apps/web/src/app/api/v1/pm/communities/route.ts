@@ -8,9 +8,14 @@ import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ValidationError } from '@/lib/api/errors';
 import { requirePmPortfolioAccess } from '@/lib/api/pm-portfolio-access';
-import { listManagedCommunitiesForPm } from '@/lib/api/pm-communities';
+import { listManagedCommunitiesForPm, requireAddCommunityAccess } from '@/lib/api/pm-communities';
+import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
-import { normalizeSignupSubdomain } from '@/lib/auth/signup-schema';
+import {
+  isFloridaZip,
+  isPlanAvailableForCommunityType,
+  normalizeSignupSubdomain,
+} from '@/lib/auth/signup-schema';
 import { createAddCommunityCheckout } from '@/lib/services/stripe-service';
 import {
   getOrCreateBillingGroupForPm,
@@ -34,6 +39,23 @@ export const GET = withErrorHandler(
 export const POST = withErrorHandler(
   runRoute(pmCommunitiesPostContract, async ({ body, req }) => {
     const userId = await requirePmPortfolioAccess(req);
+    // Adding a community bills the portfolio: only its billing owner, while
+    // root in it, may (see decideAddCommunityAccess). Reauth applies on top,
+    // as for change-plan: who you are and that you just proved it are separate.
+    await requireAddCommunityAccess(userId);
+    await requireFreshReauth(userId);
+
+    if (!isPlanAvailableForCommunityType(body.communityType, body.planId)) {
+      throw new ValidationError('This plan is not available for this community type', {
+        field: 'planId',
+      });
+    }
+    const zip5 = /^(\d{5})(?:-\d{4})?$/.exec(body.zipCode)?.[1];
+    if (body.state.toUpperCase() !== 'FL' || !zip5 || !isFloridaZip(zip5)) {
+      throw new ValidationError('PropertyPro Florida serves Florida associations only. Enter a Florida address.', {
+        field: 'zipCode',
+      });
+    }
 
     // A retry must not be blocked by this PM's own abandoned checkout for it.
     await retireOwnAddToGroupSignup(userId, normalizeSignupSubdomain(body.subdomain));

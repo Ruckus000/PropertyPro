@@ -4,9 +4,15 @@ import { NextRequest } from 'next/server';
 vi.mock('@/lib/api/auth', () => ({
   requireAuthenticatedUserId: vi.fn().mockResolvedValue('user-123'),
 }));
+const gates = vi.hoisted(() => ({
+  requireAddCommunityAccess: vi.fn(),
+  requireFreshReauth: vi.fn(),
+}));
 vi.mock('@/lib/api/pm-communities', () => ({
   isPmAdminInAnyCommunity: vi.fn().mockResolvedValue(true),
+  requireAddCommunityAccess: gates.requireAddCommunityAccess,
 }));
+vi.mock('@/lib/api/reauth-guard', () => ({ requireFreshReauth: gates.requireFreshReauth }));
 vi.mock('@propertypro/db/unsafe', () => ({
   isPmAdminInAnyCommunity: vi.fn().mockResolvedValue(true),
 }));
@@ -45,6 +51,8 @@ import {
   retireOwnAddToGroupSignup,
 } from '@/lib/billing/billing-group-service';
 import { checkSignupSubdomainAvailability } from '@/lib/auth/signup';
+import { ForbiddenError } from '@/lib/api/errors';
+import { ReauthRequiredError } from '@/lib/api/errors/ReauthRequiredError';
 
 function makeRequest(body: Record<string, unknown>) {
   return new NextRequest('http://localhost/api/v1/pm/communities', {
@@ -70,6 +78,8 @@ const validBody = {
 describe('POST /api/v1/pm/communities', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    gates.requireAddCommunityAccess.mockResolvedValue(42);
+    gates.requireFreshReauth.mockResolvedValue(undefined);
   });
 
   // #1115: the PM's own abandoned checkout for this subdomain is released
@@ -140,5 +150,72 @@ describe('POST /api/v1/pm/communities', () => {
   it('rejects invalid community type', async () => {
     const res = await POST(makeRequest({ ...validBody, communityType: 'invalid' }));
     expect(res.status).toBe(400);
+  });
+
+  describe('who may add', () => {
+    it('refuses anyone the add-community rule refuses, before any checkout work', async () => {
+      gates.requireAddCommunityAccess.mockRejectedValue(
+        new ForbiddenError('Only the root manager who pays for this portfolio can add a community.'),
+      );
+
+      const res = await POST(makeRequest(validBody));
+      const json = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(json.error.message).toBe('Only the root manager who pays for this portfolio can add a community.');
+      expect(gates.requireAddCommunityAccess).toHaveBeenCalledWith('user-123');
+      expect(retireOwnAddToGroupSignup).not.toHaveBeenCalled();
+      expect(getOrCreateBillingGroupForPm).not.toHaveBeenCalled();
+      expect(createAddCommunityCheckout).not.toHaveBeenCalled();
+    });
+
+    it('asks for a fresh password, like a plan change', async () => {
+      gates.requireFreshReauth.mockRejectedValue(new ReauthRequiredError());
+
+      const res = await POST(makeRequest(validBody));
+      const json = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(json.error.code).toBe('REAUTH_REQUIRED');
+      expect(gates.requireFreshReauth).toHaveBeenCalledWith('user-123');
+      expect(getOrCreateBillingGroupForPm).not.toHaveBeenCalled();
+      expect(createAddCommunityCheckout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('what may be added', () => {
+    it('refuses a plan the community type does not offer', async () => {
+      const res = await POST(makeRequest({ ...validBody, communityType: 'apartment', planId: 'essentials' }));
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.error.message).toMatch(/plan is not available/i);
+      expect(createAddCommunityCheckout).not.toHaveBeenCalled();
+    });
+
+    it('accepts the apartment plan for an apartment community', async () => {
+      const res = await POST(makeRequest({ ...validBody, communityType: 'apartment', planId: 'operations_plus' }));
+      expect(res.status).toBe(200);
+    });
+
+    it('refuses a state other than Florida', async () => {
+      const res = await POST(makeRequest({ ...validBody, state: 'GA' }));
+      const json = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(json.error.message).toMatch(/Florida/);
+      expect(createAddCommunityCheckout).not.toHaveBeenCalled();
+    });
+
+    it('refuses a ZIP outside Florida even with FL as the state', async () => {
+      const res = await POST(makeRequest({ ...validBody, zipCode: '30301' }));
+      expect(res.status).toBe(400);
+      expect(createAddCommunityCheckout).not.toHaveBeenCalled();
+    });
+
+    it('accepts a Florida ZIP+4 and a lower-case state', async () => {
+      const res = await POST(makeRequest({ ...validBody, state: 'fl', zipCode: '33139-1234' }));
+      expect(res.status).toBe(200);
+    });
   });
 });

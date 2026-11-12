@@ -9,7 +9,11 @@
 // WEB_UNSAFE_IMPORT_ALLOWLIST in scripts/verify-scoped-db-access.ts (both guards
 // apply — the #718 two-guard lesson).
 // AUTHZ: transferRoot/reassignRoot swap two userRoles rows atomically via the unscoped transaction client under the one-root partial unique index; self-authorized by their route handlers (root-identity / platform-admin gates).
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+import {
+  createUnscopedClient,
+  moveBillingOwnershipWithRootTx,
+  type BillingOwnershipMove,
+} from '@propertypro/db/unsafe';
 import {
   createScopedClient,
   logAuditEvent,
@@ -17,7 +21,7 @@ import {
   userRoles,
 } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
-import { ForbiddenError } from '@/lib/api/errors';
+import { AppError, ForbiddenError } from '@/lib/api/errors';
 
 export type OpenDisputeResult =
   | { disputed: false; reason: 'no_current_root' }
@@ -86,6 +90,11 @@ export async function openDispute(
  * already hold a `property_manager` row in the community. Single transaction;
  * demote `from` FIRST then promote `to` so the one-root partial unique index
  * never sees two roots mid-statement.
+ *
+ * Billing follows root (`moveBillingOwnershipWithRootTx`): when `from` owns the
+ * billing group this community is in and is root of nothing else in it, the
+ * group passes to `to`. Refused (409, nothing changes) when `to` already owns a
+ * different group.
  */
 export async function transferRoot(
   communityId: number,
@@ -94,7 +103,7 @@ export async function transferRoot(
 ): Promise<void> {
   const db = createUnscopedClient();
 
-  await db.transaction(async (tx) => {
+  const billing = await db.transaction(async (tx): Promise<BillingOwnershipMove> => {
     const scoped = createScopedClient(
       communityId,
       tx as unknown as Parameters<typeof createScopedClient>[1],
@@ -125,16 +134,34 @@ export async function transferRoot(
       { role: 'root_manager' },
       and(eq(userRoles.userId, toUserId), eq(userRoles.role, 'property_manager')),
     );
+
+    // Billing follows root, in the same transaction so a refusal undoes the swap.
+    const move = await moveBillingOwnershipWithRootTx(
+      tx as unknown as Parameters<typeof moveBillingOwnershipWithRootTx>[0],
+      { communityId, fromUserId, toUserId },
+    );
+    if (move.outcome === 'target_owns_other_group') {
+      throw new AppError(
+        'This person already pays for another portfolio, so billing for this community can’t move to them. Contact support to combine the two.',
+        409,
+        'ROOT_TRANSFER_TARGET_OWNS_BILLING_GROUP',
+      );
+    }
+    return move;
   });
 
+  const billingMoved = billing.outcome === 'moved' ? billing.billingGroupId : null;
   await logAuditEvent({
     userId: fromUserId,
     action: 'root_transferred',
     resourceType: 'community',
     resourceId: String(communityId),
     communityId,
-    oldValues: { root: fromUserId },
-    newValues: { root: toUserId },
+    oldValues: { root: fromUserId, ...(billingMoved !== null && { billingGroupOwner: fromUserId }) },
+    newValues: {
+      root: toUserId,
+      ...(billingMoved !== null && { billingGroupOwner: toUserId, billingGroupId: billingMoved }),
+    },
   });
 }
 // Root reassignment (platform-admin) lives in @propertypro/db as `reassignRootOp`

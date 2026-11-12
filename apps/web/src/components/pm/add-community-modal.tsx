@@ -1,11 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   useAddCommunity,
+  useAddCommunityAccess,
   useBillingGroupPreview,
   type AddCommunityFormState,
 } from '@/hooks/use-add-community';
+import { useReauth } from '@/hooks/use-reauth';
+import { ReauthModal } from '@/components/auth/reauth-modal';
+import { getSignupPlansForCommunityType, isFloridaZip } from '@/lib/auth/signup-schema';
 import {
   Dialog,
   DialogContent,
@@ -35,18 +39,25 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 interface AddCommunityModalProps {
   open: boolean;
   onClose: () => void;
-  billingGroupId: number | null;
+  /**
+   * Where focus goes on close. Defaults to whatever had focus when the modal
+   * opened; the account menu passes its trigger, because the menu item that
+   * opened this is gone by then.
+   */
+  returnFocusTo?: RefObject<HTMLElement | null>;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function AddCommunityModal({
-  open,
-  onClose,
-  billingGroupId,
-}: AddCommunityModalProps) {
+/**
+ * Add a community: details, then the password (as for a plan change), then
+ * Stripe Checkout in place. Opened from the Communities page and the account
+ * menu; who may open it, and to which billing group the community is added,
+ * comes from `useAddCommunityAccess`, and the server checks both again.
+ */
+export function AddCommunityModal({ open, onClose, returnFocusTo }: AddCommunityModalProps) {
   const [form, setForm] = useState<AddCommunityFormState>({
     name: '',
     communityType: 'condo_718',
@@ -63,6 +74,26 @@ export function AddCommunityModal({
     timezone: 'America/New_York',
   });
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const reauth = useReauth();
+
+  // Opened from state, not a DialogTrigger, so Radix would return focus to
+  // <body>. A ref, because the opener must survive onOpenChange(false).
+  const openerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) {
+      openerRef.current =
+        returnFocusTo?.current ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    }
+  }, [open, returnFocusTo]);
+
+  const access = useAddCommunityAccess(open);
+  const billingGroupId = access.data?.billingGroupId ?? null;
+  // Opened from a stale page or menu after access was lost: say so up front
+  // rather than after the form and the password. The server refuses anyway.
+  const refused = access.data?.allowed === false;
+  const plans = getSignupPlansForCommunityType(form.communityType);
+  const zip = form.zipCode.trim();
+  const zipError = zip.length >= 5 && !isFloridaZip(zip) ? 'Enter a Florida ZIP code.' : null;
 
   const preview = useBillingGroupPreview({
     billingGroupId,
@@ -73,10 +104,20 @@ export function AddCommunityModal({
 
   const submit = useAddCommunity();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    // Adding a community bills the portfolio, so it asks for the password the
+    // way a plan change does. The server refuses without a fresh one.
+    if (!(await reauth.triggerReauth())) return;
     submit.mutate(form, {
       onSuccess: (data) => setClientSecret(data.clientSecret),
     });
+  };
+
+  const setCommunityType = (communityType: AddCommunityFormState['communityType']) => {
+    // A plan the new type does not offer falls back to its first plan.
+    const offered = getSignupPlansForCommunityType(communityType);
+    const planId = offered.some((p) => p.id === form.planId) ? form.planId : offered[0]!.id;
+    setForm({ ...form, communityType, planId: planId as AddCommunityFormState['planId'] });
   };
 
   const handleClose = () => {
@@ -87,7 +128,17 @@ export function AddCommunityModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent size="md" resizable>
+      <DialogContent
+        size="md"
+        resizable
+        onCloseAutoFocus={(event) => {
+          const opener = openerRef.current;
+          if (opener?.isConnected) {
+            event.preventDefault();
+            opener.focus();
+          }
+        }}
+      >
         {!clientSecret ? (
           <>
             <DialogHeader>
@@ -117,9 +168,11 @@ export function AddCommunityModal({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="essentials">Essentials — $199/mo</SelectItem>
-                    <SelectItem value="professional">Professional — $349/mo</SelectItem>
-                    <SelectItem value="operations_plus">Operations Plus — $499/mo</SelectItem>
+                    {plans.map((plan) => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.label} — ${plan.monthlyPriceUsd}/mo
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -129,9 +182,7 @@ export function AddCommunityModal({
                 <Label htmlFor="add-community-type">Community type</Label>
                 <Select
                   value={form.communityType}
-                  onValueChange={(v) =>
-                    setForm({ ...form, communityType: v as AddCommunityFormState['communityType'] })
-                  }
+                  onValueChange={(v) => setCommunityType(v as AddCommunityFormState['communityType'])}
                 >
                   <SelectTrigger id="add-community-type">
                     <SelectValue />
@@ -191,15 +242,10 @@ export function AddCommunityModal({
                     placeholder="Miami"
                   />
                 </div>
+                {/* Florida only: PropertyPro Florida serves Florida associations. */}
                 <div className="space-y-2">
                   <Label htmlFor="add-community-state">State</Label>
-                  <Input
-                    id="add-community-state"
-                    value={form.state}
-                    onChange={(e) => setForm({ ...form, state: e.target.value })}
-                    maxLength={2}
-                    placeholder="FL"
-                  />
+                  <Input id="add-community-state" value="Florida" readOnly disabled />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="add-community-zip">ZIP</Label>
@@ -208,7 +254,16 @@ export function AddCommunityModal({
                     value={form.zipCode}
                     onChange={(e) => setForm({ ...form, zipCode: e.target.value })}
                     placeholder="33101"
+                    inputMode="numeric"
+                    maxLength={5}
+                    aria-invalid={zipError ? true : undefined}
+                    aria-describedby={zipError ? 'add-community-zip-error' : undefined}
                   />
+                  {zipError && (
+                    <p id="add-community-zip-error" className="text-sm text-status-danger">
+                      {zipError}
+                    </p>
+                  )}
                 </div>
                 <div className="col-span-2 space-y-2">
                   <Label htmlFor="add-community-units">Unit count</Label>
@@ -241,9 +296,15 @@ export function AddCommunityModal({
                 </div>
               )}
 
+              {refused && (
+                <p role="alert" className="text-sm text-status-danger">
+                  Only the root manager who pays for this portfolio can add a community.
+                </p>
+              )}
+
               {/* Mutation error */}
               {submit.error && (
-                <p className="text-sm" style={{ color: 'var(--status-danger)' }}>
+                <p role="alert" className="text-sm text-status-danger">
                   {submit.error.message}
                 </p>
               )}
@@ -254,12 +315,21 @@ export function AddCommunityModal({
                 Cancel
               </Button>
               <Button
-                onClick={handleSubmit}
-                disabled={submit.isPending || !form.name || !form.subdomain || form.unitCount < 1}
+                onClick={() => void handleSubmit()}
+                disabled={
+                  refused ||
+                  submit.isPending ||
+                  !form.name ||
+                  !form.subdomain ||
+                  form.unitCount < 1 ||
+                  !isFloridaZip(zip)
+                }
               >
                 {submit.isPending ? 'Starting checkout…' : 'Continue to Payment'}
               </Button>
             </DialogFooter>
+            {/* Inside this dialog's content, so Radix stacks it as a child layer. */}
+            <ReauthModal isOpen={reauth.isOpen} onCancel={reauth.onCancel} verify={reauth.verify} />
           </>
         ) : (
           <div className="py-4">

@@ -30,8 +30,8 @@ vi.mock('@/hooks/use-portfolio-dashboard', () => ({
   PORTFOLIO_KEYS: { all: ['pm', 'dashboard'], summary: () => ['pm', 'dashboard', 'summary'] },
 }));
 
-vi.mock('@/hooks/use-billing-group', () => ({
-  useBillingGroup: () => ({ data: { data: { billingGroupId: 1 } }, isError: false, error: null }),
+vi.mock('@/hooks/use-add-community', () => ({
+  useAddCommunityAccess: () => ({ data: { allowed: true, billingGroupId: 1 } }),
 }));
 
 // The banner's own dismissal state — held not-dismissed so the wiring under
