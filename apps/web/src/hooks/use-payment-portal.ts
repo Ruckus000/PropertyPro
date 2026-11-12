@@ -2,6 +2,7 @@
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { PaymentFeePolicy } from '@propertypro/shared';
+import { ApiRequestError } from '@/lib/api/request-json';
 
 /* ─────── Types ─────── */
 
@@ -94,7 +95,15 @@ export function usePaymentStatement(
       const params = new URLSearchParams({ communityId: String(communityId) });
       if (unitId) params.set('unitId', String(unitId));
       const res = await fetch(`/api/v1/payments/statement?${params}`);
-      if (!res.ok) throw new Error('Failed to load payment data');
+      // ApiRequestError, not a bare Error: the portal tells an owner with no
+      // linked unit (403 NO_UNIT_ASSOCIATION) apart from a real failure.
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: { code?: string } } | null;
+        throw new ApiRequestError('Failed to load payment data', {
+          status: res.status,
+          code: body?.error?.code,
+        });
+      }
       const json = (await res.json()) as {
         data?: StatementInner | UnitStatementData | CommunityStatementData;
       };

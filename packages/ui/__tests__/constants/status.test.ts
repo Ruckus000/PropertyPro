@@ -37,6 +37,18 @@ describe("getStatusConfig (canonical, via @propertypro/ui barrel)", () => {
     }
   });
 
+  // R-1 (2026-11-11 empty-state audit): maintenance requests carry these two
+  // statuses, and both rendered as the grey "Neutral" fallback on web.
+  it.each([
+    ["acknowledged", "Acknowledged", "warning"],
+    ["resolved", "Resolved", "success"],
+  ] as const)("resolves maintenance status %s to %s (%s)", (key, label, variant) => {
+    const config = getStatusConfig(key);
+    expect(config.label).toBe(label);
+    expect(config.variant).toBe(variant);
+    expect(config.icon).toBe(variant);
+  });
+
   it("still falls back to neutral for a genuinely unknown status", () => {
     expect(getStatusConfig("totally-made-up-status").label).toBe("Neutral");
   });

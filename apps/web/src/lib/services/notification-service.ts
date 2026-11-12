@@ -179,8 +179,14 @@ const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   maintenance_update: 'maintenance',
   compliance_alert: 'meeting',
   document_posted: 'document',
-  // Same preference the compliance_alert event these used to borrow had.
-  resident_notice: 'meeting',
+  // A notice about the resident's own home (package, visitor, violation, ARC
+  // decision) is the same shape as a maintenance update: personal, no per-type
+  // toggle, governed by email frequency. It used to borrow 'meeting', so the
+  // "Meeting notices" checkbox silently switched off package and violation
+  // emails. Frequency is also what the email's one-click unsubscribe sets
+  // (topic `notifications`), so the gate and the opt-out now agree.
+  // Mirrored in notification-digest-processor.ts `mapEventTypeToKind`.
+  resident_notice: 'maintenance',
 };
 
 export interface InAppNotificationEvent {

@@ -1,9 +1,14 @@
 'use client';
 
+import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { Package } from 'lucide-react';
 import { useMyPackages, type PackageListItem } from '@/hooks/use-packages';
+import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
+import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -70,7 +75,7 @@ function PackageCard({ pkg }: { pkg: PackageListItem }) {
 }
 
 export function PackageResidentView({ communityId }: PackageResidentViewProps) {
-  const { data: packages, isLoading } = useMyPackages(communityId);
+  const { data: packages, isLoading, isError, error, refetch } = useMyPackages(communityId);
 
   if (isLoading) {
     return (
@@ -83,6 +88,42 @@ export function PackageResidentView({ communityId }: PackageResidentViewProps) {
           </Card>
         ))}
       </div>
+    );
+  }
+
+  // `/api/v1/packages/my` answers 403 NO_UNIT_ASSOCIATION when the resident
+  // has no unit in this community (`requireActorUnitIds`). That is a setup gap,
+  // not a failure, and retrying cannot fix it — so it gets a calm state that
+  // says who can. Other 403s (feature off, wrong role) stay errors.
+  if (isError && isNoUnitAssociationError(error)) {
+    return (
+      <EmptyState
+        icon="building"
+        title="Your account isn't linked to a unit yet"
+        description="Packages are logged per unit. Once your manager links your account to your unit, packages delivered to it will show here."
+        action={
+          <Button asChild variant="outline">
+            <Link href={`/help/contact?communityId=${communityId}`}>Contact management</Link>
+          </Button>
+        }
+      />
+    );
+  }
+
+  // Any other failure must not fall through to "No pending packages": an
+  // empty list there would tell the resident nothing has arrived.
+  if (isError) {
+    return (
+      <AlertBanner
+        status="danger"
+        title="We couldn't load your packages."
+        description="Check your connection, then try again."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        }
+      />
     );
   }
 

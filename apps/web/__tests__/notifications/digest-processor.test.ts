@@ -687,6 +687,51 @@ describe('notification digest processor', () => {
     ]);
   });
 
+  // R-7 (2026-11-11 empty-state audit): the digest mapped resident_notice to
+  // 'meeting' too, so a resident with "Meeting notices" off had every queued
+  // package/violation/ARC row discarded at send time.
+  it('delivers a queued resident notice when the meeting toggle is off', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'tenant@example.com', fullName: 'Tenant', deletedAt: null }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest', emailAnnouncements: false, emailMeetings: false, inAppEnabled: true }],
+    });
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 22,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'violation',
+        sourceId: '77',
+        eventType: 'resident_notice',
+        eventTitle: 'Violation Notice Issued',
+        eventSummary: 'Violation #77 has been marked as noticed.',
+        actionUrl: 'https://app.local/violations/77?communityId=101',
+        attemptCount: 0,
+      },
+    ]);
+    createScopedClientMock.mockImplementation((communityId: number) => ({
+      query: vi.fn(async (table: unknown) => {
+        const state = queryState.get(communityId);
+        if (!state) return [];
+        if (table === tables.communities) return state.communities;
+        if (table === tables.notificationPreferences) return state.preferences;
+        return [];
+      }),
+      queryIncludingDeleted: vi.fn(async () => []),
+      selectFrom: selectUsersFor(communityId),
+      update: updateMock,
+    }));
+
+    const summary = await processNotificationDigests({ now: new Date('2026-02-18T13:30:00.000Z') });
+
+    expect(summary.rowsDiscarded).toBe(0);
+    expect(summary.rowsSent).toBe(1);
+  });
+
   it('drops a queued document notice whose document went back to a draft', async () => {
     findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
     hasMoreDigestRowsMock.mockResolvedValue(false);

@@ -152,6 +152,66 @@ describe('PaymentPortal', () => {
     }, { timeout: 10000 });
   });
 
+  // R-4 (2026-11-11 empty-state audit): an owner with no linked unit got
+  // "We couldn't load your payment data" and a Retry that could never succeed.
+  describe('owner with no linked unit (403 NO_UNIT_ASSOCIATION)', () => {
+    function mockStatement403(code: string | undefined) {
+      mockFetch.mockImplementation((url: string) => {
+        if (url.includes('fee-policy')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ data: { feePolicy: 'owner_pays' } }),
+          });
+        }
+        return Promise.resolve({
+          ok: false,
+          status: 403,
+          json: () =>
+            Promise.resolve({
+              error: { message: 'No unit association found for this owner', ...(code ? { code } : {}) },
+            }),
+        });
+      });
+    }
+
+    it('shows a calm not-linked state with a Contact management link, not an error', async () => {
+      mockStatement403('NO_UNIT_ASSOCIATION');
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="resident" paymentsEnabled={false} />
+        </Wrapper>,
+      );
+
+      expect(await screen.findByText("Your account isn't linked to a unit yet")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Payments are tracked per unit\. Once your manager links your account/),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Contact management' })).toHaveAttribute(
+        'href',
+        '/help/contact?communityId=42',
+      );
+      expect(screen.queryByText("We couldn't load your payment data.")).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+    });
+
+    it('keeps any other 403 an error with Retry', async () => {
+      mockStatement403('FORBIDDEN');
+      const PaymentPortal = await importPaymentPortal();
+      const { Wrapper } = createWrapper();
+      render(
+        <Wrapper>
+          <PaymentPortal communityId={42} userRole="resident" paymentsEnabled={false} />
+        </Wrapper>,
+      );
+
+      expect(await screen.findByText("We couldn't load your payment data.")).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+      expect(screen.queryByText("Your account isn't linked to a unit yet")).toBeNull();
+    });
+  });
+
   it('calculates total due from pending and overdue items', async () => {
     mockBothFetches({
       lineItems: [

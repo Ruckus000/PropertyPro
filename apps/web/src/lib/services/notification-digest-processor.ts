@@ -155,7 +155,9 @@ function mapEventTypeToKind(eventType: string): NotificationKind | null {
   if (eventType === 'document_shared') return 'document';
   if (eventType === 'maintenance_update') return 'maintenance';
   if (eventType === 'compliance_alert') return 'meeting';
-  if (eventType === 'resident_notice') return 'meeting';
+  // Same kind as notification-service.ts EVENT_TO_KIND: a resident notice
+  // follows email frequency, not the "Meeting notices" toggle.
+  if (eventType === 'resident_notice') return 'maintenance';
   return null;
 }
 

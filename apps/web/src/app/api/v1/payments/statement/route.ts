@@ -10,6 +10,7 @@ import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { BadRequestError, ForbiddenError } from '@/lib/api/errors';
+import { NO_UNIT_ASSOCIATION_CODE } from '@/lib/units/no-unit-association';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt, requireFinanceEnabled, requireFinanceReadPermission } from '@/lib/finance/common';
 import { parseCommunityIdFromQuery } from '@/lib/finance/request';
@@ -40,7 +41,7 @@ export const GET = withErrorHandler(
     if (membership.role === 'resident' && membership.isUnitOwner) {
       const actorUnitIds = await listActorUnitIdsForFinance(communityId, actorUserId);
       if (actorUnitIds.length === 0) {
-        throw new ForbiddenError('No unit association found for this owner');
+        throw new ForbiddenError('No unit association found for this owner', NO_UNIT_ASSOCIATION_CODE);
       }
 
       let unitId: number;
@@ -53,7 +54,7 @@ export const GET = withErrorHandler(
       } else if (actorUnitIds.length === 1) {
         const onlyUnitId = actorUnitIds[0];
         if (onlyUnitId === undefined) {
-          throw new ForbiddenError('No unit association found for this owner');
+          throw new ForbiddenError('No unit association found for this owner', NO_UNIT_ASSOCIATION_CODE);
         }
         unitId = onlyUnitId;
       } else {

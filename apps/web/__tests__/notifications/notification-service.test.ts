@@ -659,6 +659,38 @@ describe('notification-service', () => {
 
         expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
       });
+
+      // R-7 (2026-11-11 empty-state audit): resident notices borrowed the
+      // 'meeting' kind, so turning off "Meeting notices" silently stopped
+      // package, visitor, violation and ARC emails. They follow email frequency.
+      const packageNotice: ResidentNoticeEvent = {
+        type: 'resident_notice',
+        topic: 'package',
+        title: 'New package received',
+        description: 'UPS delivery',
+        severity: 'info',
+        recordId: '31',
+      };
+
+      it('still emails a resident notice when the meeting toggle is off', async () => {
+        setupMock(residentRoles, residentUsers, [
+          { userId: 'u-tenant', emailFrequency: 'immediate', emailAnnouncements: false, emailMeetings: false, inAppEnabled: true },
+        ]);
+
+        await sendNotification(COMMUNITY_ID, packageNotice, { type: 'specific_user', userId: 'u-tenant' }, 'actor-1');
+
+        expect(sendEmailMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('suppresses a resident notice when email frequency is never', async () => {
+        setupMock(residentRoles, residentUsers, [
+          { userId: 'u-tenant', emailFrequency: 'never', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true },
+        ]);
+
+        await sendNotification(COMMUNITY_ID, packageNotice, { type: 'specific_user', userId: 'u-tenant' }, 'actor-1');
+
+        expect(sendEmailMock).not.toHaveBeenCalled();
+      });
     });
 
     it('sends document posted emails', async () => {

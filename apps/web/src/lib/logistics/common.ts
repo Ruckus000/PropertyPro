@@ -4,6 +4,7 @@ import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePermission } from '@/lib/db/access-control';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
+import { NO_UNIT_ASSOCIATION_CODE } from '@/lib/units/no-unit-association';
 
 // Re-export from canonical source (M1 deduplication)
 export { getActorUnitIds } from '@/lib/units/actor-units';
@@ -61,7 +62,10 @@ export async function requireActorUnitIds(
 ): Promise<number[]> {
   const unitIds = await getIds(scopedClient, actorUserId);
   if (unitIds.length === 0) {
-    throw new ForbiddenError('No unit association found for this user in the selected community');
+    throw new ForbiddenError(
+      'No unit association found for this user in the selected community',
+      NO_UNIT_ASSOCIATION_CODE,
+    );
   }
   return unitIds;
 }

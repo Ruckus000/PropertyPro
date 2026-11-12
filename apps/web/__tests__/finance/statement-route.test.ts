@@ -136,5 +136,20 @@ describe('GET /api/v1/payments/statement', () => {
 
     const res = await GET(getReq('communityId=10&unitId=99'));
     expect(res.status).toBe(403);
+    // A wrong-unit request is NOT the "no linked unit" case the portal renders calmly.
+    const json = await res.json();
+    expect(json.error.code).toBe('FORBIDDEN');
+  });
+
+  // R-4: the portal tells "no linked unit" apart from other 403s by this code.
+  it('returns 403 NO_UNIT_ASSOCIATION when the owner has no linked unit', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(OWNER_MEMBERSHIP);
+    listActorUnitIdsForFinanceMock.mockResolvedValue([]);
+
+    const res = await GET(getReq());
+    expect(res.status).toBe(403);
+    const json = await res.json();
+    expect(json.error.code).toBe('NO_UNIT_ASSOCIATION');
+    expect(buildUnitStatementMock).not.toHaveBeenCalled();
   });
 });

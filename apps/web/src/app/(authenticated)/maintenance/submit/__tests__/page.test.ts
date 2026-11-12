@@ -31,6 +31,18 @@ describe('maintenance/submit (redirect-only page)', () => {
     expect(url).toContain('from=maintenance');
   });
 
+  // R-6 (2026-11-11 empty-state audit): the redirect dropped the visitor on the
+  // Requests list without opening the form they came for.
+  it('opens the request sheet on arrival (create=request)', async () => {
+    await expect(
+      MaintenanceSubmitPage({
+        searchParams: Promise.resolve({ communityId: '42' }),
+      } as never),
+    ).rejects.toThrow();
+    const url = new URL(redirectMock.mock.calls[0]?.[0] as string, 'http://x');
+    expect(url.searchParams.get('create')).toBe('request');
+  });
+
   it('preserves status, priority, unitId, q filter params', async () => {
     await expect(
       MaintenanceSubmitPage({

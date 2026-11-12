@@ -10,7 +10,7 @@ import {
   resolveNavItemHref,
   PAGE_TITLES,
 } from '../../src/components/layout/nav-config';
-import type { CommunityFeatures } from '@propertypro/shared';
+import { getFeaturesForCommunity, type CommunityFeatures } from '@propertypro/shared';
 
 const ALL_FEATURES: CommunityFeatures = {
   hasCompliance: true,
@@ -156,6 +156,25 @@ describe('getVisibleItems', () => {
     const tenant = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, false).map((i) => i.id);
     expect(owner).toContain('payments');
     expect(tenant).not.toContain('payments');
+  });
+
+  // R-5 (2026-11-11 empty-state audit): owners and tenants can submit ARC
+  // applications, but the only ARC link was admin-gated, so the resident
+  // sidebar had no way to reach the page.
+  it('shows ARC Requests to owners and tenants where the community type has ARC', () => {
+    const owner = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, true).map((i) => i.id);
+    const tenant = getVisibleItems(NAV_ITEMS, 'resident', ALL_FEATURES, false).map((i) => i.id);
+    expect(owner).toContain('arc-requests');
+    expect(tenant).toContain('arc-requests');
+    const manager = getVisibleItems(NAV_ITEMS, 'property_manager', ALL_FEATURES).map((i) => i.id);
+    expect(manager).toContain('arc-requests');
+  });
+
+  it('hides ARC Requests from residents of an apartment community (no hasARC)', () => {
+    const apartment = getFeaturesForCommunity('apartment');
+    expect(apartment.hasARC).toBe(false);
+    const ids = getVisibleItems(NAV_ITEMS, 'resident', apartment, true).map((i) => i.id);
+    expect(ids).not.toContain('arc-requests');
   });
 
   it('shows admin items to the management tier', () => {

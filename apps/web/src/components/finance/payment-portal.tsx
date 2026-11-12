@@ -6,6 +6,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { PaymentFeePolicy } from '@propertypro/shared';
 import { PaymentDialog } from './payment-dialog';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { EmptyState } from '@/components/shared/empty-state';
+import { Button } from '@/components/ui/button';
+import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
 import { formatDateOnly } from '@/lib/utils/format-date';
 import {
   usePaymentStatement,
@@ -229,7 +232,7 @@ export function PaymentPortal({
   const showUnitColumn = mode === 'community';
   const canPay = mode === 'unit' && paymentsEnabled;
 
-  const { data, isPending, isError, refetch } = usePaymentStatement(communityId, mode, unitId, {
+  const { data, isPending, isError, error, refetch } = usePaymentStatement(communityId, mode, unitId, {
     enabled: canLoadData,
   });
 
@@ -266,6 +269,25 @@ export function PaymentPortal({
           <div className="h-64 rounded-md bg-surface-muted" />
         </div>
       </div>
+    );
+  }
+
+  // The statement API answers 403 NO_UNIT_ASSOCIATION when the owner has no
+  // linked unit. That is a setup gap the manager fixes, not a failure — "We
+  // couldn't load your payment data" and a Retry that can never succeed told
+  // the owner something was broken.
+  if (isError && mode === 'unit' && isNoUnitAssociationError(error)) {
+    return (
+      <EmptyState
+        icon="building"
+        title="Your account isn't linked to a unit yet"
+        description="Payments are tracked per unit. Once your manager links your account to your unit, your balance and history will show here."
+        action={
+          <Button asChild variant="outline">
+            <Link href={`/help/contact?communityId=${communityId}`}>Contact management</Link>
+          </Button>
+        }
+      />
     );
   }
 

@@ -318,7 +318,11 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'ARC Requests',
     icon: ClipboardCheck,
     href: (cid) => `/arc-requests?communityId=${cid}`,
-    visibility: 'admin',
+    // Intentionally NO `visibility` gate: owners and tenants submit ARC
+    // applications (`requireArcSubmitterRole` admits exactly `resident`), and
+    // the page role-branches to `ResidentArcRequests` for them. Managers get the
+    // review inbox from the same link. `hasARC` is a condo/HOA type feature, so
+    // apartments never see it.
     featureKey: 'hasARC',
     navTier: 'more',
     matchPrefixes: ['/arc-requests'],
