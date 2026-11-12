@@ -10,7 +10,6 @@
  */
 import { expect, test } from '@playwright/test';
 import { loginAs } from './helpers/dev-login';
-import { clickWhenHydrated } from './helpers/hydration';
 
 test.describe('PM Add Community Flow', () => {
   // Above Playwright's 30s default: this describe compiles the FIRST
@@ -41,9 +40,22 @@ test.describe('PM Add Community Flow', () => {
     expect((await answer.json()).data).toEqual({ allowed: false, billingGroupId: null });
     await expect(page.getByRole('button', { name: 'Add Community', exact: true })).toHaveCount(0);
 
-    // The account menu asks the same question when it opens.
+    // The account menu asks the same question when it opens. Its Radix trigger
+    // opens on pointerdown and has no onClick, so `clickWhenHydrated` would
+    // wait forever: wait for the handler it does have, then click.
     const menu = page.getByRole('button', { name: /account menu/i });
-    await clickWhenHydrated(menu);
+    await expect
+      .poll(
+        () =>
+          menu.evaluate((el) => {
+            const key = Object.keys(el).find((k) => k.startsWith('__reactProps$'));
+            const props = key ? (el as unknown as Record<string, { onPointerDown?: unknown }>)[key] : null;
+            return typeof props?.onPointerDown === 'function';
+          }),
+        { timeout: 30_000, message: 'React never attached the account menu trigger handler' },
+      )
+      .toBe(true);
+    await menu.click();
     await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Add Community' })).toHaveCount(0);
   });
