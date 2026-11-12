@@ -267,7 +267,7 @@ export function ComplianceCommandCenter({
             <KpiCard label="Needs board action" value={summary.needsBoardActionCount} meta="Approvals and reviews pending" />
           </section>
 
-          <ComplianceOnboarding items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
+          <ComplianceOnboarding communityId={communityId} items={items as ChecklistItemData[]} onUpload={(item) => setUploadItem(item as ChecklistItemData)} />
 
           <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
             <ComplianceQueue

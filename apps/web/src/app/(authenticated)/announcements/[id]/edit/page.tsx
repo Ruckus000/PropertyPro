@@ -83,6 +83,7 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
 
       <AnnouncementAuthoringForm
         communityId={context.communityId}
+        communityType={membership.communityType}
         announcement={{
           id: announcement.id,
           title: announcement.title,

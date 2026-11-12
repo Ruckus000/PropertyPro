@@ -12,9 +12,11 @@ const routerMock = {
   prefetch: vi.fn(),
 };
 
+const searchParamsState = vi.hoisted(() => ({ value: 'communityId=42' }));
+
 vi.mock('next/navigation', () => ({
   useRouter: () => routerMock,
-  useSearchParams: () => new URLSearchParams('communityId=42'),
+  useSearchParams: () => new URLSearchParams(searchParamsState.value),
 }));
 
 const deleteMutateAsync = vi.fn();
@@ -89,6 +91,7 @@ function renderList(props: ContainerProps) {
 
 describe('AnnouncementListContainer', () => {
   beforeEach(() => {
+    searchParamsState.value = 'communityId=42';
     routerMock.push.mockReset();
     routerMock.refresh.mockReset();
     deleteMutateAsync.mockReset();
@@ -122,6 +125,38 @@ describe('AnnouncementListContainer', () => {
       </QueryClientProvider>,
     );
     expect(screen.queryByRole('link', { name: 'Create announcement' })).not.toBeInTheDocument();
+  });
+
+  it('names a search that matched nothing and offers to clear it, instead of "No announcements yet"', () => {
+    searchParamsState.value = 'communityId=42&q=pool';
+    renderList({
+      items: [],
+      communityId: 42,
+      currentUserId: 'user-admin',
+      isAdmin: true,
+      canWriteAnnouncements: true,
+    });
+
+    expect(screen.getByText('No announcements match “pool”')).toBeInTheDocument();
+    expect(screen.queryByText('No announcements yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Clear search' })).toHaveAttribute(
+      'href',
+      '/announcements?communityId=42',
+    );
+  });
+
+  it('keeps "No announcements yet" when no search is active', () => {
+    searchParamsState.value = 'communityId=42&q=%20%20';
+    renderList({
+      items: [],
+      communityId: 42,
+      currentUserId: 'user-admin',
+      isAdmin: true,
+      canWriteAnnouncements: true,
+    });
+
+    expect(screen.getByText('No announcements yet')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Clear search' })).not.toBeInTheDocument();
   });
 
   it('shows Edit + Delete for admins on live announcements', () => {

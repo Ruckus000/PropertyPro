@@ -77,9 +77,10 @@ export const GET = withErrorHandler(
     const data = await loadChecklistWithStatus(communityId, membership.communityType);
 
     if (data.length > 0) {
-      void tryAutoComplete(communityId, userId, 'review_compliance');
-      // B2: board members' checklist carries `check_compliance` (distinct from the
-      // admin `review_compliance`). Firing it here lets board roles reach 100%.
+      // B2: board members' checklist carries `check_compliance`, a read-only
+      // step, so loading the list is the whole task. The manager step
+      // `review_compliance` is NOT fired here: opening the page is not acting
+      // on it. It completes in PATCH, on the first real decision about an item.
       void tryAutoComplete(communityId, userId, 'check_compliance');
     }
 
@@ -243,6 +244,14 @@ export const PATCH = withErrorHandler(
       newValues:
         patchAction === 'mark_not_applicable' ? { reason } : { documentId: documentId ?? null },
     });
+
+    // The manager's "Resolve your first compliance item" step completes on the
+    // first decision about a record: posting a file to it, or saying whether it
+    // applies. Removing a file is not progress, so `unlink_document` does not
+    // count. (It used to fire on GET, so merely opening the page finished it.)
+    if (patchAction !== 'unlink_document') {
+      void tryAutoComplete(communityId, userId, 'review_compliance');
+    }
 
     return result;
   }),

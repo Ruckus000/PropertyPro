@@ -93,9 +93,16 @@ type UserRoleInsert = {
  * Build a transaction-aware unscoped-db mock. Records the values passed to
  * every `tx.insert(userRoles).values(...)` call.
  */
-function buildDb(): { userRoleInserts: UserRoleInsert[]; communityInserts: Record<string, unknown>[] } {
+function buildDb(): {
+  userRoleInserts: UserRoleInsert[];
+  communityInserts: Record<string, unknown>[];
+  categoryInserts: unknown[];
+  preferenceInserts: unknown[];
+} {
   const userRoleInserts: UserRoleInsert[] = [];
   const communityInserts: Record<string, unknown>[] = [];
+  const categoryInserts: unknown[] = [];
+  const preferenceInserts: unknown[] = [];
 
   const returningMock = vi.fn(() =>
     Promise.resolve([{ id: 42, slug: 'sunset-condos' }]),
@@ -108,6 +115,8 @@ function buildDb(): { userRoleInserts: UserRoleInsert[]; communityInserts: Recor
     if (table === communitiesTable) {
       communityInserts.push(values as Record<string, unknown>);
     }
+    if (table === documentCategoriesTable) categoryInserts.push(values);
+    if (table === notificationPreferencesTable) preferenceInserts.push(values);
     return { returning: returningMock };
   });
 
@@ -124,7 +133,7 @@ function buildDb(): { userRoleInserts: UserRoleInsert[]; communityInserts: Recor
 
   createUnscopedClientMock.mockReturnValue(db);
 
-  return { userRoleInserts, communityInserts };
+  return { userRoleInserts, communityInserts, categoryInserts, preferenceInserts };
 }
 
 const VALID_INPUT = {
@@ -165,6 +174,29 @@ describe('createCommunityForPm', () => {
     const { communityInserts } = buildDb();
     await createCommunityForPm(VALID_INPUT);
     expect(communityInserts[0]).toMatchObject({ unitCount: 50 });
+  });
+
+  it('writes the default categories and creator preferences exactly as provisioning does', async () => {
+    // The two creation paths drifted: this one omitted `isSystem` on the
+    // default categories and set only `emailFrequency` on the preferences
+    // (empty-state audit, 2026-11-11). Both now use one builder.
+    const { categoryInserts, preferenceInserts } = buildDb();
+
+    await createCommunityForPm(VALID_INPUT);
+
+    expect(categoryInserts).toEqual([
+      [{ communityId: 42, name: 'Governing Documents', description: 'desc', isSystem: true }],
+    ]);
+    expect(preferenceInserts).toEqual([
+      {
+        userId: VALID_INPUT.userId,
+        communityId: 42,
+        emailFrequency: 'immediate',
+        emailAnnouncements: true,
+        emailMeetings: true,
+        inAppEnabled: true,
+      },
+    ]);
   });
 
   it('seeds the onboarding checklist with the creator v3 role (root_manager), not legacy pm_admin', async () => {

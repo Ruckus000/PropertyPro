@@ -8,6 +8,7 @@ import {
   type AnnouncementComposerValues,
 } from '@/components/announcements/announcement-composer';
 import { useMutateAnnouncement } from '@/hooks/use-mutate-announcement';
+import type { CommunityType } from '@propertypro/shared';
 
 interface EditableAnnouncement {
   id: number;
@@ -21,11 +22,13 @@ interface EditableAnnouncement {
 
 interface AnnouncementAuthoringFormProps {
   communityId: number;
+  communityType: CommunityType;
   announcement?: EditableAnnouncement;
 }
 
 export function AnnouncementAuthoringForm({
   communityId,
+  communityType,
   announcement,
 }: AnnouncementAuthoringFormProps) {
   const router = useRouter();
@@ -69,6 +72,7 @@ export function AnnouncementAuthoringForm({
 
   return (
     <AnnouncementComposer
+      communityType={communityType}
       initialValues={
         announcement
           ? {

@@ -9,6 +9,10 @@ import {
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import { initializeNewCommunityRecords, seedNewCommunitySite } from '@/lib/services/new-community-site';
+import {
+  buildCreatorNotificationPreferences,
+  buildDefaultDocumentCategoryRows,
+} from '@/lib/services/new-community-defaults';
 import { getDefaultDocumentCategories, type CommunityType } from '@propertypro/shared';
 
 interface CreateCommunityInput {
@@ -71,22 +75,17 @@ export async function createCommunityForPm(
       displayTitle: 'Administrator',
     });
 
-    // 3. Insert default document categories
+    // 3. Insert default document categories — system categories, exactly as
+    // self-serve provisioning writes them (shared builder).
     const templates = getDefaultDocumentCategories(input.communityType);
-    await tx.insert(documentCategories).values(
-      templates.map((t) => ({
-        communityId: cId,
-        name: t.name,
-        description: t.description,
-      })),
-    );
+    await tx
+      .insert(documentCategories)
+      .values(buildDefaultDocumentCategoryRows(cId, templates));
 
-    // 4. Insert default notification preferences
-    await tx.insert(notificationPreferences).values({
-      userId: input.userId,
-      communityId: cId,
-      emailFrequency: 'immediate',
-    });
+    // 4. Insert default notification preferences (same builder as provisioning).
+    await tx
+      .insert(notificationPreferences)
+      .values(buildCreatorNotificationPreferences(input.userId, cId));
 
     return { communityId: cId, slug: community.slug };
   });

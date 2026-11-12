@@ -77,7 +77,7 @@ describe('AnnouncementAuthoringForm', () => {
   it('create: submits values, pushes to the new announcement, and refreshes', async () => {
     mutateAsyncMock.mockResolvedValue({ data: { id: 42 } });
 
-    render(<AnnouncementAuthoringForm communityId={7} />);
+    render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
 
     expect(screen.getByTestId('composer-submit').textContent).toBe('Publish announcement');
     screen.getByTestId('composer-submit').click();
@@ -93,6 +93,7 @@ describe('AnnouncementAuthoringForm', () => {
 
     render(
       <AnnouncementAuthoringForm
+        communityType="condo_718"
         communityId={7}
         announcement={{
           id: 5,
@@ -123,7 +124,7 @@ describe('AnnouncementAuthoringForm', () => {
     // observable effect is: mutation ran, no router push/refresh.
     mutateAsyncMock.mockResolvedValue({ data: {} });
 
-    render(<AnnouncementAuthoringForm communityId={7} />);
+    render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
     screen.getByTestId('composer-submit').click();
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalled());
@@ -134,7 +135,7 @@ describe('AnnouncementAuthoringForm', () => {
   it('does not navigate when the mutation rejects', async () => {
     mutateAsyncMock.mockRejectedValue(new Error('We could not create this announcement.'));
 
-    render(<AnnouncementAuthoringForm communityId={7} />);
+    render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
     screen.getByTestId('composer-submit').click();
 
     await waitFor(() => expect(mutateAsyncMock).toHaveBeenCalled());
@@ -143,7 +144,7 @@ describe('AnnouncementAuthoringForm', () => {
   });
 
   it('cancel (create): pushes back to the announcements list', () => {
-    render(<AnnouncementAuthoringForm communityId={7} />);
+    render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
     screen.getByTestId('composer-cancel').click();
     expect(pushMock).toHaveBeenCalledWith('/announcements?communityId=7');
   });
@@ -151,6 +152,7 @@ describe('AnnouncementAuthoringForm', () => {
   it('cancel (edit): pushes back to the existing announcement', () => {
     render(
       <AnnouncementAuthoringForm
+        communityType="condo_718"
         communityId={7}
         announcement={{
           id: 9,
@@ -173,7 +175,7 @@ describe('AnnouncementAuthoringForm', () => {
       }),
     );
 
-    render(<AnnouncementAuthoringForm communityId={7} />);
+    render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
     const btn = screen.getByTestId('composer-submit') as HTMLButtonElement;
     btn.click();
 

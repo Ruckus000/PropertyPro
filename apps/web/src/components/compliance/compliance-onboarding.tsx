@@ -7,82 +7,112 @@ import type { ChecklistItemData } from "./compliance-checklist-item";
 
 // ── Constants ─────────────────────────────────────────
 
-const STORAGE_KEY = "propertypro:compliance-onboarding-dismissed";
+/**
+ * Dismissal is remembered per community: a manager who skips the panel for one
+ * association must still see it on the next one they set up.
+ */
+export function onboardingDismissedKey(communityId: number): string {
+  return `propertypro:compliance-onboarding-dismissed:${communityId}`;
+}
 
-/** Priority template keys — governing docs that should be uploaded first. */
-const PRIORITY_KEYS = [
-  "718_declaration", "720_declaration",
-  "718_bylaws", "720_bylaws",
+/**
+ * Priority template keys — governing docs that should be uploaded first, in
+ * the order they are shown. Each must exist in
+ * `packages/shared/src/compliance/templates.ts`; a key that does not is
+ * silently skipped, which is how HOAs once got a one-step panel
+ * (`720_declaration` / `720_bylaws` never existed). A checklist holds one
+ * community type's keys, so one interleaved list serves both.
+ */
+export const PRIORITY_KEYS = [
+  "718_declaration", "720_governing_docs",
+  "718_bylaws", "720_bylaws_rules",
   "718_articles", "720_articles",
   "718_rules",
-];
+] as const;
 
 const STEP_DESCRIPTIONS: Record<string, string> = {
   "718_declaration": "Your association's recorded Declaration of Condominium.",
-  "720_declaration": "Your HOA's recorded Declaration of Covenants.",
+  "720_governing_docs": "Your HOA's recorded Declaration of Covenants and its amendments.",
   "718_bylaws": "Current bylaws and all adopted amendments.",
-  "720_bylaws": "Current bylaws and all adopted amendments.",
+  "720_bylaws_rules": "Current bylaws and the rules adopted by the board.",
   "718_articles": "Articles of Incorporation filed with the state.",
   "720_articles": "Articles of Incorporation filed with the state.",
   "718_rules": "Rules and regulations adopted by the board.",
 };
 
+const MAX_STEPS = 4;
+
 // ── Detection ─────────────────────────────────────────
 
 /**
- * Returns true if the community appears to be freshly set up:
- * all applicable items are unsatisfied/overdue and no documents are linked.
+ * The getting-started steps: the priority items present in the checklist,
+ * INCLUDING ones already satisfied, so progress can be shown. (Filtering out
+ * satisfied items made `completedCount` always 0, so "Done" and the progress
+ * dots never rendered.) Falls back to the first applicable items when no
+ * priority key matches. Not-applicable items are never steps.
  */
-export function isFreshChecklist(items: ChecklistItemData[]): boolean {
+export function getPriorityItems(items: ChecklistItemData[]): ChecklistItemData[] {
   const applicable = items.filter((i) => i.status !== "not_applicable");
-  if (applicable.length === 0) return false;
-  return applicable.every((i) => !i.documentId);
+
+  const priority = PRIORITY_KEYS
+    .map((key) => applicable.find((i) => i.templateKey === key))
+    .filter((i): i is ChecklistItemData => !!i);
+
+  return (priority.length > 0 ? priority : applicable).slice(0, MAX_STEPS);
 }
 
 /**
- * Returns the priority items to display in the onboarding flow,
- * filtered to only those present in the checklist. Falls back to
- * the first 4 unsatisfied items if no priority keys match.
+ * Whether the panel belongs on screen: the community is still getting started
+ * (no file posted anywhere outside the steps themselves) and at least one step
+ * is unfinished. Posting a step's own file keeps the panel up so that step can
+ * read "Done"; posting any other record means the manager has moved past it.
  */
-function getPriorityItems(items: ChecklistItemData[]): ChecklistItemData[] {
-  const unsatisfied = items.filter(
-    (i) => i.status !== "satisfied" && i.status !== "not_applicable",
-  );
+export function shouldShowOnboarding(items: ChecklistItemData[]): boolean {
+  const steps = getPriorityItems(items);
+  if (steps.length === 0) return false;
+  if (steps.every((i) => i.status === "satisfied")) return false;
 
-  const priority = PRIORITY_KEYS
-    .map((key) => unsatisfied.find((i) => i.templateKey === key))
-    .filter((i): i is ChecklistItemData => !!i);
-
-  if (priority.length > 0) return priority.slice(0, 4);
-  return unsatisfied.slice(0, 4);
+  const stepIds = new Set(steps.map((i) => i.id));
+  return items
+    .filter((i) => i.status !== "not_applicable" && !stepIds.has(i.id))
+    .every((i) => !i.documentId);
 }
 
 // ── Component ─────────────────────────────────────────
 
 export interface ComplianceOnboardingProps {
+  communityId: number;
   items: ChecklistItemData[];
   onUpload: (item: ChecklistItemData) => void;
 }
 
-export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingProps) {
+export function ComplianceOnboarding({ communityId, items, onUpload }: ComplianceOnboardingProps) {
   const [dismissed, setDismissed] = useState(true); // start hidden to avoid flash
+  const storageKey = onboardingDismissedKey(communityId);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    let stored: string | null = null;
+    try {
+      stored = localStorage.getItem(storageKey);
+    } catch {
+      // Storage blocked (private mode, policy): show the panel.
+    }
     setDismissed(stored === "true");
-  }, []);
+  }, [storageKey]);
 
   const handleDismiss = useCallback(() => {
-    localStorage.setItem(STORAGE_KEY, "true");
+    try {
+      localStorage.setItem(storageKey, "true");
+    } catch {
+      // Storage blocked: the dismissal lasts for this view only.
+    }
     setDismissed(true);
-  }, []);
+  }, [storageKey]);
 
   if (dismissed) return null;
-  if (!isFreshChecklist(items)) return null;
+  if (!shouldShowOnboarding(items)) return null;
 
   const priorityItems = getPriorityItems(items);
-  if (priorityItems.length === 0) return null;
-
   const completedCount = priorityItems.filter((i) => i.status === "satisfied").length;
 
   return (
@@ -183,18 +213,23 @@ export function ComplianceOnboarding({ items, onUpload }: ComplianceOnboardingPr
       {/* Footer with progress dots */}
       <div className="flex items-center justify-between px-4 py-2.5 border-t border-[var(--status-brand-border)]/50 bg-[var(--status-brand-bg)]">
         <div className="flex items-center gap-1.5">
-          {priorityItems.map((item, i) => (
+          {priorityItems.map((item) => (
             <span
               key={item.id}
+              aria-hidden="true"
+              data-step-done={item.status === "satisfied" ? "true" : "false"}
               className={`
                 h-1.5 w-1.5 rounded-full transition-colors duration-quick
-                ${i < completedCount
+                ${item.status === "satisfied"
                   ? "bg-[var(--status-success)]"
                   : "bg-[var(--border-default)]"
                 }
               `}
             />
           ))}
+          <span className="sr-only">
+            {completedCount} of {priorityItems.length} done
+          </span>
         </div>
 
         <button

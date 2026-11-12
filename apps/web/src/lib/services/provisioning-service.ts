@@ -44,6 +44,10 @@ import {
 } from '@/lib/billing/billing-group-service';
 import { createCommunityForPm } from '@/lib/pm/create-community';
 import { initializeNewCommunityRecords, seedNewCommunitySite } from '@/lib/services/new-community-site';
+import {
+  buildCreatorNotificationPreferences,
+  buildDefaultDocumentCategoryRows,
+} from '@/lib/services/new-community-defaults';
 import { WelcomeEmail, sendEmail } from '@propertypro/email';
 import {
   getComplianceTemplate,
@@ -476,14 +480,10 @@ async function stepCategoriesCreated(ctx: JobContext): Promise<void> {
     .where(eq(documentCategories.communityId, communityId));
   const existingNames = new Set(existing.map((r) => r.name));
 
-  const rows = templates
-    .filter((t) => !existingNames.has(t.name))
-    .map((t) => ({
-      communityId,
-      name: t.name,
-      description: t.description,
-      isSystem: true,
-    }));
+  const rows = buildDefaultDocumentCategoryRows(
+    communityId,
+    templates.filter((t) => !existingNames.has(t.name)),
+  );
 
   if (rows.length === 0) return;
 
@@ -512,14 +512,7 @@ async function stepPreferencesSet(ctx: JobContext): Promise<void> {
 
   await db
     .insert(notificationPreferences)
-    .values({
-      userId: roleRow.userId,
-      communityId,
-      emailFrequency: 'immediate',
-      emailAnnouncements: true,
-      emailMeetings: true,
-      inAppEnabled: true,
-    })
+    .values(buildCreatorNotificationPreferences(roleRow.userId, communityId))
     .onConflictDoNothing();
 }
 

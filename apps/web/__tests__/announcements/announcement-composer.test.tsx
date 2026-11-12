@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { AnnouncementComposer } from '../../src/components/announcements/announcement-composer';
+import {
+  AnnouncementComposer,
+  getAnnouncementAudienceOptions,
+} from '../../src/components/announcements/announcement-composer';
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -18,6 +21,7 @@ describe('AnnouncementComposer', () => {
     // End-to-end editor interaction is exercised via preview-tools.
     render(
       <AnnouncementComposer
+        communityType="condo_718"
         onSubmit={onSubmit}
         initialValues={{
           title: '',
@@ -65,6 +69,7 @@ describe('AnnouncementComposer', () => {
 
     render(
       <AnnouncementComposer
+        communityType="condo_718"
         onSubmit={onSubmit}
         initialValues={{
           title: 'Seasonal notice',
@@ -103,6 +108,7 @@ describe('AnnouncementComposer', () => {
 
     render(
       <AnnouncementComposer
+        communityType="condo_718"
         onSubmit={onSubmit}
         initialValues={{
           title: 'Old notice',
@@ -118,10 +124,38 @@ describe('AnnouncementComposer', () => {
     expect(screen.getByRole('button', { name: 'Publish announcement' })).toBeEnabled();
   });
 
+  describe('audience options follow the community type', () => {
+    // Radix Select mirrors its items into a hidden native <select> inside a
+    // form, so the offered audiences are readable without opening the popover.
+    function offeredAudiences(): string[] {
+      return [...document.querySelectorAll('select option')]
+        .map((option) => (option as HTMLOptionElement).value)
+        .filter(Boolean);
+    }
+
+    it('offers an apartment no owner or board audience', () => {
+      render(<AnnouncementComposer communityType="apartment" onSubmit={vi.fn()} />);
+      expect(offeredAudiences()).toEqual(['all', 'tenants_only']);
+    });
+
+    it('offers a condo every audience', () => {
+      render(<AnnouncementComposer communityType="condo_718" onSubmit={vi.fn()} />);
+      expect(offeredAudiences()).toEqual(['all', 'owners_only', 'board_only', 'tenants_only']);
+    });
+
+    it('keeps a saved audience the community no longer offers, so an edit cannot change it', () => {
+      expect(getAnnouncementAudienceOptions('apartment', 'owners_only')).toEqual([
+        'all',
+        'tenants_only',
+        'owners_only',
+      ]);
+    });
+  });
+
   it('shows a validation message when required fields are blank', async () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
-    render(<AnnouncementComposer onSubmit={onSubmit} />);
+    render(<AnnouncementComposer communityType="condo_718" onSubmit={onSubmit} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Publish announcement' }));
 

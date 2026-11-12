@@ -58,7 +58,7 @@ export const CHECKLIST_DISPLAY: Record<ChecklistItemKey, string> = {
   upload_community_rules: 'Upload your community rules',
   add_units: 'Add your units',
   invite_first_member: 'Add a board member or resident',
-  review_compliance: 'Review your compliance score',
+  review_compliance: 'Resolve your first compliance item',
   post_announcement: 'Post your first announcement',
   customize_portal: 'Customize your portal',
   review_announcement: "Review your community's latest announcement",

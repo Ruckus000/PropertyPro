@@ -62,13 +62,16 @@ describe('AdminReviewList', () => {
     ).toBeDefined();
   });
 
-  it('renders the empty state when there are no requests', () => {
+  it('renders an empty state that is true on a brand-new community', () => {
+    // The list returns pending requests only, so empty may mean none ever
+    // arrived. "All join requests have been reviewed." was false on day one.
     setQuery({ data: [] });
     render(<AdminReviewList />);
-    expect(screen.getByText('No pending requests')).toBeDefined();
+    expect(screen.getByText('No requests waiting')).toBeDefined();
     expect(
-      screen.getByText('All join requests have been reviewed.'),
+      screen.getByText(/People with a PropertyPro account can ask to join with their unit number/),
     ).toBeDefined();
+    expect(screen.queryByText(/have been reviewed/)).toBeNull();
   });
 
   it('renders a request row and approves it via the mutation', () => {

@@ -53,11 +53,15 @@ export function AdminReviewList({ communityId }: { communityId?: number } = {}) 
 
   const requests = data ?? [];
 
+  // The list holds pending requests only, so an empty one cannot tell "none
+  // ever arrived" (every brand-new community) from "all reviewed". The copy
+  // must be true for both: "All join requests have been reviewed." was false
+  // on day one.
   if (requests.length === 0) {
     return (
       <EmptyState
-        title="No pending requests"
-        description="All join requests have been reviewed."
+        title="No requests waiting"
+        description="People with a PropertyPro account can ask to join with their unit number. Their requests appear here for you to approve or deny."
       />
     );
   }
