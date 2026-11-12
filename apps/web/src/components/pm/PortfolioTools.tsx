@@ -8,21 +8,26 @@
  *
  * Templates is a plan feature (`hasSitePortfolioTemplates`); the page passes
  * `showTemplates` from the server check, so nobody is sent to an upgrade wall.
+ *
+ * On a phone the list has no room for a checkbox column, so the More menu
+ * also starts select mode (`onSelectCommunities`).
  */
 import Link from 'next/link';
-import { BarChart3, LayoutTemplate, MoreHorizontal } from 'lucide-react';
+import { BarChart3, CheckSquare, LayoutTemplate, MoreHorizontal } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
 interface PortfolioToolsProps {
   showTemplates: boolean;
+  onSelectCommunities?: () => void;
 }
 
-export function PortfolioTools({ showTemplates }: PortfolioToolsProps) {
+export function PortfolioTools({ showTemplates, onSelectCommunities }: PortfolioToolsProps) {
   const links = [
     { href: '/pm/reports', label: 'Reports', icon: BarChart3 },
     ...(showTemplates ? [{ href: '/pm/portfolio/templates', label: 'Templates', icon: LayoutTemplate }] : []),
@@ -54,6 +59,15 @@ export function PortfolioTools({ showTemplates }: PortfolioToolsProps) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
+            {onSelectCommunities && (
+              <>
+                <DropdownMenuItem onSelect={onSelectCommunities} className="min-h-11">
+                  <CheckSquare className="mr-2 size-4 text-content-tertiary" aria-hidden="true" />
+                  Select communities
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            )}
             {links.map(({ href, label, icon: Icon }) => (
               <DropdownMenuItem key={href} asChild>
                 <Link href={href} className="min-h-11">

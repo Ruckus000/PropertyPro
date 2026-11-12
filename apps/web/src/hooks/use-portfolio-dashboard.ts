@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { CommunityType } from '@propertypro/shared';
 import { requestJson } from '@/lib/api/request-json';
 import type { PortfolioView } from '@/lib/pm/portfolio-summary-keys';
@@ -180,6 +180,9 @@ export function usePortfolioDashboard(filters: PortfolioFilters = {}) {
   return useQuery({
     queryKey: PORTFOLIO_KEYS.summary(filters),
     queryFn: () => fetchPortfolioDashboard(filters),
+    // Keep the current page on screen while a new search or filter loads, so
+    // the layout does not drop to a skeleton on every keystroke.
+    placeholderData: keepPreviousData,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: true,
   });

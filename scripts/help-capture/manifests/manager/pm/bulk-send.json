@@ -20,22 +20,22 @@
         },
         {
           "type": "waitFor",
-          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+          "selector": "table"
         },
         {
           "type": "click",
-          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+          "selector": "table tbody >> role=checkbox >> nth=0"
         },
         {
           "type": "waitFor",
-          "selector": "role=button[name=/^Bulk announcement/]"
+          "selector": "role=region[name=\"Bulk actions\"]"
         }
       ],
       "clipTo": [
-        "role=button[name=/^Bulk announcement/]",
-        "table tbody tr >> nth=0"
+        "role=region[name=\"Bulk actions\"]",
+        "table tbody tr >> nth=1"
       ],
-      "highlight": "role=button[name=/^Bulk announcement/]",
+      "highlight": "role=region[name=\"Bulk actions\"]",
       "step": 1
     },
     {
@@ -55,15 +55,19 @@
         },
         {
           "type": "waitFor",
-          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+          "selector": "table"
         },
         {
           "type": "click",
-          "selector": "role=checkbox[name=\"Select row\"] >> nth=0"
+          "selector": "table tbody >> role=checkbox >> nth=0"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=region[name=\"Bulk actions\"]"
         },
         {
           "type": "click",
-          "selector": "role=button[name=/^Bulk announcement/]"
+          "selector": "role=region[name=\"Bulk actions\"] >> role=button[name=\"Send announcement\"]"
         },
         {
           "type": "waitFor",

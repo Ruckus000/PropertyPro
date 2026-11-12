@@ -42,22 +42,11 @@
         },
         {
           "type": "waitFor",
-          "selector": "role=button[name=/^Actions for /] >> nth=0"
-        },
-        {
-          "type": "click",
-          "selector": "role=button[name=/^Actions for /] >> nth=0"
-        },
-        {
-          "type": "waitFor",
-          "selector": "role=menuitem[name=\"View Dashboard\"]"
+          "selector": "table"
         }
       ],
-      "clipTo": [
-        "table tbody tr >> nth=0",
-        "role=menu"
-      ],
-      "highlight": "role=menuitem[name=\"View Dashboard\"]",
+      "clipTo": "table tbody >> nth=0",
+      "highlight": "table tbody >> nth=0 >> role=link >> nth=0",
       "step": 1
     },
     {

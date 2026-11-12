@@ -45,10 +45,12 @@ vi.mock('@/hooks/use-site-setup-banner', () => ({
 }));
 
 // Heavy children stubbed: this file is about the banner seam, not the table.
-vi.mock('@/components/pm/CommunityFilters', () => ({ CommunityFilters: () => null }));
-vi.mock('@/components/pm/KpiSummaryBar', () => ({ KpiSummaryBar: () => null }));
-vi.mock('@/components/pm/CommunityCardGrid', () => ({ CommunityCardGrid: () => null }));
-vi.mock('@/components/pm/PortfolioTable', () => ({ PortfolioTable: () => null }));
+vi.mock('@/components/pm/communities/CommunitiesToolbar', () => ({ CommunitiesToolbar: () => null, SORT_OPTIONS: [] }));
+vi.mock('@/components/pm/communities/CommunityCards', () => ({
+  CommunityChooser: () => null,
+  CommunityGallery: () => null,
+}));
+vi.mock('@/components/pm/communities/CommunityTable', () => ({ CommunityTable: () => null }));
 vi.mock('@/components/pm/add-community-modal', () => ({ AddCommunityModal: () => null }));
 vi.mock('@/components/pm/CommunityAddedModal', () => ({ CommunityAddedModal: () => null }));
 vi.mock('@/components/pm/BulkAnnouncementDialog', () => ({ BulkAnnouncementDialog: () => null }));
@@ -86,7 +88,15 @@ function community(
 
 function mockDashboard(communities: ReturnType<typeof community>[], isLoading = false) {
   usePortfolioDashboardMock.mockReturnValue({
-    data: isLoading ? undefined : { kpis: {}, communities, totalCount: communities.length },
+    data: isLoading
+      ? undefined
+      : {
+          kpis: { totalUnits: { value: 0 } },
+          communities,
+          totalCount: communities.length,
+          portfolioCount: communities.length,
+          viewCounts: { all: communities.length, needsAttention: 0, overdueDues: 0 },
+        },
     isLoading,
     isError: false,
   });

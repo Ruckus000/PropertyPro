@@ -26,14 +26,11 @@ import type { CellContext, ColumnDef, ColumnMeta } from './data-table-types';
  * column-resizing nobody uses could not be shaken out either. That cost
  * **57.9 KiB on seven routes**, five of which were over the 700 KiB hard budget.
  *
- * The one consumer that genuinely uses selection, pagination and sorting —
- * `pm/PortfolioTable` — keeps the real library, in
- * `@/components/pm/portfolio-data-table`. Its route is under budget, and
- * reimplementing a selection state machine to save nothing there would have
- * been the risky half of this change for none of the benefit.
+ * The one screen that genuinely uses selection and sorting, Communities, left
+ * the library too: its selection is a set of ids and its sorting happens on the
+ * server (`pm/communities/CommunityTable.tsx`).
  *
- * So: if you need sorting, row selection or pagination, reach for
- * `PortfolioDataTable`. Do not grow this one back into a table library.
+ * Do not grow this one back into a table library.
  */
 
 /**
