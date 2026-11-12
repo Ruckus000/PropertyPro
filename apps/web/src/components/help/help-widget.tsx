@@ -57,6 +57,39 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
   const { isOpen, close } = useHelpWidget();
   const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState('');
+  const panelRef = useRef<HTMLElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Keyboard behaviour while open. On open: remember what had focus (the
+  // "Open help" button, say) and move focus to the search box. Escape closes.
+  // On close: hand focus back to that element, unless the user has already
+  // moved it somewhere else on the page. The closed panel is `inert`, so focus
+  // left inside it would otherwise fall to <body>.
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    const active = document.activeElement;
+    const opener =
+      active instanceof HTMLElement && active !== document.body && !panel?.contains(active)
+        ? active
+        : null;
+    searchInputRef.current?.focus();
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      close();
+    }
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const focused = document.activeElement;
+      const focusWasInPanel =
+        !focused || focused === document.body || (panel?.contains(focused) ?? false);
+      if (opener?.isConnected && focusWasInPanel) opener.focus();
+    };
+  }, [isOpen, close]);
 
   const { data: searchResults, error: searchError } = useHelpSearch(
     searchQuery,
@@ -129,12 +162,16 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
         Only the results list scrolls, so the search box and the footer stay put.
       */}
       <aside
+        ref={panelRef}
         className={cn(
           'fixed right-4 top-4 z-[70] flex max-h-[calc(100dvh-2rem)] w-[min(100vw-2rem,28rem)] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-edge bg-surface-page shadow-e3 transition-[transform,opacity] duration-200',
           isOpen ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0',
         )}
         aria-label="Help panel"
         aria-hidden={!isOpen}
+        // Closed means unreachable: without this, Tab still walks the hidden
+        // close button, search box and links. The slide/fade still runs.
+        inert={!isOpen}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-edge px-4 py-3">
@@ -154,6 +191,7 @@ function HelpWidgetInner({ communityId }: HelpWidgetProps) {
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-disabled" aria-hidden="true" />
             <input
+              ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
