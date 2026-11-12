@@ -125,6 +125,13 @@ export function getSignupPlansForCommunityType(
   return SIGNUP_PLAN_OPTIONS[communityType];
 }
 
+/** Florida ZIPs run 32004–34997; PropertyPro Florida serves Florida only. */
+export function isFloridaZip(zip: string): boolean {
+  if (!/^\d{5}$/.test(zip)) return false;
+  const n = Number(zip);
+  return n >= 32004 && n <= 34997;
+}
+
 export function isPlanAvailableForCommunityType(
   communityType: CommunityType,
   planKey: string,

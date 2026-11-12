@@ -6,7 +6,7 @@ import { refuseUnderSupportSession } from '@/lib/support/support-scope';
 /**
  * AUTHZ: PM portfolio cross-community gate. Authenticates the caller and
  * requires them to be a property-manager admin in at least one community —
- * the two-step gate every `/api/v1/pm/*` (and `billing-groups/mine`) route
+ * the two-step gate every `/api/v1/pm/*` route
  * needs before doing cross-community work. Returns the authenticated userId
  * on success; throws `ForbiddenError` (403) otherwise.
  *

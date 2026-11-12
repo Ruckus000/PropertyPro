@@ -3,6 +3,7 @@ import { unionAll } from 'drizzle-orm/pg-core';
 import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
 import { db } from '../drizzle';
 import { assessmentLineItems } from '../schema/assessment-line-items';
+import { billingGroups } from '../schema/billing-groups';
 import { communities } from '../schema/communities';
 import { complianceChecklistItems } from '../schema/compliance-checklist-items';
 import { documents } from '../schema/documents';
@@ -126,6 +127,60 @@ export async function hasOpenAddCommunityCheckoutUnscoped(userId: string): Promi
     )
     .limit(1);
   return rows.length > 0;
+}
+
+export interface AddCommunityFacts {
+  /** Billing groups `userId` owns that are not deleted. */
+  ownedBillingGroupIds: number[];
+  /** One row per management role `userId` holds in a community that is not deleted. */
+  managedRoles: Array<{
+    communityId: number;
+    role: string;
+    billingGroupId: number | null;
+    hasStripeCustomer: boolean;
+  }>;
+}
+
+/**
+ * What deciding "may `userId` add a community?" needs: the billing groups they
+ * own and every management role they hold. The decision itself lives in the
+ * web app (`decideAddCommunityAccess`).
+ *
+ * Cross-community by design: it reads only the caller's own billing groups and
+ * role rows.
+ */
+export async function findAddCommunityFactsUnscoped(userId: string): Promise<AddCommunityFacts> {
+  const [groups, roles] = await Promise.all([
+    db
+      .select({ id: billingGroups.id })
+      .from(billingGroups)
+      .where(and(eq(billingGroups.ownerUserId, userId), isNull(billingGroups.deletedAt))),
+    db
+      .select({
+        communityId: userRoles.communityId,
+        role: userRoles.role,
+        billingGroupId: communities.billingGroupId,
+        stripeCustomerId: communities.stripeCustomerId,
+      })
+      .from(userRoles)
+      .innerJoin(communities, eq(communities.id, userRoles.communityId))
+      .where(
+        and(
+          eq(userRoles.userId, userId),
+          inArray(userRoles.role, [...PM_SCOPE_DB_ROLES]),
+          isNull(communities.deletedAt),
+        ),
+      ),
+  ]);
+  return {
+    ownedBillingGroupIds: groups.map((g) => Number(g.id)),
+    managedRoles: roles.map((r) => ({
+      communityId: Number(r.communityId),
+      role: r.role,
+      billingGroupId: r.billingGroupId == null ? null : Number(r.billingGroupId),
+      hasStripeCustomer: typeof r.stripeCustomerId === 'string' && r.stripeCustomerId.length > 0,
+    })),
+  };
 }
 
 /**

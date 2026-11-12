@@ -137,7 +137,6 @@ function walkDirectory(dir: string, files: string[]): void {
 const KNOWN_RAW_FETCH_HOOKS = new Set<string>([
   'apps/web/src/hooks/use-account-settings.ts',
   'apps/web/src/hooks/use-add-community.ts',
-  'apps/web/src/hooks/use-billing-group.ts',
   'apps/web/src/hooks/use-bulk-announcements.ts',
   'apps/web/src/hooks/use-bulk-documents.ts',
   'apps/web/src/hooks/use-change-plan.ts',

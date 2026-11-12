@@ -3,10 +3,9 @@
  * of add-community-modal.tsx).
  *
  * Documented exception to the requestJson rule: the modal renders the thrown
- * error's `.message` verbatim, so the hook keeps a manual fetch + non-OK
- * throw with the exact literals `'Failed to fetch pricing preview'` and
- * `'Checkout creation failed'` rather than delegating to requestJson (which
- * would change the user-visible copy).
+ * error's `.message` verbatim, so a server fault reads exactly
+ * `'Failed to fetch pricing preview'` / `'Checkout creation failed'`. A POST
+ * refusal (4xx) shows the server's reason instead.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -15,6 +14,8 @@ import { createElement, type ReactNode } from 'react';
 import {
   useBillingGroupPreview,
   useAddCommunity,
+  useAddCommunityAccess,
+  ADD_COMMUNITY_ACCESS_QUERY_KEY,
   pricingPreviewKey,
   type AddCommunityFormState,
   type PricingPreview,
@@ -235,10 +236,63 @@ describe('useAddCommunity', () => {
     expect(result.current.data).toEqual({ clientSecret: 'cs_123' });
   });
 
-  it('throws the exact literal on non-OK', async () => {
+  it('refreshes the add-access answer once a checkout starts (a first add creates the group)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { clientSecret: 'cs_1' } }) }),
+    );
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    qc.setQueryData(ADD_COMMUNITY_ACCESS_QUERY_KEY, { allowed: true, billingGroupId: null });
+    const local = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: qc }, children);
+
+    const { result } = renderHook(() => useAddCommunity(), { wrapper: local });
+    result.current.mutate(form);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(qc.getQueryState(ADD_COMMUNITY_ACCESS_QUERY_KEY)?.isInvalidated).toBe(true);
+  });
+
+  it('throws the exact literal on a server fault, never its internals', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
+      status: 500,
       json: async () => ({ error: { message: 'server boom' } }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useAddCommunity(), { wrapper });
+    result.current.mutate(form);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Checkout creation failed');
+  });
+
+  it('shows why a refusal happened, so the person can act on it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({
+        error: { message: 'Only the root manager who pays for this portfolio can add a community.' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useAddCommunity(), { wrapper });
+    result.current.mutate(form);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe(
+      'Only the root manager who pays for this portfolio can add a community.',
+    );
+  });
+
+  it('falls back to the literal when a refusal has no readable body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => {
+        throw new SyntaxError('not json');
+      },
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -281,5 +335,37 @@ describe('useAddCommunity', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe('Checkout creation failed');
+  });
+});
+
+describe('useAddCommunityAccess', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('asks the read-only access route and unwraps the envelope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { allowed: true, billingGroupId: 7 } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useAddCommunityAccess(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual({ allowed: true, billingGroupId: 7 });
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/pm/communities/add-access');
+  });
+
+  it('waits until enabled, so the account menu asks only when opened', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useAddCommunityAccess(false), { wrapper });
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

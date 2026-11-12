@@ -54,11 +54,11 @@ interface CommunityGalleryProps {
   communities: PortfolioCommunity[];
   /** Show the Add Community tile (the full portfolio is on screen). */
   showAddTile: boolean;
-  onAdd: () => void;
-  addDisabled: boolean;
+  /** Absent when the user may not add a community: no tile. */
+  onAdd?: () => void;
 }
 
-export function CommunityGallery({ communities, showAddTile, onAdd, addDisabled }: CommunityGalleryProps) {
+export function CommunityGallery({ communities, showAddTile, onAdd }: CommunityGalleryProps) {
   return (
     <ul className="grid gap-3 md:grid-cols-2 md:gap-6 lg:grid-cols-3">
       {communities.map((c) => (
@@ -92,17 +92,15 @@ export function CommunityGallery({ communities, showAddTile, onAdd, addDisabled 
           </Link>
         </li>
       ))}
-      {showAddTile && (
+      {showAddTile && onAdd && (
         <li className="hidden md:block">
           <button
             type="button"
             onClick={onAdd}
-            disabled={addDisabled}
             className={cn(
               'flex h-full min-h-48 w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-edge p-5',
               'transition-colors duration-quick hover:border-interactive hover:bg-surface-hover',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              'disabled:pointer-events-none disabled:opacity-50',
             )}
           >
             <span className="flex size-10 items-center justify-center rounded-full border border-edge bg-surface-card">

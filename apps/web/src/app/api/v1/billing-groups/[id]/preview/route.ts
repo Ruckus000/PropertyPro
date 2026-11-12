@@ -55,8 +55,7 @@ export const GET = withErrorHandler(
   runRoute(billingGroupPreviewContract, async ({ params, query, req }) => {
     const userId = await requireAuthenticatedUserId();
     // A billing group spans the owner's portfolio, which a support session
-    // (consented for ONE community) does not cover — as its sibling
-    // `billing-groups/mine` is refused via requirePmPortfolioAccess.
+    // (consented for ONE community) does not cover.
     refuseUnderSupportSession(req.headers);
     const billingGroupId = params.id;
 

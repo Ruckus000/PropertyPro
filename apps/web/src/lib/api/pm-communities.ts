@@ -1,5 +1,6 @@
 // AUTHZ: P3-PRE-03: PM portfolio cross-community read boundary
 import {
+  findAddCommunityFactsUnscoped,
   findManagedCommunitiesPortfolioUnscoped,
   findManagedCommunityIdsUnscoped,
   hasOpenAddCommunityCheckoutUnscoped,
@@ -7,6 +8,12 @@ import {
   type PortfolioQueryFilters,
 } from '@propertypro/db/unsafe';
 import type { CommunityType } from '@propertypro/shared';
+import { ForbiddenError } from '@/lib/api/errors';
+import {
+  ADD_COMMUNITY_REFUSAL_MESSAGES,
+  decideAddCommunityAccess,
+  type AddCommunityAccess,
+} from '@/lib/pm/add-community-access';
 
 export interface PmCommunityFilters {
   communityType?: CommunityType;
@@ -59,4 +66,22 @@ export async function findSoleManagedCommunityId(userId: string): Promise<number
  */
 export async function hasOpenAddCommunityCheckout(userId: string): Promise<boolean> {
   return hasOpenAddCommunityCheckoutUnscoped(userId);
+}
+
+/** Whether `userId` may add a community (see `decideAddCommunityAccess`). */
+export async function getAddCommunityAccess(userId: string): Promise<AddCommunityAccess> {
+  return decideAddCommunityAccess(await findAddCommunityFactsUnscoped(userId));
+}
+
+/**
+ * Throws 403 with a reason the person can act on unless `userId` may add a
+ * community. Returns the billing group to add to, or null when this add
+ * starts one.
+ */
+export async function requireAddCommunityAccess(userId: string): Promise<number | null> {
+  const access = await getAddCommunityAccess(userId);
+  if (!access.allowed) {
+    throw new ForbiddenError(ADD_COMMUNITY_REFUSAL_MESSAGES[access.reason]);
+  }
+  return access.billingGroupId;
 }

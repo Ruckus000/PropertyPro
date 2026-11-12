@@ -1,6 +1,8 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { requestJson } from '@/lib/api/request-json';
+import type { AddCommunityAccessResponse } from '@/app/api/v1/pm/communities/add-access/contract';
 
 /**
  * TanStack-Query hooks for the "Add a Community" PM flow. Replaces the two
@@ -11,16 +13,12 @@ import { useMutation, useQuery } from '@tanstack/react-query';
  * - `useAddCommunity` — user-triggered POST that creates the pending signup
  *   and Stripe Checkout session (`POST /api/v1/pm/communities`, 200).
  *
- * **Why not `requestJson`:** both routes return the standard `{ data: T }`
- * envelope, so `requestJson<T>` would unwrap correctly. However, the modal
- * renders the thrown error's `.message` verbatim to the user
- * (`{submit.error.message}`), and previously distinguished the two failures
- * with the exact literals `'Failed to fetch pricing preview'` and
- * `'Checkout creation failed'`. `requestJson` derives its message from the
- * response error envelope (`json.error?.message ?? 'Request failed'`), which
- * would change the user-visible copy. To preserve behavior EXACTLY we keep a
- * manual `fetch` + non-OK throw with those precise literals. This is a
- * documented exception to the `requestJson` envelope rule.
+ * **Why not `requestJson`:** the modal renders the thrown error's `.message`
+ * verbatim, and a server fault must read `'Failed to fetch pricing preview'`
+ * or `'Checkout creation failed'`, not `requestJson`'s `'Request failed'`. A
+ * POST refusal (4xx) carries a reason the person can act on, so that message
+ * is shown instead. `useAddCommunityAccess` has no such copy and uses
+ * `requestJson`.
  *
  * The POST route actually returns `{ data: { clientSecret, pendingSignupId,
  * billingGroupId } }`; the modal only consumes `clientSecret`, so the
@@ -107,15 +105,45 @@ export function useBillingGroupPreview({
   });
 }
 
+export const ADD_COMMUNITY_ACCESS_QUERY_KEY = ['add-community-access'] as const;
+
+/**
+ * May the signed-in user add a community, and to which billing group (null:
+ * their first add sets one up)? Read-only; the POST asks the same question.
+ * `enabled` lets the account menu wait until it opens.
+ */
+export function useAddCommunityAccess(enabled = true) {
+  return useQuery({
+    queryKey: ADD_COMMUNITY_ACCESS_QUERY_KEY,
+    queryFn: ({ signal }) =>
+      requestJson<AddCommunityAccessResponse>('/api/v1/pm/communities/add-access', { signal }),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 export function useAddCommunity() {
+  const queryClient = useQueryClient();
   return useMutation<AddCommunityCheckoutData, Error, AddCommunityFormState>({
+    // A first add sets up the billing group, so the cached answer (group: null)
+    // is out of date the moment a checkout starts.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ADD_COMMUNITY_ACCESS_QUERY_KEY }),
     mutationFn: async (form) => {
       const res = await fetch('/api/v1/pm/communities', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error('Checkout creation failed');
+      if (!res.ok) {
+        // A refusal says why (not the billing owner, not a Florida address,
+        // subdomain taken). Only a server fault falls back to the generic line.
+        let message = 'Checkout creation failed';
+        if (res.status < 500) {
+          const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+          if (body?.error?.message) message = body.error.message;
+        }
+        throw new Error(message);
+      }
       const json = (await res.json()) as {
         data?: { clientSecret?: string };
       };

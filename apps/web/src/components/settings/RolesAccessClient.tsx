@@ -238,7 +238,7 @@ function RootSection({
             status="warning"
             variant="subtle"
             title="You will become a property_manager."
-            description="The selected property manager will become the new root manager. This cannot be undone by you afterward."
+            description="The selected property manager will become the new root manager. If you pay for this community's portfolio and are not root manager of another community in it, paying for the portfolio passes to them too. This cannot be undone by you afterward."
           />
 
           <div className="space-y-2">

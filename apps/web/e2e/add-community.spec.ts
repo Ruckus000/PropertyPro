@@ -1,8 +1,8 @@
 /**
  * E2E Test: PM Add Community Flow (Task 15)
  *
- * Verifies that the PM can open the Add Community modal from the dashboard
- * and that the legacy wizard URL redirects back to the dashboard.
+ * Verifies who is offered Add Community and that the legacy wizard URL
+ * redirects back to the dashboard.
  *
  * The form submission path (Stripe Embedded Checkout) is not exercised here
  * because it would require live Stripe test credentials and would create
@@ -18,44 +18,34 @@ test.describe('PM Add Community Flow', () => {
   // unreachable while the test itself is also capped at 30s.
   test.setTimeout(120_000);
 
-  test('PM can open the Add Community modal from the dashboard', async ({ page }) => {
+  // The seeded pm_admin pays for the demo portfolio but is root manager of none
+  // of its communities, so the add rule refuses them: adding a community is the
+  // billing owner's, while root in the portfolio. No seeded persona is both, so
+  // opening the form is covered by the jsdom tests (add-community-modal,
+  // profile-menu-add-community, pm-dashboard-client), not here.
+  test('a portfolio billing owner who is not root is not offered Add Community', async ({ page }) => {
     await loginAs(page, 'pm_admin');
 
     // `domcontentloaded`, not `networkidle`. This is the FIRST authenticated
     // route the suite compiles, so it pays the largest cold-compile cost of any
     // block — and `networkidle` never settles on a dev-server page, so it blew
-    // the 30s test timeout inside `page.goto` before any assertion ran. The
-    // assertions below auto-wait for what actually matters.
+    // the 30s test timeout inside `page.goto` before any assertion ran.
+    const pageAnswer = page.waitForResponse((r) => r.url().includes('/api/v1/pm/communities/add-access'), {
+      timeout: 60_000,
+    });
     await page.goto('/pm/dashboard/communities', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /communities/i })).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(page.getByRole('heading', { name: /communities/i })).toBeAttached({ timeout: 30_000 });
+    // Absence means nothing until the answer is in: wait for it, and check it.
+    const answer = await pageAnswer;
+    expect((await answer.json()).data).toEqual({ allowed: false, billingGroupId: null });
+    await expect(page.getByRole('button', { name: 'Add Community', exact: true })).toHaveCount(0);
 
-    // Exact: from three communities the gallery's Add Community tile also
-    // carries the words ("Add Community Set up a new association").
-    const addButton = page.getByRole('button', { name: 'Add Community', exact: true });
-    await expect(addButton).toBeVisible();
-    // This block PASSES today, but it had the same latent bug as the two specs
-    // that did not: a click before hydration is SWALLOWED, not delayed, so the
-    // 30s below could never rescue it. The old comment here ("the dialog can
-    // open a beat late") had exactly the wrong model. It survives on luck — as
-    // the first authenticated route compiled, its 30s heading wait absorbs a
-    // large cold compile, so hydration usually wins the race. See
-    // helpers/hydration.ts.
-    await clickWhenHydrated(addButton);
-
-    await expect(page.getByRole('dialog')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('heading', { name: /add a community/i })).toBeVisible();
-
-    // Core form fields are present
-    await expect(page.getByLabel(/community name/i)).toBeVisible();
-    await expect(page.getByLabel(/subdomain/i)).toBeVisible();
-    await expect(page.getByLabel(/unit count/i)).toBeVisible();
-
-    // Continue button is disabled until required fields are filled
-    const continueBtn = page.getByRole('button', { name: /continue to payment/i });
-    await expect(continueBtn).toBeDisabled();
+    // The account menu asks the same question when it opens.
+    const menu = page.getByRole('button', { name: /account menu/i });
+    await clickWhenHydrated(menu);
+    await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Add Community' })).toHaveCount(0);
   });
 
   test('legacy /communities/new URL redirects back to the dashboard', async ({ page }) => {
