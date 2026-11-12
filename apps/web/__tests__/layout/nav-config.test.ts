@@ -170,6 +170,12 @@ describe('getVisibleItems', () => {
     expect(manager).toContain('arc-requests');
   });
 
+  it('groups ARC Requests under Management, not an Admin heading residents would see', () => {
+    const sectionOf = (id: string) => NAV_SECTIONS.find((s) => s.items.some((i) => i.id === id))?.label;
+    expect(sectionOf('arc-requests')).toBe('Management');
+    expect(sectionOf('arc-requests')).toBe(sectionOf('violations-report'));
+  });
+
   it('hides ARC Requests from residents of an apartment community (no hasARC)', () => {
     const apartment = getFeaturesForCommunity('apartment');
     expect(apartment.hasARC).toBe(false);

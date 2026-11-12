@@ -453,24 +453,51 @@ describe('OperationsHub', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
+  // A function, not a shared element: rerendering the SAME element object lets
+  // React bail out, so the component would never re-read useSearchParams.
+  const hub = () => (
+    <OperationsHub
+      communityId={42}
+      requestsEnabled={true}
+      workOrdersEnabled={false}
+      reservationsEnabled={false}
+      requestScope="mine"
+      isAdmin={false}
+      userId="u-1"
+      communityTimezone="America/New_York"
+    />
+  );
+
   it('closing a sheet pops exactly the one entry that opening pushed', async () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { rerender } = render(hub());
+    fireEvent.click(screen.getAllByRole('button', { name: 'Submit Request' })[0]!);
+    expect(historyPush).toHaveBeenCalledTimes(1);
+    // Next syncs the pushed URL into useSearchParams.
     searchParamsMock.mockReturnValue('tab=requests&create=request');
-    render(
-      <OperationsHub
-        communityId={42}
-        requestsEnabled={true}
-        workOrdersEnabled={false}
-        reservationsEnabled={false}
-        requestScope="mine"
-        isAdmin={false}
-        userId="u-1"
-        communityTimezone="America/New_York"
-      />,
-    );
+    rerender(hub());
+
     fireEvent.click(await screen.findByRole('button', { name: 'Close sheet' }));
     expect(backMock).toHaveBeenCalledTimes(1);
-    expect(historyPush).not.toHaveBeenCalled();
     expect(pushMock).not.toHaveBeenCalled();
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  // Browser check of R-6 (2026-11-11 empty-state audit): the legacy
+  // /maintenance/submit redirect ARRIVES with create=request. Back there left
+  // Operations for the page before the redirect (a tenant landed on /mobile).
+  it('closing a sheet the visitor arrived with strips create in place, without Back', async () => {
+    const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+    searchParamsMock.mockReturnValue('tab=requests&from=maintenance&create=request');
+    render(hub());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close sheet' }));
+    expect(backMock).not.toHaveBeenCalled();
+    expect(historyReplace).toHaveBeenCalledWith(
+      null,
+      '',
+      '/communities/42/operations?tab=requests&from=maintenance',
+    );
+    historyReplace.mockRestore();
   });
 });

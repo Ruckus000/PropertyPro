@@ -215,3 +215,23 @@ describe('usePickupPackage invalidation (regression for stale "my packages" view
     );
   });
 });
+
+// Browser check of R-3 (2026-11-11 empty-state audit): a resident with no
+// linked unit gets 403 NO_UNIT_ASSOCIATION, and the default three retries held
+// the skeleton for ~10s before the "not linked" state showed.
+describe('useMyPackages retry', () => {
+  it('does not retry a 403 refusal', async () => {
+    mockFetch.mockImplementation(() =>
+      jsonOk({ error: { code: 'NO_UNIT_ASSOCIATION', message: 'No unit association' } }, 403),
+    );
+    // App-like defaults: three retries unless the query says otherwise.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: 3, retryDelay: 0 } } });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const my = renderHook(() => useMyPackages(COMMUNITY_ID), { wrapper });
+    await waitFor(() => expect(my.result.current.isError).toBe(true));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -139,6 +139,8 @@ export function OperationsHub({
   const selectedTab = availableTabs.some((candidate) => candidate.id === tab) ? tab : defaultTab;
 
   const createValue = (searchParams.get('create') ?? undefined) as CreateValue | undefined;
+  // True only while a sheet this page opened (pushState) is showing.
+  const openedHereRef = useRef(false);
 
   const operationsQuery = useOperations(
     communityId,
@@ -259,11 +261,27 @@ export function OperationsHub({
   function openCreate(value: CreateValue) {
     const params = new URLSearchParams(searchParams.toString());
     params.set('create', value);
+    openedHereRef.current = true;
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
 
+  /*
+   * Back pops the entry `openCreate` pushed — but only if this page pushed
+   * one. A visitor can also ARRIVE with `create` already set (the legacy
+   * /maintenance/submit redirect sends `create=request`); there, Back would
+   * leave Operations for whatever page came before. Strip the param in place
+   * instead, the same way tab switches rewrite the URL.
+   */
   function closeCreate() {
-    router.back();
+    if (openedHereRef.current) {
+      openedHereRef.current = false;
+      router.back();
+      return;
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('create');
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
   const requestsDescription = requestScope === 'community'

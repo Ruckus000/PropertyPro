@@ -372,14 +372,16 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
   navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage']),
-  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report']),
+  // `arc-requests` sits beside `violations-report`, not under Admin: residents
+  // see it too (they submit ARC applications), and an "Admin" heading over a
+  // resident's own requests would be wrong.
+  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report', 'arc-requests']),
   navSection('Admin', [
     'compliance',
     'directory',
     'contracts',
     'esign',
     'violations-inbox',
-    'arc-requests',
     'move-in-out',
     'audit-trail',
   ]),
