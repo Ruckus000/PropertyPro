@@ -11,10 +11,18 @@ import {
 import {
   fillTemplatePlaceholders,
 } from '@/lib/constants/emergency-templates';
+import type { CommunityType } from '@propertypro/shared';
+import {
+  BROADCAST_AUDIENCE_LABELS,
+  getBroadcastAudienceOptions,
+  type BroadcastAudience,
+} from './broadcast-audience';
 
 interface Props {
   communityId: number;
   communityName: string;
+  /** Decides which audiences are offered; see `getBroadcastAudienceOptions`. */
+  communityType: CommunityType;
   /**
    * Per-community `smsDispatchEnabled` legal gate. REQUIRED so a new call site
    * has to state its intent rather than silently inheriting a default.
@@ -30,7 +38,7 @@ interface Props {
 
 type Step = 'template' | 'compose' | 'recipients' | 'confirm' | 'sending' | 'sent';
 
-export function BroadcastComposer({ communityId, communityName, smsEnabled }: Props) {
+export function BroadcastComposer({ communityId, communityName, communityType, smsEnabled }: Props) {
   const router = useRouter();
   const [step, setStep] = useState<Step>('template');
   const [title, setTitle] = useState('');
@@ -38,7 +46,8 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
   const [smsBody, setSmsBody] = useState('');
   const [severity, setSeverity] = useState<'emergency' | 'urgent' | 'info'>('emergency');
   const [templateKey, setTemplateKey] = useState<string | undefined>();
-  const [targetAudience, setTargetAudience] = useState<'all' | 'owners_only'>('all');
+  const [targetAudience, setTargetAudience] = useState<BroadcastAudience>('all');
+  const audienceOptions = getBroadcastAudienceOptions(communityType);
   const [channels, setChannels] = useState<Array<'sms' | 'email'>>(
     smsEnabled ? ['sms', 'email'] : ['email'],
   );
@@ -273,18 +282,28 @@ export function BroadcastComposer({ communityId, communityName, smsEnabled }: Pr
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-content">Select Recipients</h2>
 
-          <div>
-            <label htmlFor="audience" className="block text-sm font-medium text-content-secondary">Audience</label>
-            <select
-              id="audience"
-              value={targetAudience}
-              onChange={(e) => setTargetAudience(e.target.value as 'all' | 'owners_only')}
-              className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
-            >
-              <option value="all">All residents</option>
-              <option value="owners_only">Owners only</option>
-            </select>
-          </div>
+          {audienceOptions.length > 1 ? (
+            <div>
+              <label htmlFor="audience" className="block text-sm font-medium text-content-secondary">Audience</label>
+              <select
+                id="audience"
+                value={targetAudience}
+                onChange={(e) => setTargetAudience(e.target.value as BroadcastAudience)}
+                className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
+              >
+                {audienceOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {BROADCAST_AUDIENCE_LABELS[option]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              <span className="block text-sm font-medium text-content-secondary">Audience</span>
+              <p className="mt-1 text-sm text-content">{BROADCAST_AUDIENCE_LABELS.all}</p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <span className="block text-sm font-medium text-content-secondary">Channels</span>

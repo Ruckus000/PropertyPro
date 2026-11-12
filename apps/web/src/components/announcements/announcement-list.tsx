@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Loader2, Pin, RotateCcw, Trash2 } from 'lucide-react';
+import { Loader2, Pin, RotateCcw, SearchX, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
@@ -46,6 +46,14 @@ export interface AnnouncementListProps {
   headerAction?: ReactNode;
   /** Action shown inside the empty state (e.g. a "Create announcement" CTA). */
   emptyStateAction?: ReactNode;
+  /**
+   * The `?q=` search the list was filtered by, if any. An empty list under a
+   * search means "nothing matched", not "nothing posted", so it gets its own
+   * message naming the search.
+   */
+  searchQuery?: string;
+  /** Clears the search; shown in the no-results state. */
+  clearSearchAction?: ReactNode;
   /** Per-item authorization decision; container computes from server state. */
   canManageItem: (item: AnnouncementListItem) => boolean;
   /** Container-supplied mutation handlers. The presenter only knows when they're in flight. */
@@ -205,6 +213,8 @@ export function AnnouncementList({
   showDeleted,
   headerAction,
   emptyStateAction,
+  searchQuery,
+  clearSearchAction,
   canManageItem,
   onDelete,
   onRestore,
@@ -262,7 +272,14 @@ export function AnnouncementList({
         />
       ) : null}
 
-      {visibleItems.length === 0 ? (
+      {visibleItems.length === 0 && searchQuery ? (
+        <EmptyState
+          icon={SearchX}
+          title={`No announcements match “${searchQuery}”`}
+          description="Try a different word, or clear the search to see every announcement."
+          action={clearSearchAction}
+        />
+      ) : visibleItems.length === 0 ? (
         <EmptyState
           icon="bell"
           title={showDeleted ? 'No deleted announcements' : 'No announcements yet'}

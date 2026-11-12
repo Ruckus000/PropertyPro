@@ -38,7 +38,10 @@ export default async function NewAnnouncementPage({ searchParams }: PageProps) {
         description="Share a community update with the right audience."
       />
 
-      <AnnouncementAuthoringForm communityId={context.communityId} />
+      <AnnouncementAuthoringForm
+        communityId={context.communityId}
+        communityType={membership.communityType}
+      />
     </div>
   );
 }

@@ -14,21 +14,21 @@ updatedAt: "2026-11-11"
 
 <StepByStep>
 
-<Step title="Select Add Resident" shot="rs-add">
+<Step title="Select Add resident" shot="rs-add">
 
-It is at the top right of the **Residents** tab of **Directory**. **Directory** is in the sidebar under **Admin**.
+Open **Directory** from the sidebar and select the **Residents** tab. Before anyone is added, **Add resident** is in the middle of the tab; after that it is at the top right. You can also select a unit on the **Units** tab and choose **Add resident** in its panel, which starts the form on that unit.
 
 </Step>
 
 <Step title="Enter their details" shot="rs-form">
 
-**Full name**, **Email** and **Unit ID** are required; **Phone** is optional. <OnlyFor types="condo_718 hoa_720">Choose **Owner** or **Tenant** as the **Role**.</OnlyFor><OnlyFor types="apartment">Residents are added as **Tenant**.</OnlyFor> **Unit ID** is PropertyPro’s ID for the unit (shown after **Unit** on each resident row), which is not always the same as the unit number. Leave **Send invitation email** checked to send a sign-up link, then select **Save resident**.
+**Full name**, **Email** and **Unit** are required; **Phone** is optional. <OnlyFor types="condo_718 hoa_720">Choose **Owner** or **Tenant** as the **Role**.</OnlyFor><OnlyFor types="apartment">Residents are added as **Tenant**.</OnlyFor> Pick the **Unit** from the list of your units by its number. If the list is empty, add your units on the **Units** tab first. Leave **Send invitation email** checked to send a sign-up link, then select **Save resident**.
 
 </Step>
 
 <Step title="Resend if needed" shot="rs-resend">
 
-Select **Send Invite** on the resident’s row.
+Select the resident to open their details, then select **Send invite** (or **Resend invite** if they were invited and have not signed in yet).
 
 </Step>
 
@@ -36,7 +36,7 @@ Select **Send Invite** on the resident’s row.
 
 ## Import from a spreadsheet
 
-Select **Import CSV**, then **Download CSV template** (columns name, email, role, unit_number). Fill it in with **owner** or **tenant** as the role and upload it. You see a preview with any row errors before you select the **Import … Residents** button. Import does not send invitations; use **Send Invite** afterward.
+On the **Residents** tab, select **Import CSV** (before anyone is added) or **More actions** (**⋯**) then **Import from CSV**. Select **Download CSV template** (columns name, email, role, unit_number), fill it in with **owner** or **tenant** as the role, and upload it. Every row needs a unit_number that matches one of your units. You see a preview with any row errors before you select the **Import … Residents** button. Import does not send invitations; use **Send invite** afterward.
 
 <Figure shot="rs-import" alt="Import Residents page with the CSV template download" />
 
@@ -44,8 +44,6 @@ Select **Import CSV**, then **Download CSV template** (columns name, email, role
 
 Only the community’s root manager can change access, in **Settings → Roles & Access**. It is where property managers are added or removed<OnlyFor types="condo_718 hoa_720"> and board designations are set</OnlyFor>.
 
-<Callout type="info" title="Removing a resident">
+## Removing a resident
 
-Removing someone from a community goes through PropertyPro support for now. Their account stays active for other communities, and their records stay in yours.
-
-</Callout>
+Select the resident to open their details, then select **Remove from community** and confirm with **Remove resident**. You can also select **Remove** next to their name in a unit’s panel. They lose portal access to this community. Their PropertyPro account stays, so any other community they belong to is unaffected.<OnlyFor types="condo_718 hoa_720"> If they were the unit’s only owner, the unit is left with no owner on file.</OnlyFor>

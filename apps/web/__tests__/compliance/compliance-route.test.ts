@@ -9,7 +9,8 @@
  * isolated.
  *
  * Coverage:
- *   - GET happy path (status derivation + auto-complete fire-and-forget)
+ *   - GET happy path (status derivation + `check_compliance` fire-and-forget;
+ *     `review_compliance` waits for a PATCH decision)
  *   - GET carries autoLinkedDocumentId and notApplicableReason
  *   - GET 400 invalid/missing communityId query
  *   - GET 401 unauth, 403 per gate (membership / condo-feature / permission)
@@ -215,10 +216,12 @@ describe('GET /api/v1/compliance', () => {
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(expect.anything(), 55);
     expect(requireCommunityMembershipMock).toHaveBeenCalledWith(55, USER_ID);
     expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'compliance', 'read');
-    expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'review_compliance');
     // B2: board/owner/tenant checklists carry `check_compliance` — fire it on read
     // so those roles can actually reach 100%.
     expect(tryAutoCompleteMock).toHaveBeenCalledWith(55, USER_ID, 'check_compliance');
+    // The manager step is NOT finished by opening the page (F-audit): it waits
+    // for a real decision about an item, made through PATCH.
+    expect(tryAutoCompleteMock).not.toHaveBeenCalledWith(55, USER_ID, 'review_compliance');
   });
 
   it('says whether each linked file is posted, a draft, or deleted', async () => {
@@ -632,6 +635,32 @@ describe('PATCH /api/v1/compliance', () => {
         newValues: { documentId: 77 },
       }),
     );
+  });
+
+  it('completes the manager onboarding step on a decision about an item, not on unlink', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValue({ id: 5, title: 'Budget', documentId: 77 });
+
+    await PATCH(bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }), undefined);
+    expect(tryAutoCompleteMock.mock.calls).toEqual([[42, USER_ID, 'review_compliance']]);
+
+    tryAutoCompleteMock.mockClear();
+    await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'mark_not_applicable', reason: 'No elevator.' }),
+      undefined,
+    );
+    expect(tryAutoCompleteMock.mock.calls).toEqual([[42, USER_ID, 'review_compliance']]);
+
+    tryAutoCompleteMock.mockClear();
+    await PATCH(bodyReq('PATCH', { id: 5, communityId: 42, action: 'unlink_document' }), undefined);
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
+  });
+
+  it('does not complete the onboarding step when the link is refused', async () => {
+    findChecklistLinkConflictMock.mockResolvedValueOnce('document_fills_another_record');
+
+    await PATCH(bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }), undefined);
+
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
   });
 
   it('refuses with 409 a file already posted as another record, writing nothing', async () => {

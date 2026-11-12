@@ -60,6 +60,7 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
       <BroadcastComposer
         communityId={context.communityId}
         communityName={communityName}
+        communityType={membership.communityType}
         smsEnabled={isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled}
       />
     </div>

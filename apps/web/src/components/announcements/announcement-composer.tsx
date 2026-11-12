@@ -8,6 +8,7 @@
 
 import { useCallback, useState, type FormEvent } from 'react';
 import dynamic from 'next/dynamic';
+import { getFeaturesForCommunity, type CommunityType } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -50,7 +51,35 @@ export interface AnnouncementComposerValues {
   expiresAt?: string | null;
 }
 
+const AUDIENCE_LABELS: Record<AnnouncementAudience, string> = {
+  all: 'All residents',
+  owners_only: 'Owners only',
+  board_only: 'Board members only',
+  tenants_only: 'Tenants only',
+};
+
+/**
+ * The audiences this community can actually address. A community with no
+ * owner role (apartments) has no owners and no association board, so "Owners
+ * only" and "Board members only" would reach nobody. An announcement already
+ * saved with one of those keeps it as an option, so opening it to edit never
+ * changes its audience silently.
+ */
+export function getAnnouncementAudienceOptions(
+  communityType: CommunityType,
+  current?: AnnouncementAudience,
+): AnnouncementAudience[] {
+  const { hasOwnerRole } = getFeaturesForCommunity(communityType);
+  const options: AnnouncementAudience[] = hasOwnerRole
+    ? ['all', 'owners_only', 'board_only', 'tenants_only']
+    : ['all', 'tenants_only'];
+  if (current && !options.includes(current)) options.push(current);
+  return options;
+}
+
 export interface AnnouncementComposerProps {
+  /** Decides which audiences are offered; see `getAnnouncementAudienceOptions`. */
+  communityType: CommunityType;
   initialValues?: AnnouncementComposerValues;
   isSubmitting?: boolean;
   submitLabel?: string;
@@ -93,6 +122,7 @@ function fromLocalInputValue(value: string): string | null {
 }
 
 export function AnnouncementComposer({
+  communityType,
   initialValues = DEFAULT_VALUES,
   isSubmitting = false,
   submitLabel = 'Publish announcement',
@@ -107,6 +137,7 @@ export function AnnouncementComposer({
     toLocalInputValue(initialValues.expiresAt),
   );
   const [error, setError] = useState<string | null>(null);
+  const audienceOptions = getAnnouncementAudienceOptions(communityType, initialValues.audience);
 
   /*
    * A warning, not a block. A past expiry is a legitimate "take this down now"
@@ -207,10 +238,11 @@ export function AnnouncementComposer({
               <SelectValue placeholder="Select audience" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All residents</SelectItem>
-              <SelectItem value="owners_only">Owners only</SelectItem>
-              <SelectItem value="board_only">Board members only</SelectItem>
-              <SelectItem value="tenants_only">Tenants only</SelectItem>
+              {audienceOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {AUDIENCE_LABELS[option]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

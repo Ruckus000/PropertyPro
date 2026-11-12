@@ -58,6 +58,16 @@ export function AnnouncementListContainer({
     return `/announcements?${params.toString()}`;
   })();
 
+  const searchQuery = searchParams?.get('q')?.trim() || undefined;
+  const clearSearchHref = (() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    params.delete('q');
+    if (!params.has('communityId')) {
+      params.set('communityId', String(communityId));
+    }
+    return `/announcements?${params.toString()}`;
+  })();
+
   const canManageItem = useCallback(
     (item: AnnouncementListItem) => isAdmin || item.publishedBy === currentUserId,
     [isAdmin, currentUserId],
@@ -100,6 +110,12 @@ export function AnnouncementListContainer({
     </Button>
   ) : undefined;
 
+  const clearSearchAction = searchQuery ? (
+    <Button asChild variant="outline">
+      <Link href={clearSearchHref}>Clear search</Link>
+    </Button>
+  ) : undefined;
+
   const deleteErrorMessage =
     deleteMutation.error instanceof Error ? deleteMutation.error.message : null;
   const restoreErrorMessage =
@@ -112,6 +128,8 @@ export function AnnouncementListContainer({
       showDeleted={showDeleted}
       headerAction={headerAction}
       emptyStateAction={emptyStateAction}
+      searchQuery={searchQuery}
+      clearSearchAction={clearSearchAction}
       canManageItem={canManageItem}
       onDelete={onDelete}
       onRestore={onRestore}
