@@ -50,6 +50,10 @@ const ROOTS: Array<{ dir: string; only?: readonly string[] }> = [
   { dir: 'apps/web/src' },
   { dir: 'apps/admin/src' },
   { dir: 'packages/ui/src', only: ['bare-focus-ring', 'arbitrary-font'] },
+  // The empty-state illustrations paint with palette custom properties only
+  // (docs/design-system/patterns/empty-states.md §5.1). Without this root a hex
+  // fill there passed every guard, since the root above checks two rules.
+  { dir: 'packages/ui/src/illustrations', only: ['raw-hex', 'raw-color-fn', 'raw-palette', 'arbitrary-color'] },
 ];
 const BASELINE_PATH = 'scripts/design-token-baseline.json';
 
@@ -255,15 +259,18 @@ if (process.argv.includes('--selftest')) {
 
 // ── Scan ──
 const current = new Map<string, Counts>();
-let scanned = 0;
+const scannedFiles = new Set<string>();
 for (const root of ROOTS) {
   for (const file of walk(root.dir)) {
-    scanned += 1;
+    scannedFiles.add(file);
     const counts = scanContent(readFileSync(file, 'utf8'), root.only);
-    if (Object.keys(counts).length > 0) current.set(file, counts);
+    // Roots nest (illustrations sits inside packages/ui/src), so a file's
+    // counts from each root merge rather than the last root's overwriting them.
+    if (Object.keys(counts).length > 0) current.set(file, { ...current.get(file), ...counts });
   }
 }
 // A scan that read nothing must not pass, and must not write an empty baseline.
+const scanned = scannedFiles.size;
 if (scanned === 0) {
   console.error('guard:design-tokens could not check — the scan roots hold no .ts/.tsx/.css files.');
   process.exit(2);

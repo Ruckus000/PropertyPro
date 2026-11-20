@@ -13,6 +13,9 @@ export * from "./primitives";
 // Components
 export * from "./components";
 
+// Empty-state illustrations (docs/design-system/patterns/empty-states.md §5)
+export * from "./illustrations";
+
 // Hooks
 export * from "./hooks";
 

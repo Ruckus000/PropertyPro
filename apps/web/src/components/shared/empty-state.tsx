@@ -1,11 +1,14 @@
 /**
  * Web wrapper for @propertypro/ui's props-only EmptyState.
  *
- * packages/ui's EmptyState only knows about concrete props (icon component,
- * title, description, action, size). This wrapper keeps the two web-only
- * ways call sites already use it — a curated `preset` key
- * (EMPTY_STATE_CONFIGS) or a string `icon` key (ICON_MAP) — resolves either
- * to a concrete icon/title/description, and delegates rendering.
+ * packages/ui's EmptyState only knows about concrete props. This wrapper keeps
+ * the two web-only ways call sites already use it — a curated `preset` key
+ * (EMPTY_STATE_CONFIGS) or a string `icon` key (ICON_MAP) — resolves either to
+ * a concrete icon/title/description, and delegates rendering.
+ *
+ * Scene sizes (`hero` / `section` / `compact`) take an `illustration` instead
+ * of an icon; a preset's icon is ignored there. See
+ * docs/design-system/patterns/empty-states.md.
  */
 
 import * as React from "react";
@@ -50,14 +53,32 @@ const ICON_MAP: Record<EmptyStateIconKey, LucideIcon> = {
 
 // ── Props ──
 
-interface EmptyStateBaseProps extends React.HTMLAttributes<HTMLDivElement> {
-  /** Size variant */
-  size?: "sm" | "md" | "lg";
-}
+type IconSize = "sm" | "md" | "lg";
+type SceneSize = "hero" | "section" | "compact";
 
-interface EmptyStateCustomProps extends EmptyStateBaseProps {
+/** The older icon look. A scene prop here is a type error, not silently dropped. */
+interface IconVariant {
+  size?: IconSize;
   /** Icon component or icon key */
   icon?: LucideIcon | EmptyStateIconKey;
+  illustration?: never;
+  eyebrow?: never;
+  aside?: never;
+}
+
+/** The empty-state pattern (docs/design-system/patterns/empty-states.md). */
+interface SceneVariant {
+  size: SceneSize;
+  /** The illustration, e.g. `<DocumentsScene size="hero" />`. */
+  illustration?: React.ReactNode;
+  /** Hero only: what the page is. */
+  eyebrow?: string;
+  /** Hero only: the context column. */
+  aside?: React.ReactNode;
+  icon?: never;
+}
+
+interface CustomContent {
   /** Primary message (encouraging, action-oriented) */
   title: string;
   /** Additional context */
@@ -66,23 +87,32 @@ interface EmptyStateCustomProps extends EmptyStateBaseProps {
   action?: React.ReactNode;
 }
 
-interface EmptyStatePresetProps extends EmptyStateBaseProps {
-  /** Use a preset from EMPTY_STATE_CONFIGS */
+interface PresetContent {
+  /** Use a preset from EMPTY_STATE_CONFIGS (its icon applies to sm/md/lg only) */
   preset: EmptyStateKey;
   /** Optional action override (required if preset has actionLabel) */
   action?: React.ReactNode;
+  icon?: never;
 }
 
-export type EmptyStateProps = EmptyStateCustomProps | EmptyStatePresetProps;
+type ElementProps = Omit<React.HTMLAttributes<HTMLElement>, "title">;
 
-function isPreset(props: EmptyStateProps): props is EmptyStatePresetProps {
+export type EmptyStateProps = ElementProps &
+  (IconVariant | SceneVariant) &
+  (CustomContent | PresetContent);
+
+function isPreset(props: EmptyStateProps): props is EmptyStateProps & PresetContent {
   return "preset" in props;
+}
+
+function isSceneSize(size: IconSize | SceneSize): size is SceneSize {
+  return size === "hero" || size === "section" || size === "compact";
 }
 
 // ── Component ──
 
 export function EmptyState(props: EmptyStateProps) {
-  const { size = "md", action, className, ...rest } = props;
+  const { size = "md", action, illustration, eyebrow, aside, className, ...rest } = props;
 
   let title: string;
   let description: string | undefined;
@@ -105,13 +135,30 @@ export function EmptyState(props: EmptyStateProps) {
 
   // Clean up extra props before spreading — `rest` may still carry
   // `preset`/`title`/`description`/`icon` depending on which branch of the
-  // union was passed, none of which UiEmptyState (or the DOM div it spreads
-  // onto) should receive.
-  const divProps = { ...rest } as Record<string, unknown>;
-  delete divProps.preset;
-  delete divProps.title;
-  delete divProps.description;
-  delete divProps.icon;
+  // union was passed, none of which UiEmptyState (or the DOM element it
+  // spreads onto) should receive.
+  const domProps = { ...rest } as Record<string, unknown>;
+  delete domProps.preset;
+  delete domProps.title;
+  delete domProps.description;
+  delete domProps.icon;
+  const elementProps = domProps as Omit<React.HTMLAttributes<HTMLElement>, "title">;
+
+  if (isSceneSize(size)) {
+    return (
+      <UiEmptyState
+        size={size}
+        illustration={illustration}
+        eyebrow={eyebrow}
+        aside={aside}
+        title={title}
+        description={description}
+        action={action}
+        className={className}
+        {...elementProps}
+      />
+    );
+  }
 
   return (
     <UiEmptyState
@@ -121,7 +168,7 @@ export function EmptyState(props: EmptyStateProps) {
       action={action}
       size={size}
       className={className}
-      {...(divProps as React.HTMLAttributes<HTMLDivElement>)}
+      {...elementProps}
     />
   );
 }
