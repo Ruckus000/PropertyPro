@@ -113,4 +113,23 @@ describe('ConnectStatus', () => {
     expect(screen.getByText('Setup Incomplete')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Resume Setup' })).toBeDefined();
   });
+
+  it('renders the under-review state when details are submitted but charges are off', () => {
+    setStatus({
+      data: {
+        connected: true,
+        stripeAccountId: 'acct_1',
+        onboardingComplete: true,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+      },
+    });
+    renderConnect();
+    expect(screen.getByText('Stripe Is Reviewing Your Account')).toBeDefined();
+    expect(screen.queryByText('Connect Bank Account')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Connect with Stripe' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Stripe Setup' }));
+    expect(onboardMutateMock).toHaveBeenCalledTimes(1);
+  });
 });

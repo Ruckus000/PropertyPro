@@ -1,29 +1,26 @@
 /**
  * Route contract for `POST /api/v1/stripe/connect/complete`.
  *
- * Plan A1 drain #167. Exchanges Stripe OAuth code for connected account ID.
- * Mirrors drain #164 onboard auth chain.
+ * Called by the `/settings/payments/connected` page when Stripe's hosted
+ * onboarding sends the admin back. It re-reads the community's saved connected
+ * account from Stripe and saves its flags. The body carries only the
+ * community: the account id comes from our own table, never from the URL
+ * Stripe redirected to, so there is nothing in the request to forge.
  *
- * Tenant scope: `tenantScope: { in: 'body' }` (roadmap 3.6, 2026-09-30). The
- * body `communityId` was previously trusted as-is and never reconciled with the
- * middleware `x-community-id` header. The app-bound runner now cross-checks it
- * (header authoritative; mismatch → 404). Stripe's OAuth `redirect_uri` is the
- * fixed `NEXT_PUBLIC_APP_URL` (no tenant subdomain), so the legitimate callback
- * arrives with NO header and the body value — itself HMAC-bound to the signed
- * `state` — is used unchanged.
+ * Tenant scope: `tenantScope: { in: 'body' }`. The return URL is the fixed
+ * `NEXT_PUBLIC_APP_URL` (no tenant subdomain), so the legitimate call arrives
+ * with no `x-community-id` header and the body value is used. When the header
+ * is present it is authoritative, and a mismatch is a 404.
  *
- * Auth chain preserved verbatim:
+ * Auth chain:
  *   requireAuthenticatedUserId
- *     → validateConnectOAuthState(state, communityId, userId)
  *     → requireCommunityMembership
  *     → requireFinanceEnabled
+ *     → requirePaymentsEnabled
  *     → requireFinanceWritePermission
  *     → requireFinanceAdminWrite
  *     → requireActiveSubscriptionForMutation
  *     → completeConnectOnboarding(...)
- *
- * Sub-threshold ordering: invalid body now 400 before 401 (runner parses body
- * before handler auth), matching drain #164 onboard precedent.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
@@ -33,12 +30,11 @@ export const stripeConnectCompletePostContract = defineRoute({
   request: {
     body: z.object({
       communityId: z.number().int().positive(),
-      code: z.string().min(1).max(256),
-      state: z.string().min(1).max(2048),
     }),
   },
   response: z.object({
     stripeAccountId: z.string(),
+    onboardingComplete: z.boolean(),
     chargesEnabled: z.boolean(),
     payoutsEnabled: z.boolean(),
   }),
