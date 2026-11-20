@@ -3,6 +3,7 @@ import {
   PASSWORD_POLICY,
   getPasswordChecks,
   scorePassword,
+  validatePassword,
 } from '../../src/auth/password-policy';
 // Imported from its own module, not the barrel: `password-policy.ts` is
 // deliberately zod-free so client components can reach it as
@@ -10,6 +11,26 @@ import {
 import { buildPasswordZodSchema } from '../../src/auth/password-policy-zod';
 
 describe('password policy', () => {
+  describe('validatePassword', () => {
+    it('returns null for a compliant password', () => {
+      expect(validatePassword('Secure!123')).toBeNull();
+    });
+
+    it('returns the FIRST failing rule message, in policy order', () => {
+      // Fails length AND special: length is first.
+      expect(validatePassword('Ab1')).toBe('Password must be between 8 and 72 characters');
+      // Long enough; missing an uppercase and a special character.
+      expect(validatePassword('abcdefg1')).toBe('Password must include an uppercase letter');
+      expect(validatePassword('Abcdefg1')).toBe('Password must include a special character');
+    });
+
+    it('rejects a password over the 72-byte bcrypt ceiling', () => {
+      expect(validatePassword(`Aa1!${'x'.repeat(69)}`)).toBe(
+        'Password must be between 8 and 72 characters',
+      );
+    });
+  });
+
   describe('getPasswordChecks', () => {
     it('returns all-false for empty input', () => {
       const checks = getPasswordChecks('');

@@ -5,7 +5,8 @@
  * - `apps/web/src/lib/auth/signup-schema.ts` (Zod validation on signup API)
  * - `apps/web/src/lib/auth/schemas.ts` (Zod validation on reset)
  * - `apps/web/src/components/auth/password-strength-indicator.tsx` (UI)
- * - `apps/web/src/components/auth/set-password-form.tsx` (invitation flow)
+ * - `validatePassword` below — the client-side check every password form runs
+ *   (set-password, reset-password, desktop account settings, mobile Security)
  *
  * Rule order here must match the order of surfaced messages so the first
  * failing rule is a deterministic user-facing error.
@@ -89,6 +90,21 @@ export function getPasswordChecks(pw: string): Record<PasswordRuleId, boolean> {
     checks[rule.id] = rule.test(pw);
   }
   return checks;
+}
+
+/**
+ * The first failing rule's message, or `null` when the password satisfies the
+ * policy. Client-side FEEDBACK for password forms — not enforcement: the
+ * server paths (`updatePassword` in `apps/web/src/lib/auth/password-reset.ts`,
+ * the signup and invitation routes) validate independently.
+ */
+export function validatePassword(pw: string): string | null {
+  for (const rule of PASSWORD_POLICY.rules) {
+    if (!rule.test(pw)) {
+      return rule.message;
+    }
+  }
+  return null;
 }
 
 interface PasswordScore {

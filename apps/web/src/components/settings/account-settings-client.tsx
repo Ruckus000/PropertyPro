@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { AlertCircle, Check, User, Lock, Shield, Trash2, Clock } from 'lucide-react';
-import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
+// The zod-free SUBPATH: the barrel would pull zod into this route.
+import { PASSWORD_POLICY, validatePassword } from '@propertypro/shared/password-policy';
 import { cn } from '@/lib/utils';
 import { createBrowserClient } from '@/lib/supabase/client';
 import {
@@ -24,21 +25,6 @@ import {
 import { useReauth } from '@/hooks/use-reauth';
 import { ReauthModal } from '@/components/auth/reauth-modal';
 import { PageHeader } from '@/components/shared/page-header';
-
-// ── Password requirements ──────────────────────────────
-//
-// The shared policy, from its zod-free SUBPATH like `set-password-form.tsx` and
-// `reset-password-form.tsx` (the barrel would pull zod into this route). The
-// first failing rule's message is the one surfaced.
-
-function validatePassword(pw: string): string | null {
-  for (const rule of PASSWORD_POLICY.rules) {
-    if (!rule.test(pw)) {
-      return rule.message;
-    }
-  }
-  return null;
-}
 
 // ── Shared styles ──────────────────────────────────────
 

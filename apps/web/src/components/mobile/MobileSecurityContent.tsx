@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { Lock, AlertCircle, Check, KeyRound } from 'lucide-react';
+// The zod-free subpath: the barrel would pull zod into this client bundle.
+import { validatePassword } from '@propertypro/shared/password-policy';
 import { cn } from '@/lib/utils';
+import { requestPasswordReset } from '@/lib/auth/actions';
 import { MobileBackHeader } from '@/components/mobile/MobileBackHeader';
 import { PageTransition, SlideUp } from '@/components/motion';
 
@@ -30,15 +33,19 @@ export function MobileSecurityContent({
   // Forgot password state
   const [resetSent, setResetSent] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
-  const [resetFailed, setResetFailed] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   async function handleChangePassword() {
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    if (newPassword.length < 8) {
-      setError('Password must be at least 8 characters');
+    // The shared policy every other password form uses. A bare length check
+    // here let Supabase reject the update and the user saw only "Failed to
+    // update password".
+    const policyError = validatePassword(newPassword);
+    if (policyError) {
+      setError(policyError);
       return;
     }
 
@@ -86,16 +93,24 @@ export function MobileSecurityContent({
     setTimeout(() => setSuccess(false), 5000);
   }
 
+  // The server action, as on /auth/forgot-password: it sets the redirect to
+  // /auth/reset-password (the bare client call set none, so the email link
+  // fell back to the Supabase Site URL), applies the per-email rate limit, and
+  // refuses under a support session.
   async function handleForgotPassword() {
     setResetLoading(true);
     setResetSent(false);
-    setResetFailed(false);
+    setResetError(null);
 
     try {
-      const { createBrowserClient } = await import('@/lib/supabase/client');
-      await createBrowserClient().auth.resetPasswordForEmail(email);
+      const result = await requestPasswordReset(email);
+      if (!result.success) {
+        setResetError(result.message);
+        setResetLoading(false);
+        return;
+      }
     } catch {
-      setResetFailed(true);
+      setResetError("Couldn't send the reset link. Please try again.");
       setResetLoading(false);
       return;
     }
@@ -154,7 +169,7 @@ export function MobileSecurityContent({
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder="8+ characters, upper, lower, number, symbol"
                     autoComplete="new-password"
                     className={inputClassName}
                   />
@@ -242,12 +257,17 @@ export function MobileSecurityContent({
                 className="inline-flex items-center gap-1.5 text-[14px] font-medium text-stone-500 underline underline-offset-2 hover:text-stone-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-400 focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <KeyRound size={14} aria-hidden="true" />
-                {resetLoading
-                  ? 'Sending...'
-                  : resetFailed
-                    ? "Couldn't send the reset link. Try again"
-                    : 'Forgot your password?'}
+                {resetLoading ? 'Sending...' : 'Forgot your password?'}
               </button>
+            )}
+            {resetError && !resetSent && (
+              <div
+                role="alert"
+                className="mt-2 flex items-center justify-center gap-2 text-sm text-status-danger"
+              >
+                <AlertCircle size={16} aria-hidden="true" />
+                {resetError}
+              </div>
             )}
           </div>
         </SlideUp>
