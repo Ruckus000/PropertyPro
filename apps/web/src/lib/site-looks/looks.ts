@@ -29,7 +29,7 @@ import {
   type BlockType,
   type CommunityType,
   type ResolvedHeroPhoto,
-  type StockHeroPhoto,
+  type StockPhotoId,
 } from '@propertypro/shared';
 import type { LayoutId } from '@/components/public-site/blocks/types';
 
@@ -51,6 +51,8 @@ export interface LookDefinition {
   description: string;
   layoutId: LayoutId;
   presetSlug: LookId;
+  /** Stock photos this look suggests for its hero; the first is its default. Empty for a look with no photos. */
+  suggestedPhotos: readonly StockPhotoId[];
   /** The home page's sections, in order. A new site gets exactly these. */
   sections: readonly LookSection[];
 }
@@ -72,10 +74,18 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-// The two stock photos are scenery, never a building an association could take
-// for its own (D3). Heritage shares Bayfront's sunset.
-const SUNSET: StockHeroPhoto = { stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset };
-const PALMS: StockHeroPhoto = { stock: 'palms', alt: STOCK_PHOTO_ALT.palms };
+// Stock photos are scenery, never a building an association could take for its
+// own (D3). Each look has its own default and suggestions; none is shared.
+/** A hero's photo for a stock id, with that photo's alt text. */
+function stockPhoto(id: StockPhotoId) {
+  return { stock: id, alt: STOCK_PHOTO_ALT[id] };
+}
+
+const BAYFRONT_PHOTOS: readonly StockPhotoId[] = ['pilings-dusk', 'gulf-sunset', 'shoreline'];
+
+const HERITAGE_PHOTOS: readonly StockPhotoId[] = ['oak-avenue', 'lake-reflection', 'royal-palms'];
+
+const PALM_GROVE_PHOTOS: readonly StockPhotoId[] = ['palm-walk', 'sea-oats', 'palm-sky'];
 
 /** Every look lists the same records: all five categories a Documents section can show. */
 const RECORDS: z.input<(typeof blockSchemaRegistry)['documents']> = {
@@ -95,6 +105,7 @@ const RECORDS: z.input<(typeof blockSchemaRegistry)['documents']> = {
 export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   {
     id: 'bayfront',
+    suggestedPhotos: BAYFRONT_PHOTOS,
     name: 'Bayfront',
     description: 'Photo-led and modern.',
     layoutId: 'bayfront',
@@ -104,7 +115,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
         headline: 'Welcome to {{name}}',
         subtitle:
           '{{units}} homes in {{city}}. Meeting notices, news and community records, all in one place.',
-        photos: [SUNSET],
+        photos: [stockPhoto(BAYFRONT_PHOTOS[0]!)],
       }),
       section('quicklinks', {}),
       section('announcements', { limit: 3 }),
@@ -115,6 +126,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'heritage',
+    suggestedPhotos: HERITAGE_PHOTOS,
     name: 'Heritage',
     description: 'Formal and official.',
     layoutId: 'heritage',
@@ -123,7 +135,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
       section('hero', {
         headline: '{{name}}',
         subtitle: 'The website of {{name}}. Notices, meetings and records for owners and residents.',
-        photos: [SUNSET],
+        photos: [stockPhoto(HERITAGE_PHOTOS[0]!)],
       }),
       section('announcements', { limit: 5 }),
       section('meetings', { limit: 5 }),
@@ -135,6 +147,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'palm-grove',
+    suggestedPhotos: PALM_GROVE_PHOTOS,
     name: 'Palm Grove',
     description: 'Warm and friendly.',
     layoutId: 'palm-grove',
@@ -144,7 +157,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
         headline: 'Welcome home to {{name}}',
         subtitle:
           'News, meetings and everyday information for our neighbors. {{units}} homes in {{city}}.',
-        photos: [PALMS],
+        photos: [stockPhoto(PALM_GROVE_PHOTOS[0]!)],
       }),
       section('announcements', { limit: 3 }),
       section('meetings', { limit: 5 }),
@@ -154,6 +167,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'plain-simple',
+    suggestedPhotos: [],
     name: 'Plain & Simple',
     description: 'No photos needed, larger text.',
     layoutId: 'plain-simple',

@@ -25,7 +25,15 @@ vi.mock('@propertypro/db/unsafe', () => {
   throw new Error('looks.ts must not import @propertypro/db/unsafe');
 });
 
-import { blockSchemaRegistry, diffSite, fingerprint, resolveLinkedText, type LinkedFacts } from '@propertypro/shared';
+import {
+  blockSchemaRegistry,
+  diffSite,
+  fingerprint,
+  PICKABLE_STOCK_PHOTO_IDS,
+  resolveLinkedText,
+  STOCK_PHOTO_ALT,
+  type LinkedFacts,
+} from '@propertypro/shared';
 import { LAYOUT_IDS } from '@/components/public-site/blocks/types';
 import { LOOK_STYLES } from '@/components/public-site/layouts/look-styles';
 import {
@@ -292,6 +300,24 @@ describe('the looks registry', () => {
     }
     expect(getLook('tidewater')).toBeNull();
     expect(getLook('')).toBeNull();
+  });
+
+  it('each look names its suggested photos, the first being its default', () => {
+    const expected: Record<string, string[]> = {
+      bayfront: ['pilings-dusk', 'gulf-sunset', 'shoreline'],
+      heritage: ['oak-avenue', 'lake-reflection', 'royal-palms'],
+      'palm-grove': ['palm-walk', 'sea-oats', 'palm-sky'],
+      'plain-simple': [],
+    };
+    for (const l of LOOKS) {
+      expect([...l.suggestedPhotos]).toEqual(expected[l.id]);
+      expect(new Set(l.suggestedPhotos).size).toBe(l.suggestedPhotos.length);
+      for (const id of l.suggestedPhotos) expect(PICKABLE_STOCK_PHOTO_IDS).toContain(id);
+      const hero = sectionOf(l.sections, 'hero').content as { photos?: unknown };
+      const first = l.suggestedPhotos[0];
+      if (first === undefined) expect(hero.photos).toBeUndefined();
+      else expect(hero.photos).toEqual([{ stock: first, alt: STOCK_PHOTO_ALT[first] }]);
+    }
   });
 
   it("every look's sections parse with blockSchemaRegistry", () => {
