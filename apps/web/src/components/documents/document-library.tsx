@@ -426,6 +426,7 @@ export function DocumentLibrary({
             existingDocuments={documents}
             onChanged={handleUploadsChanged}
             onComplete={() => setShowUpload(false)}
+            records={showStatutory ? checklistQuery.data : undefined}
           />
         </div>
       )}

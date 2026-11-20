@@ -53,7 +53,13 @@ import { useComplianceMutations } from '@/hooks/use-compliance-mutations';
 import { useDocumentCategories } from '@/hooks/use-document-categories';
 import { uploadDocumentFile } from '@/hooks/use-document-upload';
 import { recordsAlertQueryKey } from '@/hooks/use-records-alert';
-import { DOCUMENT_ACCEPT, classifyUpload, titleFromFileName, type UploadVerdict } from '@/lib/documents/upload-rules';
+import {
+  DOCUMENT_ACCEPT,
+  classifyUpload,
+  sentence,
+  titleFromFileName,
+  type UploadVerdict,
+} from '@/lib/documents/upload-rules';
 import type { MissingRecord } from '@/lib/site-editor/records-status';
 import { cn } from '@/lib/utils';
 import { APPLIES_HINT } from './applies-hint';
@@ -93,11 +99,6 @@ interface Outcome {
   text: string;
   /** The file posted to Documents but could not be linked to its record. */
   postedUnlinked?: boolean;
-}
-
-function sentence(message: string): string {
-  const trimmed = message.trim();
-  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
 export function AddRecordsDrawer({ communityId, missing, conditional, onClose }: AddRecordsDrawerProps) {

@@ -9,6 +9,7 @@ import {
   autoLinkedRecordCount,
   conditionalRecordItems,
   missingRecordItems,
+  recordsToFill,
   summarizeRecords,
 } from '@/lib/site-editor/records-status';
 
@@ -223,5 +224,27 @@ describe('autoLinkedRecordCount', () => {
         item({ documentId: 4, autoLinkedDocumentId: null }),
       ]),
     ).toBe(0);
+  });
+});
+
+describe('recordsToFill', () => {
+  it('offers every applicable record that is not up to date, conditional ones included', () => {
+    const empty = item({ title: 'Empty' });
+    const draft = item({ title: 'Draft', documentId: 5, documentState: 'draft' });
+    const deleted = item({ title: 'Deleted', documentId: 6, documentState: 'deleted' });
+    const stale = item({
+      title: 'Stale',
+      documentId: 7,
+      documentState: 'posted',
+      documentPostedAt: '2020-01-01T00:00:00Z',
+      rollingWindow: { months: 12 },
+    });
+    const conditional = item({ title: 'Conditional', isConditional: true });
+    const filled = posted({ title: 'Filled' });
+    const notApplicable = item({ title: 'N/A', isApplicable: false, status: 'not_applicable' });
+
+    expect(
+      recordsToFill([empty, draft, deleted, stale, conditional, filled, notApplicable]).map((r) => r.title),
+    ).toEqual(['Empty', 'Draft', 'Deleted', 'Stale', 'Conditional']);
   });
 });
