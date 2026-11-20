@@ -75,10 +75,22 @@ describe('heroPhotoImgAttributes', () => {
     else process.env.NEXT_PUBLIC_SUPABASE_URL = savedEnv;
   });
 
-  it('serves a stock photo from the site, with its own size and no srcset', () => {
-    expect(heroPhotoImgAttributes({ stock: 'sunset', alt: 'Sunset over the water' })).toEqual({
+  it('serves a library photo in two sizes, with its own aspect box', () => {
+    expect(heroPhotoImgAttributes({ stock: 'palm-walk', alt: 'x' })).toEqual({
+      src: '/site-looks/palm-walk.2400.webp',
+      srcSet:
+        '/site-looks/palm-walk.1200.webp 1200w, /site-looks/palm-walk.2400.webp 2400w',
+      sizes: '100vw',
+      alt: 'x',
+      width: 2400,
+      height: 1600,
+    });
+  });
+
+  it('serves a retired stock photo as its single file, with no srcset', () => {
+    expect(heroPhotoImgAttributes({ stock: 'sunset', alt: 'y' })).toEqual({
       src: '/site-looks/sunset.webp',
-      alt: 'Sunset over the water',
+      alt: 'y',
       width: 1440,
       height: 1080,
     });

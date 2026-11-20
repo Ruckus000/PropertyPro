@@ -1,16 +1,23 @@
 /**
  * The `<img>` attributes and React key for one hero photo, whichever kind it is.
  *
- * An upload lives in storage in two sizes, so it gets a srcset. A stock photo
- * (D3) is one file in the web app's `public/site-looks/`: there is one size, so
- * no srcset, and the width and height are the file's own, so the browser
- * reserves the right box before it loads. `HeroBlock` (one photo) and
+ * An upload lives in storage in two sizes, so it gets a srcset. A library stock
+ * photo lives in the web app's `public/site-looks/` in three widths and gets a
+ * srcset of its two larger ones. The two retired photos (`sunset`, `palms`) are
+ * still one file each, so no srcset. The width and height are the file's own,
+ * so the browser reserves the right box before it loads. `HeroBlock` (one photo) and
  * `HeroPhotoStrip` (several) both draw through here, so they cannot disagree.
  *
  * Client-safe on purpose: HeroBlock is also what the editor canvas renders, so
  * this imports `./public-url`, never `./storage-paths` (which pulls node:crypto).
  */
-import { STOCK_PHOTO_SRC, type ResolvedHeroPhoto, type StockPhotoId } from '@propertypro/shared';
+import {
+  STOCK_PHOTOS,
+  STOCK_PHOTO_SRC,
+  stockPhotoSrc,
+  type ResolvedHeroPhoto,
+  type StockPhotoId,
+} from '@propertypro/shared';
 import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 
 /** Each stock photo file's pixel size. `hero-photo-img.test.ts` reads them from the files. */
@@ -44,7 +51,20 @@ export interface HeroPhotoImgAttributes {
 
 export function heroPhotoImgAttributes(photo: ResolvedHeroPhoto): HeroPhotoImgAttributes {
   if ('stock' in photo) {
-    return { src: STOCK_PHOTO_SRC[photo.stock], alt: photo.alt, ...STOCK_PHOTO_SIZE[photo.stock] };
+    const size = STOCK_PHOTO_SIZE[photo.stock];
+    if (STOCK_PHOTOS[photo.stock].retired) {
+      return { src: STOCK_PHOTO_SRC[photo.stock], alt: photo.alt, ...size };
+    }
+    const medium = stockPhotoSrc(photo.stock, 1200);
+    const large = stockPhotoSrc(photo.stock, 2400);
+    return {
+      src: large,
+      srcSet: `${medium} 1200w, ${large} 2400w`,
+      // A look's HeroImg overrides this per hero style once a srcset exists.
+      sizes: '100vw',
+      alt: photo.alt,
+      ...size,
+    };
   }
   // Variants are siblings of the base path; finalize deletes the raw upload, so
   // the base path itself would 404.
