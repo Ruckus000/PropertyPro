@@ -11,6 +11,11 @@
  * never be posted say why and are skipped; photos of paper get advice. One
  * redaction attestation covers the batch, asked only when a row needs it for
  * the action chosen — the server makes the same decision per file.
+ *
+ * Given the checklist (`records`, condo and HOA only), each file may also be
+ * filed into one statutory record, guessed from its name where only one fits.
+ * ponytail: an up-to-date record is not offered; replace it from Compliance. Trigger: a manager asks to replace a current record from Upload.
+ * ponytail: an unchosen file still auto-links on an unambiguous match. Trigger: a manager unlinks an auto-linked multi-upload file (compliance audit log: link then unlink).
  */
 
 import { useCallback, useMemo, useState, type ChangeEvent, type DragEvent } from 'react';
@@ -24,6 +29,8 @@ import {
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
+import { getTemplateDocumentCategory } from '@/components/compliance/compliance-visibility';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Button } from '@/components/ui/button';
@@ -38,6 +45,7 @@ import { useDocumentCategories } from '@/hooks/use-document-categories';
 import { useDocumentUploadQueue, type QueueOutcome } from '@/hooks/use-document-upload-queue';
 import type { LibraryDocumentRef } from '@/lib/documents/duplicate-uploads';
 import {
+  chosenRecordId,
   isReplacing,
   queueBlocker,
   queueSummary,
@@ -47,6 +55,7 @@ import {
   type QueueRow,
 } from '@/lib/documents/upload-queue';
 import { DOCUMENT_ACCEPT, MAX_DOCUMENT_BYTES, MAX_IMAGE_BYTES } from '@/lib/documents/upload-rules';
+import { recordsToFill, type MissingRecord } from '@/lib/site-editor/records-status';
 import { cn } from '@/lib/utils';
 import { RedactionAttestationField } from './redaction-attestation-field';
 
@@ -60,7 +69,15 @@ interface DocumentUploadQueueProps {
   onComplete?: (outcome: QueueOutcome & { action: QueueAction }) => void;
   /** Called after any send that changed the library, even a partial one. */
   onChanged?: (outcome: QueueOutcome) => void;
+  /**
+   * The compliance checklist, to offer "which record is this?" per file. Pass it
+   * only where the uploader may read and link records (condo/HOA management);
+   * absent or empty, no record is offered and auto-link decides as before.
+   */
+  records?: readonly ChecklistItemData[];
 }
+
+const AUTO = 'auto';
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -73,12 +90,25 @@ export function DocumentUploadQueue({
   initialCategoryId = null,
   onComplete,
   onChanged,
+  records,
 }: DocumentUploadQueueProps) {
-  const { categories, isLoading, error: categoriesError } = useDocumentCategories(communityId);
+  const {
+    categories,
+    isLoading,
+    error: categoriesError,
+    resolveCategoryId,
+  } = useDocumentCategories(communityId);
+  const openRecords = useMemo(() => recordsToFill(records ?? []), [records]);
+  const categoryForRecord = useCallback(
+    (record: MissingRecord) => resolveCategoryId(getTemplateDocumentCategory(record.templateKey, record.category)),
+    [resolveCategoryId],
+  );
   const queue = useDocumentUploadQueue({
     communityId,
     existingDocuments,
     defaultCategoryId: initialCategoryId,
+    records: openRecords,
+    categoryForRecord,
   });
   const { rows, isSending } = queue;
   const [attested, setAttested] = useState(false);
@@ -112,15 +142,31 @@ export function DocumentUploadQueue({
     setTried(action);
     const required = action === 'post' ? needsForPost : needsForDraft;
     if (queueBlocker({ rows, attestationRequired: required, attested })) return;
+    // A draft is never filed (`useDocumentUploadQueue`), so say so when a record was chosen.
+    const heldRecords =
+      action === 'draft' && sendable.some((row) => row.documentId == null && chosenRecordId(row) != null);
 
     const outcome = await queue.send({ action, redactionAttested: attested });
-    if (outcome.sent > 0) onChanged?.(outcome);
+    // A row can upload and still fail (its link did not land): the library changed anyway.
+    if (outcome.sent > 0 || outcome.documentIds.length > 0) onChanged?.(outcome);
     if (outcome.failed === 0) {
-      toast.success(
-        action === 'draft'
-          ? `${outcome.sent} saved as draft${outcome.sent === 1 ? '' : 's'}. Owners can’t see ${outcome.sent === 1 ? 'it' : 'them'} yet.`
-          : `${outcome.sent} document${outcome.sent === 1 ? '' : 's'} posted. Owners can see ${outcome.sent === 1 ? 'it' : 'them'} now.`,
-      );
+      const said: string[] = [];
+      if (outcome.sent > 0) {
+        said.push(
+          action === 'draft'
+            ? `${outcome.sent} saved as draft${outcome.sent === 1 ? '' : 's'}. Owners can’t see ${outcome.sent === 1 ? 'it' : 'them'} yet.`
+            : `${outcome.sent} document${outcome.sent === 1 ? '' : 's'} posted. Owners can see ${outcome.sent === 1 ? 'it' : 'them'} now.`,
+        );
+      }
+      if (outcome.linked > 0) said.push(`${outcome.linked} filed as record${outcome.linked === 1 ? '' : 's'}.`);
+      if (heldRecords) said.push('Drafts aren’t filed as records.');
+      if (outcome.unfiled > 0) {
+        said.push(
+          `${outcome.unfiled} posted file${outcome.unfiled === 1 ? ' wasn’t' : 's weren’t'} filed: ${outcome.unfiled === 1 ? 'its record' : 'their records'} now ${outcome.unfiled === 1 ? 'has a file' : 'have files'}.`,
+        );
+      }
+      // Every send that gets here changed something; never close the panel in silence.
+      toast.success(said.length > 0 ? said.join(' ') : 'Done.');
       if (outcome.notificationWarnings > 0) {
         toast.warning(
           `Residents could not be notified about ${outcome.notificationWarnings} of ${outcome.sent === 1 ? 'it' : 'them'}. The documents are posted.`,
@@ -131,9 +177,19 @@ export function DocumentUploadQueue({
       setAttested(false);
       onComplete?.({ ...outcome, action });
     } else {
-      toast.error(
-        `${outcome.failed} file${outcome.failed === 1 ? '' : 's'} couldn’t be uploaded. Fix ${outcome.failed === 1 ? 'it' : 'them'} and try again.`,
-      );
+      const notUploaded = outcome.failed - outcome.linkFailed;
+      const said: string[] = [];
+      if (notUploaded > 0) {
+        said.push(
+          `${notUploaded} file${notUploaded === 1 ? '' : 's'} couldn’t be uploaded. Fix ${notUploaded === 1 ? 'it' : 'them'} and try again.`,
+        );
+      }
+      if (outcome.linkFailed > 0) {
+        said.push(
+          `${outcome.linkFailed} file${outcome.linkFailed === 1 ? ' is' : 's are'} posted but not filed as a record. Post again to retry.`,
+        );
+      }
+      toast.error(said.join(' '));
     }
   };
 
@@ -162,6 +218,12 @@ export function DocumentUploadQueue({
       })
     : null;
   const postCount = sendable.length;
+  // How many files hold each record, counted once per render rather than once per row.
+  const claimCounts = new Map<number, number>();
+  for (const row of rows) {
+    const id = chosenRecordId(row);
+    if (id != null) claimCounts.set(id, (claimCounts.get(id) ?? 0) + 1);
+  }
 
   return (
     <div className="space-y-4">
@@ -219,6 +281,9 @@ export function DocumentUploadQueue({
                 key={row.key}
                 row={row}
                 categories={categories}
+                records={openRecords}
+                claimCounts={claimCounts}
+                categoryForRecord={categoryForRecord}
                 tried={tried != null}
                 disabled={isSending}
                 onChange={(patch) => {
@@ -272,6 +337,9 @@ export function DocumentUploadQueue({
 function QueueRowItem({
   row,
   categories,
+  records,
+  claimCounts,
+  categoryForRecord,
   tried,
   disabled,
   onChange,
@@ -279,6 +347,11 @@ function QueueRowItem({
 }: {
   row: QueueRow;
   categories: ReadonlyArray<{ id: number; name: string }>;
+  /** Records a file may be filed into; empty hides the field. */
+  records: readonly MissingRecord[];
+  /** How many files in the queue are filed into each record, this one included. */
+  claimCounts: ReadonlyMap<number, number>;
+  categoryForRecord: (record: MissingRecord) => number | null;
   tried: boolean;
   disabled: boolean;
   onChange: (patch: Partial<QueueRow>) => void;
@@ -301,6 +374,9 @@ function QueueRowItem({
             : FileText;
   const titleId = `${row.key}-title`;
   const descriptionId = `${row.key}-description`;
+  const suggestedId = `${row.key}-suggested`;
+  const claimedByOther = (id: number) =>
+    (claimCounts.get(id) ?? 0) - (chosenRecordId(row) === id ? 1 : 0) > 0;
   const [showDescription, setShowDescription] = useState(false);
 
   return (
@@ -333,7 +409,9 @@ function QueueRowItem({
           <p className="truncate text-sm font-medium text-content">{row.file.name}</p>
           <p className="text-xs text-content-tertiary">
             {formatSize(row.file.size)}
-            {row.status === 'uploading' && ` · uploading ${row.progress}%`}
+            {/* An uploaded row is only being filed: its bytes do not go up again. */}
+            {row.status === 'uploading' &&
+              (row.documentId != null ? ' · filing as a record' : ` · uploading ${row.progress}%`)}
             {row.status === 'done' && ' · done'}
           </p>
           {note && (
@@ -358,7 +436,8 @@ function QueueRowItem({
         </Button>
       </div>
 
-      {!refused && row.status !== 'done' && (
+      {/* Uploaded already (only its link failed): what it is can no longer change. */}
+      {!refused && row.status !== 'done' && row.documentId == null && (
         <>
           {row.duplicate && (
             <fieldset className="space-y-2">
@@ -382,7 +461,14 @@ function QueueRowItem({
                       value={value}
                       checked={row.duplicateChoice === value}
                       disabled={disabled}
-                      onChange={() => onChange({ duplicateChoice: value })}
+                      // A replacement keeps its document's record, so it gives up any it chose.
+                      onChange={() =>
+                        onChange(
+                          value === 'replace'
+                            ? { duplicateChoice: value, recordId: null, recordSuggested: false }
+                            : { duplicateChoice: value },
+                        )
+                      }
                       className="mt-0.5"
                     />
                     <span>
@@ -435,6 +521,58 @@ function QueueRowItem({
                   </SelectContent>
                 </Select>
               </div>
+              {records.length > 0 && (
+                <div className="sm:col-span-2">
+                  <span aria-hidden="true" className="mb-1 block text-xs font-medium text-content-secondary">
+                    Record (optional)
+                  </span>
+                  <Select
+                    // A record filled elsewhere since it was chosen has left the list: it reads, and sends, as unchosen.
+                    value={
+                      records.some((record) => record.itemId === row.recordId) ? String(row.recordId) : AUTO
+                    }
+                    disabled={disabled}
+                    onValueChange={(value) => {
+                      const record = records.find((candidate) => String(candidate.itemId) === value);
+                      onChange(
+                        record
+                          ? {
+                              recordId: record.itemId,
+                              recordSuggested: false,
+                              categoryId: categoryForRecord(record) ?? row.categoryId,
+                            }
+                          : { recordId: null, recordSuggested: false },
+                      );
+                    }}
+                  >
+                    <SelectTrigger
+                      className="w-full"
+                      aria-label={`Record for ${row.file.name}`}
+                      aria-describedby={row.recordSuggested ? suggestedId : undefined}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={AUTO}>Match automatically</SelectItem>
+                      {records.map((record) => (
+                        <SelectItem
+                          key={record.itemId}
+                          value={String(record.itemId)}
+                          disabled={claimedByOther(record.itemId)}
+                        >
+                          {record.title}
+                          {claimedByOther(record.itemId) ? ' (chosen for another file)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {row.recordSuggested && (
+                    <p id={suggestedId} className="mt-1 text-xs text-content-secondary">
+                      Suggested from the file name.
+                    </p>
+                  )}
+                </div>
+              )}
               {showDescription || row.description ? (
                 <div className="sm:col-span-2">
                   <label htmlFor={descriptionId} className="mb-1 block text-xs font-medium text-content-secondary">

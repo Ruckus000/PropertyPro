@@ -22,7 +22,7 @@ interface PatchPayload {
   replace?: boolean;
 }
 
-async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
+export async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
   const res = await fetch("/api/v1/compliance", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

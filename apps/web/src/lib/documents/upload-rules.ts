@@ -91,3 +91,9 @@ export function classifyUpload(file: { name: string; size: number }): UploadVerd
 export function titleFromFileName(name: string): string {
   return name.replace(/\.[^/.]+$/, '').trim() || name;
 }
+
+/** A server message as a sentence, so another can follow it. */
+export function sentence(message: string): string {
+  const trimmed = message.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { indexLibraryByFileName } from '../../src/lib/documents/duplicate-uploads';
 import {
+  chosenRecordId,
   isReplacing,
   makeRows,
+  proposeRecords,
   queueBlocker,
   queueSummary,
   rowNeedsAttestation,
@@ -164,5 +166,60 @@ describe('the queue rules', () => {
   it('summarises the queue', () => {
     expect(queueSummary([row('a.pdf'), row('b.pdf'), row('c.xlsx')])).toBe('3 files · 2 ready, 1 can’t be posted');
     expect(queueSummary([row('a.pdf')])).toBe('1 file · 1 ready');
+  });
+});
+
+describe('filing rows into records', () => {
+  const RECORDS = [
+    { itemId: 11, templateKey: '718_budget', title: 'Annual Budget', category: 'financial_records', state: 'nothing_posted' as const },
+    { itemId: 12, templateKey: '718_rules', title: 'Rules & Regulations', category: 'governing_documents', state: 'nothing_posted' as const },
+    { itemId: 13, templateKey: '718_insurance', title: 'Current Insurance Policies', category: 'insurance', state: 'nothing_posted' as const },
+  ];
+  const NO_LIBRARY = indexLibraryByFileName([]);
+  const categoryFor = (record: { itemId: number }) => (record.itemId === 11 ? 2 : null);
+
+  it('guesses the one record a file name points at, and takes its category', () => {
+    const [budget, scan] = proposeRecords(
+      makeRows([file('2026 Annual Budget.pdf'), file('scan_0001.pdf')], NO_LIBRARY, 1),
+      RECORDS,
+      new Set(),
+      categoryFor,
+    );
+    expect(budget).toMatchObject({ recordId: 11, recordSuggested: true, categoryId: 2 });
+    expect(scan).toMatchObject({ recordId: null, recordSuggested: false, categoryId: 1 });
+  });
+
+  it('keeps the row’s category when the library has none for the record', () => {
+    const [rules] = proposeRecords(makeRows([file('Rules and Regulations.pdf')], NO_LIBRARY, 1), RECORDS, new Set(), categoryFor);
+    expect(rules).toMatchObject({ recordId: 12, categoryId: 1 });
+  });
+
+  it('never guesses a record another file holds, nor fills one record twice in a batch', () => {
+    const rows = makeRows([file('budget 2026.pdf'), file('budget draft.pdf')], NO_LIBRARY, 1);
+    expect(proposeRecords(rows, RECORDS, new Set(), categoryFor).map((r) => r.recordId)).toEqual([11, null]);
+    expect(proposeRecords(rows, RECORDS, new Set([11]), categoryFor).map((r) => r.recordId)).toEqual([null, null]);
+  });
+
+  it('never guesses insurance from a file name, a refused file, or a replacement', () => {
+    const rows = proposeRecords(
+      [...makeRows([file('insurance policy.pdf'), file('budget.xlsx')], NO_LIBRARY, 1), ...makeRows([file('budget.pdf')], LIBRARY, 1)],
+      RECORDS,
+      new Set(),
+      categoryFor,
+    );
+    expect(rows.map((r) => r.recordId)).toEqual([null, null, null]);
+  });
+
+  it('a replacement keeps its document’s link, whatever record the row once had', () => {
+    const replacing = row('budget.pdf', { recordId: 11 });
+    expect(isReplacing(replacing)).toBe(true);
+    expect(chosenRecordId(replacing)).toBeNull();
+    expect(chosenRecordId({ ...replacing, duplicateChoice: 'both' })).toBe(11);
+  });
+
+  it('a row already uploaded, retried only to link it, asks for no attestation', () => {
+    const sensitive = row('notes.pdf', { categoryId: 2 });
+    expect(rowNeedsAttestation(sensitive, 'post', nameOf)).toBe(true);
+    expect(rowNeedsAttestation({ ...sensitive, documentId: 90 }, 'post', nameOf)).toBe(false);
   });
 });

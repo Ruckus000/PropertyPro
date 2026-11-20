@@ -6,8 +6,16 @@
  * document or as a replacement for that document's file. The queue as a whole
  * is sent with ONE action — post now, or save as drafts — and ONE redaction
  * attestation covering every row that needs it.
+ *
+ * On a condo or HOA, a row may also be filed into one statutory record. Left
+ * unchosen, the server's auto-link decides, as it always has.
  */
-import { isRedactionSensitiveCategory, normalizeCategoryName } from '@propertypro/shared';
+import {
+  isRedactionSensitiveCategory,
+  normalizeCategoryName,
+  proposeTemplateKeyForFile,
+} from '@propertypro/shared';
+import type { MissingRecord } from '@/lib/site-editor/records-status';
 import { findDuplicate, type DuplicateIndex, type LibraryDocumentRef } from './duplicate-uploads';
 import { classifyUpload, titleFromFileName, type UploadVerdict } from './upload-rules';
 
@@ -33,6 +41,12 @@ export interface QueueRow {
   status: RowStatus;
   progress: number;
   error: string | null;
+  /** The checklist item this file is filed into; null leaves it to auto-link. */
+  recordId: number | null;
+  /** True only while `recordId` is the guess from the file name. */
+  recordSuggested: boolean;
+  /** Set once the file is uploaded, so a failed link is retried without uploading again. */
+  documentId: number | null;
 }
 
 let nextKey = 0;
@@ -54,7 +68,44 @@ export function makeRows(
     status: 'ready',
     progress: 0,
     error: null,
+    recordId: null,
+    recordSuggested: false,
+    documentId: null,
   }));
+}
+
+/** The record this row will be linked to: a replacement keeps its document's link. */
+export function chosenRecordId(row: QueueRow): number | null {
+  return isReplacing(row) ? null : row.recordId;
+}
+
+/**
+ * Pre-choose a record for each new row whose file name points at exactly one
+ * record no other row has claimed (`proposeTemplateKeyForFile` never guesses the
+ * insurance and other any-title records). The row takes that record's category
+ * when the library has one for it.
+ */
+export function proposeRecords(
+  newRows: readonly QueueRow[],
+  records: readonly MissingRecord[],
+  claimed: ReadonlySet<number>,
+  categoryFor: (record: MissingRecord) => number | null,
+): QueueRow[] {
+  const taken = new Set(claimed);
+  return newRows.map((row) => {
+    if (row.verdict.kind === 'error' || isReplacing(row)) return row;
+    const open = records.filter((record) => !taken.has(record.itemId));
+    const key = proposeTemplateKeyForFile(row.file.name, open.map((record) => record.templateKey));
+    const record = open.find((candidate) => candidate.templateKey === key);
+    if (!record) return row;
+    taken.add(record.itemId);
+    return {
+      ...row,
+      recordId: record.itemId,
+      recordSuggested: true,
+      categoryId: categoryFor(record) ?? row.categoryId,
+    };
+  });
 }
 
 /** This row replaces an existing document's file rather than adding one. */
@@ -75,6 +126,7 @@ export function needsCategory(row: QueueRow): boolean {
 /**
  * Whether this row, sent with this action, needs the redaction attestation.
  * Mirrors the server, which remains the enforcement point:
+ * - a row already uploaded, retried only to link it, asks nothing;
  * - a new document asks when POSTED, by its category; a draft asks nothing;
  * - a replacement asks only when its document is already posted (whatever the
  *   action — new bytes reach the audience it already has), by its category.
@@ -84,6 +136,8 @@ export function rowNeedsAttestation(
   action: QueueAction,
   categoryNameOf: (id: number | null) => string | null,
 ): boolean {
+  // Already uploaded (only its link failed): nothing more is published.
+  if (row.documentId != null) return false;
   if (isReplacing(row)) {
     const targetIsDraft = row.duplicate.postedAt === null;
     return !targetIsDraft && sensitive(categoryNameOf(row.duplicate.categoryId));

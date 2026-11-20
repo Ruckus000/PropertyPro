@@ -148,8 +148,18 @@ export function missingRecordItems(
   subject: ComplianceSubject,
 ): MissingRecord[] {
   if (requirementLevel(subject) !== 'required') return [];
+  return recordsToFill(items.filter((item) => !(item.isConditional && !hasRecord(item))));
+}
+
+/**
+ * Every applicable record a new file could fill: nothing linked, a draft, a
+ * deleted file, or a rolling-window record gone out of date. Unlike
+ * `missingRecordItems` it ignores the website size threshold, since a small
+ * association still keeps these records; conditional items are included.
+ */
+export function recordsToFill(items: readonly ChecklistItemData[]): MissingRecord[] {
   return items.flatMap((item) => {
-    if (item.isApplicable === false || (item.isConditional && !hasRecord(item))) return [];
+    if (item.isApplicable === false) return [];
     const state = itemStatus(item);
     return state === 'up_to_date' ? [] : [toMissing(item, state)];
   });
