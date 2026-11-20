@@ -125,18 +125,22 @@ function ReportCard({
 export function StormDamageSection({ communityId, canManage }: Props) {
   const { data: reports, isLoading, isError, refetch } = useStormDamageReports({ communityId });
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  // The first report replaces the empty state, and with it the button that
+  // opened the dialog: on close, send focus to the header's Report Damage.
+  const openerRef = React.useRef<HTMLElement | null>(null);
+  const reportButtonRef = React.useRef<HTMLButtonElement>(null);
+  const openDialog = () => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialogOpen(true);
+  };
 
   const isEmpty = !isLoading && !isError && reports !== undefined && reports.length === 0;
 
   return (
-    <section className="space-y-4" aria-labelledby="storm-damage-heading">
-      {/* While empty, the setup or waiting hero owns the action and the notice
-          moves under it (StormDamageEmpty); the heading stays for the outline. */}
-      {isEmpty ? (
-        <h2 id="storm-damage-heading" className="sr-only">
-          Storm Damage
-        </h2>
-      ) : (
+    // While empty, the setup or waiting hero owns the action and the notice
+    // moves under it (StormDamageEmpty); the hero's h2 names the content.
+    <section className="space-y-4" {...(isEmpty ? { 'aria-label': 'Storm Damage' } : { 'aria-labelledby': 'storm-damage-heading' })}>
+      {isEmpty ? null : (
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 id="storm-damage-heading" className="text-xl font-semibold text-content">
@@ -145,7 +149,7 @@ export function StormDamageSection({ communityId, canManage }: Props) {
           <p className="max-w-2xl text-sm text-content-tertiary">{STORM_DAMAGE_DISCLAIMER}</p>
           <p className="max-w-2xl text-xs text-content-tertiary">{STORM_DAMAGE_STATUS_NOTE}</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} size="sm">
+        <Button ref={reportButtonRef} onClick={openDialog} size="sm">
           <Plus className="h-4 w-4" aria-hidden="true" />
           Report Damage
         </Button>
@@ -168,7 +172,7 @@ export function StormDamageSection({ communityId, canManage }: Props) {
       )}
 
       {isEmpty && (
-        <StormDamageEmpty communityId={communityId} canManage={canManage} onReport={() => setDialogOpen(true)} />
+        <StormDamageEmpty communityId={communityId} canManage={canManage} onReport={openDialog} />
       )}
 
       {!isLoading && !isError && reports && reports.length > 0 && (
@@ -188,6 +192,11 @@ export function StormDamageSection({ communityId, canManage }: Props) {
         communityId={communityId}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        onCloseAutoFocus={(event) => {
+          if (openerRef.current?.isConnected) return;
+          event.preventDefault();
+          reportButtonRef.current?.focus();
+        }}
       />
     </section>
   );

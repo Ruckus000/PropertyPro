@@ -179,7 +179,24 @@ describe('StormDamageFormDialog — success confirmation is wired', () => {
 
 describe('StormDamageSection — the §626.854 notice stays verbatim and visible in every state', () => {
   const empty = { data: [], isLoading: false, isError: false, refetch: vi.fn() };
-  const notice = () => screen.getByText(STORM_DAMAGE_DISCLAIMER);
+  // Present AND visible: never inside a visually hidden element.
+  const notice = () => {
+    const el = screen.getByText(STORM_DAMAGE_DISCLAIMER);
+    expect(el.closest('.sr-only')).toBeNull();
+    return el;
+  };
+
+  it('loading: the notice is in the header', () => {
+    useStormDamageReportsMock.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: vi.fn() });
+    render(<StormDamageSection communityId={42} canManage />, { wrapper: makeWrapper() });
+    expect(notice()).toBeInTheDocument();
+  });
+
+  it('load error: the notice is in the header', () => {
+    useStormDamageReportsMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, refetch: vi.fn() });
+    render(<StormDamageSection communityId={42} canManage={false} />, { wrapper: makeWrapper() });
+    expect(notice()).toBeInTheDocument();
+  });
 
   it('manager, no reports: setup guide, then the full notice as a note', () => {
     useStormDamageReportsMock.mockReturnValue(empty);

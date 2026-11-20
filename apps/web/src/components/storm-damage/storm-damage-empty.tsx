@@ -35,13 +35,13 @@ import {
 
 const HELP = { href: '/help/building/storm-damage', label: '' };
 
-/** The report form's fields, in its order (storm-damage-form-dialog.tsx). */
+/** The report form's fields, with its own labels and in its order (storm-damage-form-dialog.tsx). */
 function ReportFields() {
   const fields: Array<{ label: string; detail: string }> = [
-    { label: 'Where', detail: 'The building, floor or common area' },
-    { label: 'What', detail: Object.values(STORM_DAMAGE_CATEGORY_LABELS).join(', ') },
-    { label: 'How bad', detail: Object.values(STORM_DAMAGE_SEVERITY_LABELS).join(', ') },
-    { label: 'When', detail: 'The date it happened, if known' },
+    { label: 'Location', detail: 'The building, floor or common area' },
+    { label: 'Type of damage', detail: Object.values(STORM_DAMAGE_CATEGORY_LABELS).join(', ') },
+    { label: 'Severity', detail: Object.values(STORM_DAMAGE_SEVERITY_LABELS).join(', ') },
+    { label: 'When did it happen?', detail: 'Optional' },
     { label: 'Description', detail: 'What was damaged and how' },
   ];
   return (
@@ -98,7 +98,7 @@ export function StormDamageEmpty({
           size="hero"
           eyebrow="Storm damage"
           title="Your damage reports appear here"
-          description="After a storm, record any building or common-area damage you noticed so your association has it on file."
+          description="After a storm, record any building or common-area damage you noticed so management has it on file."
           illustration={<StormCalmScene size="hero" />}
           action={<Button onClick={onReport}>Report damage</Button>}
           aside={

@@ -217,7 +217,7 @@ to pay.
 **Landscape:** ground band, sun, cloud (2 sizes), palm (2 poses), building
 (low-rise, 1–3 floors, window grid), door.
 **Props:** filing drawer, folder, document, sealed deed, coin stack, bar chart,
-calendar, clock, clipboard, camera, megaphone, bell, key, shield, wrench, package,
+calendar, clock, clipboard, megaphone, bell, key, shield, wrench, package,
 pool ladder, envelope, phone, gavel, people-seat (chair), checklist.
 **Marks:** ✚ coral disc, ✓ green disc, progress ring.
 
