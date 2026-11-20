@@ -38,11 +38,19 @@ import { useDirectoryExport, type DirectoryExportInput } from '@/hooks/use-direc
 import { occupantIdOf, occupantToResident, useCreateOccupant, useOccupants, useRemoveOccupant } from '@/hooks/use-occupants';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
 import { AddResidentDialog } from '@/components/residents/add-resident-dialog';
+import { DirectoryScene } from '@propertypro/ui';
+import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide';
+import dynamic from 'next/dynamic';
 import { DirectorySheet } from './directory-sheet';
 import { EditResidentDialog } from './edit-resident-dialog';
 import { PastDueRuleDialog } from './past-due-rule-dialog';
 import { SendDocumentsDialog } from './send-documents-dialog';
 import { UnitFormDialog } from './unit-form-dialog';
+
+// Rendered only on an empty directory or from "Continue setup".
+const DirectorySetup = dynamic(() => import('./directory-setup').then((m) => m.DirectorySetup), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
 import { DirectoryToolbar, type FilterToken, type StatusOption, type UnitsView } from './directory-toolbar';
 import {
   ANY_OVERDUE_RULE,
@@ -193,6 +201,8 @@ export function DirectoryPageClient({
   const [unitForm, setUnitForm] = useState<{ open: boolean; unitId: number | null }>({ open: false, unitId: null });
   const [editResidentId, setEditResidentId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const setupDismissal = useSetupDismissed('directory', communityId);
   // Where focus returns after a confirmation (it has no Radix trigger).
   const confirmReturnRef = useRef<HTMLElement | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
@@ -601,11 +611,54 @@ export function DirectoryPageClient({
   const showPrimary =
     tab === 'units' ? canWrite && (unitsQ.data?.length ?? 0) > 0 : tab === 'residents' ? residentRows.length > 0 : false;
 
+  // ── Empty states (docs/design-system/patterns/empty-states.md §4.1, §4.3) ──
+  // Setup: a manager with no units. Partial: units exist, residents or
+  // invitations do not, until done or dismissed.
+  const loaded = !unitsLoading && !residentsLoading && !unitsQ.isError;
+  const setupAllowed = isAdmin && canWrite;
+  const inSetup = setupAllowed && loaded && dirUnits.length === 0;
+  const nextSetupStep =
+    dirUnits.length === 0 ? 'Units' : residentRows.length === 0 ? 'Residents' : stats.notActiveResidents > 0 ? 'Invitations' : null;
+  const setupDone = [dirUnits.length > 0, residentRows.length > 0, residentRows.length > 0 && stats.notActiveResidents === 0].filter(
+    Boolean,
+  ).length;
+  const showContinueBar = setupAllowed && loaded && !inSetup && nextSetupStep !== null && !setupOpen && !setupDismissal.dismissed;
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="Directory" hideHelpButton />
 
-      {isAdmin && !unitsLoading && !residentsLoading && !unitsQ.isError ? (
+      {showContinueBar ? (
+        <ContinueSetupBar
+          done={setupDone}
+          total={3}
+          countLabel="setup steps done"
+          next={nextSetupStep ?? undefined}
+          onContinue={() => setSetupOpen(true)}
+          onDismiss={setupDismissal.dismiss}
+        />
+      ) : null}
+
+      {inSetup || (setupOpen && setupAllowed && loaded) ? (
+        <DirectorySetup
+          communityId={communityId}
+          communityType={communityType}
+          unitCount={dirUnits.length}
+          residentCount={residentRows.length}
+          notActiveCount={stats.notActiveResidents}
+          onAddUnit={() => setUnitForm({ open: true, unitId: null })}
+          onAddResident={() => openAddResident(null)}
+          onReviewInvites={() => {
+            setSetupOpen(false);
+            setTab('residents');
+            setResidentStatus('not_active');
+          }}
+          {...(inSetup ? {} : { onClose: () => setSetupOpen(false) })}
+        />
+      ) : null}
+
+      {/* The strip counts units: on an empty community it would only show zeros (F-4). */}
+      {isAdmin && loaded && dirUnits.length > 0 ? (
         <OverviewStrip
           stats={stats}
           requestCount={joinRequestsQ.data ? pendingRequests : null}
@@ -626,6 +679,7 @@ export function DirectoryPageClient({
         />
       ) : null}
 
+      {inSetup ? null : (
       <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           {isAdmin ? (
@@ -1044,6 +1098,7 @@ export function DirectoryPageClient({
           </TabsContent>
         ) : null}
       </Tabs>
+      )}
 
       {/* ─────────── Drawers ─────────── */}
       <DirectorySheet

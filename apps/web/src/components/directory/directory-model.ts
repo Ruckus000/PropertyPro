@@ -473,7 +473,10 @@ export function groupByBuilding(units: readonly DirectoryUnit[]): BuildingGroup[
 export interface OverviewStats {
   totalUnits: number;
   vacantUnits: number;
+  /** Owner-occupied or rented. A unit whose occupancy is not set is neither (audit F-4). */
   occupiedUnits: number;
+  /** Units with no occupancy recorded. */
+  unsetUnits: number;
   pastDueCents: number;
   pastDueUnits: number;
   oldestPastDueDays: number;
@@ -487,6 +490,7 @@ export function computeOverview(
   residents: readonly DirectoryResidentRow[],
 ): OverviewStats {
   const vacantUnits = units.filter((u) => u.occupancy === 'vacant').length;
+  const unsetUnits = units.filter((u) => u.occupancy === null).length;
   const pastDue = units.filter((u) => u.pastDue !== null);
   // Adoption is a share of people who CAN sign in: household members are out.
   const withLogin = residents.filter((r) => r.portalStatus !== 'no_login');
@@ -494,7 +498,8 @@ export function computeOverview(
   return {
     totalUnits: units.length,
     vacantUnits,
-    occupiedUnits: units.length - vacantUnits,
+    occupiedUnits: units.length - vacantUnits - unsetUnits,
+    unsetUnits,
     pastDueCents: pastDue.reduce((sum, u) => sum + (u.pastDue?.amountCents ?? 0), 0),
     pastDueUnits: pastDue.length,
     oldestPastDueDays: pastDue.reduce((max, u) => Math.max(max, u.pastDue?.daysOverdue ?? 0), 0),

@@ -62,7 +62,7 @@ export function OverviewStrip({
             <span className="text-sm font-medium text-content-tertiary"> / {stats.totalUnits}</span>
           </>
         }
-        label={`units occupied · ${stats.vacantUnits} vacant`}
+        label={`units occupied · ${stats.vacantUnits} vacant${stats.unsetUnits > 0 ? ` · ${stats.unsetUnits} not set` : ''}`}
       />
       {canSeeBalances ? (
         <Cell
