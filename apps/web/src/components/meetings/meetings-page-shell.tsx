@@ -4,15 +4,14 @@ import { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
 import { MonthGrid } from '@/components/calendar/month-grid';
 import { DayDetailPanel } from '@/components/calendar/day-detail-panel';
 import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
-import { MeetingForm } from '@/components/meetings/meeting-form';
+import { MeetingForm, type MeetingTypeOption } from '@/components/meetings/meeting-form';
+import dynamic from 'next/dynamic';
 import { MeetingMinutesList } from '@/components/meetings/meeting-minutes-list';
 import { MeetingSchedule } from '@/components/meetings/meeting-schedule';
 import { NextNoticeStrip } from '@/components/meetings/next-notice-strip';
@@ -20,6 +19,14 @@ import { useCalendarEvents, useMeetings } from '@/hooks/use-meetings';
 import { getCalendarEventDateKey } from '@/lib/calendar/event-types';
 import { minutesOwedCount, nextNoticeOwed } from '@/lib/meetings/meeting-status';
 import type { CommunityRole, CommunityType } from '@propertypro/shared';
+
+// The first-run guide and waiting state render only before any meeting exists.
+const MeetingsSetup = dynamic(() => import('./meetings-empty').then((m) => m.MeetingsSetup), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
+const MeetingsWaiting = dynamic(() => import('./meetings-empty').then((m) => m.MeetingsWaiting), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
 
 /**
  * Three readings of one set, one at a time.
@@ -77,6 +84,7 @@ export function MeetingsPageShell({
   const [activeMeetingId, setActiveMeetingId] = useState<number | null>(null);
   const [editingMeetingId, setEditingMeetingId] = useState<number | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createType, setCreateType] = useState<MeetingTypeOption | undefined>(undefined);
 
   // `?meeting=<id>` — set by the `/meetings/<id>` redirect that emails and
   // notifications link to — opens that meeting once, then leaves the URL so a
@@ -106,6 +114,8 @@ export function MeetingsPageShell({
   const meetings = meetingsQuery.data ?? [];
   const owedMinutes = minutesOwedCount(meetings, now);
   const noticeOwed = nextNoticeOwed(meetings, now);
+  // First run is the ALL-TIME count, not the month on screen (audit F-11).
+  const firstRun = meetingsQuery.isSuccess && meetings.length === 0;
 
   const deferredMonth = useDeferredValue(currentMonth);
   const rangeStart = format(startOfMonth(deferredMonth), 'yyyy-MM-dd');
@@ -137,8 +147,9 @@ export function MeetingsPageShell({
     <div className="space-y-6">
       <PageHeader
         title="Meetings & Calendar"
-        actions={canWrite ? <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button> : undefined}
+        actions={canWrite && !firstRun ? <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button> : undefined}
       >
+        {firstRun ? null : (
         <Tabs value={view} onValueChange={handleViewChange}>
           <TabsList aria-label="View">
             {VIEWS.map((option) => (
@@ -157,7 +168,18 @@ export function MeetingsPageShell({
             ))}
           </TabsList>
         </Tabs>
+        )}
       </PageHeader>
+
+      {firstRun && canWrite ? (
+        <MeetingsSetup
+          onSchedule={(type) => {
+            setCreateType(type);
+            setShowCreateForm(true);
+          }}
+        />
+      ) : null}
+      {firstRun && !canWrite ? <MeetingsWaiting communityId={communityId} /> : null}
 
       {noticeOwed ? (
         <NextNoticeStrip
@@ -170,7 +192,7 @@ export function MeetingsPageShell({
         />
       ) : null}
 
-      {view === 'calendar' && (
+      {view === 'calendar' && !firstRun && (
         <>
           <p className="text-sm text-content-secondary">Calendar timezone: {timezone}.</p>
 
@@ -199,18 +221,10 @@ export function MeetingsPageShell({
           )}
 
           {!eventsQuery.isError && !eventsQuery.isLoading && events.length === 0 ? (
-            <Card className="border-edge-subtle bg-surface-card">
-              <CardContent>
-                <EmptyState
-                  preset={canWrite ? 'no_meetings' : 'no_meetings_yet'}
-                  action={
-                    canWrite ? (
-                      <Button onClick={() => setShowCreateForm(true)}>Schedule Meeting</Button>
-                    ) : undefined
-                  }
-                />
-              </CardContent>
-            </Card>
+            // Meetings exist, just not this month: say so plainly (audit F-11).
+            <p className="rounded-md border border-edge-subtle bg-surface-card p-4 text-sm text-content-secondary">
+              Nothing scheduled in {format(currentMonth, 'MMMM yyyy')}.
+            </p>
           ) : selectedDate ? (
             <DayDetailPanel
               date={selectedDate}
@@ -226,7 +240,7 @@ export function MeetingsPageShell({
         </>
       )}
 
-      {view === 'schedule' && (
+      {view === 'schedule' && !firstRun && (
         <MeetingSchedule
           meetings={meetings}
           now={now}
@@ -240,7 +254,7 @@ export function MeetingsPageShell({
         />
       )}
 
-      {view === 'minutes' && (
+      {view === 'minutes' && !firstRun && (
         <MeetingMinutesList
           communityId={communityId}
           meetings={meetings}
@@ -259,9 +273,14 @@ export function MeetingsPageShell({
           communityId={communityId}
           communityTimezone={timezone}
           communityType={communityType}
-          onClose={() => setShowCreateForm(false)}
+          initialMeetingType={createType}
+          onClose={() => {
+            setShowCreateForm(false);
+            setCreateType(undefined);
+          }}
           onSuccess={() => {
             setShowCreateForm(false);
+            setCreateType(undefined);
           }}
         />
       ) : null}

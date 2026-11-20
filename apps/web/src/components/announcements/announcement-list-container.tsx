@@ -104,11 +104,6 @@ export function AnnouncementListContainer({
     </Button>
   ) : undefined;
 
-  const emptyStateAction = canWriteAnnouncements ? (
-    <Button asChild>
-      <Link href={`/announcements/new?communityId=${communityId}`}>Create announcement</Link>
-    </Button>
-  ) : undefined;
 
   const clearSearchAction = searchQuery ? (
     <Button asChild variant="outline">
@@ -127,7 +122,7 @@ export function AnnouncementListContainer({
       communityId={communityId}
       showDeleted={showDeleted}
       headerAction={headerAction}
-      emptyStateAction={emptyStateAction}
+      canWrite={canWriteAnnouncements}
       searchQuery={searchQuery}
       clearSearchAction={clearSearchAction}
       canManageItem={canManageItem}

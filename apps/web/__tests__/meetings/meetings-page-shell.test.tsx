@@ -31,6 +31,7 @@ vi.mock('@/hooks/use-meetings', () => ({
   useMeetings: () => ({
     data: meetingsData,
     isLoading: false,
+    isSuccess: true,
     isError: false,
     refetch: refetchMeetings,
   }),
@@ -294,5 +295,33 @@ describe('MeetingsPageShell — ?meeting= from a /meetings/<id> link', () => {
     renderShell();
 
     expect(routerReplace).not.toHaveBeenCalled();
+  });
+});
+
+// ── Empty states (docs/design-system/patterns/empty-states.md §4.1 Meetings) ──
+
+describe('MeetingsPageShell — first run and empty months', () => {
+  it('a writer with no meetings at all gets the setup guide, slots per meeting type, no views', async () => {
+    meetingsData = [];
+    renderShell();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Run meetings residents can follow' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Schedule: Board meeting' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Schedule: Annual meeting' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Calendar' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create Meeting' })).toBeNull();
+  });
+
+  it('a reader with no meetings gets the calm waiting state', async () => {
+    meetingsData = [];
+    renderShell({ canWrite: false });
+    expect(await screen.findByRole('heading', { level: 2, name: 'Meetings and their notices appear here' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Setup steps' })).toBeNull();
+  });
+
+  it('an empty month on a community with meetings is just an empty month, not the set-up nudge (F-11)', () => {
+    renderShell();
+    expect(screen.getByText(/^Nothing scheduled in /)).toBeTruthy();
+    expect(screen.queryByText('Schedule and track board meetings')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Run meetings residents can follow' })).toBeNull();
   });
 });
