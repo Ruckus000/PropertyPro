@@ -72,6 +72,8 @@ export interface DocumentsTableProps {
   categoryNameById: Map<number, string>;
   onSelectDocument: (document: DocumentRow) => void;
   emptyAction?: React.ReactNode;
+  /** What the empty table says. Name the filter that hid the rows (spec §2, No results). */
+  emptyMessage?: string;
 }
 
 export function DocumentsTable({
@@ -82,6 +84,7 @@ export function DocumentsTable({
   categoryNameById,
   onSelectDocument,
   emptyAction,
+  emptyMessage = 'No documents match these filters.',
 }: DocumentsTableProps) {
   const columns = useMemo<ColumnDef<LibraryRow, unknown>[]>(() => {
     const base: ColumnDef<LibraryRow, unknown>[] = [
@@ -229,7 +232,7 @@ export function DocumentsTable({
       columns={columns}
       data={rows}
       isLoading={isLoading}
-      emptyMessage="Nothing matches those filters."
+      emptyMessage={emptyMessage}
       {...(emptyAction ? { emptyAction } : {})}
       getRowId={(row) => `${row.kind}-${row.id}`}
     />

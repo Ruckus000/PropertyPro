@@ -235,17 +235,22 @@ test.describe('first-run onboarding: a fresh community', () => {
     await expect(page.getByText(/1 resident(s)? imported successfully/)).toBeVisible({ timeout: 30_000 });
 
     // ── 4. Post a governing document residents can read ────────────────────
+    // A fresh condo's empty library opens on the setup guide (one slot per
+    // statutory record): post the Declaration into its own slot.
     await page.goto(`/communities/${communityId}/documents`, { waitUntil: 'domcontentloaded' });
-    await clickWhenHydrated(page.getByRole('button', { name: /^Governing Documents$/i }));
-    await clickWhenHydrated(page.getByRole('button', { name: /Open upload panel/i }));
-    await page.setInputFiles('input[type="file"][accept]', FIXTURE_PDF);
-    await page.getByLabel('Title', { exact: true }).fill(documentTitle);
+    await clickWhenHydrated(
+      page.getByRole('button', { name: 'Add file: Declaration of Condominium & Amendments' }),
+    );
+    const uploadDialog = page.getByRole('dialog', { name: 'Upload Document' });
+    await uploadDialog.locator('input[type="file"]').setInputFiles(FIXTURE_PDF);
+    await uploadDialog.getByLabel('Title', { exact: true }).fill(documentTitle);
     const documentPosted = page.waitForResponse(
       (r) => r.url().includes('/api/v1/documents') && r.request().method() === 'POST',
     );
-    await page.getByRole('button', { name: /^Post 1 now$/ }).click();
+    await uploadDialog.getByRole('button', { name: 'Upload & Link' }).click();
     expect((await documentPosted).ok()).toBe(true);
-    await expect(page.getByRole('list', { name: 'Files to upload' })).toBeHidden({ timeout: 30_000 });
+    // Filed and linked: the library returns with the partial-setup bar.
+    await expect(page.getByRole('region', { name: 'Continue setup' })).toContainText('1 of 13', { timeout: 30_000 });
 
     // ── 5. Invite the imported resident from the directory ─────────────────
     await page.goto(`/dashboard/directory?communityId=${communityId}&tab=residents`, {

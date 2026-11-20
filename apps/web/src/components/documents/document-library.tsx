@@ -31,6 +31,10 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilePlus2, PenTool } from 'lucide-react';
 import { type CommunityRole, type CommunityType } from '@propertypro/shared';
+import { DocumentsScene } from '@propertypro/ui';
+import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
+import { getTemplateDocumentCategory } from '@/components/compliance/compliance-visibility';
+import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -65,10 +69,12 @@ import {
   type DocumentQuickFilter,
   type DocumentRow,
 } from '@/lib/documents/document-state';
+import { buildStarterSet, buildStatutorySteps, statutoryProgress } from '@/lib/documents/setup-model';
 import { DocumentCategoryFilter } from './document-category-filter';
 import { DocumentInspector } from './document-inspector';
 import { DocumentSearch } from './document-search';
 import { DocumentsTable } from './documents-table';
+import { ResidentDocumentsWaiting } from './documents-waiting';
 import { PublishDocumentDialog } from './publish-document-dialog';
 
 /**
@@ -106,6 +112,12 @@ const DocumentUploadQueue = dynamic(
 // The two non-default readings. Switching views already implies a beat, and the
 // placeholder reserves height so the switch does not jump the page.
 const DocumentsBoard = dynamic(() => import('./documents-board').then((m) => m.DocumentsBoard), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
+
+// The setup guide renders only on an empty library or from "Continue setup",
+// and pulls the compliance upload modal and the not-applicable dialog with it.
+const DocumentsSetup = dynamic(() => import('./documents-setup').then((m) => m.DocumentsSetup), {
   loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
 });
 
@@ -152,7 +164,7 @@ export function DocumentLibrary({
     document: DocumentRow;
     publishing: boolean;
   } | null>(null);
-  const { view, setView } = useUrlView('view', coerceDocumentsView);
+  const { view: urlView, setView } = useUrlView('view', coerceDocumentsView);
 
   const canUpload = checkPermissionV2(userRole, communityType, 'documents', 'write', {
     isUnitOwner,
@@ -160,10 +172,13 @@ export function DocumentLibrary({
 
   // Both gates must hold, or the request 403s and the screen breaks.
   const showStatutory = hasCompliance && canReadCompliance;
+  // The timeline reads only statutory records: with none to show it is hidden
+  // (spec rule 5), and a URL naming it falls back to the list.
+  const view = urlView === 'timeline' && !showStatutory ? 'list' : urlView;
 
   const documentsQuery = useDocuments({ communityId });
   const checklistQuery = useComplianceChecklist(communityId, { enabled: showStatutory });
-  const { categories } = useDocumentCategories(communityId);
+  const { categories, isLoading: categoriesLoading } = useDocumentCategories(communityId);
   // Only the board asks for deleted rows, and only management may see them.
   const deletedQuery = useDeletedDocuments({
     communityId,
@@ -220,6 +235,69 @@ export function DocumentLibrary({
     [checklist, documents],
   );
   const draftCount = useMemo(() => documents.filter(isDraft).length, [documents]);
+
+  // ── Empty states (docs/design-system/patterns/empty-states.md §2) ──
+  // Setup: a manager with nothing yet. Partial: started, not finished.
+  // Waiting: a resident with nothing to open yet.
+  const errorMessage =
+    documentsQuery.error instanceof Error ? documentsQuery.error.message : null;
+  const checklistItems = useMemo<ChecklistItemData[]>(
+    () => (showStatutory ? ((checklistQuery.data as ChecklistItemData[] | undefined) ?? []) : []),
+    [checklistQuery.data, showStatutory],
+  );
+  const documentCountByCategory = useMemo(() => {
+    const counts = new Map<number, number>();
+    // Drafts are not posted, so a folder holding only a draft is still empty for tenants.
+    for (const d of documents) {
+      if (d.categoryId != null && !isDraft(d)) counts.set(d.categoryId, (counts.get(d.categoryId) ?? 0) + 1);
+    }
+    return counts;
+  }, [documents]);
+  const documentTitleById = useMemo(() => new Map(documents.map((d) => [d.id, d.title])), [documents]);
+  const statutorySetup = showStatutory && checklistQuery.isSuccess && checklistItems.length > 0;
+  const apartmentSetup = communityType === 'apartment' && categories.length > 0;
+  const setupSupported = canUpload && (statutorySetup || apartmentSetup);
+  const setupProgress = useMemo(() => {
+    if (!setupSupported) return null;
+    if (statutorySetup) {
+      const p = statutoryProgress(
+        buildStatutorySteps(checklistItems, (i) => getTemplateDocumentCategory(i.templateKey, i.category)),
+      );
+      return { done: p.posted, total: p.required, label: 'required posted', next: p.next?.title, complete: p.complete };
+    }
+    const { residentFacing } = buildStarterSet(categories, communityType);
+    const open = residentFacing.filter((c) => !documentCountByCategory.get(c.id));
+    return {
+      done: residentFacing.length - open.length,
+      total: residentFacing.length,
+      label: 'resident essentials',
+      next: open[0]?.name,
+      complete: open.length === 0,
+    };
+  }, [categories, checklistItems, communityType, documentCountByCategory, setupSupported, statutorySetup]);
+  const setupDismissal = useSetupDismissed('documents', communityId);
+  const [setupOpen, setSetupOpen] = useState(false);
+  // Lives on the page, not in the guide: the first upload ends the empty state
+  // and unmounts the guide, and its announcement must still be read out.
+  const [announcement, setAnnouncement] = useState('');
+  // Settled = nothing still loading that decides which state this is.
+  const settled =
+    documentsQuery.isSuccess &&
+    !documentsQuery.isPlaceholderData &&
+    !(showStatutory && checklistQuery.isLoading) &&
+    !categoriesLoading;
+  const isEmpty = settled && documents.length === 0 && !errorMessage;
+  const inSetup = isEmpty && setupSupported;
+  const showWaiting = isEmpty && !canUpload;
+  const hideLibrary = inSetup || showWaiting;
+  const setupIncomplete = !!setupProgress && !setupProgress.complete && documents.length > 0;
+  const showContinueBar = setupIncomplete && !setupOpen && !setupDismissal.dismissed;
+  const filtersActive = selectedCategoryId !== null || quickFilter !== 'all';
+  // The list can arrive (prefetched on hover) before the checklist or folders
+  // that decide whether this is setup: until then, an empty list is "still
+  // loading", never the plain empty state and never the full toolbar.
+  const maybeEmpty = documents.length === 0 && !settled;
+  const hideChrome = hideLibrary || maybeEmpty;
 
   // The selection is a snapshot taken on click; a lifecycle change (posted,
   // taken off the site, file replaced) refetches the list but not the
@@ -333,15 +411,24 @@ export function DocumentLibrary({
     return () => controller.abort();
   }, [communityId, documents, documentsLoaded, linkedDocumentId, pathname, router, searchParams]);
 
-  const errorMessage =
-    documentsQuery.error instanceof Error ? documentsQuery.error.message : null;
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Documents"
         actions={
           <>
+            {setupIncomplete && setupDismissal.dismissed && !setupOpen && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setupDismissal.restore();
+                  setSetupOpen(true);
+                }}
+              >
+                Setup guide
+              </Button>
+            )}
+            {!hideChrome && (
             <button
               type="button"
               onClick={() => setSearchMode(!searchMode)}
@@ -353,6 +440,7 @@ export function DocumentLibrary({
             >
               {searchMode ? 'Hide Search' : 'Search'}
             </button>
+            )}
             {canUpload && hasEsign && (
               <Link
                 href={`/esign?communityId=${communityId}`}
@@ -371,7 +459,7 @@ export function DocumentLibrary({
                 Author Document
               </Link>
             )}
-            {canUpload && (
+            {canUpload && !inSetup && !maybeEmpty && (
               <button
                 type="button"
                 onClick={() => {
@@ -407,15 +495,17 @@ export function DocumentLibrary({
           px-1` bleed, which is itself 4px of overflow when the parent is already at
           its minimum (measured: the first attempt at this fix left +4px behind).
         */}
-        <div className="max-w-full overflow-x-auto">
-          <Tabs value={view} onValueChange={setView}>
-            <TabsList aria-label="View">
-              <TabsTrigger value="list">List</TabsTrigger>
-              <TabsTrigger value="board">Board</TabsTrigger>
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
+        {!hideChrome && (
+          <div className="max-w-full overflow-x-auto">
+            <Tabs value={view} onValueChange={setView}>
+              <TabsList aria-label="View">
+                <TabsTrigger value="list">List</TabsTrigger>
+                <TabsTrigger value="board">Board</TabsTrigger>
+                {showStatutory && <TabsTrigger value="timeline">Timeline</TabsTrigger>}
+              </TabsList>
+            </Tabs>
+          </div>
+        )}
       </PageHeader>
 
       {showUpload && canUpload && (
@@ -437,7 +527,7 @@ export function DocumentLibrary({
         </div>
       )}
 
-      {showStatutory && (
+      {showStatutory && !hideLibrary && (
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
           <p className="text-sm text-content-secondary">
             <b className="font-semibold text-content">{facts.total}</b> statutory records
@@ -486,6 +576,56 @@ export function DocumentLibrary({
         />
       )}
 
+      {canUpload && showStatutory && checklistQuery.isError && (
+        <AlertBanner
+          status="danger"
+          variant="subtle"
+          title="We couldn't load your record list."
+          description="The setup guide and the statutory columns need it. Your documents are not affected."
+          action={
+            <Button size="sm" onClick={() => void checklistQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      )}
+
+      {showContinueBar && setupProgress && (
+        <ContinueSetupBar
+          done={setupProgress.done}
+          total={setupProgress.total}
+          countLabel={setupProgress.label}
+          next={setupProgress.next}
+          onContinue={() => setSetupOpen(true)}
+          onDismiss={setupDismissal.dismiss}
+        />
+      )}
+
+      {setupSupported && (inSetup || setupOpen) && (
+        <DocumentsSetup
+          communityId={communityId}
+          communityType={communityType}
+          checklist={checklistItems}
+          categories={categories}
+          documentCountByCategory={documentCountByCategory}
+          documentTitleById={documentTitleById}
+          onOpenUploadPanel={(categoryId) => {
+            setUploadCategoryId(categoryId);
+            setShowUpload(true);
+          }}
+          onChanged={invalidateDocuments}
+          onAnnounce={setAnnouncement}
+          {...(inSetup ? {} : { onClose: () => setSetupOpen(false) })}
+        />
+      )}
+
+      <p aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+
+      {showWaiting && <ResidentDocumentsWaiting communityId={communityId} communityType={communityType} />}
+
+      {!hideLibrary && (
       <div className="overflow-hidden rounded-md border border-edge bg-surface-card">
         <div className="border-b border-edge px-6 py-4">
           <DocumentCategoryFilter
@@ -506,24 +646,47 @@ export function DocumentLibrary({
             {view === 'list' && (
               <DocumentsTable
                 rows={rows}
-                isLoading={documentsQuery.isLoading}
+                isLoading={documentsQuery.isLoading || maybeEmpty}
                 selectedId={selectedDocument?.id ?? null}
                 showStatutoryColumns={showStatutory}
                 categoryNameById={categoryNameById}
                 onSelectDocument={setSelectedDocument}
-                {...(documents.length === 0 && !documentsQuery.isLoading
+                {...(documents.length === 0 && settled
                   ? {
+                      // Empty with no setup guide to offer (e.g. the record list
+                      // failed to load): the plain section-size empty state.
+                      emptyMessage: '',
                       emptyAction: (
                         <EmptyState
                           preset={canUpload ? 'no_documents' : 'no_documents_yet'}
-                          size="sm"
+                          size="section"
+                          illustration={<DocumentsScene size="section" />}
                           {...(canUpload
                             ? { action: <Button onClick={openUploadPanel}>Upload Document</Button> }
                             : {})}
                         />
                       ),
                     }
-                  : {})}
+                  : filtersActive
+                    ? {
+                        emptyMessage:
+                          selectedCategoryId !== null
+                            ? `No documents in ${categoryNameById.get(selectedCategoryId) ?? 'this folder'} match these filters.`
+                            : 'No documents match these filters.',
+                        emptyAction: (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedCategoryId(null);
+                              setQuickFilter('all');
+                            }}
+                          >
+                            Clear filters
+                          </Button>
+                        ),
+                      }
+                    : {})}
               />
             )}
 
@@ -600,6 +763,7 @@ export function DocumentLibrary({
           </div>
         </div>
       </div>
+      )}
 
       <PublishDocumentDialog
         open={publishTarget !== null}

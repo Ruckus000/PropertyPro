@@ -41,6 +41,13 @@ describe('empty-state scenes', () => {
     expect(ground(compact)).toBe(0);
   });
 
+  it('a waiting scene drops the "next to add" mark', () => {
+    // The mark is the only coral disc in the Documents scene.
+    const coralDiscs = (c: HTMLElement) => c.querySelectorAll('circle[fill="var(--coral-600)"]').length;
+    expect(coralDiscs(render(<DocumentsScene />).container)).toBe(1);
+    expect(coralDiscs(render(<DocumentsScene next={false} />).container)).toBe(0);
+  });
+
   it('never labels the art for assistive tech', () => {
     const { container } = render(<StormCalmScene />);
     expect(container.querySelector('title, desc, [aria-label]')).toBeNull();

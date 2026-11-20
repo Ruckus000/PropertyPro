@@ -27,8 +27,12 @@ function Tile() {
   return <rect x={2} y={2} width={60} height={60} rx={12} fill={INK.sky} />;
 }
 
-/** Documents: a filing drawer waiting for its records, the next one marked to add. */
-export function DocumentsScene({ size = "hero", className }: SceneProps) {
+/**
+ * Documents: a filing drawer waiting for its records, the next one marked to add.
+ * `next={false}` drops the "next to add" mark, for a viewer who cannot add
+ * anything (a resident's waiting state).
+ */
+export function DocumentsScene({ size = "hero", className, next = true }: SceneProps & { next?: boolean }) {
   if (size === "compact") {
     return (
       <Scene size="compact" className={className}>
@@ -48,7 +52,7 @@ export function DocumentsScene({ size = "hero", className }: SceneProps) {
       <g transform="rotate(-10 250 120)">
         <Document x={226} y={86} />
       </g>
-      <PlusMark x={262} y={196} />
+      {next && <PlusMark x={262} y={196} />}
     </Scene>
   );
 }

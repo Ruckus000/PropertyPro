@@ -285,10 +285,12 @@ test.describe('Flow 2: Owner document access and isolation', () => {
     // documents, and `.first()` over an unscoped `.or()` can resolve to that
     // off-screen text instead of the list — passing or failing for reasons
     // unrelated to the documents page.
-    // (4) The empty-state alternative had to be the REAL copy. `document-list.tsx`
-    // renders `<EmptyState preset="no_documents_yet">` for a reader who cannot
-    // upload — title "No documents yet" in `lib/constants/empty-states.ts`
-    // (managers get "Build your document library"). This matters here specifically:
+    // (4) The empty-state alternative has to be the REAL copy. An empty library
+    // in `documents/document-library.tsx` shows a reader who cannot upload the
+    // waiting state ("…documents will appear here", `documents-waiting.tsx`) and
+    // a manager the setup guide ("Post the records owners can see", or for an
+    // apartment "Give residents the papers they ask for most",
+    // `documents-setup.tsx`). This matters here specifically:
     // `owner.one@sunset.local` holds unit 1 in Sunset Condos but **NULL** in
     // Palm Shores, and a bare `loginAs(page, 'owner')` lands on Palm Shores, so
     // the empty library is a legitimate outcome for this test.
@@ -296,7 +298,7 @@ test.describe('Flow 2: Owner document access and isolation', () => {
     const content = main
       .getByRole('button', { name: /^Download$/i })
       .or(main.locator('table, [role="table"], [data-testid="document-list"]'))
-      .or(main.getByText(/no documents yet|build your document library/i));
+      .or(main.getByText(/documents will appear here|post the records owners can see|give residents the papers/i));
     await expect(content.first()).toBeVisible({ timeout: 30_000 });
   });
 
