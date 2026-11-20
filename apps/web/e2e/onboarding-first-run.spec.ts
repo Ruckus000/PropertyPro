@@ -209,7 +209,8 @@ test.describe('first-run onboarding: a fresh community', () => {
     await clickWhenHydrated(unitsRow.getByRole('button', { name: 'Add' }));
     // First visits compile on demand under `next dev`; give navigations room.
     await expect(page).toHaveURL(/\/dashboard\/directory\?.*tab=units/, { timeout: 60_000 });
-    await clickWhenHydrated(page.getByRole('button', { name: 'Add unit' }).first());
+    // A directory with no units opens on its setup guide: add one unit by hand.
+    await clickWhenHydrated(page.getByRole('button', { name: 'Add a unit: One at a time' }));
     const unitDialog = page.getByRole('dialog', { name: 'Add a unit' });
     await unitDialog.getByLabel(/Unit number/).fill('101');
     const unitCreated = page.waitForResponse(
