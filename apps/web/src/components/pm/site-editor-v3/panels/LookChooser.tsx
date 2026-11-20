@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useSiteDesign } from '@/hooks/use-site-design';
 import { useKeepCurrentLook, useSelectLook } from '@/hooks/use-site-look';
 import { LOOK_SUMMARIES } from '@/lib/site-looks/look-summaries';
+import { chosenLookId } from '@/lib/site-looks/chosen-look';
 import type { LookId } from '@/lib/site-looks/looks';
 import { cn } from '@/lib/utils';
 
@@ -71,7 +72,8 @@ export function LookChooser({ communityId, hideLegend = false }: LookChooserProp
   const draftedLayout = design.data.draft.layoutId;
   const drafted =
     draftedLayout && draftedLayout !== design.data.live.layoutId ? lookFor(draftedLayout) : null;
-  const chosen = drafted ?? live;
+  const chosenId = chosenLookId(design.data);
+  const chosen = chosenId ? lookFor(chosenId) : null;
   const busy = select.isPending || keep.isPending;
 
   function choose(id: LookId) {
