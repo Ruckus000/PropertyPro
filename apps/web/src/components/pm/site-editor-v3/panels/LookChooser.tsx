@@ -106,8 +106,8 @@ export function LookChooser({ communityId, hideLegend = false }: LookChooserProp
           Look
         </legend>
         <p className="text-sm text-content-secondary">
-          Sets how your whole site is laid out. Sections you&apos;ve edited stay as they are, but a
-          welcome with no photo of yours gets the look&apos;s photo.
+          Sets how your whole site is laid out. Sections you&apos;ve edited stay as they are, but our
+          photos in your welcome change to the new look&apos;s. Photos you uploaded always stay.
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {LOOK_SUMMARIES.map((look) => {
