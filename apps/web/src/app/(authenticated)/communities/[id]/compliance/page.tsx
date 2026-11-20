@@ -79,6 +79,7 @@ export default async function CompliancePage({ params }: PageProps) {
       canWrite={canWrite}
       belowPostingThreshold={belowPostingThreshold}
       timeZone={membership.timezone}
+      communityType={membership.communityType}
     />
   );
 }

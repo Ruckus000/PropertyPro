@@ -19,7 +19,7 @@ import type { FilterKey } from './compliance-pill-mapping';
 import { UploadDocumentModal } from './upload-document-modal';
 import { getTemplateDocumentCategory } from './compliance-visibility';
 import { LinkDocumentModal } from './link-document-modal';
-import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
+import { hasBoardDesignation, type BoardDesignation, type CommunityType } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
 import { ComplianceFirstRun } from './compliance-first-run';
 import { NotApplicableDialog } from '@/components/website-home/records/not-applicable-dialog';
@@ -46,6 +46,8 @@ export interface ComplianceCommandCenterProps {
   belowPostingThreshold?: BelowPostingThreshold | null;
   /** The community's IANA time zone, for the activity history's times. */
   timeZone?: string;
+  /** For the first run's legal sentence (statute and size threshold come from the shared table). */
+  communityType?: CommunityType;
 }
 
 function defaultView(designation: BoardDesignation | null): ViewMode {
@@ -63,6 +65,7 @@ export function ComplianceCommandCenter({
   canWrite,
   belowPostingThreshold = null,
   timeZone,
+  communityType,
 }: ComplianceCommandCenterProps) {
   const storageKey = `compliance.audienceView.${communityId}`;
 
@@ -106,7 +109,11 @@ export function ComplianceCommandCenter({
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
   // Day one: nothing posted, nothing overdue. A calm countdown, not the
   // dashboard's 0% and "requirements are now in effect" (audit F-6).
-  const firstRun = useMemo(() => isComplianceFirstRun(items as ChecklistItemData[]), [items]);
+  // Ends as soon as anything is due within 7 days: that warning must show.
+  const firstRun = useMemo(
+    () => isComplianceFirstRun(items as ChecklistItemData[]) && summary.postingWindowsDueSoonCount === 0,
+    [items, summary.postingWindowsDueSoonCount],
+  );
 
   // Ref tracks which selectedId we already scrolled to, so we only trigger
   // the scrollIntoView behavior when the selection actually changes (not on
@@ -202,7 +209,9 @@ export function ComplianceCommandCenter({
       <PageHeader
         title="Compliance"
         description="Records and statutory requirements"
-        actions={actions}
+        // While the first run lists each record with its own action, the header's
+        // "Upload record" (which acts on an auto-selected record) steps aside.
+        actions={firstRun ? undefined : actions}
       />
 
       {belowPostingThreshold && (
@@ -231,7 +240,7 @@ export function ComplianceCommandCenter({
           <span className="rounded-full bg-[var(--status-warning)] px-3 py-1 text-xs font-semibold text-white">
             {view === 'board'
               ? `${summary.needsBoardActionCount} need board action`
-              : `${summary.attentionCount} need attention`}
+              : `${summary.overdueCount + summary.postingWindowsDueSoonCount} need attention`}
           </span>
         </section>
       )}
@@ -269,6 +278,7 @@ export function ComplianceCommandCenter({
       ) : firstRun ? (
         <ComplianceFirstRun
           communityId={communityId}
+          communityType={communityType}
           items={items as ChecklistItemData[]}
           canWrite={canWrite}
           clockOff={belowPostingThreshold !== null}

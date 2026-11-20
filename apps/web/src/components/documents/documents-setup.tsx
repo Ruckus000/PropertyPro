@@ -20,7 +20,7 @@ import * as React from 'react';
 import { toast } from 'sonner';
 import { CheckCircle2, Smartphone } from 'lucide-react';
 import { DocumentsScene } from '@propertypro/ui';
-import type { CommunityType } from '@propertypro/shared';
+import { requiredSectionStatute, unitThreshold, type CommunityType } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import {
   ContextLinks,
@@ -93,6 +93,10 @@ function StatutorySetup({
   const steps = buildStatutorySteps(checklist, documentCategoryFor);
   const progress = statutoryProgress(steps);
   const isCondo = communityType === 'condo_718';
+  // Statute and size threshold from the shared table, so this cannot drift
+  // from the website and Compliance copy.
+  const statute = requiredSectionStatute(communityType);
+  const threshold = unitThreshold(communityType);
 
   function linkUpload(item: ChecklistItemData, documentId: number) {
     linkDocument.mutate(
@@ -153,11 +157,7 @@ function StatutorySetup({
       <SetupGuide
         eyebrow="Owner portal records"
         title="Post the records owners can see"
-        description={
-          isCondo
-            ? 'Florida asks condo associations with 25 or more units to post these for owners (§718.111(12)(g)). Add a file to any slot and it’s filed and counted.'
-            : 'Florida asks HOAs with 100 or more parcels to post these for owners (§720.303(4)). Add a file to any slot and it’s filed and counted.'
-        }
+        description={`Florida asks ${isCondo ? 'condo associations' : 'HOAs'} with ${threshold?.minUnits ?? ''} or more ${threshold?.unitNoun ?? ''} to post these for owners (${statute ?? ''}). Add a file to any slot and it’s filed and counted.`}
         progress={{ done: progress.posted, total: progress.required, label: 'required posted' }}
         facts={[
           ...(progress.conditionalOpen > 0 ? [{ label: `${progress.conditionalOpen} more only if they apply` }] : []),

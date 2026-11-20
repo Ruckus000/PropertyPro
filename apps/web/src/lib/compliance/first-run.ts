@@ -38,9 +38,15 @@ export function firstRunGroup(item: FirstRunItem): FirstRunGroup {
   return 'once';
 }
 
-const isPosted = (item: FirstRunItem) => item.documentId != null && item.documentState === 'posted';
+// A record whose file is up: posted, or already satisfied (status derives from the file).
+const isPosted = (item: FirstRunItem) =>
+  item.status === 'satisfied' || (item.documentId != null && item.documentState === 'posted');
 
-/** Nothing posted and nothing overdue: show the countdown, not the dashboard. */
+/**
+ * Nothing posted and nothing overdue: show the countdown, not the dashboard.
+ * The caller also ends it once anything is due within 7 days, so the warning
+ * banner is never swallowed by a calm screen.
+ */
 export function isComplianceFirstRun(items: FirstRunItem[]): boolean {
   return items.length > 0 && !items.some(isPosted) && !items.some((i) => i.status === 'overdue');
 }
