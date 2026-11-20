@@ -3,6 +3,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { DocumentLibrary } from '@/components/documents/document-library';
+import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -31,6 +32,18 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
     membership.communityType,
     resolvePlanId(membership.subscriptionPlan),
   );
+
+  // The setup guide draws one slot per statutory record, so a condo/HOA must
+  // have its record list. It is created with the community, best-effort; this
+  // fills any gap for a manager, as the website home does (idempotent: inserts
+  // only missing rows). A failure must not take the page down.
+  if (membership.isAdmin && (membership.communityType === 'condo_718' || membership.communityType === 'hoa_720')) {
+    try {
+      await ensureTransparencyChecklistInitialized(communityId, membership.communityType);
+    } catch (err) {
+      console.error('[documents] ensureTransparencyChecklistInitialized failed', { communityId, err });
+    }
+  }
 
   // Resolved here, not in the client: the checklist request 403s without BOTH
   // `hasCompliance` (condo/HOA only) and `compliance:read` (a TENANT does not

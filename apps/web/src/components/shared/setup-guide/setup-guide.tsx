@@ -24,6 +24,7 @@
 import * as React from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { ProgressRing } from '@propertypro/ui';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export interface SetupStepItem {
@@ -74,6 +75,8 @@ export interface SetupGuideProps {
   steps: SetupStep[];
   /** The context column: ContextSection blocks. */
   context?: React.ReactNode;
+  /** Present when the real page exists behind the guide: shows "Close setup". */
+  onClose?: () => void;
   className?: string;
 }
 
@@ -92,6 +95,7 @@ export function SetupGuide({
   illustration,
   steps,
   context,
+  onClose,
   className,
 }: SetupGuideProps) {
   const titleId = React.useId();
@@ -161,7 +165,8 @@ export function SetupGuide({
             const status = step.done ? 'Completed: ' : isOpen ? 'Current step: ' : 'Not started: ';
             return (
               <li key={step.id} className="flex items-center">
-                {index > 0 && <span aria-hidden="true" className="mr-2 h-px w-6 bg-edge-strong" />}
+                {/* Hairlines join steps on one line; on phones the rail wraps, so a line would start with one. */}
+                {index > 0 && <span aria-hidden="true" className="mr-2 h-px w-6 bg-edge-strong max-md:hidden" />}
                 <button
                   type="button"
                   onClick={() => openStep(step)}
@@ -185,6 +190,11 @@ export function SetupGuide({
         <p className="ml-auto text-xs tabular-nums text-content-secondary">
           {doneCount} of {workCount} done
         </p>
+        {onClose && (
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close setup
+          </Button>
+        )}
       </nav>
 
       {/* Body: open step + later steps | context */}

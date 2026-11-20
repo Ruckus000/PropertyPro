@@ -13,7 +13,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { useComplianceChecklistMock, useDocumentsMock, fetchAccessibleDocumentMock } = vi.hoisted(() => ({
+const { useComplianceChecklistMock, useDocumentsMock, fetchAccessibleDocumentMock, categoriesMock } = vi.hoisted(() => ({
+  categoriesMock: { current: [] as Array<{ id: number; name: string; slug: string; description: string | null }> },
   fetchAccessibleDocumentMock: vi.fn(async (): Promise<unknown> => null),
   useComplianceChecklistMock: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useDocumentsMock: vi.fn((): Record<string, unknown> => ({
@@ -41,7 +42,7 @@ vi.mock('@/hooks/use-compliance-checklist', () => ({
 }));
 
 vi.mock('@/hooks/use-document-categories', () => ({
-  useDocumentCategories: () => ({ categories: [], isLoading: false, error: null }),
+  useDocumentCategories: () => ({ categories: categoriesMock.current, isLoading: false, error: null }),
 }));
 
 vi.mock('@/hooks/use-documents', () => ({
@@ -78,8 +79,12 @@ vi.mock('../../src/components/documents/documents-table', () => ({
   DocumentsTable: ({
     showStatutoryColumns,
     onSelectDocument,
+    emptyMessage,
+    emptyAction,
   }: {
     showStatutoryColumns: boolean;
+    emptyMessage?: string;
+    emptyAction?: React.ReactNode;
     onSelectDocument?: (document: {
       id: number;
       title: string;
@@ -94,6 +99,8 @@ vi.mock('../../src/components/documents/documents-table', () => ({
   }) => (
     <div>
       <div data-testid="statutory-columns">{String(showStatutoryColumns)}</div>
+      <p data-testid="table-empty-message">{emptyMessage ?? ''}</p>
+      {emptyAction}
       <button
         type="button"
         onClick={() =>
@@ -462,5 +469,112 @@ describe('opening a linked document (?doc=)', () => {
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
     expect(screen.queryByText(MISSING)).toBeNull();
     expect(routerReplace).not.toHaveBeenCalled();
+  });
+});
+
+// ── Empty states (docs/design-system/patterns/empty-states.md §2) ──
+
+const READY = { isLoading: false, isSuccess: true, isPlaceholderData: false, error: null, refetch: () => undefined };
+
+function checklistRow(id: number, templateKey: string, title: string, extra: Record<string, unknown> = {}) {
+  return {
+    id,
+    templateKey,
+    title,
+    category: 'governing_documents',
+    documentId: null,
+    documentState: null,
+    isConditional: false,
+    isApplicable: true,
+    status: 'unsatisfied',
+    ...extra,
+  };
+}
+
+const CONDO_ROWS = [
+  checklistRow(1, '718_declaration', 'Declaration of Condominium & Amendments'),
+  checklistRow(2, '718_bylaws', 'Bylaws & Amendments'),
+];
+
+const DOC = {
+  id: 1,
+  title: 'Board Packet',
+  description: null,
+  fileName: 'board.pdf',
+  fileSize: 1024,
+  mimeType: 'application/pdf',
+  categoryId: 1,
+  createdAt: '2026-03-25T12:00:00.000Z',
+  uploadedBy: null,
+};
+
+describe('empty states', () => {
+  beforeEach(() => {
+    searchParams = new URLSearchParams();
+    categoriesMock.current = [];
+    localStorage.clear();
+    useDocumentsMock.mockReturnValue({ ...READY, data: [] });
+    useComplianceChecklistMock.mockReturnValue({ ...READY, data: CONDO_ROWS } as never);
+  });
+
+  it('a manager on an empty condo library gets the setup guide, and the library chrome steps aside', async () => {
+    renderLibrary();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Post the records owners can see' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add file: Declaration of Condominium & Amendments' })).toBeTruthy();
+    // The hero owns the action: no toolbar primary, no search, no views, no counts strip.
+    expect(screen.queryByRole('button', { name: 'Open upload panel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(screen.queryByText(/statutory records/i)).toBeNull();
+    // Secondary actions that make sense with no data stay.
+    expect(screen.getByRole('link', { name: /Author Document/ })).toBeTruthy();
+  });
+
+  it('a tenant with nothing posted gets the calm waiting state, no steps and no counts', () => {
+    renderLibrary({ communityType: 'apartment', hasCompliance: false, canReadCompliance: false, userRole: 'resident', isUnitOwner: false });
+    expect(screen.getByRole('heading', { level: 2, name: 'Your community\u2019s documents will appear here' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: 'How you\'ll hear' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Setup steps' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(screen.queryByText(/of \d+/)).toBeNull();
+  });
+
+  it('after the first file a Continue setup bar shows; dismissing it leaves a way back', () => {
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
+    renderLibrary();
+    const bar = screen.getByRole('region', { name: 'Continue setup' });
+    expect(bar.textContent).toContain('0 of 2');
+    expect(bar.textContent).toContain('Next: Declaration of Condominium & Amendments');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide setup for now' }));
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+    expect(localStorage.getItem('propertypro:setup-dismissed:documents:9')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Setup guide' })).toBeTruthy();
+  });
+
+  it('shows no bar once every required record is posted', () => {
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
+    useComplianceChecklistMock.mockReturnValue({
+      ...READY,
+      data: CONDO_ROWS.map((r) => ({ ...r, documentId: 1, documentState: 'posted' })),
+    } as never);
+    renderLibrary();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+  });
+
+  it('a filter that hides every row says so and offers Clear filters', () => {
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
+    renderLibrary();
+    expect(screen.getByTestId('table-empty-message').textContent).toBe('');
+    fireEvent.click(screen.getByRole('button', { name: /Drafts/ }));
+    expect(screen.getByTestId('table-empty-message').textContent).toBe('No documents match these filters.');
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getByTestId('table-empty-message').textContent).toBe('');
+  });
+
+  it('offers no Timeline where there are no statutory records to put on it', () => {
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
+    renderLibrary({ communityType: 'apartment', hasCompliance: false });
+    expect(screen.getByRole('tab', { name: 'List' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
   });
 });
