@@ -453,3 +453,14 @@ describe('PAGE_TITLES', () => {
     }
   });
 });
+
+describe('Emergency Alerts entry (audit F-14)', () => {
+  it('exists for owners and managers (tenants have no read), gated on the feature, in Community', () => {
+    const item = NAV_ITEMS.find((i) => i.id === 'emergency');
+    expect(item).toBeDefined();
+    expect(item?.visibility).toBe('owner_or_admin');
+    expect(item?.featureKey).toBe('hasEmergencyNotifications');
+    expect(item?.href(7)).toBe('/emergency?communityId=7');
+    expect(NAV_SECTIONS.find((s) => s.label === 'Community')?.items.map((i) => i.id)).toContain('emergency');
+  });
+});

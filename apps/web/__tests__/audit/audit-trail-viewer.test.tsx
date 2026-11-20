@@ -252,6 +252,19 @@ describe('AuditTrailViewer', () => {
     expect(await screen.findByText('Nothing in the last 30 days')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Look further back' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show everything' })).toBeInTheDocument();
+    // A filter hid the result: no scene, just the way out.
+    expect(document.querySelector('svg[viewBox="0 0 340 230"]')).toBeNull();
+  });
+
+  it('draws the scene only once the whole trail is empty', async () => {
+    auditResponse = () => payload([], { hiddenRoutineCount: 0 });
+    renderViewer();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show everything' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Look further back' }));
+    await screen.findByText('Nothing in the last 12 months');
+    fireEvent.click(screen.getByRole('button', { name: 'Look further back' }));
+    expect(await screen.findByText('Nothing yet')).toBeInTheDocument();
+    expect(document.querySelector('svg[viewBox="0 0 340 230"]')).not.toBeNull();
   });
 
   it('shows an error banner with a retry when loading fails', async () => {

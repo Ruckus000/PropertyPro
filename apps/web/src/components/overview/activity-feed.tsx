@@ -1,6 +1,7 @@
 'use client';
 
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import type { ActivityItem } from '@/lib/queries/cross-community.types';
 
 const TYPE_LABELS: Record<ActivityItem['type'], string> = {
@@ -23,7 +24,8 @@ export function ActivityFeed({ items }: { items: ActivityItem[] }) {
       <div className="rounded-md border border-edge bg-surface-card p-5">
         <h3 className="text-base font-semibold mb-4">Recent Activity</h3>
         <EmptyState
-          size="sm"
+          size="compact"
+          illustration={<PropScene size="compact" prop="bell" />}
           title="No recent activity"
           description="Your communities are quiet right now. Check back soon."
         />

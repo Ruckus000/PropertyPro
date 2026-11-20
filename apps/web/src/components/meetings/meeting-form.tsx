@@ -15,7 +15,7 @@ import {
 } from '@/lib/utils/zoned-datetime';
 import type { CommunityType } from '@propertypro/shared';
 
-type MeetingTypeOption = 'board' | 'annual' | 'special' | 'budget' | 'committee';
+export type MeetingTypeOption = 'board' | 'annual' | 'special' | 'budget' | 'committee';
 
 interface FormState {
   title: string;
@@ -31,6 +31,8 @@ interface MeetingFormProps {
   /** Drives the notice lead time — condos and HOAs are noticed differently. */
   communityType: CommunityType;
   meetingId?: number | null;
+  /** New meetings only: the type to start on (the setup guide's per-type slots). */
+  initialMeetingType?: MeetingTypeOption;
   onClose: () => void;
   onSuccess?: () => void;
 }
@@ -135,6 +137,7 @@ export function MeetingForm({
   communityTimezone,
   communityType,
   meetingId,
+  initialMeetingType,
   onClose,
   onSuccess,
 }: MeetingFormProps) {
@@ -147,6 +150,7 @@ export function MeetingForm({
     const startsAt = buildDefaultStart();
     return {
       ...EMPTY_FORM,
+      meetingType: initialMeetingType ?? EMPTY_FORM.meetingType,
       startsAt,
       endsAt: addOneHour(startsAt),
     };

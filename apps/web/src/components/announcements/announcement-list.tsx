@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Loader2, Pin, RotateCcw, SearchX, Trash2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { AnnouncementsFirstPost, AnnouncementsWaiting } from './announcements-empty';
 import { StatusBadge } from '@/components/shared/status-badge';
 import {
   AlertDialog,
@@ -44,8 +45,8 @@ export interface AnnouncementListProps {
   showDeleted: boolean;
   /** "Show deleted" toggle, only rendered when the container provides it. */
   headerAction?: ReactNode;
-  /** Action shown inside the empty state (e.g. a "Create announcement" CTA). */
-  emptyStateAction?: ReactNode;
+  /** The viewer can post: an empty list shows the first-post guide, not the waiting state. */
+  canWrite?: boolean;
   /**
    * The `?q=` search the list was filtered by, if any. An empty list under a
    * search means "nothing matched", not "nothing posted", so it gets its own
@@ -212,7 +213,7 @@ export function AnnouncementList({
   communityId,
   showDeleted,
   headerAction,
-  emptyStateAction,
+  canWrite = false,
   searchQuery,
   clearSearchAction,
   canManageItem,
@@ -279,19 +280,18 @@ export function AnnouncementList({
           description="Try a different word, or clear the search to see every announcement."
           action={clearSearchAction}
         />
-      ) : visibleItems.length === 0 ? (
+      ) : visibleItems.length === 0 && showDeleted ? (
         <EmptyState
           icon="bell"
-          title={showDeleted ? 'No deleted announcements' : 'No announcements yet'}
-          description={
-            showDeleted
-              ? 'Deleted announcements show up here. Admins can restore them.'
-              : emptyStateAction
-                ? 'Post your first announcement to keep residents informed.'
-                : 'Announcements from your community will appear here.'
-          }
-          action={!showDeleted ? emptyStateAction : undefined}
+          title="No deleted announcements"
+          description="Deleted announcements show up here. Admins can restore them."
         />
+      ) : visibleItems.length === 0 ? (
+        canWrite ? (
+          <AnnouncementsFirstPost communityId={communityId} />
+        ) : (
+          <AnnouncementsWaiting communityId={communityId} />
+        )
       ) : (
         <div className="space-y-6">
           {pinned.length > 0 && (

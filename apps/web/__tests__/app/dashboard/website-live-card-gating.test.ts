@@ -81,8 +81,6 @@ vi.mock('@/components/onboarding/onboarding-checklist', () => ({ OnboardingCheck
 vi.mock('@/components/dashboard/dashboard-welcome', () => ({ DashboardWelcome: function DashboardWelcome() { return null; } }));
 vi.mock('@/components/dashboard/apartment-dashboard', () => ({ ApartmentDashboard: function ApartmentDashboard() { return null; } }));
 vi.mock('@/components/dashboard/dashboard-announcements', () => ({ DashboardAnnouncements: () => null }));
-vi.mock('@/components/dashboard/dashboard-meetings', () => ({ DashboardMeetings: () => null }));
-vi.mock('@/components/dashboard/dashboard-violations', () => ({ DashboardViolations: () => null }));
 vi.mock('@/components/dashboard/dashboard-esign-pending', () => ({ DashboardEsignPending: () => null }));
 vi.mock('@/components/dashboard/ClaimRootBanner', () => ({ ClaimRootBanner: () => null }));
 vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));

@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DocumentsScene } from '@propertypro/ui';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import {
   ESIGN_STATUS_FILTERS,
@@ -155,6 +156,8 @@ export function RequestsView({
             />
           ) : (
             <EmptyState
+              size="section"
+              illustration={<DocumentsScene size="section" />}
               preset="no_esign_requests"
               action={
                 <Button asChild>

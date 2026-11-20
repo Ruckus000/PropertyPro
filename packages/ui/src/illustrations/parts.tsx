@@ -165,13 +165,80 @@ export function Document(props: PartProps) {
   );
 }
 
-/** Clipboard holding a short form, 64 × 80. Origin at its top-left. */
+/** Clipboard holding a short form, 64 × 88 (the clip sits above the board). Origin at its top-left. */
 export function Clipboard(props: PartProps) {
   return (
     <g transform={place(props)} {...ROUND}>
       <rect y={8} width={64} height={80} rx={7} fill={INK.card} stroke={INK.tealInk} strokeWidth={3} />
       <rect x={20} width={24} height={14} rx={4} fill={INK.tealInk} />
       <path d="M14 34h36M14 50h28M14 66h32" stroke={INK.line2} strokeWidth={3} fill="none" />
+    </g>
+  );
+}
+
+/** Shield (insurance), 56 × 64. Origin at its top-left. */
+export function Shield(props: PartProps) {
+  return (
+    <g transform={place(props)} strokeWidth={3} {...ROUND}>
+      <path d="M28 2l26 10v18c0 17-11 28-26 34C13 58 2 47 2 30V12z" fill={INK.sky} stroke={INK.tealInk} />
+      <path d="M17 32l8 8 15-16" fill="none" stroke={INK.green} />
+    </g>
+  );
+}
+
+/** A stack of coins (money), 60 × 52. Origin at its top-left. */
+export function Coins(props: PartProps) {
+  return (
+    <g transform={place(props)} strokeWidth={3} {...ROUND}>
+      <ellipse cx={30} cy={42} rx={26} ry={8} fill={INK.sun} stroke={INK.amberInk} />
+      <ellipse cx={30} cy={28} rx={26} ry={8} fill={INK.sun} stroke={INK.amberInk} />
+      <ellipse cx={30} cy={14} rx={26} ry={8} fill={INK.card} stroke={INK.amberInk} />
+    </g>
+  );
+}
+
+/** A parcel, 60 × 60. Origin at its top-left. */
+export function Package(props: PartProps) {
+  return (
+    <g transform={place(props)} strokeWidth={3} {...ROUND}>
+      <path d="M4 16L30 4l26 12v30L30 58 4 46z" fill={INK.sun} stroke={INK.amberInk} />
+      <path d="M4 16l26 12 26-12M30 28v30" fill="none" stroke={INK.amberInk} />
+    </g>
+  );
+}
+
+/** A wrench (maintenance), 60 × 60. Origin at its top-left. */
+export function Wrench(props: PartProps) {
+  return (
+    <g transform={place(props)} {...ROUND}>
+      <path
+        d="M38 6a14 14 0 0 0-14 18L6 42l12 12 18-18a14 14 0 0 0 18-14l-8 8-8-2-2-8z"
+        fill={INK.card}
+        stroke={INK.tealInk}
+        strokeWidth={3}
+      />
+    </g>
+  );
+}
+
+/** A wall calendar with today marked, 60 × 56. Origin at its top-left. */
+export function Calendar(props: PartProps) {
+  return (
+    <g transform={place(props)} strokeWidth={3} {...ROUND}>
+      <rect x={2} y={6} width={56} height={48} rx={6} fill={INK.card} stroke={INK.tealInk} />
+      <rect x={2} y={6} width={56} height={14} rx={6} fill={INK.tealInk} />
+      <rect x={14} y={30} width={10} height={9} rx={2} fill={INK.coral} />
+      <path d="M32 34h12M14 46h30" stroke={INK.line2} />
+    </g>
+  );
+}
+
+/** A bell (notices), 52 × 56. Origin at its top-left. */
+export function Bell(props: PartProps) {
+  return (
+    <g transform={place(props)} strokeWidth={3} {...ROUND}>
+      <path d="M26 4C15 4 8 12 8 22v12l-6 8h48l-6-8V22C44 12 37 4 26 4z" fill={INK.sky} stroke={INK.tealInk} />
+      <path d="M19 47a7 7 0 0 0 14 0" fill="none" stroke={INK.tealInk} />
     </g>
   );
 }

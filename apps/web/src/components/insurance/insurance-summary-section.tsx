@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import {
   useDeleteInsurancePolicy,
@@ -227,6 +228,8 @@ export function InsuranceSummarySection({ communityId, canManage, ownUnits }: Pr
         <Card>
           <CardContent className="pt-4">
             <EmptyState
+              size="section"
+              illustration={<PropScene size="section" prop="shield" />}
               preset={canManage ? 'insurance_policy_empty_admin' : 'insurance_policy_empty_resident'}
               action={
                 canManage ? (

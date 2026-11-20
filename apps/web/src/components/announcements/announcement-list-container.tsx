@@ -6,7 +6,7 @@
  * Owns:
  *   - Mutation hooks (`useDeleteAnnouncement`, `useRestoreAnnouncement`).
  *   - "Show deleted" toggle href derivation (depends on isAdmin + URL state).
- *   - Empty-state CTA visibility (depends on canWriteAnnouncements).
+ *   - Which empty state shows: the guide for writers, waiting for readers (`canWrite`).
  *   - The `canManageItem` per-item authorization decision (admin-or-author).
  *   - Post-mutation router refresh.
  *
@@ -104,12 +104,6 @@ export function AnnouncementListContainer({
     </Button>
   ) : undefined;
 
-  const emptyStateAction = canWriteAnnouncements ? (
-    <Button asChild>
-      <Link href={`/announcements/new?communityId=${communityId}`}>Create announcement</Link>
-    </Button>
-  ) : undefined;
-
   const clearSearchAction = searchQuery ? (
     <Button asChild variant="outline">
       <Link href={clearSearchHref}>Clear search</Link>
@@ -127,7 +121,7 @@ export function AnnouncementListContainer({
       communityId={communityId}
       showDeleted={showDeleted}
       headerAction={headerAction}
-      emptyStateAction={emptyStateAction}
+      canWrite={canWriteAnnouncements}
       searchQuery={searchQuery}
       clearSearchAction={clearSearchAction}
       canManageItem={canManageItem}

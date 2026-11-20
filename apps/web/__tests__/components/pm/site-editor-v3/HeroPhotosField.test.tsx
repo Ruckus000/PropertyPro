@@ -11,7 +11,21 @@ import { useState } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HeroPhotosField } from '@/components/pm/site-editor-v3/inspector/forms/fields/HeroPhotosField';
-import { STOCK_PHOTO_ALT, type HeroPhoto } from '@propertypro/shared';
+import { STOCK_PHOTO_ALT, STOCK_PHOTOS, stockPhotoSrc, type HeroPhoto } from '@propertypro/shared';
+
+const pickerSpy = vi.hoisted(() => ({ inUse: [] as string[][] }));
+vi.mock('@/components/pm/site-editor-v3/inspector/forms/fields/StockPhotoPicker', async () => {
+  // The real picker, wrapped only to record what it is given.
+  const actual = await vi.importActual<
+    typeof import('@/components/pm/site-editor-v3/inspector/forms/fields/StockPhotoPicker')
+  >('@/components/pm/site-editor-v3/inspector/forms/fields/StockPhotoPicker');
+  return {
+    StockPhotoPicker: (props: React.ComponentProps<typeof actual.StockPhotoPicker>) => {
+      if (props.open) pickerSpy.inUse.push([...props.inUse]);
+      return <actual.StockPhotoPicker {...props} />;
+    },
+  };
+});
 
 const uploadMock = vi.hoisted(() => vi.fn());
 // Captured so a test can drive a completion the way the real queue would.
@@ -71,6 +85,17 @@ describe('HeroPhotosField — labelling', () => {
       expect(screen.getByRole('button', { name: `Move photo ${n} up` })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: `Move photo ${n} down` })).toBeInTheDocument();
     }
+  });
+
+  it('names each Change photo by its row, like the other row controls', () => {
+    renderField([
+      { stock: 'pilings-dusk', alt: STOCK_PHOTO_ALT['pilings-dusk'] },
+      { path: '7/hero/pool.jpg', alt: 'The pool' },
+      { stock: 'shoreline', alt: STOCK_PHOTO_ALT.shoreline },
+    ]);
+    expect(
+      screen.getAllByRole('button', { name: /^Change photo/ }).map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Change photo 1', 'Change photo 3']);
   });
 
   it('disables the moves that would fall off the ends', () => {
@@ -221,10 +246,11 @@ describe('HeroPhotosField — focus after mutation', () => {
 
 describe('HeroPhotosField — stock photos', () => {
   // D3. A stock photo is one of ours, with no path: it shows its thumbnail, can be
-  // reworded, removed, moved, swapped for the other one, or replaced by an upload.
+  // reworded, removed, moved, changed from the library, or replaced by an upload.
   const SUNSET: HeroPhoto = { stock: 'sunset', alt: 'Sunset over the water' };
-  const PALMS: HeroPhoto = { stock: 'palms', alt: 'Palm trees' };
   const POOL: HeroPhoto = { path: '7/hero/pool.jpg', alt: 'The pool' };
+  const PILINGS: HeroPhoto = { stock: 'pilings-dusk', alt: STOCK_PHOTO_ALT['pilings-dusk'] };
+  const GULF: HeroPhoto = { stock: 'gulf-sunset', alt: STOCK_PHOTO_ALT['gulf-sunset'] };
 
   /** The parent's job: hold the list, so a change shows on the next render. */
   function Harness({ initial, onList }: { initial: HeroPhoto[]; onList?: (l: HeroPhoto[]) => void }) {
@@ -245,17 +271,19 @@ describe('HeroPhotosField — stock photos', () => {
   const thumbSrcs = (container: HTMLElement) =>
     Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src'));
 
-  it('a stock photo shows its thumbnail and can be removed or replaced', async () => {
+  it('a stock photo shows its thumbnail and can be changed or removed', async () => {
     const user = userEvent.setup();
     const { container } = render(<Harness initial={[SUNSET, POOL]} />);
 
     // Its thumbnail, from the site's own folder.
-    expect(thumbSrcs(container)[0]).toBe('/site-looks/sunset.webp');
+    expect(thumbSrcs(container)[0]).toBe(stockPhotoSrc('sunset', 480));
 
-    // Replaced by the other stock photo: its picture AND its description change.
-    await user.click(screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }));
-    expect(thumbSrcs(container)[0]).toBe('/site-looks/palms.webp');
-    expect(screen.getAllByLabelText('Alt text')[0]).toHaveValue(STOCK_PHOTO_ALT.palms);
+    // Changed to another library photo: its picture AND its description change.
+    await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+    await user.click(screen.getByRole('button', { name: 'Palm walk' }));
+    await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+    expect(thumbSrcs(container)[0]).toBe(stockPhotoSrc('palm-walk', 480));
+    expect(screen.getAllByLabelText('Alt text')[0]).toHaveValue(STOCK_PHOTO_ALT['palm-walk']);
 
     // Removed.
     await user.click(screen.getByRole('button', { name: 'Remove photo 1' }));
@@ -266,7 +294,7 @@ describe('HeroPhotosField — stock photos', () => {
     const { view } = renderField([SUNSET, POOL]);
 
     const thumbs = Array.from(view.container.querySelectorAll('img'));
-    expect(thumbs[0]).toHaveAttribute('src', '/site-looks/sunset.webp');
+    expect(thumbs[0]).toHaveAttribute('src', stockPhotoSrc('sunset', 480));
     // The description is in the field beside it; the thumbnail is not announced.
     expect(thumbs[0]).toHaveAttribute('alt', '');
     const [stockAlt] = screen.getAllByLabelText('Alt text');
@@ -320,94 +348,208 @@ describe('HeroPhotosField — stock photos', () => {
     expect(onChange).toHaveBeenLastCalledWith([SUNSET, { path: '7/hero/pool.jpg', alt: 'The pool!' }]);
   });
 
-  describe('swapping for the other stock photo', () => {
-    it('puts the other photo in the same place, with its own description', async () => {
-      const user = userEvent.setup();
-      const { onChange } = renderField([POOL, SUNSET]);
+  describe('choosing from our library', () => {
+    const UP1: HeroPhoto = { path: '7/hero/a.jpg', alt: 'A' };
+    const UP2: HeroPhoto = { path: '7/hero/b.jpg', alt: 'B' };
+    const changeButtons = () => screen.queryAllByRole('button', { name: /^Change photo \d+$/ });
 
-      await user.click(
-        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-      );
+    beforeEach(() => {
+      pickerSpy.inUse.length = 0;
+    });
+
+    it('a stock row offers Change photo, not the old swap, and a library thumbnail', () => {
+      const { view } = renderField([UP1, PILINGS, UP2]);
+      expect(changeButtons()).toHaveLength(1);
+      expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
+      expect(thumbSrcs(view.container)[1]).toBe(stockPhotoSrc('pilings-dusk', 480));
+    });
+
+    it('Change photo is not offered for an uploaded photo', () => {
+      renderField([POOL]);
+      expect(changeButtons()).toHaveLength(0);
+    });
+
+    it('changes a row in place, with the new photo\'s own description, and returns focus to it', async () => {
+      const user = userEvent.setup();
+      const { onChange } = renderField([UP1, PILINGS, UP2]);
+
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await user.click(screen.getByRole('button', { name: 'Sea oats' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+
       expect(onChange).toHaveBeenCalledWith([
-        POOL,
-        { stock: 'palms', alt: STOCK_PHOTO_ALT.palms },
+        UP1,
+        { stock: 'sea-oats', alt: STOCK_PHOTO_ALT['sea-oats'] },
+        UP2,
       ]);
     });
 
-    it('swaps back the other way', async () => {
+    it('changes the row whose button was pressed when the same photo is stored twice', async () => {
+      // The picker never adds a duplicate, but stored data can hold one.
       const user = userEvent.setup();
-      const { onChange } = renderField([PALMS]);
+      const { onChange } = renderField([PILINGS, UP1, PILINGS]);
 
-      await user.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
-      expect(onChange).toHaveBeenCalledWith([{ stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset }]);
+      await user.click(screen.getByRole('button', { name: 'Change photo 3' }));
+      await user.click(screen.getByRole('button', { name: 'Gulf sunset' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+
+      expect(onChange).toHaveBeenCalledWith([
+        PILINGS,
+        UP1,
+        { stock: 'gulf-sunset', alt: STOCK_PHOTO_ALT['gulf-sunset'] },
+      ]);
     });
 
-    it('drops a reworded description rather than keep it on a picture it does not describe', async () => {
+    it('returns focus to the changed row\'s Change photo', async () => {
       const user = userEvent.setup();
-      const { onChange } = renderField([{ stock: 'sunset', alt: 'Our own wording for the sunset' }]);
+      render(<Harness initial={[UP1, PILINGS, UP2]} />);
 
-      await user.click(
-        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-      );
-      expect(onChange).toHaveBeenCalledWith([{ stock: 'palms', alt: STOCK_PHOTO_ALT.palms }]);
-    });
-
-    it('is not offered when the other photo is already in the list', () => {
-      renderField([SUNSET, PALMS]);
-      expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
-    });
-
-    it('is a touch target: 44px tall below 768px, 32px from there up', () => {
-      // jsdom has no layout, so the rule (.claude/rules/design.md) is asserted on
-      // the classes that carry it. The label wraps in the narrow column, so the
-      // height is a floor (`min-h`), not a fixed height.
-      renderField([SUNSET]);
-      const swap = screen.getByRole('button', { name: 'Use the palm-lined street photo instead' });
-      expect(swap).toHaveClass('min-h-11', 'md:min-h-8', 'h-auto', 'md:h-auto');
-      // size="sm" carries `md:h-7`; only `md:h-auto` cancels it, so the wrapping label can grow.
-      expect(swap).not.toHaveClass('md:h-7');
-    });
-
-    it('is not offered for an uploaded photo', () => {
-      renderField([POOL]);
-      expect(screen.queryByRole('button', { name: /instead$/ })).not.toBeInTheDocument();
-    });
-
-    it('leaves focus in the row after a swap, on the button that swaps back', async () => {
-      // The swap changes the row's key, so the row remounts and the focused
-      // button is gone: without the deferred focus, a keyboard user lands on <body>.
-      const user = userEvent.setup();
-      render(<Harness initial={[SUNSET, POOL]} />);
-
-      await user.click(
-        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-      );
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await user.click(screen.getByRole('button', { name: 'Sea oats' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
 
       await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
+      );
+      // The row is the second one, and it now shows the new photo.
+      const row = (document.activeElement as HTMLElement).closest('[data-photo-row]')!;
+      expect(row.parentElement!.children[1]).toBe(row);
+      expect(row.querySelector('img')).toHaveAttribute('src', stockPhotoSrc('sea-oats', 480));
+    });
+
+    it('returns focus to Change photo when the picker is cancelled', async () => {
+      const user = userEvent.setup();
+      render(<Harness initial={[UP1, PILINGS]} />);
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
+      );
+    });
+
+    it('adds a library photo at the end, with its description, and returns focus to the opener', async () => {
+      const user = userEvent.setup();
+      const lists: HeroPhoto[][] = [];
+      render(<Harness initial={[UP1, UP2]} onList={(l) => lists.push(l)} />);
+
+      await user.click(screen.getByRole('button', { name: 'Choose one of our photos' }));
+      await user.click(screen.getByRole('button', { name: 'Marsh at sundown' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+
+      expect(lists.at(-1)).toEqual([
+        UP1,
+        UP2,
+        { stock: 'marsh-sunset', alt: STOCK_PHOTO_ALT['marsh-sunset'] },
+      ]);
+      await waitFor(() =>
         expect(document.activeElement).toBe(
-          screen.getByRole('button', { name: 'Use the sunset photo instead' }),
+          screen.getByRole('button', { name: 'Choose one of our photos' }),
         ),
       );
     });
 
-    it('announces the change once, in the field live region', async () => {
+    it('puts focus on the new row when the addition fills the hero and the Choose button leaves', async () => {
       const user = userEvent.setup();
-      const { view } = renderField([SUNSET, POOL]);
+      const seven = Array.from({ length: 7 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
+      render(<Harness initial={seven} />);
 
-      await user.click(
-        screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
+      await user.click(screen.getByRole('button', { name: 'Choose one of our photos' }));
+      await user.click(screen.getByRole('button', { name: 'Marsh at sundown' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+
+      expect(screen.queryByRole('button', { name: 'Choose one of our photos' })).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
       );
+    });
+
+    it('announces a change and an addition in the field live region', async () => {
+      const user = userEvent.setup();
+      const { view } = renderField([PILINGS]);
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await user.click(screen.getByRole('button', { name: 'Sea oats' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
       await waitFor(() =>
         expect(view.container.querySelector('[aria-live]')).toHaveTextContent(
-          'Photo 1 changed to the palm-lined street photo.',
+          `Photo changed to ${STOCK_PHOTOS['sea-oats'].name}.`,
+        ),
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Choose one of our photos' }));
+      await user.click(screen.getByRole('button', { name: 'Marsh at sundown' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+      await waitFor(() =>
+        expect(view.container.querySelector('[aria-live]')).toHaveTextContent(
+          `Added ${STOCK_PHOTOS['marsh-sunset'].name}.`,
         ),
       );
       expect(view.container.querySelectorAll('[aria-live]')).toHaveLength(1);
     });
+
+    it('hides Choose one of our photos when the hero is full, but a stock row can still change', async () => {
+      const user = userEvent.setup();
+      const seven = Array.from({ length: 7 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
+      renderField([PILINGS, ...seven]);
+      expect(screen.queryByRole('button', { name: 'Choose one of our photos' })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      expect(screen.getByRole('heading', { name: 'Choose a photo' })).toBeInTheDocument();
+    });
+
+    it('changes the retired sunset photo to a library photo', async () => {
+      const user = userEvent.setup();
+      const { onChange } = renderField([SUNSET]);
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await user.click(screen.getByRole('button', { name: 'Palm walk' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+      expect(onChange).toHaveBeenCalledWith([
+        { stock: 'palm-walk', alt: STOCK_PHOTO_ALT['palm-walk'] },
+      ]);
+    });
+
+    it('a file waiting to replace a photo follows it when the photo is changed', async () => {
+      const lists: HeroPhoto[][] = [];
+      render(<Harness initial={[PILINGS, POOL]} onList={(l) => lists.push(l)} />);
+      await userEvent.upload(
+        screen.getByLabelText(`Replace ${STOCK_PHOTOS['pilings-dusk'].name} with your own`),
+        imageFile('beach.jpg'),
+      );
+      await userEvent.type(await screen.findByLabelText('Alt text for beach.jpg'), 'The beach');
+
+      await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Gulf sunset' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
+      expect(screen.getByText(`Replaces ${STOCK_PHOTOS['gulf-sunset'].name}.`)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
+      act(() => {
+        heroPhotosHook.onUploaded!(
+          { storagePath: '7/hero/beach.jpg', altText: 'SERVER ECHO' },
+          { id: 'staged-1', file: imageFile('beach.jpg'), alt: 'The beach', decorative: false },
+        );
+      });
+      expect(lists.at(-1)).toEqual([{ path: '7/hero/beach.jpg', alt: 'The beach' }, POOL]);
+    });
+
+    it('tells the picker which stock photos are already in the list', async () => {
+      const user = userEvent.setup();
+      renderField([PILINGS, { stock: 'shoreline', alt: STOCK_PHOTO_ALT.shoreline }, UP1]);
+      await user.click(screen.getAllByRole('button', { name: /^Change photo \d+$/ })[0]!);
+      expect(pickerSpy.inUse.at(-1)).toEqual(['pilings-dusk', 'shoreline']);
+    });
+
+    it('Change photo is a touch target: 44px tall below 768px, 32px from there up', () => {
+      renderField([PILINGS]);
+      for (const name of ['Change photo 1', 'Choose one of our photos']) {
+        const button = screen.getByRole('button', { name });
+        expect(button).toHaveClass('min-h-11', 'md:min-h-8', 'h-auto', 'md:h-auto');
+        expect(button).not.toHaveClass('md:h-7');
+      }
+    });
   });
 
   describe('replacing with an upload', () => {
-    const PICK = 'Replace the sunset photo with your own';
+    const PICK = `Replace ${STOCK_PHOTOS.sunset.name} with your own`;
 
     /** Pick a file for the sunset row, describe it and press the button. */
     async function stageAndUpload(name = 'beach.jpg', alt = 'The beach') {
@@ -430,7 +572,7 @@ describe('HeroPhotosField — stock photos', () => {
 
     it('is offered on a stock photo and not on an upload', () => {
       renderField([SUNSET, POOL]);
-      expect(screen.getAllByLabelText(/^Replace the .* photo with your own$/)).toHaveLength(1);
+      expect(screen.getAllByLabelText(/^Replace .* with your own$/)).toHaveLength(1);
       expect(screen.getByLabelText(PICK)).toHaveAttribute('type', 'file');
     });
 
@@ -438,7 +580,7 @@ describe('HeroPhotosField — stock photos', () => {
       renderField([SUNSET, POOL]);
       await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
 
-      expect(await screen.findByText('Replaces the sunset photo.')).toBeInTheDocument();
+      expect(await screen.findByText(`Replaces ${STOCK_PHOTOS.sunset.name}.`)).toBeInTheDocument();
       expect(uploadMock).not.toHaveBeenCalled();
     });
 
@@ -516,15 +658,20 @@ describe('HeroPhotosField — stock photos', () => {
       // photo back in the list, and the file must not latch onto it: the manager
       // chose to replace a photo that is no longer there.
       const FIVE = Array.from({ length: 5 }, (_, i) => ({ path: `7/hero/p${i}.jpg`, alt: `Photo ${i}` }));
-      render(<Harness initial={[SUNSET, PALMS, ...FIVE]} />);
-      await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
+      render(<Harness initial={[PILINGS, GULF, ...FIVE]} />);
+      await userEvent.upload(
+        screen.getByLabelText(`Replace ${STOCK_PHOTOS['pilings-dusk'].name} with your own`),
+        imageFile('beach.jpg'),
+      );
       await screen.findByLabelText('Alt text for beach.jpg');
 
       await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Pilings at dusk' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
-      expect(thumbSrcs(document.body)[0]).toBe('/site-looks/sunset.webp');
-      expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+      expect(thumbSrcs(document.body)[0]).toBe(stockPhotoSrc('pilings-dusk', 480));
+      expect(screen.queryByText(/^Replaces /)).not.toBeInTheDocument();
     });
 
     describe('on a full hero (8 photos), where a ninth would be refused', () => {
@@ -578,27 +725,27 @@ describe('HeroPhotosField — stock photos', () => {
         render(<Harness initial={[SUNSET, ...SEVEN]} onList={(l) => lists.push(l)} />);
         await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
         await userEvent.type(await screen.findByLabelText('Alt text for beach.jpg'), 'The beach');
-        expect(screen.getByText('Replaces the sunset photo.')).toBeInTheDocument();
+        expect(screen.getByText(`Replaces ${STOCK_PHOTOS.sunset.name}.`)).toBeInTheDocument();
       }
 
       describe('when its stock photo is swapped for the other one', () => {
         it('the waiting file follows it, and its note names the new photo', async () => {
           await fullHeroWithAWaitingFile([]);
 
-          await userEvent.click(
-            screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-          );
+          await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+          await userEvent.click(screen.getByRole('button', { name: 'Palm walk' }));
+          await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
-          expect(screen.getByText('Replaces the palm-lined street photo.')).toBeInTheDocument();
-          expect(screen.queryByText('Replaces the sunset photo.')).not.toBeInTheDocument();
+          expect(screen.getByText(`Replaces ${STOCK_PHOTOS['palm-walk'].name}.`)).toBeInTheDocument();
+          expect(screen.queryByText(`Replaces ${STOCK_PHOTOS.sunset.name}.`)).not.toBeInTheDocument();
         });
 
         it('the upload still lands in that slot, for 8 photos and not 9', async () => {
           const lists: HeroPhoto[][] = [];
           await fullHeroWithAWaitingFile(lists);
-          await userEvent.click(
-            screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-          );
+          await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+          await userEvent.click(screen.getByRole('button', { name: 'Palm walk' }));
+          await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
           await userEvent.click(screen.getByRole('button', { name: /add 1 photo to hero/i }));
           finish();
@@ -616,7 +763,7 @@ describe('HeroPhotosField — stock photos', () => {
 
           await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
 
-          expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+          expect(screen.queryByText(/^Replaces /)).not.toBeInTheDocument();
         });
 
         it('the hero counts the file as an addition: no ninth photo can be staged', async () => {
@@ -664,11 +811,11 @@ describe('HeroPhotosField — stock photos', () => {
           renderWithAnOutsideEdit([]);
           await userEvent.upload(screen.getByLabelText(PICK), imageFile('beach.jpg'));
           await screen.findByLabelText('Alt text for beach.jpg');
-          expect(screen.getByText('Replaces the sunset photo.')).toBeInTheDocument();
+          expect(screen.getByText(`Replaces ${STOCK_PHOTOS.sunset.name}.`)).toBeInTheDocument();
 
           await userEvent.click(screen.getByRole('button', { name: 'Another edit arrives' }));
 
-          expect(screen.queryByText(/^Replaces the/)).not.toBeInTheDocument();
+          expect(screen.queryByText(/^Replaces /)).not.toBeInTheDocument();
         });
 
         it('the hero counts the file as an addition', async () => {
@@ -695,31 +842,36 @@ describe('HeroPhotosField — stock photos', () => {
         const lists: HeroPhoto[][] = [];
         render(
           <ForeignHarness
-            initial={[SUNSET, ...SIX]}
-            foreign={[PALMS, ...SIX]}
+            initial={[PILINGS, ...SIX]}
+            foreign={[GULF, ...SIX]}
             onList={(l) => lists.push(l)}
           />,
         );
 
-        await userEvent.upload(screen.getByLabelText(PICK), imageFile('a.jpg'));
+        await userEvent.upload(
+          screen.getByLabelText(`Replace ${STOCK_PHOTOS['pilings-dusk'].name} with your own`),
+          imageFile('a.jpg'),
+        );
         await userEvent.type(await screen.findByLabelText('Alt text for a.jpg'), 'A photo');
         await userEvent.click(screen.getByRole('button', { name: 'Another edit arrives' }));
         // The first file is aimed at a photo that is gone: it needs a place (7 + 1 = 8).
         expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
 
         await userEvent.upload(
-          screen.getByLabelText('Replace the palm-lined street photo with your own'),
+          screen.getByLabelText(`Replace ${STOCK_PHOTOS['gulf-sunset'].name} with your own`),
           imageFile('b.jpg'),
         );
         await userEvent.type(await screen.findByLabelText('Alt text for b.jpg'), 'B photo');
-        // The second takes the palm street photo's place and needs none.
+        // The second takes the Gulf sunset's place and needs none.
         expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Use the sunset photo instead' }));
+        await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
+        await userEvent.click(screen.getByRole('button', { name: 'Pilings at dusk' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
-        // Both are now aimed at the sunset photo. One takes its place; the other
+        // Both are now aimed at Pilings at dusk. One takes its place; the other
         // needs a place of its own, and the hero must not offer a ninth.
-        expect(screen.getAllByText('Replaces the sunset photo.')).toHaveLength(1);
+        expect(screen.getAllByText(`Replaces ${STOCK_PHOTOS['pilings-dusk'].name}.`)).toHaveLength(1);
         expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
         expect(screen.getByLabelText('Add photos')).toBeDisabled();
 

@@ -144,7 +144,9 @@ const RESOURCES: Record<string, ResourceSpec> = {
   site_image: { noun: 'website photo', created: 'uploaded' },
   community_export_job: { noun: 'full records export', created: 'started' },
   stripe_connected_account: { noun: 'payment account', created: 'connected' },
+  // Older rows, from when onboarding used Stripe OAuth.
   stripe_connect_oauth_start: { noun: 'payment account setup', created: 'started' },
+  stripe_connect_onboarding_link: { noun: 'payment account setup', created: 'started' },
   sms_consent: { noun: 'text message consent' },
   snowbird_digest_settings: { noun: 'seasonal digest settings' },
   onboarding_wizard: { noun: 'setup checklist', updated: 'saved progress on the' },

@@ -112,6 +112,48 @@ export function ConnectStatus({ communityId }: { communityId: number }) {
     );
   }
 
+  // Details submitted, but Stripe has not enabled charges yet. Stripe does this
+  // while it verifies the account, and it can also ask for more information.
+  // Without this branch the card fell through to "Connect with Stripe", as if
+  // nothing were linked.
+  if (data.connected) {
+    return (
+      <div className="rounded-md border border-status-warning-border bg-surface-card p-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-status-warning-bg">
+            <svg className="h-5 w-5 text-status-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-content">Stripe Is Reviewing Your Account</h3>
+            <p className="text-sm text-content-secondary">
+              Your details are submitted. Payments turn on once Stripe finishes verifying
+              the account. If Stripe asks for more information, open your Stripe setup to
+              provide it.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-4">
+          <StatusBadge label="Onboarding" ok={data.onboardingComplete} />
+          <StatusBadge label="Charges" ok={data.chargesEnabled} />
+          <StatusBadge label="Payouts" ok={data.payoutsEnabled} />
+        </div>
+
+        <button
+          onClick={handleConnect}
+          disabled={onboardMutation.isPending}
+          className="mt-4 rounded-md border border-edge-strong px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted disabled:opacity-50"
+        >
+          {onboardMutation.isPending ? 'Redirecting...' : 'Open Stripe Setup'}
+        </button>
+
+        {error && <p className="mt-2 text-sm text-status-danger">{error}</p>}
+      </div>
+    );
+  }
+
   // Not connected at all
   return (
     <div className="rounded-md border border-edge bg-surface-card p-6">

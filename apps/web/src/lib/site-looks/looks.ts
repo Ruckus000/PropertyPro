@@ -22,11 +22,14 @@ import {
   BLOCK_TYPES,
   blockSchemaRegistry,
   fingerprint,
+  heroBlockSchema,
+  resolveHeroPhotos,
   stableStringify,
   STOCK_PHOTO_ALT,
   type BlockType,
   type CommunityType,
-  type StockHeroPhoto,
+  type ResolvedHeroPhoto,
+  type StockPhotoId,
 } from '@propertypro/shared';
 import type { LayoutId } from '@/components/public-site/blocks/types';
 
@@ -48,6 +51,8 @@ export interface LookDefinition {
   description: string;
   layoutId: LayoutId;
   presetSlug: LookId;
+  /** Stock photos this look suggests for its hero; the first is its default. Empty for a look with no photos. */
+  suggestedPhotos: readonly StockPhotoId[];
   /** The home page's sections, in order. A new site gets exactly these. */
   sections: readonly LookSection[];
 }
@@ -69,10 +74,18 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-// The two stock photos are scenery, never a building an association could take
-// for its own (D3). Heritage shares Bayfront's sunset.
-const SUNSET: StockHeroPhoto = { stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset };
-const PALMS: StockHeroPhoto = { stock: 'palms', alt: STOCK_PHOTO_ALT.palms };
+// Stock photos are scenery, never a building an association could take for its
+// own (D3). Each look has its own default and suggestions; none is shared.
+/** A hero's photo for a stock id, with that photo's alt text. */
+function stockPhoto(id: StockPhotoId) {
+  return { stock: id, alt: STOCK_PHOTO_ALT[id] };
+}
+
+const BAYFRONT_PHOTOS: readonly StockPhotoId[] = ['pilings-dusk', 'gulf-sunset', 'shoreline'];
+
+const HERITAGE_PHOTOS: readonly StockPhotoId[] = ['oak-avenue', 'lake-reflection', 'royal-palms'];
+
+const PALM_GROVE_PHOTOS: readonly StockPhotoId[] = ['palm-walk', 'sea-oats', 'palm-sky'];
 
 /** Every look lists the same records: all five categories a Documents section can show. */
 const RECORDS: z.input<(typeof blockSchemaRegistry)['documents']> = {
@@ -92,6 +105,7 @@ const RECORDS: z.input<(typeof blockSchemaRegistry)['documents']> = {
 export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   {
     id: 'bayfront',
+    suggestedPhotos: BAYFRONT_PHOTOS,
     name: 'Bayfront',
     description: 'Photo-led and modern.',
     layoutId: 'bayfront',
@@ -101,7 +115,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
         headline: 'Welcome to {{name}}',
         subtitle:
           '{{units}} homes in {{city}}. Meeting notices, news and community records, all in one place.',
-        photos: [SUNSET],
+        photos: [stockPhoto(BAYFRONT_PHOTOS[0]!)],
       }),
       section('quicklinks', {}),
       section('announcements', { limit: 3 }),
@@ -112,6 +126,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'heritage',
+    suggestedPhotos: HERITAGE_PHOTOS,
     name: 'Heritage',
     description: 'Formal and official.',
     layoutId: 'heritage',
@@ -120,7 +135,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
       section('hero', {
         headline: '{{name}}',
         subtitle: 'The website of {{name}}. Notices, meetings and records for owners and residents.',
-        photos: [SUNSET],
+        photos: [stockPhoto(HERITAGE_PHOTOS[0]!)],
       }),
       section('announcements', { limit: 5 }),
       section('meetings', { limit: 5 }),
@@ -132,6 +147,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'palm-grove',
+    suggestedPhotos: PALM_GROVE_PHOTOS,
     name: 'Palm Grove',
     description: 'Warm and friendly.',
     layoutId: 'palm-grove',
@@ -141,7 +157,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
         headline: 'Welcome home to {{name}}',
         subtitle:
           'News, meetings and everyday information for our neighbors. {{units}} homes in {{city}}.',
-        photos: [PALMS],
+        photos: [stockPhoto(PALM_GROVE_PHOTOS[0]!)],
       }),
       section('announcements', { limit: 3 }),
       section('meetings', { limit: 5 }),
@@ -151,6 +167,7 @@ export const LOOKS: readonly LookDefinition[] = deepFreeze<LookDefinition[]>([
   },
   {
     id: 'plain-simple',
+    suggestedPhotos: [],
     name: 'Plain & Simple',
     description: 'No photos needed, larger text.',
     layoutId: 'plain-simple',
@@ -303,6 +320,8 @@ export interface LookSwitchCounts {
   replaced: number;
   /** Edited or hidden sections kept as they are, in their slot. */
   kept: number;
+  // A kept hero that took the incoming look's photo still counts as kept: its
+  // words are the manager's, and only a stock photo changed.
   /** The incoming look's sections of a type the page did not have. */
   added: number;
   /** Untouched sections dropped: the incoming look has no section of their type left for them. */
@@ -320,10 +339,12 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * A section is UNTOUCHED when its content, parsed by its block schema, equals a
  * default the site could have received (`outgoingDefaults`), parsed the same
  * way. Parsing both sides is what makes a section stored with the schema's
- * defaults filled in, or with its keys in jsonb's order, still count. Anything
- * else is the manager's: edited content, content that does not parse, and every
- * hidden section, even one whose default hides it too (an admin's starter-pack
- * version can).
+ * defaults filled in, or with its keys in jsonb's order, still count. A hero
+ * showing only stock photos is compared by whether it shows any, on both sides
+ * (`untouchedIdentity`): another stock photo is not an edit, no photo is.
+ * Anything else is the manager's: edited content, content that does not
+ * parse, and every hidden section, even one whose default hides it too (an
+ * admin's starter-pack version can).
  *
  * - `incoming` already drafted (`draftedLookId`): the page exactly as it is.
  *   Its sections were planned when that look was drafted, and planning again
@@ -345,10 +366,14 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * - Otherwise each untouched section is replaced in its slot by the incoming
  *   section of its type, or dropped when there is none. Each incoming section
  *   is used once, so none shows twice. Kept sections stay as they are, in their
- *   slots. The incoming types the page still lacks go in after the nearest
- *   section before them in the incoming order, or first.
+ *   slots, except that a kept hero showing only stock photos, or none, takes
+ *   the incoming look's default ("A kept hero's photo", below). The incoming
+ *   types the page still lacks go in after the nearest section before them in
+ *   the incoming order, or first.
  *
- * Content the switch supplies is a copy; kept sections are handed back as given.
+ * Content the switch supplies is a copy. Kept sections are handed back as given,
+ * except a kept hero whose photos changed, which is a new object: compare
+ * content, never rely on a kept section's row id meaning "unchanged".
  */
 export function planLookSwitch(input: PlanLookSwitchInput): SiteSection[] {
   return planLookSwitchWithCounts(input).sections;
@@ -424,6 +449,7 @@ function planAgainst(
   for (const lookSection of incoming) {
     unused.set(lookSection.blockType, [...(unused.get(lookSection.blockType) ?? []), lookSection]);
   }
+  const incomingPhotos = heroPhotosIn(incoming);
 
   const sections: SiteSection[] = [];
   let replaced = 0;
@@ -431,7 +457,7 @@ function planAgainst(
   let removed = 0;
   current.forEach((siteSection, i) => {
     if (!untouched[i]) {
-      sections.push(keep(siteSection));
+      sections.push(withLookPhotos(keep(siteSection), incomingPhotos));
       kept += 1;
       return;
     }
@@ -632,7 +658,9 @@ function planBackToLive(
   live.forEach((row, j) => {
     const i = standIn[j]!;
     // A section standing for the row with other content is the manager's edit.
-    sections.push(i !== -1 && identity[i] !== liveIdentity[j] ? keep(current[i]!) : keep(row));
+    // A look's photo on a hero is not: the row's own photos come back.
+    const now = i === -1 ? null : withPhotosOf(current[i]!, row);
+    sections.push(now !== null && contentIdentity(now) !== liveIdentity[j] ? keep(now) : keep(row));
     if (i === -1 && !placed.has(j)) added += 1;
     sections.push(...(addedAfter.get(j) ?? []));
   });
@@ -664,7 +692,12 @@ function defaultsByType(sets: readonly (readonly LookSection[])[]): Map<string, 
       const parsed = parsedContent(lookSection.blockType, lookSection.content);
       if (parsed === null) continue;
       const identities = byType.get(lookSection.blockType) ?? new Set<string>();
-      identities.add(stableStringify(parsed.data));
+      identities.add(untouchedIdentity(lookSection.blockType, parsed.data));
+      // A default with no photo (Plain & Simple) also accepts one of our photos:
+      // adding a stock photo is not an edit. Not the other way round, so emptying
+      // a photo look's hero still is one.
+      const noPhoto = photoLessHero(lookSection.blockType, parsed.data);
+      if (noPhoto !== null) identities.add(heroIdentity(noPhoto, 'stock'));
       byType.set(lookSection.blockType, identities);
     }
   }
@@ -675,7 +708,38 @@ function isUntouched(siteSection: SiteSection, defaults: ReadonlyMap<string, Rea
   const parsed = parsedContent(siteSection.blockType, siteSection.content);
   // Hiding a section is the manager's choice, even where a default hides it too.
   if (parsed === null || isHidden(parsed.data)) return false;
-  return defaults.get(siteSection.blockType)?.has(stableStringify(parsed.data)) ?? false;
+  return defaults.get(siteSection.blockType)?.has(untouchedIdentity(siteSection.blockType, parsed.data)) ?? false;
+}
+
+/**
+ * Parsed content as "untouched" compares it, the same for a section and for a
+ * default. A hero's photos are compared by kind: one or more stock photos are
+ * all `'stock'`, and no photo is `'none'`. Stock photos are ours, so picking
+ * another one, or a hero still showing a look's earlier default, does not make
+ * it edited (and `defaultsByType` lets a photo-less default accept `'stock'`
+ * too). Removing every photo from a default that has one does make it edited,
+ * so it is kept with its words; on a switch to a different look it then takes
+ * that look's photo, like any kept hero with no photo, and only on the way back
+ * to the live look does it stay empty. A hero with an upload or the legacy
+ * single image keeps its photos as they are, so it never matches a default.
+ */
+function untouchedIdentity(blockType: string, data: unknown): string {
+  const photos = blockType === 'hero' ? visibleHeroPhotos(data) : null;
+  if (photos === null || !photos.every((photo) => 'stock' in photo)) return stableStringify(data);
+  return heroIdentity(data, photos.length > 0 ? 'stock' : 'none');
+}
+
+/** A hero's parsed content with its photos replaced by their kind. */
+function heroIdentity(data: unknown, photos: 'stock' | 'none'): string {
+  const { photos: _photos, ...rest } = data as Record<string, unknown>;
+  return stableStringify({ ...rest, photos });
+}
+
+/** A default's parsed content when it is a visible hero with no photo, else null. */
+function photoLessHero(blockType: string, data: unknown): unknown {
+  if (blockType !== 'hero') return null;
+  const photos = visibleHeroPhotos(data);
+  return photos !== null && photos.length === 0 ? data : null;
 }
 
 function isHidden(data: unknown): boolean {
@@ -688,6 +752,98 @@ function countByType(sections: readonly SiteSection[]): Map<string, number> {
   return counts;
 }
 
+// ---------------------------------------------------------------------------
+// A kept hero's photo
+// ---------------------------------------------------------------------------
+//
+// A photo the manager uploaded always stays; a stock photo may be swapped for
+// the new look's default. A look's photo lives in its hero's content, so a
+// switch only brought it with a hero it REPLACED, and a hero the manager had
+// edited (their own headline) kept whatever it showed. So a kept, parseable hero
+// whose photos are all stock photos (any id, retired ones included) or none
+// takes the incoming look's default photo, keeping its words. A strip of only
+// stock photos becomes the look's single default: stock photos are ours, not the
+// manager's, so the strip is not theirs to keep across a look change. A hero
+// with an upload, the single legacy image, or content that does not parse
+// stays exactly as it is. A look with no photo (Plain & Simple) leaves the hero
+// alone, stock photo included.
+//
+// "Untouched" compares stock photos by kind (`untouchedIdentity`), so a hero
+// that differs from a default only in which stock photo it shows, or that added
+// one of our photos to Plain & Simple's photo-less default, takes the incoming
+// look's whole hero. One emptied of a default's photo is an edit, kept with its
+// words; on a switch to a different look it has no photo, so it takes the
+// incoming look's, like any kept hero with no photo.
+//
+// Only the way BACK to the live look keeps an emptied hero empty. There the live
+// row's photos come back over a hero showing only stock photos, when the live
+// row shows no upload, so a switch's photo never outlives the switch; a hero
+// with no photo at all is left alone, because a switch back never takes a photo
+// away and never puts one over a hero the manager emptied.
+
+/**
+ * A visible hero's photos, or null for content that does not parse. The hero
+ * schema is strict and has no `hidden` key today, so the hidden check only
+ * guards against one being added later.
+ */
+function visibleHeroPhotos(content: unknown): ResolvedHeroPhoto[] | null {
+  const parsed = heroBlockSchema.safeParse(content);
+  if (!parsed.success || isHidden(parsed.data)) return null;
+  return resolveHeroPhotos(parsed.data);
+}
+
+/** Whether a parseable, visible hero shows only stock photos. None counts: no upload either. */
+function onlyStockPhotos(content: unknown): boolean {
+  const photos = visibleHeroPhotos(content);
+  return photos !== null && photos.every((photo) => 'stock' in photo);
+}
+
+/** Whether a hero shows only stock photos, and at least one. */
+function showsStockPhotos(content: unknown): boolean {
+  const photos = visibleHeroPhotos(content);
+  return photos !== null && photos.length > 0 && photos.every((photo) => 'stock' in photo);
+}
+
+/** The photos a look's hero starts with, or null when it has none (Plain & Simple). */
+function heroPhotosIn(sections: readonly LookSection[]): unknown[] | null {
+  const hero = sections.find((s) => s.blockType === 'hero');
+  const photos = (hero?.content as { photos?: unknown } | undefined)?.photos;
+  return Array.isArray(photos) && photos.length > 0 ? photos : null;
+}
+
+/** The hero's content with `photos` set (a copy), or removed when `photos` is undefined. */
+function heroWithPhotos(content: unknown, photos: unknown[] | undefined): unknown {
+  const { photos: _replaced, ...rest } = content as Record<string, unknown>;
+  return photos === undefined ? rest : { ...rest, photos: copyJson(photos) };
+}
+
+/** A kept section, given the incoming look's photos when it is a hero showing only stock photos, or none. */
+function withLookPhotos(section: SiteSection, photos: unknown[] | null): SiteSection {
+  if (section.blockType !== 'hero' || photos === null || !onlyStockPhotos(section.content)) return section;
+  return { ...section, content: heroWithPhotos(section.content, photos) };
+}
+
+/**
+ * A section standing for a live row, with the row's photos back where it is a
+ * hero showing stock photos and the row a hero showing no upload: a stock photo
+ * follows the look, so it is not an edit.
+ */
+function withPhotosOf(section: SiteSection, row: SiteSection): SiteSection {
+  if (
+    section.blockType !== 'hero' ||
+    row.blockType !== 'hero' ||
+    !showsStockPhotos(section.content) ||
+    !onlyStockPhotos(row.content)
+  ) {
+    return section;
+  }
+  const rowPhotos = (row.content as { photos?: unknown }).photos;
+  return {
+    ...section,
+    content: heroWithPhotos(section.content, Array.isArray(rowPhotos) ? rowPhotos : undefined),
+  };
+}
+
 /** A section kept as it is: its id, type and content, and nothing else the caller attached. */
 function keep({ id, blockType, content }: SiteSection): SiteSection {
   return id === undefined ? { blockType, content } : { id, blockType, content };
@@ -695,7 +851,12 @@ function keep({ id, blockType, content }: SiteSection): SiteSection {
 
 /** An incoming section for the page, as a copy the caller may change (section content is plain JSON). */
 function fromLook({ blockType, content }: LookSection): SiteSection {
-  return { blockType, content: JSON.parse(JSON.stringify(content)) as unknown };
+  return { blockType, content: copyJson(content) };
+}
+
+/** A deep copy of plain JSON (section content is plain JSON), so a caller can change it without changing a look. */
+function copyJson(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value)) as unknown;
 }
 
 /**

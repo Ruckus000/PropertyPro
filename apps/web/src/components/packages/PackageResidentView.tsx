@@ -7,6 +7,7 @@ import { useMyPackages, type PackageListItem } from '@/hooks/use-packages';
 import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +99,8 @@ export function PackageResidentView({ communityId }: PackageResidentViewProps) {
   if (isError && isNoUnitAssociationError(error)) {
     return (
       <EmptyState
-        icon="building"
+        size="section"
+        illustration={<PropScene size="section" prop="package" />}
         title="Your account isn't linked to a unit yet"
         description="Packages are logged per unit. Once your manager links your account to your unit, packages delivered to it will show here."
         action={

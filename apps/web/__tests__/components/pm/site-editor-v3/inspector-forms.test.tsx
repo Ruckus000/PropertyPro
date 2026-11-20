@@ -65,6 +65,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 // The hero form writes through its own endpoint and its photo field reaches the
 // upload queue; neither is under test here, only the form's own text.
 const updateHeroMock = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/use-chosen-look', () => ({ useChosenLookId: () => 'bayfront' }));
 vi.mock('@/hooks/use-hero-block', () => ({
   useHeroBlock: () => ({ data: null }),
   useUpdateHeroBlock: () => ({ mutateAsync: updateHeroMock, isPending: false }),
@@ -600,6 +601,19 @@ describe('HeroForm — the words as the page shows them', () => {
   it('shows the community name when the whole headline drops, as the page does', () => {
     renderHero({ headline: '{{city}}' }, { ...HARBOR, city: null });
     expect(headline()).toHaveValue('Harbor Pointe');
+  });
+
+  it('offers the photo library beside the upload control', () => {
+    renderHero({ headline: 'Welcome home' });
+    expect(screen.getByRole('button', { name: 'Choose one of our photos' })).toBeInTheDocument();
+  });
+
+  it("opens the photo library on the chosen look's suggestions", async () => {
+    // `useChosenLookId` is mocked to Bayfront at the top of this file.
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome home' });
+    await user.click(screen.getByRole('button', { name: 'Choose one of our photos' }));
+    expect(await screen.findByRole('group', { name: 'Suggested for Bayfront' })).toBeInTheDocument();
   });
 
   it('shows words with no detail in them exactly as stored', () => {

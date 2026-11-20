@@ -81,6 +81,8 @@ describe('buildSlimNavSections', () => {
       // 2026-07-20 with attorney-reviewed copy), so they are visible-but-demoted.
       'reserves',
       'storm-damage',
+      // Emergency alerts (audit F-14) ship on every plan; demoted like the rest.
+      'emergency',
       'packages',
       'visitors',
       'payments',

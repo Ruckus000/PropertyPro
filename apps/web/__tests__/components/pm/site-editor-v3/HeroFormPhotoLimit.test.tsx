@@ -12,6 +12,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MAX_HERO_PHOTOS, heroBlockSchema, type HeroPhoto } from '@propertypro/shared';
 
 const updateHeroMock = vi.hoisted(() => vi.fn());
+vi.mock('@/hooks/use-chosen-look', () => ({ useChosenLookId: () => null }));
 vi.mock('@/hooks/use-hero-block', () => ({
   useHeroBlock: () => ({ data: null }),
   useUpdateHeroBlock: () => ({ mutateAsync: updateHeroMock, isPending: false }),

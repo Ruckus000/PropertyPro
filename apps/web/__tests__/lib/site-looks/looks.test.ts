@@ -25,7 +25,15 @@ vi.mock('@propertypro/db/unsafe', () => {
   throw new Error('looks.ts must not import @propertypro/db/unsafe');
 });
 
-import { blockSchemaRegistry, diffSite, fingerprint, resolveLinkedText, type LinkedFacts } from '@propertypro/shared';
+import {
+  blockSchemaRegistry,
+  diffSite,
+  fingerprint,
+  PICKABLE_STOCK_PHOTO_IDS,
+  resolveLinkedText,
+  STOCK_PHOTO_ALT,
+  type LinkedFacts,
+} from '@propertypro/shared';
 import { LAYOUT_IDS } from '@/components/public-site/blocks/types';
 import { LOOK_STYLES } from '@/components/public-site/layouts/look-styles';
 import {
@@ -69,6 +77,19 @@ function sectionOf(sections: readonly LookSection[], blockType: string): LookSec
   const found = sections.find((s) => s.blockType === blockType);
   if (!found) throw new Error(`No ${blockType} section`);
   return found;
+}
+
+/** The photos a look's own hero starts with. */
+function heroPhotosOf(lookDef: LookDefinition): unknown {
+  const content = sectionOf(lookDef.sections, 'hero').content as { photos?: unknown };
+  if (!content.photos) throw new Error(`${lookDef.id}'s hero has no photos`);
+  return content.photos;
+}
+
+/** A hero's content with no `photos` key. */
+function withoutPhotos(content: unknown): Record<string, unknown> {
+  const { photos: _photos, ...rest } = content as Record<string, unknown>;
+  return rest;
 }
 
 function types(sections: readonly { blockType: string }[]): string[] {
@@ -287,6 +308,24 @@ describe('the looks registry', () => {
     expect(getLook('')).toBeNull();
   });
 
+  it('each look names its suggested photos, the first being its default', () => {
+    const expected: Record<string, string[]> = {
+      bayfront: ['pilings-dusk', 'gulf-sunset', 'shoreline'],
+      heritage: ['oak-avenue', 'lake-reflection', 'royal-palms'],
+      'palm-grove': ['palm-walk', 'sea-oats', 'palm-sky'],
+      'plain-simple': [],
+    };
+    for (const l of LOOKS) {
+      expect([...l.suggestedPhotos]).toEqual(expected[l.id]);
+      expect(new Set(l.suggestedPhotos).size).toBe(l.suggestedPhotos.length);
+      for (const id of l.suggestedPhotos) expect(PICKABLE_STOCK_PHOTO_IDS).toContain(id);
+      const hero = sectionOf(l.sections, 'hero').content as { photos?: unknown };
+      const first = l.suggestedPhotos[0];
+      if (first === undefined) expect(hero.photos).toBeUndefined();
+      else expect(hero.photos).toEqual([{ stock: first, alt: STOCK_PHOTO_ALT[first] }]);
+    }
+  });
+
   it("every look's sections parse with blockSchemaRegistry", () => {
     const failures: string[] = [];
     for (const l of LOOKS) {
@@ -452,14 +491,14 @@ describe('planLookSwitch', () => {
   });
 
   it('an edited hero keeps its text and slot; untouched neighbours are replaced in place', () => {
-    // Review Focus 4.
+    // Review Focus 4. EDITED_HERO has no photo, so it takes Heritage's (below).
     const current = siteFrom(bayfront.sections);
     current[0] = { id: 100, blockType: 'hero', content: EDITED_HERO };
 
     const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage });
 
     expect(result).toEqual([
-      { id: 100, blockType: 'hero', content: EDITED_HERO },
+      { id: 100, blockType: 'hero', content: { ...EDITED_HERO, photos: heroPhotosOf(heritage) } },
       // Bayfront's Quick links is untouched and Heritage has none: removed.
       sectionOf(heritage.sections, 'announcements'),
       sectionOf(heritage.sections, 'meetings'),
@@ -469,6 +508,207 @@ describe('planLookSwitch', () => {
     ]);
     // Replaced, not kept: Heritage shows five announcements where Bayfront shows three.
     expect(result[1]?.content).toEqual({ limit: 5 });
+  });
+
+  describe("a kept hero's photo", () => {
+    const palmGrove = look('palm-grove');
+    /** The hero a switch from Bayfront to `incoming` hands back, the rest of the page untouched. */
+    const heroAfter = (heroContent: unknown, incoming: LookDefinition) => {
+      const current = siteFrom(bayfront.sections);
+      current[0] = { id: 100, blockType: 'hero', content: heroContent };
+      const result = planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming });
+      return result.find((s) => s.blockType === 'hero');
+    };
+
+    it("a hero with no photo takes the incoming look's, keeping its words and its row", () => {
+      // A hero written before the looks shipped (Breakaway's, in production).
+      const hero = { headline: 'Welcome to Breakaway Apartments', subtitle: 'Break free.' };
+      expect(heroAfter(hero, palmGrove)).toEqual({
+        id: 100,
+        blockType: 'hero',
+        content: { ...hero, photos: heroPhotosOf(palmGrove) },
+      });
+      // An empty photo list is no photo either.
+      expect(heroAfter({ ...hero, photos: [] }, palmGrove)?.content).toEqual({ ...hero, photos: heroPhotosOf(palmGrove) });
+    });
+
+    it("a hero still showing a look's own photo takes the incoming look's", () => {
+      // The words edited, the photo never chosen: Bayfront's sunset becomes Palm Grove's palms.
+      const hero = { ...EDITED_HERO, photos: heroPhotosOf(bayfront) };
+      expect(heroAfter(hero, palmGrove)?.content).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(palmGrove) });
+    });
+
+    it("a hero showing a retired stock photo takes the incoming look's default", () => {
+      const hero = { ...EDITED_HERO, photos: [{ stock: 'sunset', alt: STOCK_PHOTO_ALT.sunset }] };
+      expect(heroAfter(hero, palmGrove)?.content).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(palmGrove) });
+    });
+
+    it("a stock photo the manager picked is swapped for the incoming look's default", () => {
+      const hero = { ...EDITED_HERO, photos: [{ stock: 'sea-oats', alt: STOCK_PHOTO_ALT['sea-oats'] }] };
+      expect(heroAfter(hero, heritage)?.content).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(heritage) });
+    });
+
+    it("a strip of only stock photos becomes the incoming look's single default", () => {
+      const hero = {
+        ...EDITED_HERO,
+        photos: (['sea-oats', 'sailboats', 'palm-sky'] as const).map((stock) => ({ stock, alt: STOCK_PHOTO_ALT[stock] })),
+      };
+      const after = heroAfter(hero, heritage)?.content as { photos?: unknown[] };
+      expect(after).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(heritage) });
+      expect(after.photos).toHaveLength(1);
+    });
+
+    it("a hero showing the manager's own photo keeps it", () => {
+      const uploaded = { ...EDITED_HERO, photos: [{ path: '7/hero/pool.jpeg', alt: 'The pool at dusk' }] };
+      expect(heroAfter(uploaded, palmGrove)?.content).toEqual(uploaded);
+      // An upload beside a stock photo: the strip holds the manager's own photo, so all of it stays.
+      const mixed = { ...EDITED_HERO, photos: [{ path: '7/hero/pool.jpeg', alt: 'The pool at dusk' }, ...(heroPhotosOf(bayfront) as unknown[])] };
+      expect(heroAfter(mixed, heritage)?.content).toEqual(mixed);
+      // The single image heroes were saved with before the photo list.
+      const legacy = { ...EDITED_HERO, heroImagePath: '7/hero/front.jpeg', heroImageAlt: 'The front gate' };
+      expect(heroAfter(legacy, palmGrove)?.content).toEqual(legacy);
+    });
+
+    it('a look with no photo of its own leaves the hero as it is', () => {
+      expect(heroAfter(EDITED_HERO, plainSimple)?.content).toEqual(EDITED_HERO);
+    });
+
+    it('switching to Plain & Simple keeps a stock photo', () => {
+      // Decided by the user: the photo keeps showing, below the words, rather than the switch removing it.
+      const hero = { ...EDITED_HERO, photos: heroPhotosOf(bayfront) };
+      expect(heroAfter(hero, plainSimple)?.content).toEqual(hero);
+    });
+
+    it("a hero that differs from its look's default only in its stock photo is untouched", () => {
+      // Picking another stock photo does not make a hero edited, and neither does
+      // the photo Bayfront's hero started with before the library (the retired sunset).
+      for (const stock of ['sea-oats', 'sunset'] as const) {
+        const current = siteFrom(bayfront.sections);
+        const hero = current[0]!.content as Record<string, unknown>;
+        current[0] = { id: 100, blockType: 'hero', content: { ...hero, photos: [{ stock, alt: STOCK_PHOTO_ALT[stock] }] } };
+        expect({
+          stock,
+          result: planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage }),
+        }).toEqual({ stock, result: asPlanned(heritage.sections) });
+      }
+
+      // An upload is the manager's: the default's words with their own photo are an edited hero, kept with it.
+      const current = siteFrom(bayfront.sections);
+      const uploaded = { ...(current[0]!.content as Record<string, unknown>), photos: [{ path: '7/hero/pool.jpeg', alt: 'The pool at dusk' }] };
+      current[0] = { id: 100, blockType: 'hero', content: uploaded };
+      expect(
+        planLookSwitch({ current, outgoingDefaults: [bayfront.sections], draftedLookId: null, live: null, incoming: heritage })[0],
+      ).toEqual({ id: 100, blockType: 'hero', content: uploaded });
+    });
+
+    it('a hero whose content does not parse stays exactly as it is', () => {
+      // The hero schema is strict, so an unknown key (here `hidden`, which a hero
+      // cannot have today) fails to parse; what the planner cannot read, it leaves.
+      const unparsed = { ...EDITED_HERO, hidden: true };
+      expect(heroAfter(unparsed, palmGrove)?.content).toEqual(unparsed);
+    });
+
+    it('the photo a switch gave is taken back off when returning to the live look', () => {
+      const live = livePage([{ blockType: 'hero', content: EDITED_HERO }, ...bayfront.sections.slice(1)]);
+
+      const { drafted, back } = roundTrip(live, bayfront, palmGrove);
+
+      expect(drafted[0]?.content).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(palmGrove) });
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
+    });
+
+    it('returning to the live look keeps a words edit made in between, with the live photo', () => {
+      const live = livePage([{ blockType: 'hero', content: EDITED_HERO }, ...bayfront.sections.slice(1)]);
+
+      const { back } = roundTrip(live, bayfront, palmGrove, (page) =>
+        edited(page, 'hero', { ...EDITED_HERO, headline: 'Harbor Pointe East', photos: heroPhotosOf(palmGrove) }),
+      );
+
+      expect(back.sections[0]?.content).toEqual({ ...EDITED_HERO, headline: 'Harbor Pointe East' });
+      expect(staged(live, back.sections).drafts).toEqual([
+        expect.objectContaining({ slot: 1, blockType: 'hero', content: { ...EDITED_HERO, headline: 'Harbor Pointe East' } }),
+      ]);
+    });
+
+    it("removing the photo from a hero with its look's default words is an edit, kept empty on the way back to the live look", () => {
+      // Live Bayfront as published; under Palm Grove the manager removes the
+      // photo from Palm Grove's untouched hero. The way back to the live look
+      // keeps the hero as edited: it never puts a photo over a hero the manager
+      // emptied. (A switch to a different look would give it that look's photo:
+      // see the next test.)
+      const live = livePage(bayfront.sections);
+      const noPhoto = withoutPhotos(sectionOf(palmGrove.sections, 'hero').content);
+
+      const { back } = roundTrip(live, bayfront, palmGrove, (page) => edited(page, 'hero', noPhoto));
+
+      expect(back.sections[0]?.content).toEqual(noPhoto);
+      expect(staged(live, back.sections)).toMatchObject({
+        drafts: [expect.objectContaining({ slot: 1, blockType: 'hero', content: noPhoto })],
+        tombstones: [],
+      });
+    });
+
+    it("a hero with its look's default words and no photo is edited, and a switch to a different look gives it that look's photo", () => {
+      // The forward fill applies to every kept hero with no photo, emptied or never given one.
+      const noPhoto = withoutPhotos(sectionOf(bayfront.sections, 'hero').content);
+      expect(heroAfter(noPhoto, heritage)).toEqual({ id: 100, blockType: 'hero', content: { ...noPhoto, photos: heroPhotosOf(heritage) } });
+    });
+
+    it("a legacy single image with its look's default words is not untouched", () => {
+      const legacy = { ...withoutPhotos(sectionOf(bayfront.sections, 'hero').content), heroImagePath: '7/hero/front.jpeg' };
+      expect(heroAfter(legacy, heritage)).toEqual({ id: 100, blockType: 'hero', content: legacy });
+    });
+
+    it("Plain & Simple's hero, which has no photo, is untouched when switching away", () => {
+      const current = siteFrom(plainSimple.sections);
+      expect(planLookSwitch({ current, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: heritage })).toEqual(
+        asPlanned(heritage.sections),
+      );
+      // Beside an edited section too: the hero alone is replaced by Heritage's.
+      const withEdit = siteFrom(plainSimple.sections);
+      const contactAt = types(withEdit).indexOf('contact');
+      withEdit[contactAt] = { id: 999, blockType: 'contact', content: { showBoard: false, showManagement: true } };
+      expect(
+        planLookSwitch({ current: withEdit, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: heritage })[0],
+      ).toEqual(sectionOf(heritage.sections, 'hero'));
+    });
+
+    it("Plain & Simple's hero with its default words and one of our photos picked is untouched", () => {
+      // Adding one of our photos is not an edit (spec §5): only the words, the
+      // call to action and uploads make a hero edited.
+      const current = siteFrom(plainSimple.sections);
+      const heroAt = types(current).indexOf('hero');
+      const hero = current[heroAt]!;
+      current[heroAt] = {
+        ...hero,
+        content: { ...(hero.content as Record<string, unknown>), photos: [{ stock: 'sea-oats', alt: STOCK_PHOTO_ALT['sea-oats'] }] },
+      };
+      expect(planLookSwitch({ current, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: bayfront })).toEqual(
+        asPlanned(bayfront.sections),
+      );
+    });
+
+    it('returning to the live look restores a live strip of stock photos', () => {
+      const strip = (['sea-oats', 'sailboats'] as const).map((stock) => ({ stock, alt: STOCK_PHOTO_ALT[stock] }));
+      const live = livePage([{ blockType: 'hero', content: { ...EDITED_HERO, photos: strip } }, ...bayfront.sections.slice(1)]);
+
+      const { drafted, back } = roundTrip(live, bayfront, palmGrove);
+
+      expect(drafted[0]?.content).toEqual({ ...EDITED_HERO, photos: heroPhotosOf(palmGrove) });
+      expect(back.sections).toEqual(rowsOf(live));
+      expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
+    });
+
+    it('a hero edited to show no photo stays that way on the way back to the live look', () => {
+      // Live Bayfront as published, the sunset on its hero; under Palm Grove the
+      // manager rewrites the hero with no photo.
+      const live = livePage(bayfront.sections);
+
+      const { back } = roundTrip(live, bayfront, palmGrove, (page) => edited(page, 'hero', EDITED_HERO));
+
+      expect(back.sections[0]?.content).toEqual(EDITED_HERO);
+    });
   });
 
   it('a hidden section stays hidden', () => {
@@ -1036,7 +1276,8 @@ describe('planLookSwitch', () => {
     const result = planLookSwitch({ current, outgoingDefaults: [heritage.sections], draftedLookId: null, live: null, incoming: bayfront });
 
     expect(result).toEqual([
-      { id: 100, blockType: 'hero', content: EDITED_HERO },
+      // The edited hero has no photo, so it takes Bayfront's.
+      { id: 100, blockType: 'hero', content: { ...EDITED_HERO, photos: heroPhotosOf(bayfront) } },
       // Quick links, which Heritage does not have, goes right after the hero.
       sectionOf(bayfront.sections, 'quicklinks'),
       sectionOf(bayfront.sections, 'announcements'),

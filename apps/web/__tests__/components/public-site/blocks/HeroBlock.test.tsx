@@ -552,3 +552,46 @@ describe('<HeroBlock> — stock photos (D3)', () => {
     expect(screen.getByRole('group', { name: 'Photo 2 of 2' })).toBeInTheDocument();
   });
 });
+
+describe("<HeroBlock> — a library photo's sizes, per look", () => {
+  // `sizes` tells the browser how wide the photo is drawn, so it fetches the
+  // 1200w file where that is enough. Full-bleed is the window; anything inside
+  // the look's content column (max-w-6xl: 1152px) is at most that column.
+  const SEA_OATS = { stock: 'sea-oats' as const, alt: 'Sea oats on a dune' };
+  const COLUMN = '(min-width: 1152px) 1152px, 100vw';
+  const propsFor = (layout: BlockRendererProps['layout'], photos: unknown[]) => ({
+    ...makeProps({ headline: 'X', photos }),
+    layout,
+  });
+
+  it.each([
+    ['bayfront', '100vw'],
+    ['heritage', '(min-width: 768px) 50vw, 100vw'],
+    ['palm-grove', COLUMN],
+    ['plain-simple', COLUMN],
+  ] as const)('%s draws one photo with sizes %s', (layout, sizes) => {
+    render(<HeroBlock {...propsFor(layout, [SEA_OATS])} />);
+    const img = screen.getByRole('img', { name: SEA_OATS.alt });
+    expect(img).toHaveAttribute('srcset', expect.stringContaining('1200w'));
+    expect(img).toHaveAttribute('sizes', sizes);
+  });
+
+  it.each([
+    ['bayfront', COLUMN],
+    ['heritage', '(min-width: 768px) 50vw, 100vw'],
+    ['palm-grove', COLUMN],
+    ['plain-simple', COLUMN],
+  ] as const)("%s's strip is as wide as the place it takes: %s", (layout, sizes) => {
+    const second = { stock: 'sailboats' as const, alt: 'Sailboats in the harbor' };
+    render(<HeroBlock {...propsFor(layout, [SEA_OATS, second])} />);
+    expect(screen.getByRole('img', { name: second.alt })).toHaveAttribute('sizes', sizes);
+  });
+
+  it("the legacy hero's column (max-w-3xl) gets the size uploads have always had", () => {
+    render(<HeroBlock {...propsFor('tidewater', [SEA_OATS])} />);
+    expect(screen.getByRole('img', { name: SEA_OATS.alt })).toHaveAttribute(
+      'sizes',
+      '(min-width: 1024px) 768px, 100vw',
+    );
+  });
+});

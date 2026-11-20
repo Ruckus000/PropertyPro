@@ -29,6 +29,19 @@ describe('MeetingForm modal', () => {
     mutateAsyncMock.mockResolvedValue({ data: {}, warnings: [] });
   });
 
+  it('starts a new meeting on the type the setup guide picked', () => {
+    renderWithClient(
+      <MeetingForm
+        communityId={1}
+        communityTimezone="America/New_York"
+        communityType="condo_718"
+        initialMeetingType="annual"
+        onClose={vi.fn()}
+      />,
+    );
+    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('annual');
+  });
+
   it('auto-focuses the title field; controlled inputs preserve spaces', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

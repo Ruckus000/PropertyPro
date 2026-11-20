@@ -37,8 +37,7 @@ import { AssessmentPaymentReceivedEmail, sendEmail } from '@propertypro/email';
 import { generateCSV } from '@/lib/services/csv-export';
 import { getStripeClient } from '@/lib/services/stripe-service';
 import { markViolationFinePaidForLineItem } from '@/lib/services/violations-service';
-import { AppError, BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
-import { signPayload, verifySignature } from '@/lib/services/oauth-state';
+import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
 import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
 import { listActorUnitIds } from '@/lib/units/actor-units';
@@ -1894,202 +1893,171 @@ function getStripeBaseUrl(): string {
 }
 
 /**
- * Initiates Stripe Connect Standard onboarding via OAuth.
+ * Where Stripe's hosted onboarding sends the admin back to. Both carry the
+ * community, because `NEXT_PUBLIC_APP_URL` has no tenant subdomain.
+ */
+function connectOnboardingUrls(communityId: number): { returnUrl: string; refreshUrl: string } {
+  const base = getStripeBaseUrl();
+  const query = `communityId=${communityId}`;
+  return {
+    // Stripe sends the admin here when they finish OR leave onboarding, so
+    // arriving here does not mean onboarding is complete. The page re-reads
+    // the account from Stripe.
+    returnUrl: `${base}/settings/payments/connected?${query}`,
+    // Stripe sends the admin here when the link has expired or was already
+    // used. The payments page shows "Resume Setup", which makes a fresh link.
+    refreshUrl: `${base}/settings/payments?${query}`,
+  };
+}
+
+async function findConnectAccount(
+  communityId: number,
+): Promise<StripeConnectedAccountRecord | undefined> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<StripeConnectedAccountRecord>(stripeConnectedAccounts, {});
+  return rows[0];
+}
+
+/**
+ * Starts (or resumes) Stripe Connect onboarding for a community.
  *
- * Instead of creating an Express account, we redirect the user to
- * Stripe's OAuth authorization page where they connect (or create)
- * their own Standard Stripe account.
+ * We create the association's Stripe account through the API, save it, and
+ * return a one-time link to Stripe's hosted onboarding page. A community that
+ * already has a saved account gets a fresh link for that account instead.
+ * Stripe no longer offers OAuth to new Connect platforms, which is what this
+ * replaced, so there is no client ID.
+ *
+ * `stripe_dashboard: full` is the only controller setting passed. Every other
+ * default is the one we need, and together they are what Stripe used to call a
+ * Standard account: the association pays Stripe's fees, Stripe collects the
+ * verification requirements, and Stripe, not PropertyPro, covers a negative
+ * balance and recovers it from the association. The association is the
+ * merchant, so disputes are theirs.
  */
 export async function startConnectOnboarding(
   communityId: number,
   actorUserId: string,
   requestId?: string | null,
 ): Promise<{ onboardingUrl: string }> {
-  const clientId = process.env.STRIPE_CONNECT_CLIENT_ID;
-  if (!clientId) {
-    // Two distinct jobs here, and neither one covers the other.
-    //
-    // 1. The THROW is typed so the admin sees "payments aren't set up" instead
-    //    of a bare error page. A plain `Error` reaches the client as a generic
-    //    500 INTERNAL_ERROR, which reads as "the app is broken" rather than
-    //    "this environment is missing a key".
-    //
-    // 2. The CAPTURE is explicit because `withErrorHandler` returns early for
-    //    every `AppError` — BEFORE it reaches `Sentry.captureException`, which
-    //    only runs for unknown errors. So typing this error would otherwise
-    //    have made a real misconfiguration *less* visible than the untyped
-    //    `Error` it replaced: better UX, zero operator signal. Capturing at
-    //    the throw site keeps both.
-    //
-    // Not routed through the readiness probe on purpose: resident payments are
-    // gated off per community (`assessmentPaymentsEnabled`), so a readiness
-    // entry would hold production at 'degraded' indefinitely for a feature
-    // nobody has switched on — which is how a probe gets ignored.
-    captureMessage('stripe_connect_client_id_missing', {
-      level: 'error',
-      extra: { communityId, requestId: requestId ?? null },
-    });
-    throw new AppError(
-      'Resident payments are not configured for this environment.',
-      503,
-      'PAYMENTS_NOT_CONFIGURED',
-    );
-  }
-
-  const baseUrl = getStripeBaseUrl();
-  const payload = JSON.stringify({ communityId, userId: actorUserId, ts: Date.now() });
-  const sig = signPayload(payload);
-  const state = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64url');
-  const redirectUri = `${baseUrl}/settings/payments/connected`;
-
-  const params = new URLSearchParams({
-    response_type: 'code',
-    client_id: clientId,
-    scope: 'read_write',
-    redirect_uri: redirectUri,
-    state,
-  });
-
-  const onboardingUrl = `https://connect.stripe.com/oauth/authorize?${params.toString()}`;
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'create',
-    resourceType: 'stripe_connect_oauth_start',
-    resourceId: String(communityId),
-    communityId,
-    metadata: { requestId: requestId ?? null },
-  });
-
-  return { onboardingUrl };
-}
-
-const CONNECT_STATE_MAX_AGE_MS = 10 * 60 * 1000; // 10 minutes
-
-/**
- * Validates the HMAC-signed OAuth state parameter returned from Stripe
- * Connect. Throws on forgery, expiry, or community/user mismatch.
- */
-export function validateConnectOAuthState(
-  stateParam: string | null,
-  expectedCommunityId: number,
-  expectedUserId: string,
-): void {
-  if (!stateParam) {
-    throw new BadRequestError('Missing OAuth state parameter');
-  }
-
-  let outer: { p: string; s: string };
-  try {
-    outer = JSON.parse(Buffer.from(stateParam, 'base64url').toString());
-  } catch {
-    throw new BadRequestError('Invalid OAuth state parameter');
-  }
-
-  if (!outer.p || !outer.s || !verifySignature(outer.p, outer.s)) {
-    throw new ForbiddenError('OAuth state signature invalid');
-  }
-
-  let parsed: { communityId: number; userId: string; ts: number };
-  try {
-    parsed = JSON.parse(outer.p);
-  } catch {
-    throw new BadRequestError('Invalid OAuth state payload');
-  }
-
-  if (parsed.communityId !== expectedCommunityId) {
-    throw new ForbiddenError('OAuth state communityId mismatch');
-  }
-  if (parsed.userId !== expectedUserId) {
-    throw new ForbiddenError('OAuth state userId mismatch');
-  }
-  if (Date.now() - parsed.ts > CONNECT_STATE_MAX_AGE_MS) {
-    throw new BadRequestError('OAuth state has expired — please try connecting again');
-  }
-}
-
-/**
- * Completes Stripe Connect Standard onboarding by exchanging the OAuth
- * authorization code for the connected account ID.
- */
-export async function completeConnectOnboarding(
-  communityId: number,
-  code: string,
-  actorUserId: string,
-  requestId?: string | null,
-): Promise<{ stripeAccountId: string; chargesEnabled: boolean; payoutsEnabled: boolean }> {
   const stripe = getStripeClient();
-  const response = await stripe.oauth.token({
-    grant_type: 'authorization_code',
-    code,
-  });
+  let stripeAccountId = (await findConnectAccount(communityId))?.stripeAccountId;
 
-  const stripeAccountId = response.stripe_user_id;
   if (!stripeAccountId) {
-    throw new Error('Stripe OAuth did not return a stripe_user_id');
-  }
-
-  // Retrieve the account to check capabilities and type
-  const account = await stripe.accounts.retrieve(stripeAccountId);
-
-  if (account.type !== 'standard') {
-    throw new BadRequestError(
-      `Only Standard Stripe accounts are supported. Got: ${account.type}`,
-    );
-  }
-
-  const onboardingComplete = !!account.details_submitted;
-  const chargesEnabled = account.charges_enabled;
-  const payoutsEnabled = account.payouts_enabled;
-
-  const scoped = createScopedClient(communityId);
-  const existingRows = await scoped.selectFrom<StripeConnectedAccountRecord>(stripeConnectedAccounts, {});
-
-  if (existingRows[0]) {
-    // Update existing record with new account
-    await scoped.update(
-      stripeConnectedAccounts,
-      {
-        stripeAccountId,
-        onboardingComplete,
-        chargesEnabled,
-        payoutsEnabled,
-      },
-      eq(stripeConnectedAccounts.id, existingRows[0].id),
-    );
-  } else {
-    await scoped.insert(stripeConnectedAccounts, {
-      stripeAccountId,
-      onboardingComplete,
-      chargesEnabled,
-      payoutsEnabled,
+    const account = await stripe.accounts.create({
+      controller: { stripe_dashboard: { type: 'full' } },
+      metadata: { communityId: String(communityId) },
     });
+    stripeAccountId = account.id;
+
+    const scoped = createScopedClient(communityId);
+    try {
+      await scoped.insert(stripeConnectedAccounts, {
+        stripeAccountId,
+        onboardingComplete: false,
+        chargesEnabled: false,
+        payoutsEnabled: false,
+      });
+    } catch (error) {
+      if (!isNamedUniqueViolation(error, 'stripe_connected_accounts_community_unique')) {
+        throw error;
+      }
+      // Two clicks raced and the other one saved its account first. Use that
+      // one. The account created here is left empty in Stripe: it was never
+      // onboarded, so it cannot take payments.
+      const winner = await findConnectAccount(communityId);
+      if (!winner) throw error;
+      captureMessage('stripe_connect_account_race', {
+        level: 'warning',
+        extra: { communityId, unusedStripeAccountId: account.id, requestId: requestId ?? null },
+      });
+      stripeAccountId = winner.stripeAccountId;
+    }
+
+    if (stripeAccountId === account.id) {
+      await logAuditEvent({
+        userId: actorUserId,
+        action: 'create',
+        resourceType: 'stripe_connected_account',
+        resourceId: stripeAccountId,
+        communityId,
+        metadata: { requestId: requestId ?? null },
+      });
+    }
   }
+
+  const { returnUrl, refreshUrl } = connectOnboardingUrls(communityId);
+  const link = await stripe.accountLinks.create({
+    account: stripeAccountId,
+    refresh_url: refreshUrl,
+    return_url: returnUrl,
+    type: 'account_onboarding',
+  });
 
   await logAuditEvent({
     userId: actorUserId,
     action: 'create',
-    resourceType: 'stripe_connected_account',
+    resourceType: 'stripe_connect_onboarding_link',
     resourceId: stripeAccountId,
     communityId,
     metadata: { requestId: requestId ?? null },
   });
 
-  return { stripeAccountId, chargesEnabled, payoutsEnabled };
+  return { onboardingUrl: link.url };
+}
+
+interface ConnectAccountState {
+  onboardingComplete: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+}
+
+/** Re-reads a saved connected account from Stripe and saves its flags. */
+async function syncConnectAccount(
+  communityId: number,
+  record: StripeConnectedAccountRecord,
+): Promise<ConnectAccountState> {
+  const stripe = getStripeClient();
+  const account = await stripe.accounts.retrieve(record.stripeAccountId);
+  const state: ConnectAccountState = {
+    onboardingComplete: !!account.details_submitted,
+    chargesEnabled: account.charges_enabled,
+    payoutsEnabled: account.payouts_enabled,
+  };
+
+  const scoped = createScopedClient(communityId);
+  await scoped.update(stripeConnectedAccounts, { ...state }, eq(stripeConnectedAccounts.id, record.id));
+  return state;
+}
+
+/**
+ * Runs when Stripe sends the admin back from hosted onboarding. Being sent
+ * back does not mean onboarding is finished, so this re-reads the community's
+ * saved account from Stripe rather than trusting anything in the URL.
+ */
+export async function completeConnectOnboarding(
+  communityId: number,
+  actorUserId: string,
+  requestId?: string | null,
+): Promise<{ stripeAccountId: string } & ConnectAccountState> {
+  const record = await requireConnectAccount(communityId);
+  const state = await syncConnectAccount(communityId, record);
+
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'update',
+    resourceType: 'stripe_connected_account',
+    resourceId: record.stripeAccountId,
+    communityId,
+    metadata: { requestId: requestId ?? null, ...state },
+  });
+
+  return { stripeAccountId: record.stripeAccountId, ...state };
 }
 
 export async function getConnectStatus(
   communityId: number,
-): Promise<{
-  connected: boolean;
-  stripeAccountId: string | null;
-  onboardingComplete: boolean;
-  chargesEnabled: boolean;
-  payoutsEnabled: boolean;
-}> {
-  const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<StripeConnectedAccountRecord>(stripeConnectedAccounts, {});
-  const record = rows[0];
+): Promise<{ connected: boolean; stripeAccountId: string | null } & ConnectAccountState> {
+  const record = await findConnectAccount(communityId);
   if (!record) {
     return {
       connected: false,
@@ -2100,29 +2068,8 @@ export async function getConnectStatus(
     };
   }
 
-  const stripe = getStripeClient();
-  const account = await stripe.accounts.retrieve(record.stripeAccountId);
-  const onboardingComplete = !!account.details_submitted;
-  const chargesEnabled = account.charges_enabled;
-  const payoutsEnabled = account.payouts_enabled;
-
-  await scoped.update(
-    stripeConnectedAccounts,
-    {
-      onboardingComplete,
-      chargesEnabled,
-      payoutsEnabled,
-    },
-    eq(stripeConnectedAccounts.id, record.id),
-  );
-
-  return {
-    connected: true,
-    stripeAccountId: record.stripeAccountId,
-    onboardingComplete,
-    chargesEnabled,
-    payoutsEnabled,
-  };
+  const state = await syncConnectAccount(communityId, record);
+  return { connected: true, stripeAccountId: record.stripeAccountId, ...state };
 }
 
 /**

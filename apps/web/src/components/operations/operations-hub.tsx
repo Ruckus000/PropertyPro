@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { PageHeader } from '@/components/shared/page-header';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
@@ -291,13 +292,14 @@ export function OperationsHub({
   const requestsEmptyState = selectedTab === 'requests'
     ? (
       <EmptyState
+        size="section"
+        illustration={<PropScene size="section" prop="wrench" />}
         title="No maintenance requests yet"
         description={
           requestScope === 'community'
             ? 'Resident submissions will appear here as they come in.'
             : 'Submit a request to start tracking repairs and follow-up here.'
         }
-        icon="wrench"
         action={
           cta
             ? (
@@ -309,7 +311,7 @@ export function OperationsHub({
         }
       />
     )
-    : <EmptyState preset="no_operations_items" />;
+    : <EmptyState preset="no_operations_items" size="section" illustration={<PropScene size="section" prop="wrench" />} />;
 
   return (
     <div className="space-y-6">

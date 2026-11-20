@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -60,6 +61,8 @@ export function AdminReviewList({ communityId }: { communityId?: number } = {}) 
   if (requests.length === 0) {
     return (
       <EmptyState
+        size="section"
+        illustration={<PropScene size="section" prop="bell" />}
         title="No requests waiting"
         description="People with a PropertyPro account can ask to join with their unit number. Their requests appear here for you to approve or deny."
       />

@@ -6,6 +6,7 @@ import { NotificationListItem } from './notification-list-item';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 
 interface NotificationDropdownProps {
   communityId: number;
@@ -50,10 +51,10 @@ export function NotificationDropdown({ communityId }: NotificationDropdownProps)
           </div>
         ) : items.length === 0 ? (
           <EmptyState
-            icon="bell"
+            size="compact"
+            illustration={<PropScene size="compact" prop="bell" />}
             title="You're all caught up"
             description="New activity will appear here as it happens."
-            size="sm"
           />
         ) : (
           <div role="list">

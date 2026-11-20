@@ -67,8 +67,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   //     401s, and the platform still reports the cron as registered and firing.
   //     Every scheduled job (16 as of apps/web/vercel.json) was dead for months
   //     with a green dashboard.
-  //   - OAUTH_STATE_SECRET: `signPayload` throws without it, so Stripe Connect
-  //     onboarding 500s instead of degrading.
+  //   - OAUTH_STATE_SECRET: signing the OAuth `state` throws without it, so
+  //     "Connect Google Calendar" 500s instead of degrading.
   //   - SUPPORT_SESSION_JWT_SECRET: the admin app signs the support-access JWT
   //     and web verifies it. Absent on either side, Start Session 500s and the
   //     popup never opens — the exact failure that made `support-access` look

@@ -5,8 +5,8 @@ import { ArrowDown, ArrowUp, Trash2, X } from 'lucide-react';
 import {
   MAX_HERO_PHOTOS,
   STOCK_PHOTO_ALT,
-  STOCK_PHOTO_IDS,
-  STOCK_PHOTO_SRC,
+  STOCK_PHOTOS,
+  stockPhotoSrc,
   type HeroPhoto,
   type StockPhotoId,
 } from '@propertypro/shared';
@@ -25,17 +25,13 @@ import {
   validateMinDimensions,
   type ImageDimensions,
 } from '@/lib/site-assets/client-image';
+import type { LookId } from '@/lib/site-looks/looks';
+import { StockPhotoPicker } from './StockPhotoPicker';
 import { useHeroPhotos, type HeroPhotoUploadItem } from '@/hooks/use-hero-photos';
 
 const ALT_MAX = 200;
 
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
-
-/** What a manager calls each stock photo, in the sentence "the ___ photo". */
-const STOCK_PHOTO_NAME: Readonly<Record<StockPhotoId, string>> = {
-  sunset: 'sunset',
-  palms: 'palm-lined street',
-};
 
 /** A picked file, described but not yet uploaded. */
 interface StagedPhoto {
@@ -51,18 +47,6 @@ interface StagedPhoto {
    * (`followStockPhoto`).
    */
   replaces?: StockPhotoId;
-}
-
-/**
- * The stock photo a swap would offer for `current`: the other one, when it is not
- * already in the list, so a swap never puts the same photo in the strip twice.
- *
- * ponytail: with two stock photos "the other one" is a single button. A third would
- * make this a choice. Trigger: STOCK_PHOTO_IDS grows past two.
- */
-function swapTarget(photos: readonly HeroPhoto[], current: StockPhotoId): StockPhotoId | null {
-  const taken = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
-  return STOCK_PHOTO_IDS.find((id) => id !== current && !taken.has(id)) ?? null;
 }
 
 /**
@@ -98,23 +82,20 @@ export interface HeroPhotosFieldProps {
    * rather than failing it. Same reason and same shape as `HeroImageField`.
    */
   readDimensions?: (file: Blob) => Promise<ImageDimensions>;
-  /**
-   * Told whether a picked file has not reached `photos` yet: staged but not
-   * uploaded, or uploading. A caller with its own Save (the website home's
-   * Change photo) holds it while this is true, or the file would be dropped.
-   */
-  onPendingChange?: (pending: boolean) => void;
+  /** The look the site uses, so the library lists its suggested photos first. */
+  lookId?: LookId | null;
 }
 
 /**
- * Hero photo list: upload, describe, reorder, remove.
+ * Hero photo list: upload, choose from our library, describe, reorder, remove.
  *
  * A stock photo (D3: one of ours, served from public/site-looks/, with no path)
  * shows its thumbnail and moves and removes like any other photo. Its description
- * is the manager's to reword, but it can never be decorative. It can also be
- * swapped for the other stock photo, which brings that photo's own description
- * with it, or replaced by one of the manager's own uploads, which takes its place
- * in the list rather than going to the end and carries the upload's own
+ * is the manager's to reword, but it can never be decorative. "Change photo" opens
+ * the library to swap it for another, which brings that photo's own description
+ * with it; "Choose one of our photos" adds one at the end while there is room. A
+ * stock photo can also be replaced by one of the manager's own uploads, which takes
+ * its place in the list rather than going to the end and carries the upload's own
  * description, never the stock photo's.
  *
  * Reordering is buttons only — no drag library. Phase 2b-2 already declined
@@ -129,7 +110,7 @@ export function HeroPhotosField({
   photos,
   onChange,
   readDimensions = readImageDimensions,
-  onPendingChange,
+  lookId = null,
 }: HeroPhotosFieldProps) {
   // ONE live region for the whole field, matching SiteEditorProvider's
   // discipline. Two regions announce the same move twice.
@@ -140,10 +121,17 @@ export function HeroPhotosField({
   const listRef = useRef<HTMLUListElement | null>(null);
   const addRef = useRef<HTMLInputElement | null>(null);
   // Where focus should land after the list re-renders, by row index.
-  const focusAfterRef = useRef<{ index: number; action: 'remove' | 'move' | 'swap' } | null>(
+  const focusAfterRef = useRef<{ index: number; action: 'remove' | 'move' | 'change' } | null>(
     null,
   );
   const stagedSeqRef = useRef(0);
+  // The library picker. It has no trigger of its own, so Radix cannot return focus
+  // when it closes: the opener is kept here and focused by hand (see `closePicker`).
+  // `index` is the row whose "Change photo" opened it (null when adding).
+  const [picker, setPicker] = useState<{ replacing: StockPhotoId | null; index: number | null } | null>(
+    null,
+  );
+  const openerRef = useRef<HTMLElement | null>(null);
 
   // `handleUploaded` fires once per file from inside the queue's sequential
   // loop. Reading the prop directly would append to whatever array this
@@ -200,11 +188,6 @@ export function HeroPhotosField({
   // it takes that photo's place, so the list ends the same length. Which ones do
   // is read from the list as it is now, not remembered, so an edit from outside
   // the field cannot leave a file counted as free.
-  const pending = staged.length > 0 || isUploading;
-  useEffect(() => {
-    onPendingChange?.(pending);
-  }, [pending, onPendingChange]);
-
   const replacing = replacingRows(staged, photos);
   const remaining = MAX_HERO_PHOTOS - photos.length - (staged.length - replacing.size);
   const allDescribed = staged.every((row) => row.decorative || row.alt.trim().length > 0);
@@ -229,8 +212,8 @@ export function HeroPhotosField({
       const selector =
         pending.action === 'remove'
           ? 'button[data-remove]'
-          : pending.action === 'swap'
-            ? 'button[data-swap]'
+          : pending.action === 'change'
+            ? 'button[data-change]'
             : 'button[data-move-focus]';
       (row?.querySelector<HTMLElement>(selector) ?? row)?.focus();
     }, 0);
@@ -277,20 +260,50 @@ export function HeroPhotosField({
     focusAfterRef.current = { index, action: 'remove' };
   };
 
-  /** Puts the other stock photo in this one's place, with that photo's own description. */
-  const swapStock = (index: number) => {
-    const current = photos[index];
-    if (current === undefined || !('stock' in current)) return;
-    const other = swapTarget(photos, current.stock);
-    if (other === null) return;
-    const next = photos.slice();
+  const openPicker = (opener: HTMLElement, replacing: StockPhotoId | null, index: number | null = null) => {
+    openerRef.current = opener;
+    setPicker({ replacing, index });
+  };
+
+  /**
+   * Focus goes back to the control that opened the picker, if it is still on the
+   * page. When it is not (a changed row remounts under a new key, and a full hero
+   * drops the Choose button), `focusAfterRef` has already queued the right place.
+   */
+  const closePicker = (event: Event) => {
+    event.preventDefault();
+    const opener = openerRef.current;
+    if (opener?.isConnected) opener.focus();
+  };
+
+  const choosePhoto = (id: StockPhotoId) => {
+    const current = photosRef.current;
+    const from = picker?.replacing ?? null;
+    const name = STOCK_PHOTOS[id].name;
     // Not the old description: "Sunset over the water" on a street of palm trees
     // would tell a screen-reader user about a picture that is not there.
-    next[index] = { stock: other, alt: STOCK_PHOTO_ALT[other] };
-    onChange(next);
-    followStockPhoto(current.stock, other);
-    setAnnouncement(`Photo ${index + 1} changed to the ${STOCK_PHOTO_NAME[other]} photo.`);
-    focusAfterRef.current = { index, action: 'swap' };
+    const chosen: HeroPhoto = { stock: id, alt: STOCK_PHOTO_ALT[id] };
+    if (from !== null) {
+      const shows = (photo: HeroPhoto | undefined) =>
+        photo !== undefined && 'stock' in photo && photo.stock === from;
+      // The row whose button was pressed, while it still shows that photo; else
+      // the first that does. Stored data can hold the same stock photo twice.
+      const pressed = picker?.index ?? -1;
+      const index = shows(current[pressed]) ? pressed : current.findIndex(shows);
+      if (index < 0) return;
+      const next = current.map((photo, i) => (i === index ? chosen : photo));
+      onChange(next);
+      // A waiting file follows the photo only once no row shows it any more.
+      if (!next.some(shows)) followStockPhoto(from, id);
+      setAnnouncement(`Photo changed to ${name}.`);
+      focusAfterRef.current = { index, action: 'change' };
+      return;
+    }
+    if (remaining <= 0) return;
+    onChange([...current, chosen]);
+    setAnnouncement(`Added ${name}.`);
+    // The Choose button leaves with the last free place; put focus on the new row.
+    if (remaining === 1) focusAfterRef.current = { index: current.length, action: 'change' };
   };
 
   const setPhoto = (index: number, patch: Partial<HeroPhoto>) => {
@@ -391,7 +404,6 @@ export function HeroPhotosField({
             const decorativeId = `hero-photo-decorative-${blockOrder}-${index}`;
             const isStock = 'stock' in photo;
             const isDecorative = !isStock && photo.decorative === true;
-            const swapTo = isStock ? swapTarget(photos, photo.stock) : null;
             const replaceId = `hero-photo-replace-${blockOrder}-${index}`;
             return (
               <li
@@ -410,7 +422,7 @@ export function HeroPhotosField({
                   <img
                     src={
                       isStock
-                        ? STOCK_PHOTO_SRC[photo.stock]
+                        ? stockPhotoSrc(photo.stock, 480)
                         : buildPublicAssetUrl(`${photo.path}.800w.webp`)
                     }
                     alt=""
@@ -432,26 +444,23 @@ export function HeroPhotosField({
 
                 {isStock && (
                   <div className="space-y-2">
-                    {swapTo !== null && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        data-swap
-                        // The docked column is 320px wide and the longest label
-                        // ("…the palm-lined street photo instead") is wider than
-                        // the row, so let it wrap rather than run off the edge. The
-                        // height is a floor for that reason: 44px below 768px and
-                        // 32px from there up (the touch-target rule in design.md).
-                        className="h-auto md:h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
-                        onClick={() => swapStock(index)}
-                      >
-                        {`Use the ${STOCK_PHOTO_NAME[swapTo]} photo instead`}
-                      </Button>
-                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      data-change
+                      aria-label={`Change photo ${index + 1}`}
+                      // 44px below 768px and 32px from there up (the touch-target
+                      // rule in design.md); the md twins cancel the primitive's fixed
+                      // heights.
+                      className="h-auto md:h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
+                      onClick={(event) => openPicker(event.currentTarget, photo.stock, index)}
+                    >
+                      Change photo
+                    </Button>
                     <div className="space-y-1">
                       <Label htmlFor={replaceId} className="text-xs">
-                        {`Replace the ${STOCK_PHOTO_NAME[photo.stock]} photo with your own`}
+                        {`Replace ${STOCK_PHOTOS[photo.stock].name} with your own`}
                       </Label>
                       <Input
                         id={replaceId}
@@ -571,7 +580,7 @@ export function HeroPhotosField({
 
                 {row.replaces !== undefined && replacing.has(row.id) && (
                   <p className="text-xs text-content-secondary">
-                    {`Replaces the ${STOCK_PHOTO_NAME[row.replaces]} photo.`}
+                    {`Replaces ${STOCK_PHOTOS[row.replaces].name}.`}
                   </p>
                 )}
 
@@ -629,20 +638,34 @@ export function HeroPhotosField({
         <Label htmlFor={`hero-photo-add-${blockOrder}`} className="text-xs">
           Add photos
         </Label>
-        <Input
-          ref={addRef}
-          id={`hero-photo-add-${blockOrder}`}
-          type="file"
-          accept={ACCEPTED_TYPES}
-          multiple
-          disabled={remaining <= 0 || isUploading}
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            // Reset the input so re-picking the same file fires change again.
-            event.target.value = '';
-            if (files.length > 0) void onPick(files);
-          }}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            ref={addRef}
+            id={`hero-photo-add-${blockOrder}`}
+            className="min-w-0 flex-1 basis-48"
+            type="file"
+            accept={ACCEPTED_TYPES}
+            multiple
+            disabled={remaining <= 0 || isUploading}
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              // Reset the input so re-picking the same file fires change again.
+              event.target.value = '';
+              if (files.length > 0) void onPick(files);
+            }}
+          />
+          {remaining > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-auto md:h-auto min-h-11 whitespace-normal py-1.5 md:min-h-8"
+              onClick={(event) => openPicker(event.currentTarget, null)}
+            >
+              Choose one of our photos
+            </Button>
+          )}
+        </div>
         <p className="text-xs text-content-secondary">
           {remaining > 0
             ? `${remaining} of ${MAX_HERO_PHOTOS} remaining. Describe each photo, or mark it decorative.`
@@ -680,6 +703,18 @@ export function HeroPhotosField({
             ))}
         </ul>
       )}
+
+      <StockPhotoPicker
+        open={picker !== null}
+        onOpenChange={(open) => {
+          if (!open) setPicker(null);
+        }}
+        lookId={lookId}
+        replacing={picker?.replacing ?? null}
+        inUse={photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : []))}
+        onChoose={choosePhoto}
+        onCloseAutoFocus={closePicker}
+      />
 
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}

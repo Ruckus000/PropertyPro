@@ -18,6 +18,8 @@ export interface ComplianceDetailPanelProps {
   onLink: (item: ChecklistItemData) => void;
   onView: (item: ChecklistItemData) => void;
   onMarkApplicable: (item: ChecklistItemData) => void;
+  /** Conditional records only: "Doesn't apply to us", with a reason (audit F-8). */
+  onMarkNotApplicable?: (item: ChecklistItemData) => void;
   isSelectedHidden?: boolean;
   onClearFilter?: () => void;
 }
@@ -31,6 +33,7 @@ export function ComplianceDetailPanel({
   onLink,
   onView,
   onMarkApplicable,
+  onMarkNotApplicable,
   isSelectedHidden,
   onClearFilter,
 }: ComplianceDetailPanelProps) {
@@ -122,6 +125,20 @@ export function ComplianceDetailPanel({
           {cta.label}
         </button>
       )}
+
+      {canWrite &&
+        onMarkNotApplicable &&
+        selectedItem.isConditional &&
+        selectedItem.isApplicable !== false &&
+        selectedItem.documentId == null && (
+          <button
+            type="button"
+            onClick={() => onMarkNotApplicable(selectedItem)}
+            className="mt-2 min-h-11 w-full rounded-[var(--radius-md)] border border-edge px-4 py-2 text-sm font-medium text-content hover:bg-surface-hover md:min-h-0"
+          >
+            Doesn&apos;t apply to us
+          </button>
+        )}
 
       {!activityHidden && (
         <div className="mt-5">
