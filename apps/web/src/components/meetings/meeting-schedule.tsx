@@ -123,9 +123,13 @@ export function MeetingSchedule({
   } else if (shown.length === 0) {
     body =
       range === 'upcoming' ? (
+        // The page shows first-run guidance when there are no meetings at all;
+        // here meetings exist, just none ahead (audit F-11).
         <EmptyState
-          preset={canWrite ? 'no_meetings' : 'no_meetings_yet'}
-          action={canWrite ? <Button onClick={onCreateMeeting}>Schedule Meeting</Button> : undefined}
+          size="sm"
+          title="Nothing scheduled ahead"
+          description="Upcoming meetings appear here as they're scheduled."
+          action={canWrite ? <Button variant="outline" onClick={onCreateMeeting}>Schedule Meeting</Button> : undefined}
         />
       ) : (
         <EmptyState

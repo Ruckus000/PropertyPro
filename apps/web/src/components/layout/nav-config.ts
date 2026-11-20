@@ -12,6 +12,7 @@ import {
   FileText,
   Calendar,
   Megaphone,
+  Siren,
   Vote,
   BriefcaseBusiness,
   Shield,
@@ -301,6 +302,18 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/storm-damage'],
   },
   {
+    // Audit F-14: emergency alerts had no entry, so the only way in was a URL.
+    // Owners read them and managers send them; tenants have no read (RBAC).
+    id: 'emergency',
+    label: 'Emergency Alerts',
+    icon: Siren,
+    href: (cid) => `/emergency?communityId=${cid}`,
+    visibility: 'owner_or_admin',
+    featureKey: 'hasEmergencyNotifications',
+    navTier: 'more',
+    matchPrefixes: ['/emergency'],
+  },
+  {
     id: 'esign',
     label: 'E-Sign',
     icon: FileSignature,
@@ -378,7 +391,7 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // also live in a section so `AppSidebar` has a fallback top-level placement when
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
-  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage']),
+  navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage', 'emergency']),
   // `arc-requests` sits beside `violations-report`, not under Admin: residents
   // see it too (they submit ARC applications), and an "Admin" heading over a
   // resident's own requests would be wrong.
@@ -780,6 +793,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   insurance: { title: 'Insurance', subtitle: 'Building policies & wind mitigation' },
   reserves: { title: 'Reserve Register', subtitle: 'Major components & remaining useful life' },
   'storm-damage': { title: 'Storm Damage', subtitle: 'Report & track post-storm damage' },
+  emergency: { title: 'Emergency Alerts', subtitle: 'Urgent notices to residents' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
   'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
   'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },

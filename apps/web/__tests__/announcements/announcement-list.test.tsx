@@ -106,7 +106,7 @@ describe('AnnouncementListContainer', () => {
       isAdmin: true,
       canWriteAnnouncements: true,
     });
-    expect(screen.getByRole('link', { name: 'Create announcement' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toHaveAttribute(
       'href',
       '/announcements/new?communityId=42',
     );
@@ -124,7 +124,7 @@ describe('AnnouncementListContainer', () => {
         />
       </QueryClientProvider>,
     );
-    expect(screen.queryByRole('link', { name: 'Create announcement' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Write an announcement' })).not.toBeInTheDocument();
   });
 
   it('names a search that matched nothing and offers to clear it, instead of "No announcements yet"', () => {
@@ -145,7 +145,7 @@ describe('AnnouncementListContainer', () => {
     );
   });
 
-  it('keeps "No announcements yet" when no search is active', () => {
+  it('with no search and nothing posted, a writer gets the first-post guide (a blank search is no search)', () => {
     searchParamsState.value = 'communityId=42&q=%20%20';
     renderList({
       items: [],
@@ -155,8 +155,28 @@ describe('AnnouncementListContainer', () => {
       canWriteAnnouncements: true,
     });
 
-    expect(screen.getByText('No announcements yet')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Keep everyone in the loop' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toHaveAttribute(
+      'href',
+      '/announcements/new?communityId=42',
+    );
+    // Urgent news is pointed at emergency alerts, not posted here.
+    expect(screen.getByRole('link', { name: 'Emergency alerts' })).toHaveAttribute('href', '/emergency?communityId=42');
     expect(screen.queryByRole('link', { name: 'Clear search' })).not.toBeInTheDocument();
+  });
+
+  it('a reader with nothing posted gets the calm waiting state', () => {
+    searchParamsState.value = 'communityId=42';
+    renderList({
+      items: [],
+      communityId: 42,
+      currentUserId: 'user-owner',
+      isAdmin: false,
+      canWriteAnnouncements: false,
+    });
+
+    expect(screen.getByRole('heading', { level: 2, name: 'News from your community appears here' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Write an announcement' })).not.toBeInTheDocument();
   });
 
   it('shows Edit + Delete for admins on live announcements', () => {
