@@ -87,6 +87,17 @@ describe('HeroPhotosField — labelling', () => {
     }
   });
 
+  it('names each Change photo by its row, like the other row controls', () => {
+    renderField([
+      { stock: 'pilings-dusk', alt: STOCK_PHOTO_ALT['pilings-dusk'] },
+      { path: '7/hero/pool.jpg', alt: 'The pool' },
+      { stock: 'shoreline', alt: STOCK_PHOTO_ALT.shoreline },
+    ]);
+    expect(
+      screen.getAllByRole('button', { name: /^Change photo/ }).map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Change photo 1', 'Change photo 3']);
+  });
+
   it('disables the moves that would fall off the ends', () => {
     // Disabled rather than a soft no-op: unlike FloatControls, this list is
     // short and entirely visible, so unavailable reads more honestly.
@@ -268,7 +279,7 @@ describe('HeroPhotosField — stock photos', () => {
     expect(thumbSrcs(container)[0]).toBe(stockPhotoSrc('sunset', 480));
 
     // Changed to another library photo: its picture AND its description change.
-    await user.click(screen.getByRole('button', { name: 'Change photo' }));
+    await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
     await user.click(screen.getByRole('button', { name: 'Palm walk' }));
     await user.click(screen.getByRole('button', { name: 'Use this photo' }));
     expect(thumbSrcs(container)[0]).toBe(stockPhotoSrc('palm-walk', 480));
@@ -340,7 +351,7 @@ describe('HeroPhotosField — stock photos', () => {
   describe('choosing from our library', () => {
     const UP1: HeroPhoto = { path: '7/hero/a.jpg', alt: 'A' };
     const UP2: HeroPhoto = { path: '7/hero/b.jpg', alt: 'B' };
-    const changeButtons = () => screen.queryAllByRole('button', { name: 'Change photo' });
+    const changeButtons = () => screen.queryAllByRole('button', { name: /^Change photo \d+$/ });
 
     beforeEach(() => {
       pickerSpy.inUse.length = 0;
@@ -362,7 +373,7 @@ describe('HeroPhotosField — stock photos', () => {
       const user = userEvent.setup();
       const { onChange } = renderField([UP1, PILINGS, UP2]);
 
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await user.click(screen.getByRole('button', { name: 'Sea oats' }));
       await user.click(screen.getByRole('button', { name: 'Use this photo' }));
 
@@ -377,12 +388,12 @@ describe('HeroPhotosField — stock photos', () => {
       const user = userEvent.setup();
       render(<Harness initial={[UP1, PILINGS, UP2]} />);
 
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await user.click(screen.getByRole('button', { name: 'Sea oats' }));
       await user.click(screen.getByRole('button', { name: 'Use this photo' }));
 
       await waitFor(() =>
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change photo' })),
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
       );
       // The row is the second one, and it now shows the new photo.
       const row = (document.activeElement as HTMLElement).closest('[data-photo-row]')!;
@@ -393,10 +404,10 @@ describe('HeroPhotosField — stock photos', () => {
     it('returns focus to Change photo when the picker is cancelled', async () => {
       const user = userEvent.setup();
       render(<Harness initial={[UP1, PILINGS]} />);
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await user.click(screen.getByRole('button', { name: 'Cancel' }));
       await waitFor(() =>
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change photo' })),
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
       );
     });
 
@@ -432,14 +443,14 @@ describe('HeroPhotosField — stock photos', () => {
 
       expect(screen.queryByRole('button', { name: 'Choose one of our photos' })).not.toBeInTheDocument();
       await waitFor(() =>
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change photo' })),
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Change photo \d+$/ })),
       );
     });
 
     it('announces a change and an addition in the field live region', async () => {
       const user = userEvent.setup();
       const { view } = renderField([PILINGS]);
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await user.click(screen.getByRole('button', { name: 'Sea oats' }));
       await user.click(screen.getByRole('button', { name: 'Use this photo' }));
       await waitFor(() =>
@@ -465,14 +476,14 @@ describe('HeroPhotosField — stock photos', () => {
       renderField([PILINGS, ...seven]);
       expect(screen.queryByRole('button', { name: 'Choose one of our photos' })).not.toBeInTheDocument();
 
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       expect(screen.getByRole('heading', { name: 'Choose a photo' })).toBeInTheDocument();
     });
 
     it('changes the retired sunset photo to a library photo', async () => {
       const user = userEvent.setup();
       const { onChange } = renderField([SUNSET]);
-      await user.click(screen.getByRole('button', { name: 'Change photo' }));
+      await user.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await user.click(screen.getByRole('button', { name: 'Palm walk' }));
       await user.click(screen.getByRole('button', { name: 'Use this photo' }));
       expect(onChange).toHaveBeenCalledWith([
@@ -489,7 +500,7 @@ describe('HeroPhotosField — stock photos', () => {
       );
       await userEvent.type(await screen.findByLabelText('Alt text for beach.jpg'), 'The beach');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Change photo' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Gulf sunset' }));
       await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
       expect(screen.getByText(`Replaces ${STOCK_PHOTOS['gulf-sunset'].name}.`)).toBeInTheDocument();
@@ -507,13 +518,13 @@ describe('HeroPhotosField — stock photos', () => {
     it('tells the picker which stock photos are already in the list', async () => {
       const user = userEvent.setup();
       renderField([PILINGS, { stock: 'shoreline', alt: STOCK_PHOTO_ALT.shoreline }, UP1]);
-      await user.click(screen.getAllByRole('button', { name: 'Change photo' })[0]!);
+      await user.click(screen.getAllByRole('button', { name: /^Change photo \d+$/ })[0]!);
       expect(pickerSpy.inUse.at(-1)).toEqual(['pilings-dusk', 'shoreline']);
     });
 
     it('Change photo is a touch target: 44px tall below 768px, 32px from there up', () => {
       renderField([PILINGS]);
-      for (const name of ['Change photo', 'Choose one of our photos']) {
+      for (const name of ['Change photo 1', 'Choose one of our photos']) {
         const button = screen.getByRole('button', { name });
         expect(button).toHaveClass('min-h-11', 'md:min-h-8', 'h-auto', 'md:h-auto');
         expect(button).not.toHaveClass('md:h-7');
@@ -639,7 +650,7 @@ describe('HeroPhotosField — stock photos', () => {
       await screen.findByLabelText('Alt text for beach.jpg');
 
       await userEvent.click(screen.getByRole('button', { name: 'Remove photo 1' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Change photo' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Pilings at dusk' }));
       await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
@@ -705,7 +716,7 @@ describe('HeroPhotosField — stock photos', () => {
         it('the waiting file follows it, and its note names the new photo', async () => {
           await fullHeroWithAWaitingFile([]);
 
-          await userEvent.click(screen.getByRole('button', { name: 'Change photo' }));
+          await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
           await userEvent.click(screen.getByRole('button', { name: 'Palm walk' }));
           await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
@@ -716,7 +727,7 @@ describe('HeroPhotosField — stock photos', () => {
         it('the upload still lands in that slot, for 8 photos and not 9', async () => {
           const lists: HeroPhoto[][] = [];
           await fullHeroWithAWaitingFile(lists);
-          await userEvent.click(screen.getByRole('button', { name: 'Change photo' }));
+          await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
           await userEvent.click(screen.getByRole('button', { name: 'Palm walk' }));
           await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 
@@ -838,7 +849,7 @@ describe('HeroPhotosField — stock photos', () => {
         // The second takes the Gulf sunset's place and needs none.
         expect(screen.getByText(/Maximum of 8 photos reached/)).toBeInTheDocument();
 
-        await userEvent.click(screen.getByRole('button', { name: 'Change photo' }));
+        await userEvent.click(screen.getByRole('button', { name: /^Change photo \d+$/ }));
         await userEvent.click(screen.getByRole('button', { name: 'Pilings at dusk' }));
         await userEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
 

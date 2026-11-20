@@ -765,7 +765,7 @@ describe('Website builder writers — axe', () => {
     expect(screen.getByLabelText(/headline/i)).toHaveValue('Welcome to Harbor Pointe');
     expect(screen.getByRole('button', { name: "Use the look's wording" })).toBeInTheDocument();
     expect(screen.getByLabelText('Button label')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Change photo' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change photo 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Choose one of our photos' })).toBeInTheDocument();
     expect(screen.getByLabelText('Replace Sunset over the water with your own')).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();

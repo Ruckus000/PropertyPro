@@ -82,12 +82,6 @@ export interface HeroPhotosFieldProps {
    * rather than failing it. Same reason and same shape as `HeroImageField`.
    */
   readDimensions?: (file: Blob) => Promise<ImageDimensions>;
-  /**
-   * Told whether a picked file has not reached `photos` yet: staged but not
-   * uploaded, or uploading. A caller with its own Save (the website home's
-   * Change photo) holds it while this is true, or the file would be dropped.
-   */
-  onPendingChange?: (pending: boolean) => void;
   /** The look the site uses, so the library lists its suggested photos first. */
   lookId?: LookId | null;
 }
@@ -116,7 +110,6 @@ export function HeroPhotosField({
   photos,
   onChange,
   readDimensions = readImageDimensions,
-  onPendingChange,
   lookId = null,
 }: HeroPhotosFieldProps) {
   // ONE live region for the whole field, matching SiteEditorProvider's
@@ -192,11 +185,6 @@ export function HeroPhotosField({
   // it takes that photo's place, so the list ends the same length. Which ones do
   // is read from the list as it is now, not remembered, so an edit from outside
   // the field cannot leave a file counted as free.
-  const pending = staged.length > 0 || isUploading;
-  useEffect(() => {
-    onPendingChange?.(pending);
-  }, [pending, onPendingChange]);
-
   const replacing = replacingRows(staged, photos);
   const remaining = MAX_HERO_PHOTOS - photos.length - (staged.length - replacing.size);
   const allDescribed = staged.every((row) => row.decorative || row.alt.trim().length > 0);
@@ -451,6 +439,7 @@ export function HeroPhotosField({
                       variant="outline"
                       size="sm"
                       data-change
+                      aria-label={`Change photo ${index + 1}`}
                       // 44px below 768px and 32px from there up (the touch-target
                       // rule in design.md); the md twins cancel the primitive's fixed
                       // heights.
@@ -640,32 +629,32 @@ export function HeroPhotosField({
           Add photos
         </Label>
         <div className="flex flex-wrap items-center gap-2">
-        <Input
-          ref={addRef}
-          id={`hero-photo-add-${blockOrder}`}
-          className="min-w-0 flex-1 basis-48"
-          type="file"
-          accept={ACCEPTED_TYPES}
-          multiple
-          disabled={remaining <= 0 || isUploading}
-          onChange={(event) => {
-            const files = Array.from(event.target.files ?? []);
-            // Reset the input so re-picking the same file fires change again.
-            event.target.value = '';
-            if (files.length > 0) void onPick(files);
-          }}
-        />
-        {remaining > 0 && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-auto md:h-auto min-h-11 whitespace-normal py-1.5 md:min-h-8"
-            onClick={(event) => openPicker(event.currentTarget, null)}
-          >
-            Choose one of our photos
-          </Button>
-        )}
+          <Input
+            ref={addRef}
+            id={`hero-photo-add-${blockOrder}`}
+            className="min-w-0 flex-1 basis-48"
+            type="file"
+            accept={ACCEPTED_TYPES}
+            multiple
+            disabled={remaining <= 0 || isUploading}
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? []);
+              // Reset the input so re-picking the same file fires change again.
+              event.target.value = '';
+              if (files.length > 0) void onPick(files);
+            }}
+          />
+          {remaining > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-auto md:h-auto min-h-11 whitespace-normal py-1.5 md:min-h-8"
+              onClick={(event) => openPicker(event.currentTarget, null)}
+            >
+              Choose one of our photos
+            </Button>
+          )}
         </div>
         <p className="text-xs text-content-secondary">
           {remaining > 0
