@@ -8,7 +8,6 @@
 import * as React from "react";
 import {
   Building,
-  Camera,
   Clipboard,
   Cloud,
   Document,
@@ -78,7 +77,11 @@ export function DirectoryScene({ size = "hero", className }: SceneProps) {
   );
 }
 
-/** Storm damage, calm: clear sky, an intact building, and the report kit ready. Never damage. */
+/**
+ * Storm damage, calm: clear sky, an intact building, and a report clipboard.
+ * Never damage. No camera: the report form takes no photos, so the art must
+ * not suggest it does.
+ */
 export function StormCalmScene({ size = "hero", className }: SceneProps) {
   if (size === "compact") {
     return (
@@ -96,8 +99,7 @@ export function StormCalmScene({ size = "hero", className }: SceneProps) {
       <Ground y={214} />
       <Building x={20} y={214} columns={2} floors={2} />
       <Palm x={180} y={214} />
-      <Clipboard x={216} y={110} />
-      <Camera x={246} y={164} />
+      <Clipboard x={236} y={112} />
     </Scene>
   );
 }

@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { AlertBanner } from '@/components/shared/alert-banner';
-import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge } from '@/components/shared/status-badge';
 import {
   useStormDamageReports,
@@ -32,6 +31,7 @@ import {
   type StormDamageStatus,
 } from './types';
 import { StormDamageFormDialog } from './storm-damage-form-dialog';
+import { StormDamageEmpty } from './storm-damage-empty';
 
 interface Props {
   communityId: number;
@@ -125,9 +125,22 @@ function ReportCard({
 export function StormDamageSection({ communityId, canManage }: Props) {
   const { data: reports, isLoading, isError, refetch } = useStormDamageReports({ communityId });
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  // The first report replaces the empty state, and with it the button that
+  // opened the dialog: on close, send focus to the header's Report Damage.
+  const openerRef = React.useRef<HTMLElement | null>(null);
+  const reportButtonRef = React.useRef<HTMLButtonElement>(null);
+  const openDialog = () => {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setDialogOpen(true);
+  };
+
+  const isEmpty = !isLoading && !isError && reports !== undefined && reports.length === 0;
 
   return (
-    <section className="space-y-4" aria-labelledby="storm-damage-heading">
+    // While empty, the setup or waiting hero owns the action and the notice
+    // moves under it (StormDamageEmpty); the hero's h2 names the content.
+    <section className="space-y-4" {...(isEmpty ? { 'aria-label': 'Storm Damage' } : { 'aria-labelledby': 'storm-damage-heading' })}>
+      {isEmpty ? null : (
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <h2 id="storm-damage-heading" className="text-xl font-semibold text-content">
@@ -136,11 +149,12 @@ export function StormDamageSection({ communityId, canManage }: Props) {
           <p className="max-w-2xl text-sm text-content-tertiary">{STORM_DAMAGE_DISCLAIMER}</p>
           <p className="max-w-2xl text-xs text-content-tertiary">{STORM_DAMAGE_STATUS_NOTE}</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} size="sm">
+        <Button ref={reportButtonRef} onClick={openDialog} size="sm">
           <Plus className="h-4 w-4" aria-hidden="true" />
           Report Damage
         </Button>
       </div>
+      )}
 
       {isLoading && <Skeleton className="h-40 w-full" />}
 
@@ -157,20 +171,8 @@ export function StormDamageSection({ communityId, canManage }: Props) {
         />
       )}
 
-      {!isLoading && !isError && reports && reports.length === 0 && (
-        <Card>
-          <CardContent className="pt-4">
-            <EmptyState
-              preset={canManage ? 'storm_damage_empty_admin' : 'storm_damage_empty_resident'}
-              action={
-                <Button onClick={() => setDialogOpen(true)} size="sm">
-                  <Plus className="h-4 w-4" aria-hidden="true" />
-                  Report Damage
-                </Button>
-              }
-            />
-          </CardContent>
-        </Card>
+      {isEmpty && (
+        <StormDamageEmpty communityId={communityId} canManage={canManage} onReport={openDialog} />
       )}
 
       {!isLoading && !isError && reports && reports.length > 0 && (
@@ -190,6 +192,11 @@ export function StormDamageSection({ communityId, canManage }: Props) {
         communityId={communityId}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        onCloseAutoFocus={(event) => {
+          if (openerRef.current?.isConnected) return;
+          event.preventDefault();
+          reportButtonRef.current?.focus();
+        }}
       />
     </section>
   );

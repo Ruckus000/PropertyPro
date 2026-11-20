@@ -39,12 +39,14 @@ interface Props {
   communityId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where focus goes on close when the control that opened it is gone (the first report replaces the empty state). */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 const CATEGORIES = Object.keys(STORM_DAMAGE_CATEGORY_LABELS) as StormDamageCategory[];
 const SEVERITIES = Object.keys(STORM_DAMAGE_SEVERITY_LABELS) as StormDamageSeverity[];
 
-export function StormDamageFormDialog({ communityId, open, onOpenChange }: Props) {
+export function StormDamageFormDialog({ communityId, open, onOpenChange, onCloseAutoFocus }: Props) {
   const create = useCreateStormDamageReport(communityId);
 
   const [locationLabel, setLocationLabel] = React.useState('');
@@ -92,7 +94,7 @@ export function StormDamageFormDialog({ communityId, open, onOpenChange }: Props
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md" resizable>
+      <DialogContent size="md" resizable onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Report storm damage</DialogTitle>
           <DialogDescription>{STORM_DAMAGE_DISCLAIMER}</DialogDescription>

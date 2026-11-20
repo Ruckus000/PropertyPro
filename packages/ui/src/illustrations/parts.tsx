@@ -176,16 +176,6 @@ export function Clipboard(props: PartProps) {
   );
 }
 
-/** Camera, 72 × 52. Origin at its top-left. */
-export function Camera(props: PartProps) {
-  return (
-    <g transform={place(props)} strokeWidth={3} {...ROUND}>
-      <path d="M2 14h16l6-12h24l6 12h16v36H2z" fill={INK.sun} stroke={INK.amberInk} />
-      <circle cx={36} cy={32} r={11} fill={INK.card} stroke={INK.amberInk} />
-    </g>
-  );
-}
-
 // ── Marks ──
 
 /** "Next to add": coral disc with a light plus, radius 14. Origin at its centre. */
