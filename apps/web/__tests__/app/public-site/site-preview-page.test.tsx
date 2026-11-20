@@ -353,7 +353,13 @@ describe('SitePreviewPage — the props it hands <Layout>', () => {
 
       const blocks = capturedProps[0]!.blocks as Array<{ id: number; blockType: string; content: unknown }>;
       const hero = blocks.find((b) => b.blockType === 'hero')!;
-      expect(hero.content).toEqual({ headline: 'Harbor Pointe', subtitle: 'Our own words.' });
+      // The words are the manager's; with no photo of its own, the hero shows Heritage's.
+      const heritageHero = getLook('heritage')!.sections.find((s) => s.blockType === 'hero')!;
+      expect(hero.content).toEqual({
+        headline: 'Harbor Pointe',
+        subtitle: 'Our own words.',
+        photos: (heritageHero.content as { photos: unknown }).photos,
+      });
       expect(hero.id).toBe(100); // the row it came from
       expect(blocks.map((b) => b.blockType)).toContain('board');
     });

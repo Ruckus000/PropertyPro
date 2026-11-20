@@ -116,7 +116,7 @@ export function HeroBlock(props: BlockRendererProps) {
             <img
               src={singlePhoto.src}
               srcSet={singlePhoto.srcSet}
-              sizes={singlePhoto.sizes}
+              sizes={singlePhoto.srcSet ? LEGACY_COLUMN_SIZES : undefined}
               alt={singlePhoto.alt}
               width={singlePhoto.width}
               height={singlePhoto.height}
@@ -126,7 +126,7 @@ export function HeroBlock(props: BlockRendererProps) {
           </div>
         )}
         {photos.length > 1 && (
-          <HeroPhotoStrip photos={photos} blockId={props.block.id} />
+          <HeroPhotoStrip photos={photos} blockId={props.block.id} sizes={LEGACY_COLUMN_SIZES} />
         )}
       </div>
     </section>
@@ -149,6 +149,16 @@ export function HeroBlock(props: BlockRendererProps) {
 const PHOTO_SCRIM =
   'absolute inset-0 bg-black/60 site-md:bg-transparent site-md:bg-gradient-to-t site-md:from-black/80 site-md:via-black/60 site-md:via-70% site-md:to-black/25';
 
+/**
+ * How wide a hero photo is drawn, for `sizes`. The public site keeps a fixed 16px
+ * root, so the columns are fixed widths: a look's content column is `max-w-6xl`
+ * (72rem, 1152px) and the legacy hero's `max-w-3xl` (768px, the value uploads have
+ * always used there). A full-bleed photo is the window; `photo-split` is half.
+ */
+const LOOK_COLUMN_SIZES = '(min-width: 1152px) 1152px, 100vw';
+const LEGACY_COLUMN_SIZES = '(min-width: 1024px) 768px, 100vw';
+const SPLIT_SIZES = '(min-width: 768px) 50vw, 100vw';
+
 /** Corners by `LookStyle.radius`, as whole class names so Tailwind sees them. */
 const CORNERS: Record<LookStyle['radius'], { button: string; photo: string }> = {
   square: { button: 'rounded-none', photo: 'rounded-none' },
@@ -162,8 +172,9 @@ function buttonColours({ accentUse, onAccent }: LookStyle): string {
 }
 
 /**
- * One hero photo. A look's photo slot can be wider than the legacy hero's, so an
- * upload gets `sizes` for it; a stock photo is one file and has none.
+ * One hero photo. Each look's photo slot has its own width, so the caller says how
+ * wide (`sizes`); it applies only where the photo has a srcset (an upload or a
+ * library photo, not a retired single-file one).
  */
 function HeroImg({
   photo,
@@ -227,7 +238,13 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
   const corners = CORNERS[look.radius];
   const strip =
     photos.length > 1 ? (
-      <HeroPhotoStrip photos={photos} blockId={blockId} surface={onPhoto ? 'dark' : 'light'} />
+      <HeroPhotoStrip
+        photos={photos}
+        blockId={blockId}
+        surface={onPhoto ? 'dark' : 'light'}
+        // The strip takes the photo's place: beside the words in photo-split, else the column.
+        sizes={look.heroStyle === 'photo-split' ? SPLIT_SIZES : LOOK_COLUMN_SIZES}
+      />
     ) : null;
 
   const words = (
@@ -301,7 +318,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
               <HeroImg
                 photo={photos[0]!}
                 className={cn('relative w-full', corners.photo)}
-                sizes="(min-width: 768px) 50vw, 100vw"
+                sizes={SPLIT_SIZES}
               />
             </div>
           )}
@@ -318,7 +335,7 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
             <HeroImg
               photo={photos[0]!}
               className={cn('aspect-video w-full object-cover', corners.photo)}
-              sizes="100vw"
+              sizes={LOOK_COLUMN_SIZES}
             />
           )}
           <div
@@ -340,7 +357,9 @@ export function LookHero({ look, headline, subtitle, cta, photos = [], blockId =
       <div className="mx-auto max-w-6xl">
         {words}
         {strip ??
-          (photos[0] && <HeroImg photo={photos[0]} className={cn('mt-10 w-full', corners.photo)} />)}
+          (photos[0] && (
+            <HeroImg photo={photos[0]} className={cn('mt-10 w-full', corners.photo)} sizes={LOOK_COLUMN_SIZES} />
+          ))}
       </div>
     </section>
   );

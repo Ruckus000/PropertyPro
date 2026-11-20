@@ -16,6 +16,7 @@ import { render, screen, act } from '@testing-library/react';
 import React from 'react';
 
 const updateHeroMock = vi.fn();
+vi.mock('@/hooks/use-chosen-look', () => ({ useChosenLookId: () => null }));
 vi.mock('@/hooks/use-hero-block', () => ({
   useHeroBlock: () => ({ data: null }),
   useUpdateHeroBlock: () => ({ mutateAsync: updateHeroMock, isPending: false }),

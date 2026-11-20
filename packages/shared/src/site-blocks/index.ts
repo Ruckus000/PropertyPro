@@ -78,7 +78,12 @@ export {
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
   STOCK_PHOTO_ALT,
+  STOCK_PHOTOS,
+  PICKABLE_STOCK_PHOTO_IDS,
+  stockPhotoSrc,
   type StockPhotoId,
+  type StockPhotoEntry,
+  type StockPhotoWidth,
   type StockHeroPhoto,
 } from './stock-photos';
 export {

@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { STOCK_PHOTO_IDS, STOCK_PHOTO_SRC } from '@propertypro/shared';
+import { PICKABLE_STOCK_PHOTO_IDS, stockPhotoSrc, type StockPhotoWidth } from '@propertypro/shared';
 import {
   STOCK_PHOTO_SIZE,
   heroPhotoImgAttributes,
@@ -43,10 +43,22 @@ function webpSize(file: Buffer): { width: number; height: number } {
   throw new Error(`Unrecognised WebP chunk "${chunk}"`);
 }
 
+const WIDTHS: readonly StockPhotoWidth[] = [480, 1200, 2400];
+
 describe('stock photo files', () => {
-  it.each(STOCK_PHOTO_IDS)('%s is a WebP in public/ at the size its <img> claims', (id) => {
-    const file = join(PUBLIC_DIR, STOCK_PHOTO_SRC[id]);
-    expect(existsSync(file), `${STOCK_PHOTO_SRC[id]} is missing from apps/web/public`).toBe(true);
+  const cases = PICKABLE_STOCK_PHOTO_IDS.flatMap((id) => WIDTHS.map((width) => [id, width] as const));
+
+  it.each(cases)('%s at %i wide is a 3:2 WebP in public/', (id, width) => {
+    const src = stockPhotoSrc(id, width);
+    const file = join(PUBLIC_DIR, src);
+    expect(existsSync(file), `${src} is missing from apps/web/public`).toBe(true);
+    expect(webpSize(readFileSync(file))).toEqual({ width, height: (width * 2) / 3 });
+  });
+
+  // Retired: no look suggests them, but saved websites may still name them.
+  it.each(['sunset', 'palms'] as const)('retired photo %s keeps its single file and size', (id) => {
+    const file = join(PUBLIC_DIR, `/site-looks/${id}.webp`);
+    expect(existsSync(file), `${id}.webp is missing from apps/web/public`).toBe(true);
     expect(webpSize(readFileSync(file))).toEqual(STOCK_PHOTO_SIZE[id]);
   });
 });
@@ -63,10 +75,22 @@ describe('heroPhotoImgAttributes', () => {
     else process.env.NEXT_PUBLIC_SUPABASE_URL = savedEnv;
   });
 
-  it('serves a stock photo from the site, with its own size and no srcset', () => {
-    expect(heroPhotoImgAttributes({ stock: 'sunset', alt: 'Sunset over the water' })).toEqual({
+  it('serves a library photo in two sizes, with its own aspect box', () => {
+    expect(heroPhotoImgAttributes({ stock: 'palm-walk', alt: 'x' })).toEqual({
+      src: '/site-looks/palm-walk.2400.webp',
+      srcSet:
+        '/site-looks/palm-walk.1200.webp 1200w, /site-looks/palm-walk.2400.webp 2400w',
+      sizes: '100vw',
+      alt: 'x',
+      width: 2400,
+      height: 1600,
+    });
+  });
+
+  it('serves a retired stock photo as its single file, with no srcset', () => {
+    expect(heroPhotoImgAttributes({ stock: 'sunset', alt: 'y' })).toEqual({
       src: '/site-looks/sunset.webp',
-      alt: 'Sunset over the water',
+      alt: 'y',
       width: 1440,
       height: 1080,
     });

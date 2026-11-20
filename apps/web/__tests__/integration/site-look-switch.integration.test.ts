@@ -67,6 +67,14 @@ describeDb('site looks (db-backed integration)', () => {
     return look.sections.map(({ blockType, content }) => ({ blockType, content }));
   }
 
+  /** The stock photos a look's own hero starts with: what a kept hero showing none takes on a switch. */
+  function lookHeroPhotos(id: LookId): unknown {
+    const hero = lookSections(id).find((section) => section.blockType === 'hero');
+    const photos = (hero?.content as { photos?: unknown } | undefined)?.photos;
+    if (!photos) throw new Error(`${id}'s hero has no photos`);
+    return photos;
+  }
+
   /** The branding a look writes: its layout and colour set, and the set's colours and fonts. */
   function lookBranding(id: LookId) {
     const tokens = SITE_LOOK_PRESETS[id];
@@ -253,12 +261,13 @@ describeDb('site looks (db-backed integration)', () => {
     await publish(communityId);
 
     // Bayfront's sections in Bayfront's order, with the manager's welcome text
-    // and hidden Announcements in place of Bayfront's own.
+    // and hidden Announcements in place of Bayfront's own. The welcome text had
+    // no photo, so it shows Bayfront's: a stock photo follows the look.
     const bayfront = lookSections('bayfront');
     expect(await liveSections(communityId)).toEqual(
       bayfront.map((section) =>
         section.blockType === 'hero'
-          ? { blockType: 'hero', content: EDITED_HERO }
+          ? { blockType: 'hero', content: { ...EDITED_HERO, photos: lookHeroPhotos('bayfront') } }
           : section.blockType === 'announcements'
             ? { blockType: 'announcements', content: hiddenAnnouncements }
             : section,
@@ -670,8 +679,9 @@ describeDb('site looks (db-backed integration)', () => {
     expect(await draftRowCount(communityId)).toBe(0);
     expect(await auditRowCount(communityId)).toBe(auditRowsBefore);
     expect((await readCommunity(communityId)).branding).not.toHaveProperty('draftLook');
-    // The edit is in the preview, and so is what Heritage adds.
-    expect(asRendered(previewed)[0]).toEqual({ blockType: 'hero', content: EDITED_HERO });
+    // The edit is in the preview, with Heritage's photo (it had none of its
+    // own), and so is what Heritage adds.
+    expect(asRendered(previewed)[0]).toEqual({ blockType: 'hero', content: { ...EDITED_HERO, photos: lookHeroPhotos('heritage') } });
     expect(previewed.map((section) => section.blockType)).toContain('board');
     expect(previewed.map((section) => section.blockType)).not.toContain('quicklinks');
 
@@ -681,7 +691,7 @@ describeDb('site looks (db-backed integration)', () => {
     expect(asRendered((await loadLookSwitchInput(communityId)).current)).toEqual(asRendered(previewed));
 
     // And the live look's card now shows the way back, which the draft restores:
-    // the live page, keeping the edit.
+    // the live page, keeping the edit, without the photo the switch gave it.
     const wayBack = await previewOf('bayfront');
     expect(asRendered(wayBack)[0]).toEqual({ blockType: 'hero', content: EDITED_HERO });
     expect(wayBack.map((section) => section.blockType)).toEqual(lookSections('bayfront').map((section) => section.blockType));

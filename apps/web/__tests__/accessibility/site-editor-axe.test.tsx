@@ -74,6 +74,7 @@ vi.mock('@/hooks/use-content-blocks', () => ({
 
 // The hero form writes through its own endpoint, and its photo field reaches the
 // upload queue. Same rule as above — each module COMPLETELY.
+vi.mock('@/hooks/use-chosen-look', () => ({ useChosenLookId: () => 'bayfront' }));
 vi.mock('@/hooks/use-hero-block', () => ({
   useHeroBlock: () => ({ data: null }),
   useUpdateHeroBlock: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -764,10 +765,9 @@ describe('Website builder writers — axe', () => {
     expect(screen.getByLabelText(/headline/i)).toHaveValue('Welcome to Harbor Pointe');
     expect(screen.getByRole('button', { name: "Use the look's wording" })).toBeInTheDocument();
     expect(screen.getByLabelText('Button label')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Use the palm-lined street photo instead' }),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Change photo 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Choose one of our photos' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace Sunset over the water with your own')).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -792,7 +792,7 @@ describe('Website builder writers — axe', () => {
     );
     // Rendered, and Simple's own subset: the words and the photo, no button.
     expect(screen.getByLabelText(/headline/i)).toHaveValue('Welcome to Harbor Pointe');
-    expect(screen.getByLabelText('Replace the sunset photo with your own')).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace Sunset over the water with your own')).toBeInTheDocument();
     expect(screen.queryByLabelText('Button label')).not.toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });

@@ -41,9 +41,11 @@ export interface HeroPhotoStripProps {
    * stay visible there; white ones vanish on a light page.
    */
   surface?: 'dark' | 'light';
+  /** How wide each slide is drawn (the column the strip sits in); used where a photo has a srcset. */
+  sizes?: string;
 }
 
-export function HeroPhotoStrip({ photos, blockId, surface = 'dark' }: HeroPhotoStripProps) {
+export function HeroPhotoStrip({ photos, blockId, surface = 'dark', sizes }: HeroPhotoStripProps) {
   const slideId = (index: number) => `hero-${blockId}-photo-${index}`;
   const ring = surface === 'light' ? 'focus-visible:ring-primary' : 'focus-visible:ring-content-inverse';
 
@@ -81,7 +83,7 @@ export function HeroPhotoStrip({ photos, blockId, surface = 'dark' }: HeroPhotoS
               <img
                 src={img.src}
                 srcSet={img.srcSet}
-                sizes={img.sizes}
+                sizes={img.srcSet ? (sizes ?? img.sizes) : undefined}
                 alt={img.alt}
                 width={img.width}
                 height={img.height}
