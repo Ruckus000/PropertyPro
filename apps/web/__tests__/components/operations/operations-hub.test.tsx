@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OperationsHub } from '../../../src/components/operations/operations-hub';
 
@@ -11,6 +11,8 @@ const {
   useOperationsMock,
   useWorkOrdersMock,
   useReservationsMock,
+  useAmenitiesMock,
+  cancelMutateAsync,
 } = vi.hoisted(() => ({
   searchParamsMock: vi.fn(),
   replaceMock: vi.fn(),
@@ -20,6 +22,8 @@ const {
   useOperationsMock: vi.fn(),
   useWorkOrdersMock: vi.fn(),
   useReservationsMock: vi.fn(),
+  useAmenitiesMock: vi.fn(),
+  cancelMutateAsync: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -40,6 +44,8 @@ vi.mock('@/hooks/use-operations', async () => {
     useOperations: useOperationsMock,
     useWorkOrders: useWorkOrdersMock,
     useReservations: useReservationsMock,
+    useAmenities: useAmenitiesMock,
+    useCancelReservation: () => ({ mutateAsync: cancelMutateAsync, isPending: false }),
   };
 });
 
@@ -57,9 +63,28 @@ vi.mock('../../../src/components/operations/WorkOrderCreateSheet', () => ({
     props.open ? <div role="heading">Dispatch Work Order</div> : null,
 }));
 vi.mock('../../../src/components/operations/ReservationCreateSheet', () => ({
-  ReservationCreateSheet: (props: { open: boolean }) =>
-    props.open ? <div role="heading">Reserve Amenity</div> : null,
+  ReservationCreateSheet: (props: { open: boolean; initialAmenityId?: number }) =>
+    props.open ? <div role="heading">Reserve Amenity {props.initialAmenityId ?? ''}</div> : null,
 }));
+vi.mock('../../../src/components/operations/AmenityFormSheet', () => ({
+  AmenityFormSheet: (props: { open: boolean; amenity?: { name: string } }) =>
+    props.open ? <div role="heading">{props.amenity ? `Edit ${props.amenity.name}` : 'Add amenity'}</div> : null,
+}));
+
+const POOL = {
+  id: 9,
+  name: 'Pool',
+  description: null,
+  location: 'Building A',
+  capacity: 40,
+  isBookable: true,
+  bookingRules: { maxDurationMinutes: 120 },
+};
+const SAUNA_CLOSED = { ...POOL, id: 10, name: 'Sauna', isBookable: false, bookingRules: {} };
+
+function amenities(list: unknown[]) {
+  useAmenitiesMock.mockReturnValue({ isLoading: false, error: null, data: list });
+}
 
 // Opening a sheet writes the URL with history.pushState, which Next syncs into
 // useSearchParams without re-rendering the force-dynamic page on the server.
@@ -70,6 +95,7 @@ describe('OperationsHub', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     searchParamsMock.mockReturnValue('tab=reservations');
+    amenities([POOL]);
 
     useMaintenanceRequestsMock.mockReturnValue({
       isLoading: false,
@@ -112,7 +138,7 @@ describe('OperationsHub', () => {
     });
   });
 
-  it('renders accessible tabs and resident CTA for enabled sections', () => {
+  it('renders accessible tabs and resident CTA for enabled sections', async () => {
     render(
       <OperationsHub
         communityId={42}
@@ -150,7 +176,8 @@ describe('OperationsHub', () => {
     // Reservations tab MUST show "Reserve Amenity", NOT "Submit Request".
     expect(screen.getByRole('button', { name: 'Reserve Amenity' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Submit Request' })).not.toBeInTheDocument();
-    expect(screen.getByText('Reservation #17')).toBeInTheDocument();
+    // Rows name their amenity (loaded on demand).
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
   });
 
   it('loads community-wide requests for staff and shows the request CTA', () => {
@@ -237,7 +264,7 @@ describe('OperationsHub', () => {
 
   // ── Phase 1 regression tests ──────────────────────────────────────────────
 
-  it('renders timestamps in the community timezone, not browser local', () => {
+  it('renders timestamps in the community timezone, not browser local', async () => {
     searchParamsMock.mockReturnValue('tab=reservations');
     useReservationsMock.mockReturnValue({
       isLoading: false,
@@ -274,7 +301,8 @@ describe('OperationsHub', () => {
     // 14:00 UTC = 10:00 EDT on 2026-03-28 (DST in effect).
     // Assert rendered text contains 10:00 (or "10 AM") but NOT 14:00 (UTC).
     const panel = screen.getByRole('tabpanel');
-    expect(panel.textContent).toMatch(/10:00|10 AM/i);
+    // The list is loaded on demand.
+    await waitFor(() => expect(panel.textContent).toMatch(/10:00|10 AM/i));
     expect(panel.textContent).not.toMatch(/14:00/);
   });
 
@@ -499,5 +527,158 @@ describe('OperationsHub', () => {
       '/communities/42/operations?tab=requests&from=maintenance',
     );
     historyReplace.mockRestore();
+  });
+});
+
+describe('OperationsHub — amenities', () => {
+  const hub = (isAdmin: boolean) => (
+    <OperationsHub
+      communityId={42}
+      requestsEnabled={true}
+      workOrdersEnabled={false}
+      reservationsEnabled={true}
+      requestScope={isAdmin ? 'community' : 'mine'}
+      isAdmin={isAdmin}
+      userId="u-1"
+      communityTimezone="America/New_York"
+    />
+  );
+  const noReservations = { isLoading: false, error: null, data: { data: [], meta: { page: 1, limit: 20, total: 0 } } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useMaintenanceRequestsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { total: 0, page: 1, limit: 20 } } });
+    useOperationsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { partialFailure: false, unavailableSources: [] } } });
+    useWorkOrdersMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { page: 1, limit: 20, total: 0 } } });
+    useReservationsMock.mockReturnValue(noReservations);
+  });
+
+  it('fetches amenities only on the two amenity tabs', () => {
+    amenities([]);
+    searchParamsMock.mockReturnValue('tab=requests');
+    render(hub(true));
+    expect(useAmenitiesMock).toHaveBeenLastCalledWith(42, { enabled: false });
+  });
+
+  it('offers no Reserve Amenity when nothing can be booked, and a manager gets Add amenity instead', async () => {
+    amenities([]);
+    searchParamsMock.mockReturnValue('tab=reservations');
+    render(hub(true));
+
+    expect(await screen.findByRole('heading', { name: 'Nothing to book yet' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reserve Amenity' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add amenity' }));
+    expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=amenities&create=amenity');
+  });
+
+  it('gives a resident a calm waiting state with no action when nothing can be booked', async () => {
+    amenities([SAUNA_CLOSED]);
+    searchParamsMock.mockReturnValue('tab=reservations');
+    render(hub(false));
+
+    expect(
+      await screen.findByText("When your association opens a space for booking, you'll reserve it here."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reserve Amenity' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
+  });
+
+  it('names the real bookable amenities when there are no reservations yet', async () => {
+    amenities([POOL, SAUNA_CLOSED]);
+    searchParamsMock.mockReturnValue('tab=reservations');
+    render(hub(false));
+
+    expect(await screen.findByText('You can book Pool. Your reservations appear here.')).toBeInTheDocument();
+    // The header's filled one and the empty state's outline one.
+    expect(screen.getAllByRole('button', { name: 'Reserve Amenity' })).toHaveLength(2);
+  });
+
+  it('names the amenity on each reservation row', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('tab=reservations');
+    useReservationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [{
+          id: 17, amenityId: 9, unitId: 12, status: 'confirmed',
+          startTime: '2099-03-28T14:00:00.000Z', endTime: '2099-03-28T15:00:00.000Z',
+          notes: null, createdAt: '2026-03-27T14:00:00.000Z', updatedAt: '2026-03-27T14:00:00.000Z',
+        }],
+        meta: { page: 1, limit: 20, total: 1 },
+      },
+    });
+    render(hub(false));
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+    expect(screen.queryByText(/Reservation #17/)).toBeNull();
+  });
+
+  it('shows a manager every amenity with Edit, and a resident only the bookable ones', async () => {
+    amenities([POOL, SAUNA_CLOSED]);
+    searchParamsMock.mockReturnValue('tab=amenities');
+    const { unmount } = render(hub(true));
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Sauna' })).toBeInTheDocument();
+    expect(screen.getByText('Not open for booking')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Edit Pool' })).toBeInTheDocument();
+    expect(screen.getByText('Up to 2 hours per booking')).toBeInTheDocument();
+    // The header holds the one filled Add amenity once the list has something in it.
+    expect(screen.getByRole('button', { name: 'Add amenity' })).toBeInTheDocument();
+    unmount();
+
+    render(hub(false));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Sauna' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
+  });
+
+  it('opens the booking sheet preselected from an amenity, and the edit sheet for a manager', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('tab=amenities');
+    const { rerender } = render(hub(true));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reserve Pool' }));
+    expect(historyPush).toHaveBeenLastCalledWith(null, '', '/communities/42/operations?tab=amenities&create=reservation&amenityId=9');
+    searchParamsMock.mockReturnValue('tab=amenities&create=reservation&amenityId=9');
+    rerender(hub(true));
+    expect(await screen.findByRole('heading', { name: 'Reserve Amenity 9' })).toBeInTheDocument();
+
+    searchParamsMock.mockReturnValue('tab=amenities&create=amenity&amenityId=9');
+    rerender(hub(true));
+    expect(await screen.findByRole('heading', { name: 'Edit Pool' })).toBeInTheDocument();
+  });
+
+  it('gives a manager the setup state, and a resident the waiting state, on an empty Amenities tab', async () => {
+    amenities([]);
+    searchParamsMock.mockReturnValue('tab=amenities');
+    const { unmount } = render(hub(true));
+    expect(await screen.findByRole('heading', { name: 'List the spaces residents can book' })).toBeInTheDocument();
+    // The setup state owns the only Add amenity.
+    expect(screen.getAllByRole('button', { name: 'Add amenity' })).toHaveLength(1);
+    unmount();
+
+    render(hub(false));
+    expect(await screen.findByRole('heading', { name: 'Spaces you can book appear here' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
+  });
+
+  it('opens no form for an edit link whose amenity is not in this community', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('tab=amenities&create=amenity&amenityId=99');
+    render(hub(true));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Add amenity' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^Edit / })).toBeNull();
+  });
+
+  it('loads the list for an edit link even without the tab in the URL', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('create=amenity&amenityId=9');
+    render(hub(true));
+    expect(useAmenitiesMock).toHaveBeenLastCalledWith(42, { enabled: true });
+    expect(await screen.findByRole('heading', { name: 'Edit Pool' })).toBeInTheDocument();
   });
 });

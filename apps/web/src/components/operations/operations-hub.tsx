@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   parseWorkOrderStatus,
+  useAmenities,
   useMaintenanceRequests,
   useOperations,
   useReservations,
@@ -35,16 +36,26 @@ const ReservationCreateSheet = dynamic(
   () => import('./ReservationCreateSheet').then((m) => ({ default: m.ReservationCreateSheet })),
   { ssr: false },
 );
+const AmenityFormSheet = dynamic(
+  () => import('./AmenityFormSheet').then((m) => ({ default: m.AmenityFormSheet })),
+  { ssr: false },
+);
+// The two amenity tabs render only when selected, so their code loads then (perf-check budget).
+const AmenityList = dynamic(() => import('./AmenityList').then((m) => ({ default: m.AmenityList })));
+const ReservationList = dynamic(() => import('./ReservationList').then((m) => ({ default: m.ReservationList })));
+const AmenitiesEmpty = dynamic(() => import('./amenities-empty').then((m) => ({ default: m.AmenitiesEmpty })));
+const ReservationsEmpty = dynamic(() => import('./amenities-empty').then((m) => ({ default: m.ReservationsEmpty })));
 
-type CreateValue = 'request' | 'work-order' | 'reservation';
+type CreateValue = 'request' | 'work-order' | 'reservation' | 'amenity';
 
-type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations';
+type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations' | 'amenities';
 
 const TABS: ReadonlyArray<{ id: OperationsTab; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'requests', label: 'Requests' },
   { id: 'work-orders', label: 'Work Orders' },
   { id: 'reservations', label: 'Reservations' },
+  { id: 'amenities', label: 'Amenities' },
 ];
 
 function LoadMoreButton({
@@ -133,6 +144,7 @@ export function OperationsHub({
       case 'work-orders':
         return workOrdersEnabled;
       case 'reservations':
+      case 'amenities':
         return reservationsEnabled;
     }
   });
@@ -140,6 +152,8 @@ export function OperationsHub({
   const selectedTab = availableTabs.some((candidate) => candidate.id === tab) ? tab : defaultTab;
 
   const createValue = (searchParams.get('create') ?? undefined) as CreateValue | undefined;
+  const rawAmenityId = Number(searchParams.get('amenityId'));
+  const createAmenityId = Number.isInteger(rawAmenityId) && rawAmenityId > 0 ? rawAmenityId : undefined;
   // True only while a sheet this page opened (pushState) is showing.
   const openedHereRef = useRef(false);
 
@@ -173,6 +187,21 @@ export function OperationsHub({
     { page: filters.page, limit: 20 },
     { enabled: reservationsEnabled },
   );
+  // Both amenity tabs need the list: Reservations to know whether anything can be booked.
+  const amenitiesQuery = useAmenities(communityId, {
+    enabled:
+      reservationsEnabled
+      && (selectedTab === 'reservations' || selectedTab === 'amenities' || createValue === 'amenity'),
+  });
+  const allAmenities = amenitiesQuery.data ?? [];
+  const bookableAmenities = allAmenities.filter((amenity) => amenity.isBookable);
+  // Residents see only what they can book; managers see every amenity.
+  const visibleAmenities = isAdmin ? allAmenities : bookableAmenities;
+  const amenityNames = new Map(allAmenities.map((amenity) => [amenity.id, amenity.name]));
+  // An edit link opens only for an amenity in this community's list; it never falls back to "add".
+  const editingAmenity = createAmenityId ? allAmenities.find((amenity) => amenity.id === createAmenityId) : undefined;
+  const amenityFormReady = createAmenityId === undefined || editingAmenity !== undefined;
+
   const requestsQuery = useMaintenanceRequests(communityId, {
     scope: requestScope,
     enabled: requestsEnabled,
@@ -206,12 +235,18 @@ export function OperationsHub({
         };
       case 'reservations':
         return {
-          isLoading: reservationsQuery.isLoading,
-          error: reservationsQuery.error,
+          isLoading: reservationsQuery.isLoading || amenitiesQuery.isLoading,
+          error: reservationsQuery.error ?? amenitiesQuery.error,
           hasData: Boolean(reservationsQuery.data?.data.length),
         };
+      case 'amenities':
+        return {
+          isLoading: amenitiesQuery.isLoading,
+          error: amenitiesQuery.error,
+          hasData: visibleAmenities.length > 0,
+        };
     }
-  }, [operationsQuery, requestsQuery, reservationsQuery, selectedTab, workOrdersQuery]);
+  }, [amenitiesQuery, operationsQuery, requestsQuery, reservationsQuery, selectedTab, visibleAmenities.length, workOrdersQuery]);
 
   const operationsPartialFailure =
     selectedTab === 'all'
@@ -230,7 +265,16 @@ export function OperationsHub({
 
   function getCta(currentTab: OperationsTab): CtaConfig | null {
     if (currentTab === 'reservations') {
-      return reservationsEnabled ? { label: 'Reserve Amenity', createValue: 'reservation' } : null;
+      // Only when something can be booked: otherwise the sheet is a form that can't be submitted.
+      return reservationsEnabled && bookableAmenities.length > 0
+        ? { label: 'Reserve Amenity', createValue: 'reservation' }
+        : null;
+    }
+    if (currentTab === 'amenities') {
+      // While the list is empty, its setup state owns "Add amenity" (one filled primary).
+      return isAdmin && reservationsEnabled && allAmenities.length > 0
+        ? { label: 'Add amenity', createValue: 'amenity' }
+        : null;
     }
     if (currentTab === 'work-orders') {
       return isAdmin && workOrdersEnabled
@@ -259,9 +303,13 @@ export function OperationsHub({
    * Tab switches use history.replaceState instead, so they neither bloat
    * history nor re-render this force-dynamic page on the server.
    */
-  function openCreate(value: CreateValue) {
+  function openCreate(value: CreateValue, options: { amenityId?: number; tab?: OperationsTab } = {}) {
+    const { amenityId, tab: nextTab } = options;
     const params = new URLSearchParams(searchParams.toString());
+    if (nextTab) params.set('tab', nextTab);
     params.set('create', value);
+    if (amenityId) params.set('amenityId', String(amenityId));
+    else params.delete('amenityId');
     openedHereRef.current = true;
     window.history.pushState(null, '', `${pathname}?${params.toString()}`);
   }
@@ -281,6 +329,7 @@ export function OperationsHub({
     }
     const params = new URLSearchParams(searchParams.toString());
     params.delete('create');
+    params.delete('amenityId');
     const query = params.toString();
     window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
@@ -397,7 +446,29 @@ export function OperationsHub({
         ) : null}
 
         {!activeState.isLoading && !activeState.error && !activeState.hasData && !operationsPartialFailure ? (
-          requestsEmptyState
+          selectedTab === 'reservations' ? (
+            <ReservationsEmpty
+              isAdmin={isAdmin}
+              amenityCount={allAmenities.length}
+              bookableNames={bookableAmenities.map((amenity) => amenity.name)}
+              onReserve={() => openCreate('reservation')}
+              onAdd={() => openCreate('amenity', { tab: 'amenities' })}
+              onShowAmenities={() => setTab('amenities')}
+            />
+          ) : selectedTab === 'amenities' ? (
+            <AmenitiesEmpty isAdmin={isAdmin} onAdd={() => openCreate('amenity')} />
+          ) : (
+            requestsEmptyState
+          )
+        ) : null}
+
+        {!activeState.isLoading && !activeState.error && selectedTab === 'amenities' && activeState.hasData ? (
+          <AmenityList
+            amenities={visibleAmenities}
+            isAdmin={isAdmin}
+            onEdit={(amenityId) => openCreate('amenity', { amenityId })}
+            onReserve={(amenityId) => openCreate('reservation', { amenityId })}
+          />
         ) : null}
 
         {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data ? (
@@ -492,23 +563,14 @@ export function OperationsHub({
           </div>
         ) : null}
 
-        {!activeState.isLoading && !activeState.error && selectedTab === 'reservations' && reservationsQuery.data ? (
+        {!activeState.isLoading && !activeState.error && selectedTab === 'reservations' && reservationsQuery.data && activeState.hasData ? (
           <div className="space-y-4">
-            {reservationsQuery.data.data.map((reservation) => (
-              <article key={reservation.id} className="rounded-xl border border-edge bg-surface-card p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-content">
-                      Reservation #{reservation.id}
-                    </h2>
-                    <p className="text-sm text-content-secondary">
-                      {formatInCommunityTimezone(reservation.startTime, communityTimezone)} to {formatInCommunityTimezone(reservation.endTime, communityTimezone)}
-                    </p>
-                  </div>
-                  <StatusBadge status={reservation.status} />
-                </div>
-              </article>
-            ))}
+            <ReservationList
+              communityId={communityId}
+              communityTimezone={communityTimezone}
+              reservations={reservationsQuery.data.data}
+              amenityNames={amenityNames}
+            />
             <LoadMoreButton
               visible={
                 reservationsQuery.data
@@ -548,6 +610,18 @@ export function OperationsHub({
           onClose={closeCreate}
           communityId={communityId}
           communityTimezone={communityTimezone}
+          isAdmin={isAdmin}
+          initialAmenityId={createAmenityId}
+        />
+      ) : null}
+      {createValue === 'amenity' && isAdmin && reservationsEnabled && amenityFormReady ? (
+        <AmenityFormSheet
+          // A new key per amenity, so its fields start from that amenity.
+          key={createAmenityId ?? 'new'}
+          open
+          onClose={closeCreate}
+          communityId={communityId}
+          amenity={editingAmenity}
         />
       ) : null}
     </div>

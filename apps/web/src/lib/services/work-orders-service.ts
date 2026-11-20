@@ -31,6 +31,7 @@ import {
   NotFoundError,
   UnprocessableEntityError,
 } from '@/lib/api/errors';
+import { bookingRuleViolation } from '@/lib/amenities/booking-rules';
 
 interface VendorRecord {
   [key: string]: unknown;
@@ -184,6 +185,8 @@ export interface CreateReservationInput {
   startTime: string;
   endTime: string;
   notes?: string | null;
+  /** The community's IANA zone: blackout dates are dates on its calendar. */
+  timeZone: string;
 }
 
 const VALID_WORK_ORDER_PRIORITIES: readonly WorkOrderPriority[] = ['low', 'medium', 'high', 'urgent'];
@@ -842,9 +845,14 @@ export async function createReservationForCommunity(
   if (endTime <= startTime) {
     throw new UnprocessableEntityError('endTime must be after startTime');
   }
-  if (startTime.getTime() < Date.now()) {
+  const now = new Date();
+  if (startTime.getTime() < now.getTime()) {
     throw new UnprocessableEntityError('Reservations cannot start in the past');
   }
+
+  // The amenity's own limits (lib/amenities/booking-rules.ts): checked here so they hold for every client.
+  const ruleViolation = bookingRuleViolation(amenity.bookingRules ?? {}, startTime, endTime, now, input.timeZone);
+  if (ruleViolation) throw new UnprocessableEntityError(ruleViolation);
 
   const existingReservations = await scoped.selectFrom<AmenityReservationRecord>(
     amenityReservations,

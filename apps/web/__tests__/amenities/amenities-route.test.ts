@@ -272,6 +272,23 @@ describe('/api/v1/amenities route', () => {
     expect(createAmenityForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 when the shortest booking is longer than the longest', async () => {
+    const res = await POST(
+      jsonPost({ communityId: 42, name: 'Gym', bookingRules: { minDurationMinutes: 120, maxDurationMinutes: 60 } }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(createAmenityForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts equal shortest and longest bookings', async () => {
+    const res = await POST(
+      jsonPost({ communityId: 42, name: 'Gym', bookingRules: { minDurationMinutes: 60, maxDurationMinutes: 60 } }),
+    );
+
+    expect(res.status).toBe(200);
+  });
+
   it('forwards null x-request-id to service when header missing', async () => {
     const res = await POST(jsonPost({ communityId: 42, name: 'Clubhouse' }));
     expect(res.status).toBe(200);
