@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useChosenLookId } from '@/hooks/use-chosen-look';
 import { useUpdateHeroBlock } from '@/hooks/use-hero-block';
 import { useBlockForm } from '../use-block-form';
 import { useLinkedFacts } from '../linked-facts-context';
@@ -167,6 +168,7 @@ export function HeroForm({ communityId, blockOrder, content, variant = 'full' }:
   // The hero writes through its own endpoint, not the blocks upsert: it lives
   // at slot 1, and `blocksUpsertContract` constrains blockOrder to min(2).
   const update = useUpdateHeroBlock(communityId);
+  const lookId = useChosenLookId(communityId);
 
   const save = useCallback(
     async (next: unknown) => {
@@ -273,6 +275,7 @@ export function HeroForm({ communityId, blockOrder, content, variant = 'full' }:
         blockOrder={blockOrder}
         photos={draft.photos}
         onChange={(photos) => setDraft((prev) => ({ ...prev, photos }))}
+        lookId={lookId}
       />
 
       {overPhotoLimit && (

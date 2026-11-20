@@ -35,6 +35,8 @@ export interface StockPhotoPickerProps {
   /** Photos already in the section; they cannot be chosen again. */
   inUse: readonly StockPhotoId[];
   onChoose: (id: StockPhotoId) => void;
+  /** Where focus goes when the dialog closes; the dialog has no trigger to return it to. */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export function StockPhotoPicker({
@@ -44,6 +46,7 @@ export function StockPhotoPicker({
   replacing,
   inUse,
   onChoose,
+  onCloseAutoFocus,
 }: StockPhotoPickerProps) {
   const baseId = useId();
   const [selected, setSelected] = useState<StockPhotoId | null>(replacing);
@@ -107,7 +110,13 @@ export function StockPhotoPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="lg" className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent
+        size="lg"
+        className="max-h-[90dvh] overflow-y-auto"
+        onCloseAutoFocus={onCloseAutoFocus}
+        // No look, no description line: say so rather than have Radix warn about it.
+        {...(look ? {} : { 'aria-describedby': undefined })}
+      >
         <DialogHeader>
           <DialogTitle>Choose a photo</DialogTitle>
           {look ? <DialogDescription>{`Your site uses ${look.name}`}</DialogDescription> : null}
