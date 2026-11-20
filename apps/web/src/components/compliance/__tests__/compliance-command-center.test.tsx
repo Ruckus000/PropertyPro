@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BOARD_DESIGNATIONS } from '@propertypro/shared';
@@ -257,15 +257,129 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
-  it('renders an empty state with an upload CTA when there are no checklist items', () => {
-    mockChecklistReturn = { data: [], isLoading: false, error: null };
+  it('with no checklist rows yet, says the list is not ready and offers Try again (F-10)', () => {
+    const refetch = vi.fn();
+    mockChecklistReturn = { data: [], isLoading: false, error: null, refetch } as typeof mockChecklistReturn;
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
-    expect(screen.getByText('Your compliance tracker is ready')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: 'Upload First Document' }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Your record list isn't ready yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it('after the first run, a board-action record alone raises no alarm banner (F-6)', () => {
+    mockChecklistReturn = {
+      data: [
+        { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'satisfied', documentId: 99, documentState: 'posted', documentPostedAt: '2026-05-01T00:00:00.000Z', deadline: null, rollingWindow: null, isApplicable: true },
+        { id: 2, templateKey: '718_affidavits', title: 'Affidavits', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: '2099-12-11T12:00:00.000Z', rollingWindow: null, isApplicable: true },
+      ],
+      isLoading: false,
+      error: null,
+    };
+    renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+    expect(screen.getByText(/readiness/i, { selector: 'p, span, div' })).toBeInTheDocument();
+    expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
+  });
+
+  it('the detail panel offers "Doesn\'t apply to us" on a conditional record with no file (F-8)', async () => {
+    mockChecklistReturn = {
+      data: [
+        { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'satisfied', documentId: 99, documentState: 'posted', deadline: null, rollingWindow: null, isApplicable: true },
+        { id: 2, templateKey: '718_bids', title: 'Bids', category: 'operations', status: 'overdue', documentId: null, deadline: '2026-05-01T00:00:00.000Z', rollingWindow: null, isConditional: true, isApplicable: true },
+      ],
+      isLoading: false,
+      error: null,
+    };
+    renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+    const panel = screen.getByRole('complementary', { name: 'Selected record details' });
+    fireEvent.click(within(panel).getByRole('button', { name: "Doesn't apply to us" }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  describe('first run (nothing posted, nothing overdue)', () => {
+    const future = '2099-12-11T12:00:00.000Z';
+    const dayZero = () => [
+      { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isApplicable: true },
+      { id: 2, templateKey: '718_affidavits', title: 'Affidavits', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isApplicable: true },
+      { id: 3, templateKey: '718_minutes_rolling_12m', title: 'Minutes', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isApplicable: true },
+      { id: 4, templateKey: '718_bids', title: 'Bids', category: 'operations', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isConditional: true, isApplicable: true },
+    ];
+
+    it('is a calm countdown: no 0% score, no "requirements are now in effect" (F-6)', async () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      expect(await screen.findByRole('heading', { level: 2, name: 'Your 30-day posting window has started' })).toBeInTheDocument();
+      expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
+      expect(screen.queryByText(/readiness/i, { selector: 'p, span, div' })).toBeNull();
+      expect(screen.getByText(/0 of 3/).closest('li')?.textContent).toContain('required posted');
+    });
+
+    it('groups by when records are due, a conditional one only under "if they apply"', async () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      const due = await screen.findByRole('region', { name: 'Post by the deadline' });
+      const rolling = screen.getByRole('region', { name: 'Keep current, rolling 12 months' });
+      const conditional = screen.getByRole('region', { name: 'Only if they apply' });
+      expect(due.textContent).toContain('Declaration');
+      expect(due.textContent).toContain('Board action');
+      expect(rolling.textContent).toContain('Minutes');
+      expect(rolling.textContent).not.toContain('Bids');
+      expect(conditional.textContent).toContain('Bids');
+    });
+
+    it('ends as soon as something is due within 7 days, so the warning shows', () => {
+      const soon = new Date(Date.now() + 3 * 86_400_000).toISOString();
+      mockChecklistReturn = {
+        data: dayZero().map((i) => (i.id === 1 ? { ...i, deadline: soon } : i)),
+        isLoading: false,
+        error: null,
+      };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      expect(screen.queryByRole('heading', { name: 'Your 30-day posting window has started' })).toBeNull();
+      expect(screen.getByText('Requirements are now in effect')).toBeInTheDocument();
+    });
+
+    it('an owner (read only) gets the waiting state: no counts, no to-dos', async () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin={false} designation={null} canWrite={false} />);
+      expect(await screen.findByRole('heading', { level: 2, name: "Your association's posted records appear here" })).toBeInTheDocument();
+      expect(screen.queryByText(/need your board to act/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /Upload/ })).toBeNull();
+    });
+
+    it('a dated "if it applies" record says by when to post or set it aside', async () => {
+      mockChecklistReturn = {
+        data: [...dayZero(), { id: 5, templateKey: '718_building_permits', title: 'Permits', category: 'operations', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isConditional: true, isApplicable: true }],
+        isLoading: false,
+        error: null,
+      };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      const conditional = await screen.findByRole('region', { name: 'Only if they apply' });
+      expect(conditional.textContent).toMatch(/Post it, or mark it as not applying, by December 11/);
+    });
+
+    it('counts only required board records, not conditional ones', async () => {
+      // HOA: minutes (required) and bids (conditional) are both board-action records.
+      mockChecklistReturn = {
+        data: [
+          { id: 1, templateKey: '720_minutes_rolling_12m', title: 'Minutes', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isApplicable: true },
+          { id: 2, templateKey: '720_bids', title: 'Bids', category: 'operations', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isConditional: true, isApplicable: true },
+          { id: 3, templateKey: '720_budget', title: 'Budget', category: 'financial_records', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isApplicable: true },
+        ],
+        isLoading: false,
+        error: null,
+      };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      expect(await screen.findByText(/1 record needs your board to act/)).toBeInTheDocument();
+    });
+
+    it('offers "Doesn\'t apply to us" on a conditional record (F-8)', async () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      fireEvent.click(await screen.findByRole('button', { name: "Doesn't apply to us: Bids" }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    });
   });
 
   // C.2 smoke tests — selection lifecycle

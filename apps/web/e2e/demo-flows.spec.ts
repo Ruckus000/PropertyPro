@@ -80,10 +80,13 @@ test.describe('Flow 1: Board admin compliance dashboard', () => {
     const heading = page.getByRole('heading', { name: /compliance/i });
     await expect(heading).toBeVisible({ timeout: FIRST_RENDER_TIMEOUT });
 
-    // The dashboard must show EITHER:
-    //   (a) A compliance score with checklist items, OR
-    //   (b) An onboarding prompt to generate the checklist
-    // Both are valid states. A blank page or spinner is not.
+    // The dashboard must show ONE OF:
+    //   (a) A compliance score with checklist items,
+    //   (b) An onboarding prompt to generate the checklist, OR
+    //   (c) The first-run countdown ("0 of N required posted"): a fresh
+    //       checklist with nothing posted and nothing overdue shows no score by
+    //       design (empty-states P5, audit F-6). The seeded HOA is in this state.
+    // All are valid states. A blank page or spinner is not.
     //
     // Built with `.or()`, NOT a comma-joined selector string. Playwright's
     // `text=` is a separate selector ENGINE, not CSS — embedding it in a CSS
@@ -93,7 +96,8 @@ test.describe('Flow 1: Board admin compliance dashboard', () => {
     const scoreOrOnboarding = page
       .locator('[data-testid="compliance-score"]')
       .or(page.getByText(/\d+%/))
-      .or(page.getByText(/generate|get started|set up/i));
+      .or(page.getByText(/generate|get started|set up/i))
+      .or(page.getByText(/required posted/));
     // Also on the first-render budget: the score is fetched client-side after
     // the heading paints, so it lands later than the shell it hangs off.
     await expect(scoreOrOnboarding.first()).toBeVisible({

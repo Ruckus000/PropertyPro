@@ -30,13 +30,6 @@ export interface EmptyStateConfig {
 }
 
 export const EMPTY_STATE_CONFIGS = {
-  compliance_empty: {
-    title: "Your compliance tracker is ready",
-    description:
-      "We've mapped the categories Florida requires. Upload documents to start tracking your score.",
-    actionLabel: "Upload First Document",
-    icon: "upload",
-  },
   no_owners_registered: {
     title: "Add your first owner",
     description:
