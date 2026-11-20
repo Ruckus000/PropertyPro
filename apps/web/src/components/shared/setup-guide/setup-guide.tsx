@@ -12,6 +12,10 @@
  * one with a real dependency (`disabledReason`), which stays focusable and
  * says why (aria-disabled).
  *
+ * Announcements after an action ("Declaration posted. 1 of 13 required.")
+ * belong in a live region on the PAGE, not in here: the first upload ends the
+ * empty state and unmounts this guide, which would take the region with it.
+ *
  * Later steps render as rows that open the step, rather than spec §6.3's
  * in-place disclosures: opening a step already expands it in the main column,
  * so a second, inline copy of its slots would duplicate every control.
@@ -70,10 +74,6 @@ export interface SetupGuideProps {
   steps: SetupStep[];
   /** The context column: ContextSection blocks. */
   context?: React.ReactNode;
-  /** Polite live-region text after an action ("Declaration posted. 1 of 13 required."). */
-  announcement?: string;
-  /** Opens this step first instead of the first open one (e.g. "Continue setup"). */
-  initialStepId?: string;
   className?: string;
 }
 
@@ -92,19 +92,19 @@ export function SetupGuide({
   illustration,
   steps,
   context,
-  announcement,
-  initialStepId,
   className,
 }: SetupGuideProps) {
   const titleId = React.useId();
-  const [openId, setOpenId] = React.useState(() => initialStepId ?? firstOpenStepId(steps));
-  const open = steps.find((s) => s.id === openId) ?? steps[0];
+  const [openId, setOpenId] = React.useState(() => firstOpenStepId(steps));
+  // If the open step disappears (its data changed), fall back to the first actionable one.
+  const open = steps.find((s) => s.id === openId) ?? steps.find((s) => s.id === firstOpenStepId(steps));
 
   // Number only the manager's own steps; system steps carry a check instead.
   const numbers = new Map<string, number>();
   for (const s of steps) if (!s.system) numbers.set(s.id, numbers.size + 1);
   const workCount = numbers.size;
-  const doneCount = steps.filter((s) => s.done).length;
+  // Counted like the step counter below: the manager's own steps only.
+  const doneCount = steps.filter((s) => !s.system && s.done).length;
 
   const openStep = (step: SetupStep) => {
     if (!step.disabledReason) setOpenId(step.id);
@@ -183,7 +183,7 @@ export function SetupGuide({
           })}
         </ol>
         <p className="ml-auto text-xs tabular-nums text-content-secondary">
-          {doneCount} of {steps.length} done
+          {doneCount} of {workCount} done
         </p>
       </nav>
 
@@ -219,9 +219,6 @@ export function SetupGuide({
         )}
       </div>
 
-      <p aria-live="polite" className="sr-only">
-        {announcement}
-      </p>
     </section>
   );
 }

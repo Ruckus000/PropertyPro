@@ -81,6 +81,11 @@ describe('SetupGuide', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Upload your governing documents' })).toBeTruthy();
     expect(screen.getByText('Step 1 of 3 · 0 of 5 posted')).toBeTruthy();
     expect(rail().getByRole('button', { name: /Completed:\s*Folders set up/ })).toBeTruthy();
+    expect(rail().getByRole('button', { name: /Money/ }).textContent).toContain('Not started:');
+    // The rail's count and the step counter agree: work steps only.
+    expect(screen.getByText('0 of 3 done')).toBeTruthy();
+    // A system step is never offered as work to do.
+    expect(within(screen.getByRole('list', { name: 'Other steps' })).queryByRole('button', { name: /Folders/ })).toBeNull();
     expect(screen.getByText('governing slots')).toBeTruthy();
   });
 
@@ -139,6 +144,17 @@ describe('SetupSlot', () => {
     expect(onNotApplicable).toHaveBeenCalledOnce();
   });
 
+  it('a slot with no action says nothing about adding', () => {
+    render(
+      <SetupSlotList label="x">
+        <SetupSlot title="Bylaws" tag="Required" description="Draft saved. Post it from the library." next />
+      </SetupSlotList>,
+    );
+    expect(screen.queryByText('Add file')).toBeNull();
+    expect(screen.queryByText(/next up/)).toBeNull();
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+
   it('a filled slot shows its file and offers no add or not-applicable action', () => {
     render(
       <SetupSlotList label="x">
@@ -151,7 +167,7 @@ describe('SetupSlot', () => {
 });
 
 describe('ContinueSetupBar', () => {
-  it('is an h2-labelled region with an outline continue and a named dismiss', () => {
+  it('is an h2-labelled region with a continue button and a named dismiss', () => {
     const onContinue = vi.fn();
     const onDismiss = vi.fn();
     render(

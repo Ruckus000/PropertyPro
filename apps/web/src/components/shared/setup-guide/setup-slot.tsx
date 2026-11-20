@@ -50,7 +50,9 @@ export function SetupSlot({
   icon,
 }: SetupSlotProps) {
   const describedById = React.useId();
-  const meta = [tag, description, next ? 'next up' : undefined].filter(Boolean).join(' · ');
+  const meta = [tag, description, next && !filledWith && onAdd ? 'next up' : undefined].filter(Boolean).join(' · ');
+
+  const actionable = !filledWith && !!onAdd;
 
   const tile = (
     <span
@@ -59,14 +61,14 @@ export function SetupSlot({
         'flex size-10 shrink-0 items-center justify-center rounded-sm',
         filledWith
           ? 'bg-status-success text-content-inverse'
-          : next
+          : actionable && next
             ? 'bg-interactive text-content-inverse'
             : 'bg-surface-muted text-content-secondary',
       )}
     >
       {filledWith ? (
         <Check className="size-5" strokeWidth={3} />
-      ) : next ? (
+      ) : actionable && next ? (
         <Plus className="size-5" strokeWidth={3} />
       ) : (
         (icon ?? <FileText className="size-5" />)
@@ -82,10 +84,10 @@ export function SetupSlot({
           {meta}
         </span>
       )}
-      {filledWith ? (
-        <span className="truncate text-xs text-content-secondary">{filledWith}</span>
-      ) : (
-        <span aria-hidden="true" className="text-xs font-medium text-interactive">
+      {filledWith && <span className="truncate text-xs text-content-secondary">{filledWith}</span>}
+      {/* coral-700 link ink, not the theme primary: AA on the hover surface (spec §6.2). */}
+      {actionable && (
+        <span aria-hidden="true" className="text-xs font-medium text-content-link">
           {addLabel}
         </span>
       )}
@@ -94,7 +96,7 @@ export function SetupSlot({
 
   const box = cn(
     'flex w-full items-start gap-3 rounded-md border bg-surface-card p-4 text-left',
-    filledWith
+    !actionable
       ? 'border-edge'
       : next
         ? 'border-interactive'
@@ -103,7 +105,7 @@ export function SetupSlot({
 
   return (
     <li className="flex flex-col gap-2">
-      {filledWith || !onAdd ? (
+      {!actionable ? (
         <div className={box}>
           {tile}
           {text}
