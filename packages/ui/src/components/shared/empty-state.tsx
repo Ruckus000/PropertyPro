@@ -188,14 +188,16 @@ function SceneEmptyState({
   // text, is SetupGuide's (apps/web), not this.
   return (
     <section
+      {...rest}
       aria-labelledby={titleId}
       className={cn("cq overflow-hidden rounded-md border border-edge bg-surface-card", className)}
-      {...rest}
     >
       <div className={cn(aside && "cq-md:grid cq-md:grid-cols-12")}>
         <div className={cn("flex min-w-0 flex-col", aside && "cq-md:col-span-8")}>
           {illustration && (
-            <div className="flex items-end justify-center border-b border-edge bg-[var(--teal-50)] px-6 pt-6">
+            // Below md the art drops under the text at section size, so the
+            // action stays in the first viewport (spec §3).
+            <div className="order-last flex items-end justify-center border-t border-edge bg-[var(--teal-50)] px-6 pt-6 max-md:[&>svg]:w-40 md:order-first md:border-b md:border-t-0">
               {illustration}
             </div>
           )}
@@ -204,7 +206,7 @@ function SceneEmptyState({
             <h2
               id={titleId}
               className={cn(
-                "text-2xl font-semibold leading-tight tracking-tight text-content",
+                "text-2xl font-semibold leading-tight tracking-[-0.01em] text-content",
                 eyebrow && "mt-1",
               )}
             >

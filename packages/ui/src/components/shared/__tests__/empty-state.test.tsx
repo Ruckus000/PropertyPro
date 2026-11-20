@@ -52,9 +52,17 @@ describe('EmptyState scene sizes (empty-state pattern)', () => {
     expect(screen.getByRole('region', { name: 'Help' })).toBeTruthy();
   });
 
-  it('hero without an aside does not split into columns', () => {
-    const { container } = render(<EmptyState size="hero" title="T" />);
-    expect(container.firstElementChild?.className).not.toContain('grid-cols-12');
+  it('splits into scene and context columns only when there is an aside', () => {
+    const columns = (c: HTMLElement) => c.querySelector('section > div')?.className ?? '';
+    expect(columns(render(<EmptyState size="hero" title="T" />).container)).not.toContain('cq-md:grid-cols-12');
+    expect(columns(render(<EmptyState size="hero" title="T" aside={<p>ctx</p>} />).container)).toContain(
+      'cq-md:grid-cols-12',
+    );
+  });
+
+  it('is always named by its own h2, even if a caller passes aria-labelledby', () => {
+    render(<EmptyState size="hero" title="Own title" aria-labelledby="elsewhere" />);
+    expect(screen.getByRole('region', { name: 'Own title' })).toBeTruthy();
   });
 
   it('section: an h3, no region', () => {

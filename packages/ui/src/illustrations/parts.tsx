@@ -62,7 +62,7 @@ export function Cloud(props: PartProps) {
 /** Palm, about 46 wide × 72 tall. Origin at the foot of the trunk. */
 export function Palm(props: PartProps) {
   return (
-    <g transform={place(props)} fill="none" strokeWidth={6} {...ROUND}>
+    <g transform={place(props)} fill="none" strokeWidth={3} {...ROUND}>
       <path d="M0 0c-3-28-8-48-18-64" stroke={INK.amberInk} />
       <path
         d="M-18-64c14-7 30-3 36 7M-18-64c0-14-9-24-23-26M-18-64c-14-6-28-1-33 9"
@@ -150,7 +150,7 @@ export function Drawer(props: PartProps) {
       <rect x={0} y={-90} width={120} height={90} rx={10} fill={INK.card} stroke={INK.line2} />
       <rect x={10} y={-76} width={100} height={30} rx={6} fill={INK.muted} stroke={INK.line2} />
       <rect x={10} y={-38} width={100} height={30} rx={6} fill={INK.card} stroke={INK.line2} />
-      <path d="M50-61h20M50-23h20" stroke={INK.line2} strokeWidth={4} />
+      <path d="M50-61h20M50-23h20" stroke={INK.line2} strokeWidth={3} />
     </g>
   );
 }
@@ -160,7 +160,7 @@ export function Document(props: PartProps) {
   return (
     <g transform={place(props)} {...ROUND}>
       <rect width={52} height={66} rx={5} fill={INK.coral} />
-      <path d="M11 18h30M11 30h22M11 42h28" stroke={INK.card} strokeWidth={3.5} fill="none" />
+      <path d="M11 18h30M11 30h22M11 42h28" stroke={INK.card} strokeWidth={3} fill="none" />
     </g>
   );
 }
@@ -171,7 +171,7 @@ export function Clipboard(props: PartProps) {
     <g transform={place(props)} {...ROUND}>
       <rect y={8} width={64} height={80} rx={7} fill={INK.card} stroke={INK.tealInk} strokeWidth={3} />
       <rect x={20} width={24} height={14} rx={4} fill={INK.tealInk} />
-      <path d="M14 34h36M14 50h28M14 66h32" stroke={INK.line2} strokeWidth={4} fill="none" />
+      <path d="M14 34h36M14 50h28M14 66h32" stroke={INK.line2} strokeWidth={3} fill="none" />
     </g>
   );
 }
@@ -193,7 +193,7 @@ export function PlusMark(props: PartProps) {
   return (
     <g transform={place(props)}>
       <circle r={14} fill={INK.coral} stroke={INK.card} strokeWidth={3} />
-      <path d="M0-7v14M-7 0h14" stroke={INK.card} strokeWidth={3.5} strokeLinecap="round" />
+      <path d="M0-7v14M-7 0h14" stroke={INK.card} strokeWidth={3} strokeLinecap="round" />
     </g>
   );
 }
@@ -203,7 +203,7 @@ export function DoneMark(props: PartProps) {
   return (
     <g transform={place(props)}>
       <circle r={14} fill={INK.green} />
-      <path d="M-7 0l5 5 9-10" stroke={INK.card} strokeWidth={3.5} fill="none" {...ROUND} />
+      <path d="M-7 0l5 5 9-10" stroke={INK.card} strokeWidth={3} fill="none" {...ROUND} />
     </g>
   );
 }

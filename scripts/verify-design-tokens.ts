@@ -259,10 +259,10 @@ if (process.argv.includes('--selftest')) {
 
 // ── Scan ──
 const current = new Map<string, Counts>();
-let scanned = 0;
+const scannedFiles = new Set<string>();
 for (const root of ROOTS) {
   for (const file of walk(root.dir)) {
-    scanned += 1;
+    scannedFiles.add(file);
     const counts = scanContent(readFileSync(file, 'utf8'), root.only);
     // Roots nest (illustrations sits inside packages/ui/src), so a file's
     // counts from each root merge rather than the last root's overwriting them.
@@ -270,6 +270,7 @@ for (const root of ROOTS) {
   }
 }
 // A scan that read nothing must not pass, and must not write an empty baseline.
+const scanned = scannedFiles.size;
 if (scanned === 0) {
   console.error('guard:design-tokens could not check — the scan roots hold no .ts/.tsx/.css files.');
   process.exit(2);
