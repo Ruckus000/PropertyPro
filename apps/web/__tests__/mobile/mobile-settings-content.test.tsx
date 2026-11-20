@@ -111,6 +111,33 @@ describe('MobileSettingsContent', () => {
     });
   });
 
+  it('a name-only edit resends the stored phone, never null', () => {
+    // The page pre-fills the phone from the users row; a save that sent null
+    // would clear the number and its verification (updateUserProfile).
+    render(<MobileSettingsContent {...baseProps} userPhone="+13055550100" />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Jane Q. Doe' } });
+    fireEvent.click(screen.getByText('Save Changes'));
+
+    const [payload] = mutateMock.mock.calls[0]!;
+    expect(payload.profile).toEqual({
+      communityId: 42,
+      fullName: 'Jane Q. Doe',
+      phone: '+13055550100',
+    });
+  });
+
+  it('offers the SMS toggle only for a verified phone', () => {
+    const { unmount } = render(<MobileSettingsContent {...baseProps} phoneVerified />);
+    expect(screen.getByText('SMS Notifications', { selector: 'span' })).toBeDefined();
+    expect(screen.queryByText('Add a phone number above to enable SMS notifications')).toBeNull();
+    unmount();
+
+    render(<MobileSettingsContent {...baseProps} phoneVerified={false} />);
+    expect(
+      screen.getByText('Add a phone number above to enable SMS notifications'),
+    ).toBeDefined();
+  });
+
   it('disables the button and shows "Saving..." while pending', () => {
     mutationState = { isPending: true };
     render(<MobileSettingsContent {...baseProps} />);

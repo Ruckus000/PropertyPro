@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
-import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
+import { validatePassword } from '@propertypro/shared/password-policy';
 import { noticeConsentText } from '@propertypro/shared';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { useAcceptInvitation } from '@/hooks/use-invitations';
@@ -37,15 +37,6 @@ export function ExistingAccountSignIn({ communityId }: { communityId: number }) 
       </Link>
     </div>
   );
-}
-
-function validatePassword(pw: string): string | null {
-  for (const rule of PASSWORD_POLICY.rules) {
-    if (!rule.test(pw)) {
-      return rule.message;
-    }
-  }
-  return null;
 }
 
 export function SetPasswordForm({ token, communityId, noticeConsentEmail = null }: Props) {

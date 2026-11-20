@@ -39,10 +39,13 @@ export interface UserProfileSnapshot {
 }
 
 /**
- * Read the user's current name/phone state. Used ONLY to record the "before"
- * values of a change an operator makes during a support session (see
- * lib/support/support-audit.ts) — outside a support session no route calls it,
- * so the ordinary self-service paths gain no extra query.
+ * Read the user's current name/phone state from the `users` row — the only
+ * place a phone number and its verification live (the Supabase auth user's
+ * `phone` is always empty). Callers:
+ *   - the mobile Settings page, to pre-fill the form it resends on save;
+ *   - the profile PATCH and phone-verify confirm routes, to record the
+ *     "before" values of a change an operator makes during a support session
+ *     (see lib/support/support-audit.ts).
  *
  * Same authorization contract as `updateUserProfile`: the caller passes the
  * actor's own id (the impersonated user's, under a support session).

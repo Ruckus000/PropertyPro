@@ -3,30 +3,14 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { PASSWORD_POLICY } from '@propertypro/shared/password-policy';
+// The zod-free subpath: `resetPasswordSchema` (zod, 96.7 KiB) once put this
+// route over its bundle budget. Feedback only — `updatePassword` in
+// `lib/auth/password-reset.ts` validates independently.
+import { validatePassword } from '@propertypro/shared/password-policy';
 import { updatePasswordAction } from '@/lib/auth/actions';
 import { createBrowserClient } from '@propertypro/db/supabase/client';
 import { PasswordStrengthIndicator } from '@/components/auth/password-strength-indicator';
 import { Skeleton } from '@/components/ui/skeleton';
-
-/**
- * Same policy, same messages, same shape as `set-password-form.tsx` — which has
- * always validated this way. This used to run `resetPasswordSchema`, and that
- * one import pulled zod (96.7 KiB) into the route, putting it over its bundle
- * budget. `PASSWORD_POLICY.rules` are plain predicates, so the check is
- * identical without the library.
- *
- * This is FEEDBACK, not enforcement: `updatePassword` in
- * `lib/auth/password-reset.ts` is the authority and validates independently.
- */
-function validatePassword(pw: string): string | null {
-  for (const rule of PASSWORD_POLICY.rules) {
-    if (!rule.test(pw)) {
-      return rule.message;
-    }
-  }
-  return null;
-}
 
 export function ResetPasswordForm() {
   const router = useRouter();

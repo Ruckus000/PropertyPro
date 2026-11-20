@@ -9,6 +9,7 @@ import { headers } from 'next/headers';
 import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getNotificationPreferencesForUser } from '@/lib/services/notification-preferences-service';
+import { getUserProfileSnapshot } from '@/lib/services/user-profile-service';
 import {
   getDefaultPreferences,
   type CalendarReminderPreset,
@@ -25,19 +26,30 @@ export default async function MobileSettingsPage() {
   }
 
   let userId: string;
-  let userName: string | null = null;
+  let metadataName: string | null = null;
   let userEmail = '';
-  let userPhone: string | null = null;
 
   try {
     const user = await requireAuthenticatedUser();
     userId = user.id;
-    userName = (user.user_metadata?.full_name as string) ?? null;
+    metadataName = (user.user_metadata?.full_name as string | undefined) ?? null;
     userEmail = user.email ?? '';
-    userPhone = (user.phone as string) ?? null;
   } catch {
     redirect('/auth/login');
   }
+
+  // Name and phone come from the `users` row, never the auth user: the auth
+  // user's `phone` is always empty (we store phones only in `users`) and its
+  // `full_name` metadata goes stale when a manager corrects a name. The form
+  // resends both on every save, so reading them from auth turned any save
+  // into `phone: null` — wiping a verified number — and could put the stale
+  // name back. The metadata name stays only as a fallback, as on the desktop
+  // account page. Deliberately not caught: rendering the form without the
+  // stored phone is exactly what wiped it.
+  const profile = await getUserProfileSnapshot(userId!);
+  const userName = profile.fullName ?? metadataName;
+  const userPhone = profile.phone;
+  const phoneVerified = profile.phoneVerifiedAt != null;
 
   let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
@@ -97,7 +109,6 @@ export default async function MobileSettingsPage() {
     // Fall through with defaults — the page will still render
   }
 
-  const phoneVerified = Boolean(userPhone && userPhone.length > 0);
   const canReadMeetings = checkPermissionV2(
     membership.role,
     membership.communityType,

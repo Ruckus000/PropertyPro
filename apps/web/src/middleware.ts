@@ -1291,11 +1291,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // records the change in support_access_log before making it).
     //
     // KNOWN GAP: gated on `isApi`, so it does not cover Server Actions, which
-    // POST to the *page* path. Harmless today — the only two `'use server'`
-    // modules are `lib/auth/actions.ts` and `lib/actions/checkout.ts`, both
-    // pre-tenant signup flows unreachable inside an impersonated session — but
-    // a new server action would be silently writable under a `read_only`
-    // session. Extend this check before adding one.
+    // POST to the *page* path. Each `'use server'` module must therefore refuse
+    // support sessions itself. The two today: `lib/auth/actions.ts` (password
+    // reset — reachable in-app from the mobile Security page, so both actions
+    // call `refuseUnderSupportSession`) and `lib/actions/checkout.ts` (a
+    // pre-tenant signup flow, unreachable inside an impersonated session). A
+    // new server action is silently writable under a `read_only` session
+    // unless it does the same.
     if (
       supportSession.scope === 'read_only' &&
       isApi &&

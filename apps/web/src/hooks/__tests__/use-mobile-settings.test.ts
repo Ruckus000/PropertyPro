@@ -105,6 +105,29 @@ describe('useUpdateMobileSettings', () => {
     });
   });
 
+  it('sends the phone exactly as given — the stored number unchanged, null only to clear', async () => {
+    // updateUserProfile keeps phoneVerifiedAt only when the number is
+    // byte-identical, so the hook must not reformat or drop it.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ data: {} }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUpdateMobileSettings(), { wrapper });
+    result.current.mutate({ ...input, profile: { ...input.profile, phone: '+13055550100' } });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(
+      JSON.parse(findCall(fetchMock, '/api/v1/account/profile')?.[1].body as string).phone,
+    ).toBe('+13055550100');
+
+    fetchMock.mockClear();
+    result.current.mutate({ ...input, profile: { ...input.profile, phone: null } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      JSON.parse(findCall(fetchMock, '/api/v1/account/profile')?.[1].body as string),
+    ).toHaveProperty('phone', null);
+  });
+
   it('short-circuits: a failed profile PATCH skips the preferences PATCH and throws its literal', async () => {
     const fetchMock = vi.fn().mockImplementation((url: string) => {
       if (url === '/api/v1/account/profile') {
