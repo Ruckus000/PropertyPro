@@ -81,6 +81,39 @@ describe('StockPhotoPicker', () => {
     expect((screen.getByRole('button', { name: 'Palm walk' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('shows the selected photo with a check and text, not by ring alone', async () => {
+    const user = userEvent.setup();
+    setup({ replacing: 'gulf-sunset' });
+    const seaOats = screen.getByRole('button', { name: 'Sea oats' });
+    expect(within(seaOats).queryByText('Selected')).toBeNull();
+    await user.click(seaOats);
+    const badge = within(seaOats).getByText('Selected').closest('[data-badge]');
+    expect(badge?.querySelector('svg')).toBeTruthy();
+    // The photo being replaced says In use, not Selected, while it is the choice.
+    expect(within(screen.getByRole('button', { name: 'Gulf sunset' })).queryByText('Selected')).toBeNull();
+  });
+
+  it('says why a photo already in the welcome cannot be chosen', () => {
+    setup({ replacing: 'gulf-sunset', inUse: ['gulf-sunset', 'palm-walk'] });
+    const taken = screen.getByRole('button', { name: 'Palm walk' });
+    const reason = within(taken).getByText('Already added');
+    expect(taken.getAttribute('aria-describedby')).toBe(reason.closest('[data-badge]')?.id);
+  });
+
+  it('puts every badge over the photo, so a name never wraps beside it at phone width', async () => {
+    const user = userEvent.setup();
+    setup({ replacing: 'gulf-sunset', inUse: ['gulf-sunset', 'palm-walk'] });
+    await user.click(screen.getByRole('button', { name: 'Sea oats' }));
+    for (const [name, text] of [
+      ['Gulf sunset', 'In use'],
+      ['Sea oats', 'Selected'],
+      ['Palm walk', 'Already added'],
+    ] as const) {
+      const badge = within(screen.getByRole('button', { name })).getByText(text).closest('[data-badge]');
+      expect({ name, overlay: badge?.classList.contains('absolute') }).toEqual({ name, overlay: true });
+    }
+  });
+
   it('Escape and Cancel close without choosing', async () => {
     const user = userEvent.setup();
     const { onOpenChange, onChoose } = setup();

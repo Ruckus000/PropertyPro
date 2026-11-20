@@ -6,7 +6,7 @@
  * the choice differs from the photo being replaced. A photo already in the
  * welcome section elsewhere is disabled, so a photo is never added twice.
  */
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Check } from 'lucide-react';
 import {
   PICKABLE_STOCK_PHOTO_IDS,
@@ -50,9 +50,19 @@ export function StockPhotoPicker({
 }: StockPhotoPickerProps) {
   const baseId = useId();
   const [selected, setSelected] = useState<StockPhotoId | null>(replacing);
-  useEffect(() => {
-    if (open) setSelected(replacing);
-  }, [open, replacing]);
+  // What the tiles show. Taken while the dialog is open and kept while it closes:
+  // the parent applies the choice and drops `replacing` in the same click, and
+  // the dialog's content stays on the page through its fade-out, so reading the
+  // props then would repaint the tiles (the photo in use turning "Already added").
+  const [shown, setShown] = useState({ open, replacing, inUse });
+  if (open && (!shown.open || shown.replacing !== replacing || shown.inUse.join() !== inUse.join())) {
+    // Seeded here, during render, rather than in an effect, so a reopened picker
+    // never paints one frame with the choice it closed on.
+    if (!shown.open || shown.replacing !== replacing) setSelected(replacing);
+    setShown({ open, replacing, inUse });
+  } else if (!open && shown.open) {
+    setShown({ ...shown, open: false });
+  }
 
   const look = lookId ? getLook(lookId) : null;
   const suggested = (look?.suggestedPhotos ?? []).filter((id) =>
@@ -62,14 +72,25 @@ export function StockPhotoPicker({
 
   function tile(id: StockPhotoId) {
     const isSelected = selected === id;
-    const isCurrent = replacing === id;
-    const taken = !isCurrent && inUse.includes(id);
+    const isCurrent = shown.replacing === id;
+    const taken = !isCurrent && shown.inUse.includes(id);
+    const badgeId = `${baseId}-${id}-badge`;
+    // Icon + text + colour, never the ring alone. Over the photo's corner, so the
+    // name below never has to share its line with it at phone width.
+    const badge = isCurrent
+      ? { text: 'In use', className: 'bg-surface-card text-content' }
+      : taken
+        ? { text: 'Already added', className: 'bg-surface-card text-content-secondary' }
+        : isSelected
+          ? { text: 'Selected', className: 'bg-interactive text-content-inverse' }
+          : null;
     return (
       <li key={id}>
         <button
           type="button"
           aria-label={STOCK_PHOTOS[id].name}
-          aria-describedby={isCurrent ? `${baseId}-${id}-in-use` : undefined}
+          // aria-pressed already says "selected"; the other two say why.
+          aria-describedby={isCurrent || taken ? badgeId : undefined}
           aria-pressed={isSelected}
           disabled={taken}
           onClick={() => setSelected(id)}
@@ -87,15 +108,20 @@ export function StockPhotoPicker({
             loading="lazy"
             className="aspect-[3/2] w-full object-cover"
           />
-          <span className="flex items-center justify-between gap-2 px-2 py-1 text-sm text-content">
-            <span>{STOCK_PHOTOS[id].name}</span>
-            {isCurrent ? (
-              <span id={`${baseId}-${id}-in-use`} className="inline-flex items-center gap-1 text-xs text-content-secondary">
-                <Check className="h-3 w-3" aria-hidden="true" />
-                In use
-              </span>
-            ) : null}
-          </span>
+          {badge ? (
+            <span
+              id={badgeId}
+              data-badge
+              className={cn(
+                'absolute right-1 top-1 inline-flex items-center gap-1 rounded-full border border-edge px-2 py-0.5 text-xs font-medium',
+                badge.className,
+              )}
+            >
+              <Check className="h-3 w-3" aria-hidden="true" />
+              {badge.text}
+            </span>
+          ) : null}
+          <span className="block px-2 py-1 text-sm text-content">{STOCK_PHOTOS[id].name}</span>
         </button>
       </li>
     );
@@ -136,7 +162,7 @@ export function StockPhotoPicker({
             Cancel
           </Button>
           <Button
-            disabled={selected === null || selected === replacing}
+            disabled={selected === null || selected === shown.replacing}
             onClick={() => {
               if (selected === null) return;
               onChoose(selected);
