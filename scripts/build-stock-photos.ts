@@ -8,6 +8,9 @@
  *
  *   pnpm exec tsx scripts/build-stock-photos.ts [id ...]
  *
+ * Every file is WebP at quality 72, except the 2400 file of the two heaviest
+ * look defaults (`ENCODING_2400`).
+ *
  * Exit codes: 0 built, 1 a photo could not be processed as asked, 2 the build
  * could not run (a download failed, an unknown id, or a source narrower than
  * the largest output, which would be an upscale).
@@ -27,6 +30,32 @@ import { isMainModule } from './lib/is-main-module';
 
 const WIDTHS: readonly StockPhotoWidth[] = [2400, 1200, 480];
 const QUALITY = 72;
+
+export interface StockPhotoEncoding {
+  quality: number;
+  /** A Gaussian blur's sigma, applied after the resize and before encoding. */
+  soften?: number;
+  effort?: number;
+  smartSubsample?: boolean;
+}
+
+/**
+ * The 2400 file of the two heaviest look defaults, the image their look's page
+ * paints first. Dense foliage left them at ~989 KB (palm-walk) and ~844 KB
+ * (oak-avenue) at quality 72, and quality alone cannot fix that (palm-walk is
+ * still ~688 KB at 40), so they also take a light soften before encoding: ~490
+ * KiB and ~456 KiB, the same framing and mean colour, no banding. The 1200 and
+ * 480 files are already light and keep the default.
+ */
+const ENCODING_2400: Partial<Record<StockPhotoId, StockPhotoEncoding>> = {
+  'palm-walk': { quality: 55, soften: 0.8, effort: 6, smartSubsample: true },
+  'oak-avenue': { quality: 60, soften: 0.8, effort: 6, smartSubsample: true },
+};
+
+/** How a stock photo file is encoded. */
+export function stockPhotoEncoding(id: StockPhotoId, width: StockPhotoWidth): StockPhotoEncoding {
+  return (width === 2400 ? ENCODING_2400[id] : undefined) ?? { quality: QUALITY };
+}
 
 /** Where the crop is anchored when the default (`attention`) loses the subject. */
 type CropPosition = 'attention' | 'entropy' | 'top' | 'bottom' | 'centre';
@@ -67,10 +96,12 @@ export async function buildStockPhotos(
       throw new BuildCouldNotRun(`${id}: source is ${meta.width ?? '?'}px wide, under 2400`);
     }
     for (const width of WIDTHS) {
-      const out = await sharp(original)
-        .resize(width, (width * 2) / 3, { fit: 'cover', position: CROP_POSITION[id] ?? 'attention' })
-        .webp({ quality: QUALITY })
-        .toBuffer();
+      const { soften, ...webp } = stockPhotoEncoding(id, width);
+      const resized = sharp(original).resize(width, (width * 2) / 3, {
+        fit: 'cover',
+        position: CROP_POSITION[id] ?? 'attention',
+      });
+      const out = await (soften ? resized.blur(soften) : resized).webp(webp).toBuffer();
       // stockPhotoSrc is `/site-looks/<file>`; only the file name is ours to join.
       await writeFile(join(outDir, stockPhotoSrc(id, width).replace('/site-looks/', '')), out);
     }
