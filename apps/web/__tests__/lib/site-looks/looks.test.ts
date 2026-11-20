@@ -631,10 +631,12 @@ describe('planLookSwitch', () => {
       ]);
     });
 
-    it("removing the photo from a hero with its look's default words is an edit, kept on the way back", () => {
+    it("removing the photo from a hero with its look's default words is an edit, kept empty on the way back to the live look", () => {
       // Live Bayfront as published; under Palm Grove the manager removes the
-      // photo from Palm Grove's untouched hero. A switch never takes a photo away,
-      // and never puts one back over a hero the manager emptied.
+      // photo from Palm Grove's untouched hero. The way back to the live look
+      // keeps the hero as edited: it never puts a photo over a hero the manager
+      // emptied. (A switch to a different look would give it that look's photo:
+      // see the next test.)
       const live = livePage(bayfront.sections);
       const noPhoto = withoutPhotos(sectionOf(palmGrove.sections, 'hero').content);
 
@@ -647,7 +649,8 @@ describe('planLookSwitch', () => {
       });
     });
 
-    it("a hero with its look's default words and no photo is edited, and takes the incoming look's photo", () => {
+    it("a hero with its look's default words and no photo is edited, and a switch to a different look gives it that look's photo", () => {
+      // The forward fill applies to every kept hero with no photo, emptied or never given one.
       const noPhoto = withoutPhotos(sectionOf(bayfront.sections, 'hero').content);
       expect(heroAfter(noPhoto, heritage)).toEqual({ id: 100, blockType: 'hero', content: { ...noPhoto, photos: heroPhotosOf(heritage) } });
     });
@@ -671,6 +674,21 @@ describe('planLookSwitch', () => {
       ).toEqual(sectionOf(heritage.sections, 'hero'));
     });
 
+    it("Plain & Simple's hero with its default words and one of our photos picked is untouched", () => {
+      // Adding one of our photos is not an edit (spec §5): only the words, the
+      // call to action and uploads make a hero edited.
+      const current = siteFrom(plainSimple.sections);
+      const heroAt = types(current).indexOf('hero');
+      const hero = current[heroAt]!;
+      current[heroAt] = {
+        ...hero,
+        content: { ...(hero.content as Record<string, unknown>), photos: [{ stock: 'sea-oats', alt: STOCK_PHOTO_ALT['sea-oats'] }] },
+      };
+      expect(planLookSwitch({ current, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: bayfront })).toEqual(
+        asPlanned(bayfront.sections),
+      );
+    });
+
     it('returning to the live look restores a live strip of stock photos', () => {
       const strip = (['sea-oats', 'sailboats'] as const).map((stock) => ({ stock, alt: STOCK_PHOTO_ALT[stock] }));
       const live = livePage([{ blockType: 'hero', content: { ...EDITED_HERO, photos: strip } }, ...bayfront.sections.slice(1)]);
@@ -682,7 +700,7 @@ describe('planLookSwitch', () => {
       expect(staged(live, back.sections)).toMatchObject({ drafts: [], tombstones: [] });
     });
 
-    it('a hero edited to show no photo stays that way on the way back: a switch never takes a photo away', () => {
+    it('a hero edited to show no photo stays that way on the way back to the live look', () => {
       // Live Bayfront as published, the sunset on its hero; under Palm Grove the
       // manager rewrites the hero with no photo.
       const live = livePage(bayfront.sections);

@@ -693,6 +693,11 @@ function defaultsByType(sets: readonly (readonly LookSection[])[]): Map<string, 
       if (parsed === null) continue;
       const identities = byType.get(lookSection.blockType) ?? new Set<string>();
       identities.add(untouchedIdentity(lookSection.blockType, parsed.data));
+      // A default with no photo (Plain & Simple) also accepts one of our photos:
+      // adding a stock photo is not an edit. Not the other way round, so emptying
+      // a photo look's hero still is one.
+      const noPhoto = photoLessHero(lookSection.blockType, parsed.data);
+      if (noPhoto !== null) identities.add(heroIdentity(noPhoto, 'stock'));
       byType.set(lookSection.blockType, identities);
     }
   }
@@ -711,16 +716,30 @@ function isUntouched(siteSection: SiteSection, defaults: ReadonlyMap<string, Rea
  * default. A hero's photos are compared by kind: one or more stock photos are
  * all `'stock'`, and no photo is `'none'`. Stock photos are ours, so picking
  * another one, or a hero still showing a look's earlier default, does not make
- * it edited. Removing every photo does: a switch never takes a photo away, so it
- * must not put one back over a hero the manager emptied. A hero with an upload
- * or the legacy single image keeps its photos as they are, so it never matches a
- * default.
+ * it edited (and `defaultsByType` lets a photo-less default accept `'stock'`
+ * too). Removing every photo from a default that has one does make it edited,
+ * so it is kept with its words; on a switch to a different look it then takes
+ * that look's photo, like any kept hero with no photo, and only on the way back
+ * to the live look does it stay empty. A hero with an upload or the legacy
+ * single image keeps its photos as they are, so it never matches a default.
  */
 function untouchedIdentity(blockType: string, data: unknown): string {
   const photos = blockType === 'hero' ? visibleHeroPhotos(data) : null;
   if (photos === null || !photos.every((photo) => 'stock' in photo)) return stableStringify(data);
+  return heroIdentity(data, photos.length > 0 ? 'stock' : 'none');
+}
+
+/** A hero's parsed content with its photos replaced by their kind. */
+function heroIdentity(data: unknown, photos: 'stock' | 'none'): string {
   const { photos: _photos, ...rest } = data as Record<string, unknown>;
-  return stableStringify({ ...rest, photos: photos.length > 0 ? 'stock' : 'none' });
+  return stableStringify({ ...rest, photos });
+}
+
+/** A default's parsed content when it is a visible hero with no photo, else null. */
+function photoLessHero(blockType: string, data: unknown): unknown {
+  if (blockType !== 'hero') return null;
+  const photos = visibleHeroPhotos(data);
+  return photos !== null && photos.length === 0 ? data : null;
 }
 
 function isHidden(data: unknown): boolean {
@@ -750,12 +769,17 @@ function countByType(sections: readonly SiteSection[]): Map<string, number> {
 // alone, stock photo included.
 //
 // "Untouched" compares stock photos by kind (`untouchedIdentity`), so a hero
-// that differs from a default only in which stock photo it shows takes the
-// incoming look's whole hero, while one emptied of a default's photo is an edit
-// (and, having no photo, takes the incoming look's, keeping its words). Returning to the live look puts the live row's
-// photos back over a hero showing only stock photos, when the live row shows no
-// upload, so a switch's photo never outlives the switch. A hero with no photo at
-// all is left alone there: a switch never takes a photo away, so none is an edit.
+// that differs from a default only in which stock photo it shows, or that added
+// one of our photos to Plain & Simple's photo-less default, takes the incoming
+// look's whole hero. One emptied of a default's photo is an edit, kept with its
+// words; on a switch to a different look it has no photo, so it takes the
+// incoming look's, like any kept hero with no photo.
+//
+// Only the way BACK to the live look keeps an emptied hero empty. There the live
+// row's photos come back over a hero showing only stock photos, when the live
+// row shows no upload, so a switch's photo never outlives the switch; a hero
+// with no photo at all is left alone, because a switch back never takes a photo
+// away and never puts one over a hero the manager emptied.
 
 /**
  * A visible hero's photos, or null for content that does not parse. The hero
