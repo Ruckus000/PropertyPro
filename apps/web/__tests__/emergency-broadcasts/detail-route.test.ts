@@ -13,11 +13,13 @@ const {
   requireCommunityMembershipMock,
   requirePermissionMock,
   getBroadcastWithReportMock,
+  getBroadcastForRecipientMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
   requirePermissionMock: vi.fn(),
   getBroadcastWithReportMock: vi.fn(),
+  getBroadcastForRecipientMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -34,6 +36,7 @@ vi.mock('@/lib/db/access-control', () => ({
 
 vi.mock('@/lib/services/emergency-broadcast-service', () => ({
   getBroadcastWithReport: getBroadcastWithReportMock,
+  getBroadcastForRecipient: getBroadcastForRecipientMock,
 }));
 
 import { GET } from '../../src/app/api/v1/emergency-broadcasts/[id]/route';
@@ -177,6 +180,56 @@ describe('GET /api/v1/emergency-broadcasts/[id]', () => {
 
     expect(res.status).toBe(400);
     expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+  });
+
+  describe('a non-manager (owner, incl. a board seat)', () => {
+    const OWNER_MEMBERSHIP = {
+      userId: 'user-owner-1',
+      communityId: 42,
+      role: 'resident' as const,
+      isAdmin: false,
+      isUnitOwner: true,
+      designation: 'board_member' as const,
+      communityType: 'condo_718' as const,
+    };
+    const RESIDENT_COPY = {
+      id: 5,
+      title: 'Storm alert',
+      body: 'Shelter in place',
+      severity: 'emergency',
+      completedAt: '2026-01-01T00:05:00.000Z',
+    };
+
+    beforeEach(() => {
+      requireAuthenticatedUserIdMock.mockResolvedValue('user-owner-1');
+      requireCommunityMembershipMock.mockResolvedValue(OWNER_MEMBERSHIP);
+      getBroadcastForRecipientMock.mockResolvedValue(RESIDENT_COPY);
+    });
+
+    it('gets only their own copy of the message, never the delivery report', async () => {
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/emergency-broadcasts/5?communityId=42',
+      );
+      const res = await GET(req, routeCtx('5'));
+      const json = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(json).toEqual({ data: RESIDENT_COPY });
+      expect(json.data).not.toHaveProperty('recipients');
+      expect(getBroadcastForRecipientMock).toHaveBeenCalledWith(5, 42, 'user-owner-1');
+      expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+    });
+
+    it('gets 404 for a broadcast not sent to them (draft, canceled, or not a recipient)', async () => {
+      getBroadcastForRecipientMock.mockResolvedValueOnce(null);
+      const req = new NextRequest(
+        'http://localhost:3000/api/v1/emergency-broadcasts/5?communityId=42',
+      );
+      const res = await GET(req, routeCtx('5'));
+
+      expect(res.status).toBe(404);
+      expect(getBroadcastWithReportMock).not.toHaveBeenCalled();
+    });
   });
 
   it('returns 400 for zero params.id', async () => {

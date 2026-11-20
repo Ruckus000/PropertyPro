@@ -91,6 +91,30 @@ describe('GET /api/v1/emergency-broadcasts', () => {
     });
   });
 
+  it('limits a non-manager (owner, incl. a board seat) to broadcasts sent to them', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce({
+      ...MEMBERSHIP,
+      role: 'resident',
+      isAdmin: false,
+      isUnitOwner: true,
+      designation: 'board_member',
+    });
+
+    const res = await GET(
+      new NextRequest(
+        `http://localhost:3000/api/v1/emergency-broadcasts?communityId=${COMMUNITY_ID}`,
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(paginateEmergencyBroadcastsMock).toHaveBeenCalledWith({
+      communityId: COMMUNITY_ID,
+      cursor: undefined,
+      pageSize: undefined,
+      recipientUserId: USER_ID,
+    });
+  });
+
   it('returns 401 when unauthenticated', async () => {
     requireAuthenticatedUserIdMock.mockRejectedValueOnce(new UnauthorizedError());
 

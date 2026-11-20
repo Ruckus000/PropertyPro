@@ -51,6 +51,17 @@ interface BroadcastReport {
   }>;
 }
 
+/** What a non-manager gets: the alert they received, nothing about delivery. */
+interface ResidentBroadcastView {
+  id: number;
+  title: string;
+  body: string;
+  severity: string;
+  completedAt: string;
+}
+
+export type BroadcastView = BroadcastReport | ResidentBroadcastView;
+
 interface CreateBroadcastParams {
   communityId: number;
   title: string;
@@ -110,16 +121,18 @@ export function useEmergencyBroadcast(communityId: number, broadcastId: number) 
   return useQuery({
     queryKey: KEYS.detail(communityId, broadcastId),
     queryFn: () =>
-      requestJson<BroadcastReport>(
+      requestJson<BroadcastView>(
         `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
       ),
     enabled: communityId > 0 && broadcastId > 0,
     refetchInterval: (query) => {
-      // Poll every 2s while broadcast is in-progress (not completed/canceled)
       const data = query.state.data;
-      if (data && !data.completedAt && !data.canceledAt) return 2000;
+      // A resident's copy never changes: no delivery report to refresh.
+      if (!data || !('recipients' in data)) return false;
+      // Poll every 2s while broadcast is in-progress (not completed/canceled)
+      if (!data.completedAt && !data.canceledAt) return 2000;
       // Poll every 5s after completion (for final delivery status updates)
-      if (data?.completedAt) return 5000;
+      if (data.completedAt) return 5000;
       return false;
     },
   });

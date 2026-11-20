@@ -14,6 +14,7 @@
 
 import { createElement } from 'react';
 import {
+  clampPageSize,
   communities,
   createScopedClient,
   emergencyBroadcastRecipients,
@@ -32,7 +33,7 @@ import type {
   User,
   UserRoleRecord,
 } from '@propertypro/db';
-import { eq, and, desc, inArray } from '@propertypro/db/filters';
+import { eq, and, desc, inArray, isNotNull, isNull, type SQL } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendBulkEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import {
@@ -673,6 +674,90 @@ export async function getBroadcastWithReport(
   };
 }
 
+/**
+ * What a non-manager may see of a broadcast: the message they received.
+ * No recipient list, delivery counts, author, audience or SMS copy — the
+ * delivery report names and emails every recipient in the community.
+ */
+export type ResidentBroadcast = {
+  id: number;
+  title: string;
+  body: string;
+  severity: string;
+  completedAt: Date;
+};
+
+/**
+ * Broadcast ids actually sent to this user: they have a recipient row, and the
+ * broadcast was sent (`completedAt`) and not canceled. Recipient rows are
+ * written at DRAFT time, so the row alone does not mean "received".
+ */
+async function sentToUserWhere(communityId: number, userId: string): Promise<SQL | null> {
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<{ broadcastId: number }>(
+    emergencyBroadcastRecipients,
+    { broadcastId: emergencyBroadcastRecipients.broadcastId },
+    eq(emergencyBroadcastRecipients.userId, userId),
+  );
+  const ids = [...new Set(rows.map((r) => Number(r.broadcastId)))];
+  if (ids.length === 0) return null;
+  return and(
+    inArray(emergencyBroadcasts.id, ids),
+    isNotNull(emergencyBroadcasts.completedAt),
+    isNull(emergencyBroadcasts.canceledAt),
+  ) as SQL;
+}
+
+function toResidentBroadcast(row: Record<string, unknown>): ResidentBroadcast {
+  return {
+    id: Number(row['id']),
+    title: row['title'] as string,
+    body: row['body'] as string,
+    severity: row['severity'] as string,
+    completedAt: row['completedAt'] as Date,
+  };
+}
+
+/**
+ * One broadcast as its recipient sees it, or null when it was not sent to them.
+ *
+ * AUTHZ: tenant-scoped — caller MUST have verified membership and
+ * `emergency_broadcasts:read`.
+ */
+export async function getBroadcastForRecipient(
+  broadcastId: number,
+  communityId: number,
+  userId: string,
+): Promise<ResidentBroadcast | null> {
+  const where = await sentToUserWhere(communityId, userId);
+  if (!where) return null;
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped.selectFrom<Record<string, unknown>>(
+    emergencyBroadcasts,
+    {},
+    and(eq(emergencyBroadcasts.id, broadcastId), where),
+  );
+  return rows[0] ? toResidentBroadcast(rows[0]) : null;
+}
+
+/**
+ * Every broadcast sent to this user, newest first (the resident list page).
+ *
+ * AUTHZ: same contract as getBroadcastForRecipient.
+ */
+export async function listBroadcastsForRecipient(
+  communityId: number,
+  userId: string,
+): Promise<ResidentBroadcast[]> {
+  const where = await sentToUserWhere(communityId, userId);
+  if (!where) return [];
+  const scoped = createScopedClient(communityId);
+  const rows = await scoped
+    .selectFrom<Record<string, unknown>>(emergencyBroadcasts, {}, where)
+    .orderBy(desc(emergencyBroadcasts.completedAt));
+  return rows.map(toResidentBroadcast);
+}
+
 // ── Recipient resolution ────────────────────────────────────────────────────
 
 /**
@@ -789,17 +874,40 @@ export interface PaginatedEmergencyBroadcasts {
  * `id desc` (equivalent to `initiatedAt desc` for monotonic bigserial).
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
- * community membership and `emergency_broadcasts:read` permission.
+ * community membership and `emergency_broadcasts:read` permission, and MUST
+ * pass `recipientUserId` for anyone who is not a manager: then only broadcasts
+ * sent to that user come back, as `ResidentBroadcast` rows.
  */
 export async function paginateEmergencyBroadcasts(params: {
   communityId: number;
   cursor?: string;
   pageSize?: number;
+  recipientUserId?: string;
 }): Promise<PaginatedEmergencyBroadcasts> {
   const scoped = createScopedClient(params.communityId);
-  const result = await paginate(scoped, emergencyBroadcasts, {
-    cursor: params.cursor,
-    pageSize: params.pageSize,
-  });
-  return { data: result.data, pagination: result.pagination };
+  if (params.recipientUserId === undefined) {
+    const result = await paginate(scoped, emergencyBroadcasts, {
+      cursor: params.cursor,
+      pageSize: params.pageSize,
+    });
+    return { data: result.data, pagination: result.pagination };
+  }
+
+  const where = await sentToUserWhere(params.communityId, params.recipientUserId);
+  if (!where) {
+    return {
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: clampPageSize(params.pageSize) },
+    };
+  }
+  const result = await paginate(
+    scoped,
+    emergencyBroadcasts,
+    { cursor: params.cursor, pageSize: params.pageSize },
+    { where },
+  );
+  return {
+    data: result.data.map((row) => toResidentBroadcast(row as Record<string, unknown>)),
+    pagination: result.pagination,
+  };
 }

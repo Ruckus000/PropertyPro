@@ -14,7 +14,10 @@ import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { NotFoundError } from '@/lib/api/errors/NotFoundError';
-import { getBroadcastWithReport } from '@/lib/services/emergency-broadcast-service';
+import {
+  getBroadcastForRecipient,
+  getBroadcastWithReport,
+} from '@/lib/services/emergency-broadcast-service';
 import { emergencyBroadcastDetailContract } from './contract';
 
 export const GET = withErrorHandler(
@@ -26,7 +29,11 @@ export const GET = withErrorHandler(
     // Lapsed communities lose admin reads (residents unaffected — guard short-circuits).
     await requireEntitledForAdminRead(communityId, membership);
 
-    const report = await getBroadcastWithReport(params.id, communityId);
+    // The delivery report names and emails every recipient: managers only.
+    // Everyone else gets the message, and only if it was sent to them.
+    const report = membership.isAdmin
+      ? await getBroadcastWithReport(params.id, communityId)
+      : await getBroadcastForRecipient(params.id, communityId, userId);
     if (!report) {
       throw new NotFoundError('Broadcast not found');
     }

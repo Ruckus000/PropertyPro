@@ -12,11 +12,12 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { membershipMock, queryMock, selectFromMock, billingClientMock } = vi.hoisted(() => ({
+const { membershipMock, queryMock, selectFromMock, billingClientMock, listReceivedMock } = vi.hoisted(() => ({
   membershipMock: vi.fn(),
   queryMock: vi.fn(),
   selectFromMock: vi.fn(),
   billingClientMock: vi.fn(() => null),
+  listReceivedMock: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -44,6 +45,9 @@ vi.mock('@propertypro/db/filters', () => ({ eq: vi.fn() }));
 vi.mock('@/lib/services/stripe-service', () => ({
   getActiveSubscriptionInterval: vi.fn(async () => 'month'),
 }));
+vi.mock('@/lib/services/emergency-broadcast-service', () => ({
+  listBroadcastsForRecipient: listReceivedMock,
+}));
 vi.mock('@/components/emergency/BroadcastHistoryTable', () => ({ BroadcastHistoryTable: () => null }));
 vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/settings/billing-page-client', () => ({ BillingPageClient: billingClientMock }));
@@ -70,6 +74,10 @@ beforeEach(() => {
     { id: 1, title: 'Water shutoff', severity: 'urgent', recipientCount: 3, sentCount: 3,
       deliveredCount: 3, failedCount: 0, initiatedAt: new Date('2026-09-01T00:00:00Z') },
   ]);
+  listReceivedMock.mockResolvedValue([
+    { id: 1, title: 'Water shutoff', body: 'Off 9-5', severity: 'urgent',
+      completedAt: new Date('2026-09-01T00:05:00Z') },
+  ]);
   selectFromMock.mockResolvedValue([
     { subscriptionPlan: 'operations_plus', subscriptionStatus: 'past_due',
       stripeCustomerId: 'cus_SECRET', stripeSubscriptionId: null,
@@ -82,14 +90,30 @@ describe('/emergency', () => {
     membershipMock.mockResolvedValue(TENANT);
     await expect(EmergencyPage(props)).rejects.toThrow(/emergency_broadcasts/);
     expect(queryMock).not.toHaveBeenCalled();
+    expect(listReceivedMock).not.toHaveBeenCalled();
   });
 
-  it('still lists broadcasts for an owner and a manager (controls)', async () => {
-    for (const m of [CONDO_OWNER, MANAGER]) {
-      membershipMock.mockResolvedValue(m);
-      await EmergencyPage(props);
-    }
-    expect(queryMock).toHaveBeenCalledTimes(2);
+  // The whole-table read carries drafts, canceled alerts and delivery counts;
+  // an owner (board seat or not) gets only the alerts sent to them.
+  it('gives an owner only the alerts sent to them, never the whole table', async () => {
+    membershipMock.mockResolvedValue(CONDO_OWNER);
+    await EmergencyPage(props);
+    expect(listReceivedMock).toHaveBeenCalledWith(42, 'user-1');
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('gives a board-seat owner the same resident list', async () => {
+    membershipMock.mockResolvedValue({ ...CONDO_OWNER, designation: 'board_president' });
+    await EmergencyPage(props);
+    expect(listReceivedMock).toHaveBeenCalledWith(42, 'user-1');
+    expect(queryMock).not.toHaveBeenCalled();
+  });
+
+  it('still lists every broadcast for a manager (control)', async () => {
+    membershipMock.mockResolvedValue(MANAGER);
+    await EmergencyPage(props);
+    expect(queryMock).toHaveBeenCalledTimes(1);
+    expect(listReceivedMock).not.toHaveBeenCalled();
   });
 });
 

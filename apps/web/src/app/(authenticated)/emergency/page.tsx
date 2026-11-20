@@ -3,7 +3,8 @@
  *
  * Route: /emergency?communityId=X
  * Auth: `emergency_broadcasts:read` (owners and managers; NOT tenants — the
- * same gate the list API applies), admin for write.
+ * same gate the list API applies), admin for write. Managers see every
+ * broadcast with delivery counts; owners see only the alerts sent to them.
  */
 import Link from 'next/link';
 import { headers } from 'next/headers';
@@ -14,6 +15,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { BroadcastHistoryTable } from '@/components/emergency/BroadcastHistoryTable';
+import { listBroadcastsForRecipient } from '@/lib/services/emergency-broadcast-service';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -55,6 +57,29 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     'write',
     { isUnitOwner: membership.isUnitOwner },
   );
+
+  // Non-managers (owners, board seats included) see only the alerts sent to
+  // them, dated when sent — never drafts, canceled alerts or delivery counts.
+  if (!membership.isAdmin) {
+    const received = await listBroadcastsForRecipient(context.communityId, userId);
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <PageHeader title="Emergency Alerts" />
+        <BroadcastHistoryTable
+          broadcasts={received.map((b) => ({
+            id: b.id,
+            title: b.title,
+            severity: b.severity,
+            initiatedAt: b.completedAt.toISOString(),
+            completedAt: b.completedAt.toISOString(),
+            canceledAt: null,
+          }))}
+          communityId={context.communityId}
+          showDelivery={false}
+        />
+      </div>
+    );
+  }
 
   const scoped = createScopedClient(context.communityId);
   const rows = await scoped.query(emergencyBroadcasts);
