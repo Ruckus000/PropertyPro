@@ -8,8 +8,12 @@
  * `describeBookingRules`, so what people read is what the server enforces.
  *
  * Pure: no db, no `Date.now()`. Callers pass `now` and the community's IANA
- * time zone, because a blackout date is a date on the community's calendar.
+ * time zone, because blackout dates and "days ahead" are dates on the
+ * community's calendar. An unusable zone falls back to the app default rather
+ * than failing every booking (`resolveTimezone`).
  */
+
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 export interface BookingRules {
   minDurationMinutes?: number;
@@ -20,7 +24,6 @@ export interface BookingRules {
 }
 
 const MINUTE_MS = 60_000;
-const DAY_MS = 24 * 60 * MINUTE_MS;
 /** Step used to visit every calendar date a booking touches: half a day, so a 23-hour DST day is never skipped. */
 const DATE_STEP_MS = 12 * 60 * MINUTE_MS;
 
@@ -50,6 +53,12 @@ export function calendarDateIn(instant: Date, timeZone: string): string {
   );
 }
 
+/** `YYYY-MM-DD` plus `days` calendar days. */
+function addCalendarDays(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+}
+
 /** Every calendar date (in `timeZone`) that the half-open range [start, end) touches. */
 function datesTouched(start: Date, end: Date, timeZone: string): Set<string> {
   const dates = new Set<string>();
@@ -68,8 +77,9 @@ export function bookingRuleViolation(
   start: Date,
   end: Date,
   now: Date,
-  timeZone: string,
+  zone: string,
 ): string | null {
+  const timeZone = resolveTimezone(zone);
   const minutes = (end.getTime() - start.getTime()) / MINUTE_MS;
 
   if (rules.minDurationMinutes !== undefined && minutes < rules.minDurationMinutes) {
@@ -78,9 +88,10 @@ export function bookingRuleViolation(
   if (rules.maxDurationMinutes !== undefined && minutes > rules.maxDurationMinutes) {
     return `Bookings for this amenity can be at most ${formatMinutes(rules.maxDurationMinutes)}.`;
   }
+  // Calendar days, as residents read "Book up to 7 days ahead": any time on the 7th day counts.
   if (
     rules.advanceBookingDays !== undefined
-    && start.getTime() > now.getTime() + rules.advanceBookingDays * DAY_MS
+    && calendarDateIn(start, timeZone) > addCalendarDays(calendarDateIn(now, timeZone), rules.advanceBookingDays)
   ) {
     const days = rules.advanceBookingDays;
     return `This amenity can be booked at most ${days} day${days === 1 ? '' : 's'} ahead.`;

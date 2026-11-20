@@ -112,6 +112,8 @@ export function AmenityFormSheet({ open, onClose, communityId, amenity }: Amenit
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    // A date picked but not yet added still counts: saving must not silently drop a closure.
+    const pending = /^\d{4}-\d{2}-\d{2}$/.test(blackoutDraft) && !blackoutDates.includes(blackoutDraft);
     const built = buildAmenityInput({
       name,
       location,
@@ -121,7 +123,7 @@ export function AmenityFormSheet({ open, onClose, communityId, amenity }: Amenit
       shortestHours,
       longestHours,
       advanceDays,
-      blackoutDates,
+      blackoutDates: pending ? [...blackoutDates, blackoutDraft] : blackoutDates,
     });
     if ('error' in built) {
       setError(built.error);

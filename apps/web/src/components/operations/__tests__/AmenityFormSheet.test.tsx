@@ -133,4 +133,14 @@ describe('<AmenityFormSheet>', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The shortest booking cannot be longer than the longest.');
     expect(mutateAsync).not.toHaveBeenCalled();
   });
+
+  it('keeps a closed date that was picked but not added before saving', async () => {
+    render(<AmenityFormSheet open onClose={vi.fn()} communityId={42} />);
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Pool' } });
+    fireEvent.change(screen.getByLabelText('Closed on'), { target: { value: '2026-12-25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add amenity' }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    expect(mutateAsync.mock.calls[0]![0].input.bookingRules).toEqual({ blackoutDates: ['2026-12-25'] });
+  });
 });

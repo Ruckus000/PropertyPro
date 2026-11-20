@@ -664,4 +664,21 @@ describe('OperationsHub — amenities', () => {
     expect(await screen.findByRole('heading', { name: 'Spaces you can book appear here' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
   });
+
+  it('opens no form for an edit link whose amenity is not in this community', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('tab=amenities&create=amenity&amenityId=99');
+    render(hub(true));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Add amenity' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /^Edit / })).toBeNull();
+  });
+
+  it('loads the list for an edit link even without the tab in the URL', async () => {
+    amenities([POOL]);
+    searchParamsMock.mockReturnValue('create=amenity&amenityId=9');
+    render(hub(true));
+    expect(useAmenitiesMock).toHaveBeenLastCalledWith(42, { enabled: true });
+    expect(await screen.findByRole('heading', { name: 'Edit Pool' })).toBeInTheDocument();
+  });
 });

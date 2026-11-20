@@ -31,11 +31,14 @@ describe('bookingRuleViolation', () => {
     expect(bookingRuleViolation(rules, at('2026-03-02T14:00:00Z'), at('2026-03-02T18:00:00Z'), NOW, NY)).toBeNull();
   });
 
-  it('enforces how far ahead a booking may start', () => {
+  it('counts days ahead on the community calendar, not in rolling 24 hours', () => {
     const rules = { advanceBookingDays: 7 };
-    // NOW + 7 days exactly is allowed; one minute later is not.
+    // NOW is 10 AM March 1 in New York; the 7th day ahead is March 8, at any hour.
     expect(bookingRuleViolation(rules, at('2026-03-08T15:00:00Z'), at('2026-03-08T16:00:00Z'), NOW, NY)).toBeNull();
-    expect(bookingRuleViolation(rules, at('2026-03-08T15:01:00Z'), at('2026-03-08T16:00:00Z'), NOW, NY)).toBe(
+    // 10 PM March 8 New York (EDT) is past NOW + 7 x 24h, and still allowed.
+    expect(bookingRuleViolation(rules, at('2026-03-09T02:00:00Z'), at('2026-03-09T03:00:00Z'), NOW, NY)).toBeNull();
+    // March 9 New York is the 8th day: refused.
+    expect(bookingRuleViolation(rules, at('2026-03-09T04:00:00Z'), at('2026-03-09T05:00:00Z'), NOW, NY)).toBe(
       'This amenity can be booked at most 7 days ahead.',
     );
     expect(
@@ -61,6 +64,20 @@ describe('bookingRuleViolation', () => {
     );
     // Ending exactly at midnight does not touch the next day.
     expect(bookingRuleViolation(rules, at('2026-03-10T03:00:00Z'), at('2026-03-10T04:00:00Z'), NOW, NY)).toBeNull();
+  });
+
+  it('never steps over a 23-hour DST day inside a booking', () => {
+    // 11:30 PM March 7 to 1 AM March 9, New York. A 24-hour step would sample
+    // March 7 and then March 9, missing the short March 8 between them.
+    expect(
+      bookingRuleViolation({ blackoutDates: ['2026-03-08'] }, at('2026-03-08T04:30:00Z'), at('2026-03-09T05:00:00Z'), NOW, NY),
+    ).toBe('This amenity is closed on March 8, 2026.');
+  });
+
+  it('falls back to the default zone instead of throwing on an unusable one', () => {
+    expect(() =>
+      bookingRuleViolation({ blackoutDates: ['2026-03-10'] }, at('2026-03-11T02:00:00Z'), at('2026-03-11T03:00:00Z'), NOW, 'Not/AZone'),
+    ).not.toThrow();
   });
 
   it('catches a blackout date in the middle of a multi-day booking, across a DST change', () => {

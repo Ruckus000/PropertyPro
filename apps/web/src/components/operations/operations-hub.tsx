@@ -189,13 +189,18 @@ export function OperationsHub({
   );
   // Both amenity tabs need the list: Reservations to know whether anything can be booked.
   const amenitiesQuery = useAmenities(communityId, {
-    enabled: reservationsEnabled && (selectedTab === 'reservations' || selectedTab === 'amenities'),
+    enabled:
+      reservationsEnabled
+      && (selectedTab === 'reservations' || selectedTab === 'amenities' || createValue === 'amenity'),
   });
   const allAmenities = amenitiesQuery.data ?? [];
   const bookableAmenities = allAmenities.filter((amenity) => amenity.isBookable);
   // Residents see only what they can book; managers see every amenity.
   const visibleAmenities = isAdmin ? allAmenities : bookableAmenities;
   const amenityNames = new Map(allAmenities.map((amenity) => [amenity.id, amenity.name]));
+  // An edit link opens only for an amenity in this community's list; it never falls back to "add".
+  const editingAmenity = createAmenityId ? allAmenities.find((amenity) => amenity.id === createAmenityId) : undefined;
+  const amenityFormReady = createAmenityId === undefined || editingAmenity !== undefined;
 
   const requestsQuery = useMaintenanceRequests(communityId, {
     scope: requestScope,
@@ -609,15 +614,14 @@ export function OperationsHub({
           initialAmenityId={createAmenityId}
         />
       ) : null}
-      {createValue === 'amenity' && isAdmin && reservationsEnabled
-      && (createAmenityId === undefined || amenitiesQuery.data !== undefined) ? (
+      {createValue === 'amenity' && isAdmin && reservationsEnabled && amenityFormReady ? (
         <AmenityFormSheet
           // A new key per amenity, so its fields start from that amenity.
           key={createAmenityId ?? 'new'}
           open
           onClose={closeCreate}
           communityId={communityId}
-          amenity={createAmenityId ? allAmenities.find((amenity) => amenity.id === createAmenityId) : undefined}
+          amenity={editingAmenity}
         />
       ) : null}
     </div>

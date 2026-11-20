@@ -71,13 +71,13 @@ export function ReservationCreateSheet({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!amenityId || !date || !startTime || !endTime) {
+    if (!selected || !date || !startTime || !endTime) {
       setError('Amenity, date, start time, and end time are required.');
       return;
     }
     try {
       await createMutation.mutateAsync({
-        amenityId: Number(amenityId),
+        amenityId: selected.id,
         unitId: unitId ? Number(unitId) : null,
         startTime: toZonedIsoString(date, startTime, communityTimezone),
         endTime: toZonedIsoString(date, endTime, communityTimezone),
@@ -111,7 +111,8 @@ export function ReservationCreateSheet({
           <label htmlFor="res-amenity" className="block text-sm font-medium text-content-secondary">Amenity</label>
           <select
             id="res-amenity"
-            value={amenityId}
+            // A preselected amenity that is not open for booking is never shown or sent.
+            value={selected ? amenityId : ''}
             onChange={(e) => setAmenityId(e.target.value)}
             className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           >

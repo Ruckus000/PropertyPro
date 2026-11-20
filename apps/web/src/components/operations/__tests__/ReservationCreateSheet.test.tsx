@@ -103,4 +103,17 @@ describe('<ReservationCreateSheet>', () => {
     expect(screen.queryByRole('combobox', { name: 'Amenity' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^reserve$/i })).toBeNull();
   });
+
+  it('ignores a preselected amenity that is not open for booking', async () => {
+    render(wrap(
+      <ReservationCreateSheet open={true} onClose={vi.fn()} communityId={42} communityTimezone="America/New_York" initialAmenityId={10} />,
+    ));
+    expect(screen.getByRole('combobox', { name: 'Amenity' })).toHaveValue('');
+    fireEvent.change(screen.getByLabelText(/date/i), { target: { value: '2026-05-01' } });
+    fireEvent.change(screen.getByLabelText(/start time/i), { target: { value: '14:00' } });
+    fireEvent.change(screen.getByLabelText(/end time/i), { target: { value: '15:00' } });
+    fireEvent.click(screen.getByRole('button', { name: /^reserve$/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Amenity, date, start time, and end time are required.');
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
 });
