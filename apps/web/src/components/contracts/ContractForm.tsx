@@ -115,6 +115,8 @@ export function ContractForm({ communityId, contract, onClose, onSaved }: Contra
               id="contract-title"
               type="text"
               required
+              // eslint-disable-next-line jsx-a11y/no-autofocus -- the form opens from a button the form replaces; focus moves into it
+              autoFocus
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="mt-1 block w-full rounded-md border-edge-strong shadow-e0 focus:border-edge-focus focus-visible:ring-focus sm:text-sm"

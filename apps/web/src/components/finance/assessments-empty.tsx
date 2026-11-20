@@ -3,12 +3,15 @@
  * §4.1; plan docs/superpowers/plans/2026-11-20-empty-states-amenities-vendors-assessments.md A1–A3).
  *
  * Managers only: the Assessments tab is the admin side of Payments, so there is
- * no resident waiting state here (owners see PaymentPortal). A single action, so
+ * no resident waiting state here (owners see PaymentPortal). Copy branches on
+ * community type: apartments have no owners, so no resident sees assessments.
+ * A single action, so
  * no step row; the tab's own header is hidden while empty and this owns the one
  * filled "Create Assessment". Every line is lifted from the dialog's fields and
  * help article `manager/payments/create-assessment.mdx`, so the two agree.
  */
 
+import type { CommunityType } from '@propertypro/shared';
 import { PropScene } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -24,17 +27,22 @@ const ASSESSMENT_FIELDS = [
 
 export function AssessmentsFirstRun({
   communityId,
+  communityType,
   onCreate,
 }: {
   communityId: number;
+  communityType: CommunityType;
   onCreate: () => void;
 }) {
+  // Apartments have no owner role, so every resident is a tenant, and tenants
+  // have no `finances: read` (rbac-matrix.ts): only managers ever see these.
+  const isApartment = communityType === 'apartment';
   return (
     <EmptyState
       size="hero"
       eyebrow="Assessments"
-      title="Set up the dues your units pay"
-      description="Create an assessment once and PropertyPro charges every unit when it falls due, then tracks who has paid."
+      title={isApartment ? 'Set up recurring charges for your units' : 'Set up the dues your units pay'}
+      description="Record an assessment once. PropertyPro adds the charge to every unit on the schedule below and tracks what has been paid."
       illustration={<PropScene size="hero" prop="coins" />}
       action={<Button onClick={onCreate}>Create Assessment</Button>}
       aside={
@@ -45,15 +53,27 @@ export function AssessmentsFirstRun({
           <ContextSection title="When units are charged">
             <p className="text-sm text-content-secondary">
               Monthly, Quarterly and Annual assessments are charged to every unit in your Directory on the 1st of
-              each month they fall due. One-Time assessments are not charged by that monthly run.
+              each month they fall due, so the first charge comes on the next such 1st, not on the day you create one.
+            </p>
+            <p className="text-sm text-content-secondary">
+              One-Time assessments are not charged automatically. To charge one, contact PropertyPro support.
             </p>
             <ContextLinks links={[{ href: `/dashboard/directory?communityId=${communityId}`, label: 'Directory' }]} />
           </ContextSection>
           <ContextSection title="Who sees it">
             <p className="text-sm text-content-secondary">
-              Unit owners see their charges in Payments. Tenants don&apos;t see assessments.
+              {isApartment
+                ? 'Only managers. Residents of an apartment community are tenants, and tenants don\u2019t see assessments.'
+                : 'Unit owners see their charges in Payments. Tenants don\u2019t see assessments.'}
             </p>
           </ContextSection>
+          {!isApartment && (
+            <ContextSection title="Before you create one">
+              <p className="text-sm text-content-secondary">
+                Record an assessment only after the board approves it, and note the meeting in its description.
+              </p>
+            </ContextSection>
+          )}
           <ContextSection title="Help">
             <ContextLinks
               links={[

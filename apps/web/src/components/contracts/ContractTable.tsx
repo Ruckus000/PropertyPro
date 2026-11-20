@@ -46,6 +46,8 @@ export function ContractTable({
 }: ContractTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
+  // The form replaces the empty hero; after Cancel the hero remounts, so its button takes focus back.
+  const [formCancelled, setFormCancelled] = useState(false);
 
   function getStatusBadgeColor(status: string): string {
     switch (status) {
@@ -68,7 +70,7 @@ export function ContractTable({
 
   if (isLoading) {
     return (
-      <div className="space-y-3" aria-label="Loading contracts">
+      <div className="space-y-3" role="status" aria-label="Loading contracts">
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
@@ -121,7 +123,10 @@ export function ContractTable({
         <ContractForm
           communityId={communityId}
           contract={selectedContract}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setFormCancelled(true);
+          }}
           onSaved={() => setShowForm(false)}
         />
       )}
@@ -140,6 +145,7 @@ export function ContractTable({
         showForm ? null : (
           <ContractsFirstRun
             communityId={communityId}
+            autoFocusAction={formCancelled}
             onAdd={() => {
               setSelectedContract(null);
               setShowForm(true);

@@ -5,7 +5,8 @@
  * Managers only (the page redirects everyone else), condo and HOA only. A single
  * action, so no step row; the toolbar's "Add Contract" is hidden while empty and
  * this owns the one filled one. Every line comes from ContractForm's fields, the
- * 90/60/30-day windows in lib/services/contract-renewal-alerts.ts and help article
+ * 90/60/30-day windows in lib/services/contract-renewal-alerts.ts (shown on this page
+ * only: no cron or email reads them) and help article
  * `manager/website/contracts.mdx`.
  */
 
@@ -22,28 +23,44 @@ const CONTRACT_FIELDS = [
   { label: 'Conflict of interest', detail: 'Check it if a director or officer has a financial interest' },
 ];
 
-export function ContractsFirstRun({ communityId, onAdd }: { communityId: number; onAdd: () => void }) {
+export function ContractsFirstRun({
+  communityId,
+  onAdd,
+  autoFocusAction = false,
+}: {
+  communityId: number;
+  onAdd: () => void;
+  /** True when the hero comes back after the form was cancelled, so focus returns to its action. */
+  autoFocusAction?: boolean;
+}) {
   return (
     <EmptyState
       size="hero"
       eyebrow="Contracts & Vendors"
       title="Keep every vendor agreement in one place"
-      description="Log each contract with its vendor and dates, and you'll be warned before it ends."
+      description="Log each contract with its vendor and dates, and this page lists the ones that are ending soon."
       illustration={<PropScene size="hero" prop="clipboard" />}
-      action={<Button onClick={onAdd}>Add Contract</Button>}
+      action={
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- returns focus to the control that opened the form
+        <Button onClick={onAdd} autoFocus={autoFocusAction}>
+          Add Contract
+        </Button>
+      }
       aside={
         <>
           <ContextSection title="What a contract has">
             <ContextRows rows={CONTRACT_FIELDS} />
           </ContextSection>
-          <ContextSection title="Warnings you'll get">
+          <ContextSection title="Expiration Alerts">
             <p className="text-sm text-content-secondary">
-              Expiration Alerts list contracts ending within 90, 60 and 30 days, and ones that have expired.
+              This page lists contracts ending within 90, 60 and 30 days, and ones that have expired. The alerts
+              show here only; nothing is emailed.
             </p>
           </ContextSection>
           <ContextSection title="The signed copy">
             <p className="text-sm text-content-secondary">
-              Upload the PDF in Documents first, then enter its ID in Linked Document ID.
+              Owners can't see this page, so upload the signed PDF to a Documents category they can open, then
+              enter its ID in Linked Document ID.
             </p>
             <ContextLinks links={[{ href: `/communities/${communityId}/documents`, label: 'Documents' }]} />
           </ContextSection>

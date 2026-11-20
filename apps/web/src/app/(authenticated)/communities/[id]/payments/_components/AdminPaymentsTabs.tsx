@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname, useSearchParams } from 'next/navigation';
+import type { CommunityType } from '@propertypro/shared';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AssessmentManager } from '@/components/finance/assessment-manager';
 import { DelinquencyTable } from '@/components/finance/delinquency-table';
@@ -46,11 +47,12 @@ function coercePaymentsTab(value: string | null): AdminPaymentsTab {
 
 interface AdminPaymentsTabsProps {
   communityId: number;
+  communityType: CommunityType;
   userId: string;
   userRole: string;
 }
 
-export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymentsTabsProps) {
+export function AdminPaymentsTabs({ communityId, communityType, userId, userRole }: AdminPaymentsTabsProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = coercePaymentsTab(searchParams.get('tab'));
@@ -93,7 +95,12 @@ export function AdminPaymentsTabs({ communityId, userId, userRole }: AdminPaymen
         </div>
       )}
       {activeTab === 'assessments' && (
-        <AssessmentManager communityId={communityId} userId={userId} userRole={userRole} />
+        <AssessmentManager
+          communityId={communityId}
+          communityType={communityType}
+          userId={userId}
+          userRole={userRole}
+        />
       )}
       {activeTab === 'delinquency' && <DelinquencyTable communityId={communityId} />}
       {activeTab === 'ledger' && (

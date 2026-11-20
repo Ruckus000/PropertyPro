@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import type { CommunityType } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import {
   useAssessmentLineItems,
@@ -23,6 +24,7 @@ const AssessmentsFirstRun = dynamic(
 
 interface AssessmentManagerProps {
   communityId: number;
+  communityType: CommunityType;
   userId: string;
   userRole: string;
 }
@@ -49,7 +51,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 /* ─────── Main Component ─────── */
 
-export function AssessmentManager({ communityId, userId, userRole }: AssessmentManagerProps) {
+export function AssessmentManager({ communityId, communityType, userId, userRole }: AssessmentManagerProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
@@ -93,7 +95,11 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
 
       {/* Assessment List */}
       {isEmpty ? (
-        <AssessmentsFirstRun communityId={communityId} onCreate={() => setShowCreate(true)} />
+        <AssessmentsFirstRun
+          communityId={communityId}
+          communityType={communityType}
+          onCreate={() => setShowCreate(true)}
+        />
       ) : (
         <div className="grid gap-4">
           {assessments?.map((assessment) => (

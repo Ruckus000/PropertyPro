@@ -59,7 +59,7 @@ describe('ContractTableContainer', () => {
   it('shows loading state', () => {
     setQueryState({ isLoading: true, error: null });
     renderContainer();
-    expect(screen.getByLabelText('Loading contracts')).toBeDefined();
+    expect(screen.getByRole('status', { name: 'Loading contracts' })).toBeDefined();
   });
 
   it('shows a danger banner when the load fails', () => {
@@ -83,8 +83,14 @@ describe('ContractTableContainer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Contract' }));
     expect(screen.getByRole('heading', { name: 'New Contract' })).toBeDefined();
-    // The form replaces the hero rather than stacking above it.
+    // The form replaces the hero rather than stacking above it, and focus moves into the form.
     expect(screen.queryByRole('heading', { name: 'Keep every vendor agreement in one place' })).toBeNull();
+    expect(document.activeElement?.id).toBe('contract-title');
+
+    // Cancel brings the hero back with focus on the button that opened the form.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]!);
+    const addAgain = await screen.findByRole('button', { name: 'Add Contract' });
+    expect(document.activeElement).toBe(addAgain);
   });
 
   it('renders contract rows', () => {

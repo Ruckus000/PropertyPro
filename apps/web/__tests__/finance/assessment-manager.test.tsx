@@ -110,7 +110,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -133,7 +133,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -151,7 +151,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -172,6 +172,26 @@ describe('AssessmentManager', () => {
     expect(await screen.findByText('Amount ($)')).toBeInTheDocument();
   });
 
+  it('tells an apartment manager that no resident sees assessments', async () => {
+    mockAssessmentsSuccess([]);
+
+    const AssessmentManager = await importAssessmentManager();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <AssessmentManager communityId={42} communityType="apartment" userId="user-1" userRole="property_manager" />
+      </Wrapper>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Set up recurring charges for your units' }, { timeout: 10000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Only managers\./)).toBeInTheDocument();
+    // The board-approval line is condo/HOA only.
+    expect(screen.queryByRole('heading', { name: 'Before you create one' })).toBeNull();
+  });
+
   it('keeps the tab header and drops the first-run hero once an assessment exists', async () => {
     mockAssessmentsSuccess([makeAssessment()]);
 
@@ -180,7 +200,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -196,7 +216,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -216,7 +236,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -246,7 +266,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -284,7 +304,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 

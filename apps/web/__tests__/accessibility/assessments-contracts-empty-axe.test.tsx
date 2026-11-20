@@ -25,7 +25,7 @@ function plantUnnamedButton(container: HTMLElement, sectionTitle: string) {
 
 describe('first-run heroes — axe', () => {
   it('Assessments hero has no violations', async () => {
-    const { container } = render(<AssessmentsFirstRun communityId={1} onCreate={() => {}} />);
+    const { container } = render(<AssessmentsFirstRun communityId={1} communityType="condo_718" onCreate={() => {}} />);
     expect(screen.getByRole('heading', { level: 2, name: 'Set up the dues your units pay' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 3, name: 'What an assessment has' })).toBeTruthy();
     expect(container.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
@@ -33,7 +33,7 @@ describe('first-run heroes — axe', () => {
   });
 
   it('probe: Assessments — an unnamed button in the context column is caught', async () => {
-    const { container } = render(<AssessmentsFirstRun communityId={1} onCreate={() => {}} />);
+    const { container } = render(<AssessmentsFirstRun communityId={1} communityType="condo_718" onCreate={() => {}} />);
     expect(await ruleIds(plantUnnamedButton(container, 'Who sees it'))).toContain('button-name');
   });
 
@@ -49,6 +49,6 @@ describe('first-run heroes — axe', () => {
 
   it('probe: Contracts & Vendors — an unnamed button in the context column is caught', async () => {
     const { container } = render(<ContractsFirstRun communityId={1} onAdd={() => {}} />);
-    expect(await ruleIds(plantUnnamedButton(container, "Warnings you'll get"))).toContain('button-name');
+    expect(await ruleIds(plantUnnamedButton(container, 'Expiration Alerts'))).toContain('button-name');
   });
 });
