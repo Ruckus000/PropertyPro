@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import type { CommunityType } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import {
   useAssessmentLineItems,
@@ -12,10 +14,17 @@ import {
 } from '@/hooks/use-finance';
 import { formatDateOnly } from '@/lib/utils/format-date';
 
+// Only an empty community renders it, so it loads on demand (perf-check budget).
+const AssessmentsFirstRun = dynamic(
+  () => import('./assessments-empty').then((m) => m.AssessmentsFirstRun),
+  { loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
+);
+
 /* ─────── Types ─────── */
 
 interface AssessmentManagerProps {
   communityId: number;
+  communityType: CommunityType;
   userId: string;
   userRole: string;
 }
@@ -42,7 +51,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 /* ─────── Main Component ─────── */
 
-export function AssessmentManager({ communityId, userId, userRole }: AssessmentManagerProps) {
+export function AssessmentManager({ communityId, communityType, userId, userRole }: AssessmentManagerProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
@@ -64,33 +73,33 @@ export function AssessmentManager({ communityId, userId, userRole }: AssessmentM
     );
   }
 
+  const isEmpty = assessments?.length === 0;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-content">Assessments</h2>
-          <p className="text-sm text-content-secondary">Create and manage community assessments and dues.</p>
-        </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
-        >
-          Create Assessment
-        </button>
-      </div>
-
-      {/* Assessment List */}
-      {assessments && assessments.length === 0 ? (
-        <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
-          <p className="text-sm text-content-tertiary">No assessments created yet.</p>
+      {/* Header: hidden while empty, when the first-run hero owns the action (spec D19). */}
+      {!isEmpty && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-content">Assessments</h2>
+            <p className="text-sm text-content-secondary">Create and manage community assessments and dues.</p>
+          </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="mt-3 text-sm font-medium text-interactive hover:text-interactive-hover"
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
           >
-            Create your first assessment
+            Create Assessment
           </button>
         </div>
+      )}
+
+      {/* Assessment List */}
+      {isEmpty ? (
+        <AssessmentsFirstRun
+          communityId={communityId}
+          communityType={communityType}
+          onCreate={() => setShowCreate(true)}
+        />
       ) : (
         <div className="grid gap-4">
           {assessments?.map((assessment) => (

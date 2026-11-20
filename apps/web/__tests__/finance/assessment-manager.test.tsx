@@ -110,7 +110,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -133,7 +133,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -151,14 +151,61 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
-    await waitFor(() => {
-      const bodyText = document.body.textContent || '';
-      expect(bodyText).toMatch(/no assessment|create|get started/i);
-    }, { timeout: 10000 });
+    // The first-run hero is dynamically loaded: find it, don't get it.
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Set up the dues your units pay' }, { timeout: 10000 }),
+    ).toBeInTheDocument();
+    // The hero owns the one action; the tab header (and its button) is hidden while empty.
+    expect(screen.getAllByRole('button', { name: 'Create Assessment' })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Assessments' })).toBeNull();
+    // Help points only at articles that exist.
+    expect(screen.getByRole('link', { name: 'Create dues and special assessments' })).toHaveAttribute(
+      'href',
+      '/help/payments/create-assessment',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Assessment' }));
+    expect(await screen.findByText('Amount ($)')).toBeInTheDocument();
+  });
+
+  it('tells an apartment manager that no resident sees assessments', async () => {
+    mockAssessmentsSuccess([]);
+
+    const AssessmentManager = await importAssessmentManager();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <AssessmentManager communityId={42} communityType="apartment" userId="user-1" userRole="property_manager" />
+      </Wrapper>,
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Set up recurring charges for your units' }, { timeout: 10000 }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Only managers\./)).toBeInTheDocument();
+    // The board-approval line is condo/HOA only.
+    expect(screen.queryByRole('heading', { name: 'Before you create one' })).toBeNull();
+  });
+
+  it('keeps the tab header and drops the first-run hero once an assessment exists', async () => {
+    mockAssessmentsSuccess([makeAssessment()]);
+
+    const AssessmentManager = await importAssessmentManager();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+      </Wrapper>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Assessments' }, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Set up the dues your units pay' })).toBeNull();
   });
 
   it('shows Create Assessment button', async () => {
@@ -169,7 +216,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -189,7 +236,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -219,7 +266,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 
@@ -257,7 +304,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
       </Wrapper>,
     );
 

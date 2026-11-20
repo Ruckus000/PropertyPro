@@ -65,8 +65,10 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   if (!isResidentRole) {
     return (
       <FeatureGate feature="hasFinance" communityId={communityId}>
+        <PageHeader title="Payments" />
         <AdminPaymentsTabs
           communityId={communityId}
+          communityType={membership.communityType}
           userId={userId}
           userRole={membership.role}
         />

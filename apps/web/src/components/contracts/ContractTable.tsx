@@ -13,10 +13,19 @@
  * UI state.
  */
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { ContractForm } from './ContractForm';
 import { BidTracker } from './BidTracker';
 import type { ContractRecord, ExpirationAlert } from './types';
 import { Table } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { AlertBanner } from '@/components/shared/alert-banner';
+
+// Only an empty community renders it, so it loads on demand (perf-check budget).
+const ContractsFirstRun = dynamic(
+  () => import('./contracts-empty').then((m) => m.ContractsFirstRun),
+  { loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
+);
 
 interface ContractTableProps {
   /** Pure-prop presenter input — fetched by the container. */
@@ -37,6 +46,8 @@ export function ContractTable({
 }: ContractTableProps) {
   const [showForm, setShowForm] = useState(false);
   const [selectedContract, setSelectedContract] = useState<ContractRecord | null>(null);
+  // The form replaces the empty hero; after Cancel the hero remounts, so its button takes focus back.
+  const [formCancelled, setFormCancelled] = useState(false);
 
   function getStatusBadgeColor(status: string): string {
     switch (status) {
@@ -58,12 +69,20 @@ export function ContractTable({
   }
 
   if (isLoading) {
-    return <div className="text-sm text-content-tertiary">Loading contracts...</div>;
+    return (
+      <div className="space-y-3" role="status" aria-label="Loading contracts">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
   }
 
   if (errorMessage) {
-    return <div className="text-sm text-status-danger">Error: {errorMessage}</div>;
+    return <AlertBanner status="danger" title="We couldn't load contracts." description={errorMessage} />;
   }
+
+  const isEmpty = contracts.length === 0;
 
   return (
     <div>
@@ -84,25 +103,30 @@ export function ContractTable({
         </div>
       )}
 
-      {/* Actions */}
-      <div className="mb-4 flex justify-end">
-        <button
-          onClick={() => {
-            setSelectedContract(null);
-            setShowForm(true);
-          }}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
-        >
-          Add Contract
-        </button>
-      </div>
+      {/* Actions: hidden while empty, when the first-run hero owns the action (spec D19). */}
+      {!isEmpty && (
+        <div className="mb-4 flex justify-end">
+          <button
+            onClick={() => {
+              setSelectedContract(null);
+              setShowForm(true);
+            }}
+            className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
+          >
+            Add Contract
+          </button>
+        </div>
+      )}
 
       {/* Form modal */}
       {showForm && (
         <ContractForm
           communityId={communityId}
           contract={selectedContract}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setFormCancelled(true);
+          }}
           onSaved={() => setShowForm(false)}
         />
       )}
@@ -117,8 +141,17 @@ export function ContractTable({
       )}
 
       {/* Table */}
-      {contracts.length === 0 ? (
-        <p className="text-sm text-content-tertiary">No contracts found. Create one to get started.</p>
+      {isEmpty ? (
+        showForm ? null : (
+          <ContractsFirstRun
+            communityId={communityId}
+            autoFocusAction={formCancelled}
+            onAdd={() => {
+              setSelectedContract(null);
+              setShowForm(true);
+            }}
+          />
+        )
       ) : (
         <Table className="min-w-full divide-y divide-edge">
           <thead className="bg-surface-page">

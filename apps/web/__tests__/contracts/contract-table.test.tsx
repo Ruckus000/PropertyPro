@@ -15,7 +15,7 @@
  * - Expiration alerts banner
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ContractRecord, ExpirationAlert } from '../../src/components/contracts/types';
 
@@ -25,6 +25,8 @@ const invalidateMock = vi.fn();
 vi.mock('@/hooks/use-contracts', () => ({
   useContracts: (opts: unknown) => useContractsMock(opts),
   useContractsInvalidator: () => invalidateMock,
+  useCreateContract: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
+  useUpdateContract: () => ({ mutateAsync: vi.fn(), isPending: false, error: null }),
 }));
 
 import { ContractTableContainer } from '../../src/components/contracts/contract-table-container';
@@ -57,13 +59,38 @@ describe('ContractTableContainer', () => {
   it('shows loading state', () => {
     setQueryState({ isLoading: true, error: null });
     renderContainer();
-    expect(screen.getByText('Loading contracts...')).toBeDefined();
+    expect(screen.getByRole('status', { name: 'Loading contracts' })).toBeDefined();
   });
 
-  it('renders empty state when no contracts', () => {
+  it('shows a danger banner when the load fails', () => {
+    setQueryState({ isLoading: false, error: new Error('Network down') });
+    renderContainer();
+    expect(screen.getByText("We couldn't load contracts.")).toBeDefined();
+    expect(screen.getByText('Network down')).toBeDefined();
+  });
+
+  it('renders the first-run hero, which owns the only Add Contract, when there are no contracts', async () => {
     setQueryState({ isLoading: false, error: null, data: { contracts: [], alerts: [] } });
     renderContainer();
-    expect(screen.getByText('No contracts found. Create one to get started.')).toBeDefined();
+    // Dynamically loaded: find it, don't get it.
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Keep every vendor agreement in one place' }),
+    ).toBeDefined();
+    expect(screen.getAllByRole('button', { name: 'Add Contract' })).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Track vendor contracts' }).getAttribute('href')).toBe(
+      '/help/website/contracts',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add Contract' }));
+    expect(screen.getByRole('heading', { name: 'New Contract' })).toBeDefined();
+    // The form replaces the hero rather than stacking above it, and focus moves into the form.
+    expect(screen.queryByRole('heading', { name: 'Keep every vendor agreement in one place' })).toBeNull();
+    expect(document.activeElement?.id).toBe('contract-title');
+
+    // Cancel brings the hero back with focus on the button that opened the form.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]!);
+    const addAgain = await screen.findByRole('button', { name: 'Add Contract' });
+    expect(document.activeElement).toBe(addAgain);
   });
 
   it('renders contract rows', () => {
@@ -206,6 +233,6 @@ describe('ContractTableContainer', () => {
   it('surfaces the query error message', () => {
     setQueryState({ isLoading: false, error: new Error('boom'), data: undefined });
     renderContainer();
-    expect(screen.getByText(/Error: boom/)).toBeDefined();
+    expect(screen.getByText('boom')).toBeDefined();
   });
 });
