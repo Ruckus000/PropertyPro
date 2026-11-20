@@ -1,10 +1,14 @@
 /**
  * EmptyState — Placeholder for empty content areas.
  *
- * Tailwind-based implementation of the pattern documented at
- * docs/design-system/patterns/ (see docs/design-system/README.md). This
- * component is the canonical implementation — the docs folder no longer
- * carries a duplicate .tsx copy.
+ * Two families of size:
+ * - `hero` / `section` / `compact`: the "guided blueprint" pattern
+ *   (docs/design-system/patterns/empty-states.md §3). Every one carries a
+ *   scene (`illustration`, from ../../illustrations). Use these in apps/web.
+ * - `sm` / `md` / `lg`: the earlier icon-in-a-circle look.
+ *   ponytail: sm/md/lg kept for apps/admin's call sites, which the empty-state
+ *   spec does not cover. Trigger: admin adopts scenes, or no web caller passes
+ *   sm/md/lg.
  *
  * Props-only: the preset lookup (EMPTY_STATE_CONFIGS) lives in the web app's
  * wrapper (apps/web/src/components/shared/empty-state.tsx), which resolves a
@@ -15,7 +19,7 @@ import * as React from "react";
 import { type LucideIcon } from "lucide-react";
 import { cn } from "../../utils/cn";
 
-// ── Size config ──
+// ── Size config (sm / md / lg) ──
 
 const sizeConfig = {
   sm: {
@@ -43,22 +47,54 @@ const sizeConfig = {
 
 // ── Props ──
 
-export interface EmptyStateProps extends React.HTMLAttributes<HTMLDivElement> {
+interface EmptyStateBaseProps
+  extends Omit<React.HTMLAttributes<HTMLElement>, "title"> {
+  /** Primary message: the outcome, not the absence (spec §7). */
+  title: string;
+  /** Why it matters and what will appear here. */
+  description?: string;
+  /** Optional action (usually one button). Omit for an all-clear state. */
+  action?: React.ReactNode;
+}
+
+export interface EmptyStateIconProps extends EmptyStateBaseProps {
+  size?: "sm" | "md" | "lg";
   /** Icon component */
   icon?: LucideIcon;
-  /** Primary message (encouraging, action-oriented) */
-  title: string;
-  /** Additional context */
-  description?: string;
-  /** Optional action (usually a button) */
-  action?: React.ReactNode;
-  /** Size variant */
-  size?: "sm" | "md" | "lg";
+  illustration?: never;
+  eyebrow?: never;
+  aside?: never;
 }
+
+export interface EmptyStateSceneProps extends EmptyStateBaseProps {
+  /**
+   * hero: a whole page's content (h2, art in a sky panel, optional context
+   * column). section: a tab or panel (h3). compact: a widget, dropdown or
+   * table body (one line, no heading).
+   */
+  size: "hero" | "section" | "compact";
+  /** The scene, rendered at the same size (e.g. `<DocumentsScene size="hero" />`). Decorative. */
+  illustration?: React.ReactNode;
+  /** What the page is, e.g. "Documents". Hero only. */
+  eyebrow?: string;
+  /** Context column beside the scene (what you'll see, how you'll hear, help). Hero only. */
+  aside?: React.ReactNode;
+  icon?: never;
+}
+
+export type EmptyStateProps = EmptyStateIconProps | EmptyStateSceneProps;
 
 // ── Component ──
 
-export function EmptyState({
+function isSceneProps(props: EmptyStateProps): props is EmptyStateSceneProps {
+  return props.size === "hero" || props.size === "section" || props.size === "compact";
+}
+
+export function EmptyState(props: EmptyStateProps) {
+  return isSceneProps(props) ? <SceneEmptyState {...props} /> : <IconEmptyState {...props} />;
+}
+
+function IconEmptyState({
   icon: Icon,
   title,
   description,
@@ -66,7 +102,7 @@ export function EmptyState({
   size = "md",
   className,
   ...rest
-}: EmptyStateProps) {
+}: EmptyStateIconProps) {
   const s = sizeConfig[size];
 
   return (
@@ -101,5 +137,91 @@ export function EmptyState({
 
       {action && <div className="mt-4">{action}</div>}
     </div>
+  );
+}
+
+function SceneEmptyState({
+  size,
+  illustration,
+  eyebrow,
+  aside,
+  title,
+  description,
+  action,
+  className,
+  ...rest
+}: EmptyStateSceneProps) {
+  const titleId = React.useId();
+
+  if (size === "compact") {
+    return (
+      <div className={cn("flex items-center gap-3 p-4", className)} {...rest}>
+        {illustration}
+        <div className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-medium text-content">{title}</p>
+          {description && <p className="text-sm text-content-secondary">{description}</p>}
+          {action && <div>{action}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (size === "section") {
+    return (
+      <div
+        className={cn("flex flex-col items-center px-6 py-8 text-center", className)}
+        {...rest}
+      >
+        {illustration && <div className="mb-4">{illustration}</div>}
+        <h3 className="text-lg font-semibold text-content">{title}</h3>
+        {description && (
+          <p className="mt-2 max-w-[60ch] text-sm text-content-secondary">{description}</p>
+        )}
+        {action && <div className="mt-4">{action}</div>}
+      </div>
+    );
+  }
+
+  // hero (spec §4.4): one card; the scene card (art panel over text) beside an
+  // optional context column, split 8/4 once the CARD is 720px wide (cq-md),
+  // so a sidebar-narrowed page keeps one column. The setup hero, art beside
+  // text, is SetupGuide's (apps/web), not this.
+  return (
+    <section
+      aria-labelledby={titleId}
+      className={cn("cq overflow-hidden rounded-md border border-edge bg-surface-card", className)}
+      {...rest}
+    >
+      <div className={cn(aside && "cq-md:grid cq-md:grid-cols-12")}>
+        <div className={cn("flex min-w-0 flex-col", aside && "cq-md:col-span-8")}>
+          {illustration && (
+            <div className="flex items-end justify-center border-b border-edge bg-[var(--teal-50)] px-6 pt-6">
+              {illustration}
+            </div>
+          )}
+          <div className="px-4 py-6 md:px-6 md:py-8">
+            {eyebrow && <p className="text-xs font-medium text-content-secondary">{eyebrow}</p>}
+            <h2
+              id={titleId}
+              className={cn(
+                "text-2xl font-semibold leading-tight tracking-tight text-content",
+                eyebrow && "mt-1",
+              )}
+            >
+              {title}
+            </h2>
+            {description && (
+              <p className="mt-2 max-w-[60ch] text-base text-content-secondary">{description}</p>
+            )}
+            {action && <div className="mt-6 flex flex-wrap gap-2">{action}</div>}
+          </div>
+        </div>
+        {aside && (
+          <div className="flex min-w-0 flex-col gap-8 border-t border-edge px-4 py-6 md:px-6 cq-md:col-span-4 cq-md:border-l cq-md:border-t-0">
+            {aside}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
