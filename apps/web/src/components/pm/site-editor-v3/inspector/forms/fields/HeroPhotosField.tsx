@@ -35,6 +35,8 @@ const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
 /** What a manager calls each stock photo, in the sentence "the ___ photo". */
 const STOCK_PHOTO_NAME = Object.fromEntries(
   STOCK_PHOTO_IDS.map((id) => {
+    if (id === 'sunset') return [id, 'sunset'];
+    if (id === 'palms') return [id, 'palm-lined street'];
     const { name } = STOCK_PHOTOS[id];
     return [id, name.charAt(0).toLowerCase() + name.slice(1)];
   }),
@@ -56,6 +58,9 @@ interface StagedPhoto {
   replaces?: StockPhotoId;
 }
 
+// Only the retired pair swaps; a new-library photo gets no swap button until the picker task.
+const SWAP_PAIR: readonly StockPhotoId[] = ['sunset', 'palms'];
+
 /**
  * The stock photo a swap would offer for `current`: the other one, when it is not
  * already in the list, so a swap never puts the same photo in the strip twice.
@@ -65,7 +70,7 @@ interface StagedPhoto {
  */
 function swapTarget(photos: readonly HeroPhoto[], current: StockPhotoId): StockPhotoId | null {
   const taken = new Set(photos.flatMap((photo) => ('stock' in photo ? [photo.stock] : [])));
-  return STOCK_PHOTO_IDS.find((id) => id !== current && !taken.has(id)) ?? null;
+  return SWAP_PAIR.find((id) => id !== current && !taken.has(id)) ?? null;
 }
 
 /**
