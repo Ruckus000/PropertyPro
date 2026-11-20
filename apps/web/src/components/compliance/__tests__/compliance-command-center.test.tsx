@@ -282,7 +282,7 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
   });
 
-  it('the detail panel offers "Doesn\'t apply to us" on a conditional record with no file (F-8)', () => {
+  it('the detail panel offers "Doesn\'t apply to us" on a conditional record with no file (F-8)', async () => {
     mockChecklistReturn = {
       data: [
         { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'satisfied', documentId: 99, documentState: 'posted', deadline: null, rollingWindow: null, isApplicable: true },
@@ -294,7 +294,7 @@ describe('ComplianceCommandCenter', () => {
     renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
     const panel = screen.getByRole('complementary', { name: 'Selected record details' });
     fireEvent.click(within(panel).getByRole('button', { name: "Doesn't apply to us" }));
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
   });
 
   describe('first run (nothing posted, nothing overdue)', () => {
@@ -306,19 +306,19 @@ describe('ComplianceCommandCenter', () => {
       { id: 4, templateKey: '718_bids', title: 'Bids', category: 'operations', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isConditional: true, isApplicable: true },
     ];
 
-    it('is a calm countdown: no 0% score, no "requirements are now in effect" (F-6)', () => {
+    it('is a calm countdown: no 0% score, no "requirements are now in effect" (F-6)', async () => {
       mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
-      expect(screen.getByRole('heading', { level: 2, name: 'Your 30-day posting window has started' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 2, name: 'Your 30-day posting window has started' })).toBeInTheDocument();
       expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
       expect(screen.queryByText(/readiness/i, { selector: 'p, span, div' })).toBeNull();
       expect(screen.getByText(/0 of 3/).closest('li')?.textContent).toContain('required posted');
     });
 
-    it('groups by when records are due, a conditional one only under "if they apply"', () => {
+    it('groups by when records are due, a conditional one only under "if they apply"', async () => {
       mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
-      const due = screen.getByRole('region', { name: 'Post by the deadline' });
+      const due = await screen.findByRole('region', { name: 'Post by the deadline' });
       const rolling = screen.getByRole('region', { name: 'Keep current, rolling 12 months' });
       const conditional = screen.getByRole('region', { name: 'Only if they apply' });
       expect(due.textContent).toContain('Declaration');
@@ -340,26 +340,26 @@ describe('ComplianceCommandCenter', () => {
       expect(screen.getByText('Requirements are now in effect')).toBeInTheDocument();
     });
 
-    it('an owner (read only) gets the waiting state: no counts, no to-dos', () => {
+    it('an owner (read only) gets the waiting state: no counts, no to-dos', async () => {
       mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin={false} designation={null} canWrite={false} />);
-      expect(screen.getByRole('heading', { level: 2, name: "Your association's posted records appear here" })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 2, name: "Your association's posted records appear here" })).toBeInTheDocument();
       expect(screen.queryByText(/need your board to act/)).toBeNull();
       expect(screen.queryByRole('button', { name: /Upload/ })).toBeNull();
     });
 
-    it('a dated "if it applies" record says by when to post or set it aside', () => {
+    it('a dated "if it applies" record says by when to post or set it aside', async () => {
       mockChecklistReturn = {
         data: [...dayZero(), { id: 5, templateKey: '718_building_permits', title: 'Permits', category: 'operations', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isConditional: true, isApplicable: true }],
         isLoading: false,
         error: null,
       };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
-      const conditional = screen.getByRole('region', { name: 'Only if they apply' });
+      const conditional = await screen.findByRole('region', { name: 'Only if they apply' });
       expect(conditional.textContent).toMatch(/Post it, or mark it as not applying, by December 11/);
     });
 
-    it('counts only required board records, not conditional ones', () => {
+    it('counts only required board records, not conditional ones', async () => {
       // HOA: minutes (required) and bids (conditional) are both board-action records.
       mockChecklistReturn = {
         data: [
@@ -371,14 +371,14 @@ describe('ComplianceCommandCenter', () => {
         error: null,
       };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
-      expect(screen.getByText(/1 record needs your board to act/)).toBeInTheDocument();
+      expect(await screen.findByText(/1 record needs your board to act/)).toBeInTheDocument();
     });
 
-    it('offers "Doesn\'t apply to us" on a conditional record (F-8)', () => {
+    it('offers "Doesn\'t apply to us" on a conditional record (F-8)', async () => {
       mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
       renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
-      fireEvent.click(screen.getByRole('button', { name: "Doesn't apply to us: Bids" }));
-      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: "Doesn't apply to us: Bids" }));
+      expect(await screen.findByRole('dialog')).toBeInTheDocument();
     });
   });
 

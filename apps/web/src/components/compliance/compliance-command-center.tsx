@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
@@ -21,9 +22,17 @@ import { getTemplateDocumentCategory } from './compliance-visibility';
 import { LinkDocumentModal } from './link-document-modal';
 import { hasBoardDesignation, type BoardDesignation, type CommunityType } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
-import { ComplianceFirstRun } from './compliance-first-run';
-import { NotApplicableDialog } from '@/components/website-home/records/not-applicable-dialog';
 import { isComplianceFirstRun } from '@/lib/compliance/first-run';
+
+// Both render only conditionally (a new community's first run; a dialog opened
+// on demand), so their code — the illustration kit among it — loads only then.
+// Static imports put the page 104 KiB over its hard perf budget.
+const ComplianceFirstRun = dynamic(() => import('./compliance-first-run').then((m) => m.ComplianceFirstRun), {
+  loading: () => <Skeleton className="h-96 w-full" />,
+});
+const NotApplicableDialog = dynamic(() =>
+  import('@/components/website-home/records/not-applicable-dialog').then((m) => m.NotApplicableDialog),
+);
 
 // 'manager' = operational (CAM) audience view; 'board' = board audience view.
 // The label stays "CAM view" (Community Association Manager is the Florida term);
