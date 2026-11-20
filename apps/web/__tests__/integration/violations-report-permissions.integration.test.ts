@@ -431,6 +431,31 @@ describeDb('violations reporting permission matrix', () => {
       expect(await detailStatus(staffFiled)).toBe(200);
     });
 
+    // Command-palette search is a separate raw-SQL read path; it must apply
+    // the same rule, or the hidden case's text leaks through a search box.
+    it('is hidden from the household in search too, while staff filings are found', async () => {
+      const { state, neighbourId, otherUnitAId } = req();
+      const communityA = requireCommunity(state, 'communityA');
+      const word = `zebracrossing${state.runSuffix}`.replace(/[^a-z0-9]/gi, '');
+      const residentFiled = await file('tenantA', otherUnitAId, `${word} resident`);
+      const staffFiled = await file('actorA', otherUnitAId, `${word} staff`);
+
+      const hits = await state.dbModule.searchViolationsByTrigram(communityA.id, word, 20, {
+        isAdmin: false,
+        userId: neighbourId,
+      });
+      const ids = hits.results.map((r) => Number(r.id));
+      expect(ids).toContain(staffFiled);
+      expect(ids).not.toContain(residentFiled);
+
+      const filerHits = await state.dbModule.searchViolationsByTrigram(communityA.id, word, 20, {
+        isAdmin: true,
+      });
+      expect(filerHits.results.map((r) => Number(r.id))).toEqual(
+        expect.arrayContaining([residentFiled, staffFiled]),
+      );
+    });
+
     it('shows to the household once it moves past reported, still without the reporter', async () => {
       const { state, neighbourId, otherUnitAId } = req();
       const communityA = requireCommunity(state, 'communityA');

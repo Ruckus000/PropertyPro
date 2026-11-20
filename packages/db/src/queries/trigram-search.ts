@@ -300,8 +300,13 @@ export interface ViolationSearchHit {
 }
 
 /**
- * Search violations. Residents see only violations for their own unit(s).
- * Admins see all community violations.
+ * Search violations. Residents see only violations for their own unit(s),
+ * minus a case another resident filed that is still `reported` — the same
+ * D1a rule as `residentVisibleViolationsWhere` in
+ * apps/web/src/lib/violations/common.ts (a neighbour's report reaches the
+ * cited household only once the association acts on it; the filer always
+ * sees their own). Callers pass `isAdmin` for every viewer who reads all
+ * units (managers and board seats). Keep the two in step.
  */
 export async function searchViolationsByTrigram(
   communityId: number,
@@ -334,6 +339,16 @@ export async function searchViolationsByTrigram(
               WHERE user_id = ${opts?.userId}
                 AND community_id = ${communityId}
                 AND unit_id IS NOT NULL
+            )
+            AND (
+              violations.status <> 'reported'
+              OR violations.reported_by_user_id = ${opts?.userId}
+              OR NOT EXISTS (
+                SELECT 1 FROM user_roles reporter
+                WHERE reporter.user_id = violations.reported_by_user_id
+                  AND reporter.community_id = violations.community_id
+                  AND reporter.role = 'resident'
+              )
             )
             AND description %> ${query}
           ORDER BY relevance DESC

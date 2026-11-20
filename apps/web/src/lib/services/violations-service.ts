@@ -409,7 +409,9 @@ async function notifyArcDecision(
       {
         category: 'violation',
         title: approved ? 'ARC Application Approved' : 'ARC Application Denied',
-        body: `Your ARC application #${submission.id} was ${approved ? 'approved' : 'denied'}.`,
+        body: approved
+          ? `Your ARC application #${submission.id} was approved.`
+          : arcDenialDescription(submission),
         actionUrl: residentNoticePath('arc', communityId, String(submission.id)),
         sourceType: 'violation',
         sourceId: `violation-arc:${submission.id}:${submission.status}`,

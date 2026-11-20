@@ -358,6 +358,12 @@ describe('violations-service', () => {
           'Your ARC application #7 was denied. Rule or covenant relied on: Declaration Art. VII §3 ' +
           'Committee notes: Exceeds the 4 ft height limit.',
       });
+      // The in-app entry carries the same reason, not a bare "denied".
+      expect(createNotificationsForEventMock.mock.calls[0]![1]).toMatchObject({
+        body:
+          'Your ARC application #7 was denied. Rule or covenant relied on: Declaration Art. VII §3 ' +
+          'Committee notes: Exceeds the 4 ft height limit.',
+      });
     });
 
     it('does not require a reason to APPROVE', async () => {

@@ -79,6 +79,9 @@ const listSeveritySchema = z.enum(['minor', 'moderate', 'major']);
 // A resident can now file against any unit, so cap how often one member can
 // put cases in front of the board. Generous enough for a real run of
 // problems; a burst beyond it is noise or harassment.
+// ponytail: the house limiter (getRateLimiter) is in-memory per server
+// instance, so the cap is per warm instance, not a true daily total. Trigger:
+// one resident's filings in a day exceed 10 in the violations table.
 const RESIDENT_REPORT_RATE_LIMIT_MAX = 10;
 const RESIDENT_REPORT_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
