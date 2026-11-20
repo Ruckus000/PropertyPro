@@ -340,10 +340,11 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * default the site could have received (`outgoingDefaults`), parsed the same
  * way. Parsing both sides is what makes a section stored with the schema's
  * defaults filled in, or with its keys in jsonb's order, still count. A hero
- * showing only stock photos is compared without them, on both sides. Anything
- * else is the manager's: edited content, content that does not parse, and every
- * hidden section, even one whose default hides it too (an admin's starter-pack
- * version can).
+ * showing only stock photos is compared by whether it shows any, on both sides
+ * (`untouchedIdentity`): another stock photo is not an edit, no photo is.
+ * Anything else is the manager's: edited content, content that does not
+ * parse, and every hidden section, even one whose default hides it too (an
+ * admin's starter-pack version can).
  *
  * - `incoming` already drafted (`draftedLookId`): the page exactly as it is.
  *   Its sections were planned when that look was drafted, and planning again
@@ -707,15 +708,19 @@ function isUntouched(siteSection: SiteSection, defaults: ReadonlyMap<string, Rea
 
 /**
  * Parsed content as "untouched" compares it, the same for a section and for a
- * default: a hero showing only stock photos (or none) is compared without them.
- * Stock photos are ours, so picking another one, or a hero still showing a
- * look's earlier default, does not make it edited. A hero with an upload keeps
- * its photos in the comparison, so it never matches a default with stock ones.
+ * default. A hero's photos are compared by kind: one or more stock photos are
+ * all `'stock'`, and no photo is `'none'`. Stock photos are ours, so picking
+ * another one, or a hero still showing a look's earlier default, does not make
+ * it edited. Removing every photo does: a switch never takes a photo away, so it
+ * must not put one back over a hero the manager emptied. A hero with an upload
+ * or the legacy single image keeps its photos as they are, so it never matches a
+ * default.
  */
 function untouchedIdentity(blockType: string, data: unknown): string {
-  if (blockType !== 'hero' || !onlyStockPhotos(data)) return stableStringify(data);
-  const { photos: _stock, ...rest } = data as Record<string, unknown>;
-  return stableStringify(rest);
+  const photos = blockType === 'hero' ? visibleHeroPhotos(data) : null;
+  if (photos === null || !photos.every((photo) => 'stock' in photo)) return stableStringify(data);
+  const { photos: _photos, ...rest } = data as Record<string, unknown>;
+  return stableStringify({ ...rest, photos: photos.length > 0 ? 'stock' : 'none' });
 }
 
 function isHidden(data: unknown): boolean {
@@ -744,9 +749,10 @@ function countByType(sections: readonly SiteSection[]): Map<string, number> {
 // stays exactly as it is. A look with no photo (Plain & Simple) leaves the hero
 // alone, stock photo included.
 //
-// "Untouched" leaves stock photos out of its comparison (`untouchedIdentity`),
-// so a hero that differs from a default only in its stock photo takes the
-// incoming look's whole hero. Returning to the live look puts the live row's
+// "Untouched" compares stock photos by kind (`untouchedIdentity`), so a hero
+// that differs from a default only in which stock photo it shows takes the
+// incoming look's whole hero, while one emptied of a default's photo is an edit
+// (and, having no photo, takes the incoming look's, keeping its words). Returning to the live look puts the live row's
 // photos back over a hero showing only stock photos, when the live row shows no
 // upload, so a switch's photo never outlives the switch. A hero with no photo at
 // all is left alone there: a switch never takes a photo away, so none is an edit.

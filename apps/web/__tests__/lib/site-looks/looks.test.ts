@@ -86,6 +86,12 @@ function heroPhotosOf(lookDef: LookDefinition): unknown {
   return content.photos;
 }
 
+/** A hero's content with no `photos` key. */
+function withoutPhotos(content: unknown): Record<string, unknown> {
+  const { photos: _photos, ...rest } = content as Record<string, unknown>;
+  return rest;
+}
+
 function types(sections: readonly { blockType: string }[]): string[] {
   return sections.map((s) => s.blockType);
 }
@@ -623,6 +629,46 @@ describe('planLookSwitch', () => {
       expect(staged(live, back.sections).drafts).toEqual([
         expect.objectContaining({ slot: 1, blockType: 'hero', content: { ...EDITED_HERO, headline: 'Harbor Pointe East' } }),
       ]);
+    });
+
+    it("removing the photo from a hero with its look's default words is an edit, kept on the way back", () => {
+      // Live Bayfront as published; under Palm Grove the manager removes the
+      // photo from Palm Grove's untouched hero. A switch never takes a photo away,
+      // and never puts one back over a hero the manager emptied.
+      const live = livePage(bayfront.sections);
+      const noPhoto = withoutPhotos(sectionOf(palmGrove.sections, 'hero').content);
+
+      const { back } = roundTrip(live, bayfront, palmGrove, (page) => edited(page, 'hero', noPhoto));
+
+      expect(back.sections[0]?.content).toEqual(noPhoto);
+      expect(staged(live, back.sections)).toMatchObject({
+        drafts: [expect.objectContaining({ slot: 1, blockType: 'hero', content: noPhoto })],
+        tombstones: [],
+      });
+    });
+
+    it("a hero with its look's default words and no photo is edited, and takes the incoming look's photo", () => {
+      const noPhoto = withoutPhotos(sectionOf(bayfront.sections, 'hero').content);
+      expect(heroAfter(noPhoto, heritage)).toEqual({ id: 100, blockType: 'hero', content: { ...noPhoto, photos: heroPhotosOf(heritage) } });
+    });
+
+    it("a legacy single image with its look's default words is not untouched", () => {
+      const legacy = { ...withoutPhotos(sectionOf(bayfront.sections, 'hero').content), heroImagePath: '7/hero/front.jpeg' };
+      expect(heroAfter(legacy, heritage)).toEqual({ id: 100, blockType: 'hero', content: legacy });
+    });
+
+    it("Plain & Simple's hero, which has no photo, is untouched when switching away", () => {
+      const current = siteFrom(plainSimple.sections);
+      expect(planLookSwitch({ current, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: heritage })).toEqual(
+        asPlanned(heritage.sections),
+      );
+      // Beside an edited section too: the hero alone is replaced by Heritage's.
+      const withEdit = siteFrom(plainSimple.sections);
+      const contactAt = types(withEdit).indexOf('contact');
+      withEdit[contactAt] = { id: 999, blockType: 'contact', content: { showBoard: false, showManagement: true } };
+      expect(
+        planLookSwitch({ current: withEdit, outgoingDefaults: [plainSimple.sections], draftedLookId: null, live: null, incoming: heritage })[0],
+      ).toEqual(sectionOf(heritage.sections, 'hero'));
     });
 
     it('returning to the live look restores a live strip of stock photos', () => {
