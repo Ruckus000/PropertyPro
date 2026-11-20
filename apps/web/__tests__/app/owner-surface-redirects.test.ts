@@ -15,12 +15,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   membershipMock,
   listActorUnitIdsMock,
-  withUnitLabelsMock,
+  listLiveUnitOptionsMock,
   getReportMock,
 } = vi.hoisted(() => ({
   membershipMock: vi.fn(),
   listActorUnitIdsMock: vi.fn(),
-  withUnitLabelsMock: vi.fn(),
+  listLiveUnitOptionsMock: vi.fn(),
   getReportMock: vi.fn(),
 }));
 
@@ -43,7 +43,7 @@ vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(() => ({ query: vi.fn(async () => []) })),
 }));
 vi.mock('@/lib/units/actor-units', () => ({ listActorUnitIds: listActorUnitIdsMock }));
-vi.mock('@/lib/units/unit-labels', () => ({ withUnitLabels: withUnitLabelsMock }));
+vi.mock('@/lib/units/unit-labels', () => ({ listLiveUnitOptions: listLiveUnitOptionsMock }));
 vi.mock('@/lib/services/wind-mitigation-service', () => ({
   getWindMitigationReportById: getReportMock,
 }));
@@ -95,7 +95,7 @@ const paymentsProps = {
 beforeEach(() => {
   vi.clearAllMocks();
   listActorUnitIdsMock.mockResolvedValue([]);
-  withUnitLabelsMock.mockResolvedValue([]);
+  listLiveUnitOptionsMock.mockResolvedValue([]);
   getReportMock.mockResolvedValue({ id: 9, formType: 'oir_b1_1802', buildingLabel: null });
 });
 

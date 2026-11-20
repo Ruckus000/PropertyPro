@@ -257,6 +257,10 @@ export function buildInsuranceAlertEmail(params: {
  * PropertyPro exits the loop. The agent email carries the attorney-reviewed
  * framing that PropertyPro is relaying a request, not issuing a certificate.
  */
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
 export function buildCertificateRequestEmail(params: {
   communityName: string;
   carrierName: string;
@@ -268,6 +272,16 @@ export function buildCertificateRequestEmail(params: {
   recipientEmail: string;
   loanNumber: string | null;
 }): { agentSubject: string; agentBody: string; confirmationSubject: string; confirmationBody: string } {
+  // Every value is user- or admin-entered free text that lands between fixed
+  // lines of a plain-text email (each \n becomes a <br/>, a blank line a new
+  // paragraph). Collapse whitespace so no field can forge a line — e.g. a
+  // recipient name carrying "\nUnit: 4B" to ask for a neighbour's certificate.
+  params = Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? oneLine(value) : value,
+    ]),
+  ) as typeof params;
   const policyLine = params.policyNumber
     ? `${params.carrierName} (policy ${params.policyNumber})`
     : params.carrierName;

@@ -126,10 +126,16 @@ function PolicyCard({
               </a>
             </Button>
           )}
-          <Button size="sm" onClick={() => setRequestOpen(true)} disabled={!policy.agentEmail}>
-            <FileText className="h-4 w-4" aria-hidden="true" />
-            Request a Certificate for My Lender
-          </Button>
+          {/* A request names one of the viewer's own units. A manager with no
+              unit of their own has nothing to request for, so the button would
+              only open a dead end; an owner without a linked unit still gets
+              the dialog, which tells them to ask the manager to link it. */}
+          {!(canManage && ownUnits.length === 0) && (
+            <Button size="sm" onClick={() => setRequestOpen(true)} disabled={!policy.agentEmail}>
+              <FileText className="h-4 w-4" aria-hidden="true" />
+              Request a Certificate for My Lender
+            </Button>
+          )}
 
           {canManage && (
             <>

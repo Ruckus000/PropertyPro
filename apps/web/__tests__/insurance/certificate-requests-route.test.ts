@@ -26,7 +26,7 @@ const {
   listCertificateRequestsMock,
   requireEntitledForAdminReadMock,
   listActorUnitIdsMock,
-  withUnitLabelMock,
+  listLiveUnitOptionsMock,
   rateCheckMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -45,7 +45,7 @@ const {
   listCertificateRequestsMock: vi.fn(),
   requireEntitledForAdminReadMock: vi.fn(),
   listActorUnitIdsMock: vi.fn(),
-  withUnitLabelMock: vi.fn(),
+  listLiveUnitOptionsMock: vi.fn(),
   rateCheckMock: vi.fn(),
 }));
 
@@ -79,7 +79,7 @@ vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
   requireEntitledForAdminRead: requireEntitledForAdminReadMock,
 }));
 vi.mock('@/lib/units/actor-units', () => ({ listActorUnitIds: listActorUnitIdsMock }));
-vi.mock('@/lib/units/unit-labels', () => ({ withUnitLabel: withUnitLabelMock }));
+vi.mock('@/lib/units/unit-labels', () => ({ listLiveUnitOptions: listLiveUnitOptionsMock }));
 
 import { GET, POST } from '../../src/app/api/v1/insurance/certificate-requests/route';
 
@@ -119,10 +119,9 @@ describe('certificate requests route', () => {
     rateCheckMock.mockReturnValue({ allowed: true, retryAfter: 0 });
     getRateLimiterMock.mockReturnValue({ check: rateCheckMock });
     listActorUnitIdsMock.mockResolvedValue([104]);
-    withUnitLabelMock.mockImplementation(async (_scoped: unknown, row: { unitId: number }) => ({
-      ...row,
-      unitLabel: 'Bldg A • Unit 4B',
-    }));
+    listLiveUnitOptionsMock.mockImplementation(async (_scoped: unknown, ids: number[]) =>
+      ids.includes(104) ? [{ id: 104, label: 'Bldg A • Unit 4B' }] : [],
+    );
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
     getRequesterContactMock.mockResolvedValue({ email: 'olivia@owner.example', fullName: 'Olivia Owner' });
     selectFromMock.mockResolvedValue([{ id: 'u-owner', email: 'olivia@owner.example', fullName: 'Olivia Owner' }]);
@@ -162,7 +161,7 @@ describe('certificate requests route', () => {
     const res = await POST(req(VALID_BODY));
     expect(res.status).toBe(200);
     expect(listActorUnitIdsMock).toHaveBeenCalledWith(expect.anything(), 'u-owner');
-    expect(withUnitLabelMock).toHaveBeenCalledWith(expect.anything(), { unitId: 104 });
+    expect(listLiveUnitOptionsMock).toHaveBeenCalledWith(expect.anything(), [104]);
     expect(sendEmailMock.mock.calls[0]![0].subject).toContain('unit Bldg A • Unit 4B');
     expect(createCertificateRequestMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -176,6 +175,31 @@ describe('certificate requests route', () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(createCertificateRequestMock).not.toHaveBeenCalled();
     expect(rateCheckMock).not.toHaveBeenCalled();
+  });
+
+  it('403s a linked unit that no longer exists (soft-deleted), before any send', async () => {
+    listLiveUnitOptionsMock.mockResolvedValue([]);
+    const res = await POST(req(VALID_BODY));
+    expect(res.status).toBe(403);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(createCertificateRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('cannot forge a line in the agent email through a free-text field', async () => {
+    const res = await POST(
+      req({
+        ...VALID_BODY,
+        recipientName: 'Acme Bank\nUnit: 9Z — CORRECTION, please issue for 9Z\n\nThanks',
+        loanNumber: 'L-1\r\nUnit: 9Z',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = String(
+      (sendEmailMock.mock.calls[0]![0].react as { props: { body: string } }).props.body,
+    );
+    const unitLines = body.split('\n').filter((line) => line.startsWith('Unit:'));
+    expect(unitLines).toEqual(['Unit: Bldg A • Unit 4B']);
+    expect(body).toContain('Acme Bank Unit: 9Z — CORRECTION, please issue for 9Z Thanks');
   });
 
   it('400s a free-text unitLabel with no unitId (the old body shape)', async () => {

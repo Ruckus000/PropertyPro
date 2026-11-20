@@ -21,7 +21,7 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { listActorUnitIds } from '@/lib/units/actor-units';
-import { withUnitLabels } from '@/lib/units/unit-labels';
+import { listLiveUnitOptions } from '@/lib/units/unit-labels';
 import { PageHeader } from '@/components/shared/page-header';
 import { InsuranceSummarySection } from '@/components/insurance/insurance-summary-section';
 import { WindMitigationSection } from '@/components/insurance/wind-mitigation-section';
@@ -62,12 +62,7 @@ export default async function InsurancePage({ params }: PageProps) {
 
   // The units a certificate request may name (the route re-checks this).
   const scoped = createScopedClient(communityId);
-  const ownUnitIds = await listActorUnitIds(scoped, userId);
-  const ownUnits = (
-    await withUnitLabels(scoped, ownUnitIds.map((unitId) => ({ unitId })))
-  )
-    .map(({ unitId, unitLabel }) => ({ id: unitId, label: unitLabel }))
-    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  const ownUnits = await listLiveUnitOptions(scoped, await listActorUnitIds(scoped, userId));
 
   return (
     <>

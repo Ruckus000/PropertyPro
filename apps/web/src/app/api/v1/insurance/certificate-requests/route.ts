@@ -7,9 +7,11 @@
  * directly and PropertyPro exits the loop (§626.854 line). Rate-limited because
  * it emails an external party on user input.
  *
- * The request names one of the requester's OWN units (`listActorUnitIds`); the
- * unit label in the agent's email is derived from that unit row, never typed,
- * so an owner cannot ask the agent for a certificate on a neighbour's unit.
+ * The request names one of the requester's OWN, still-existing units
+ * (`listActorUnitIds` ∩ live `units` rows); the unit label in the agent's email
+ * is derived from that unit row, never typed, so an owner cannot ask the agent
+ * for a certificate on a neighbour's unit. The email builder collapses line
+ * breaks in every free-text field so none can forge a "Unit:" line either.
  */
 import { createElement } from 'react';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
@@ -26,7 +28,7 @@ import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 import { listActorUnitIds } from '@/lib/units/actor-units';
-import { withUnitLabel } from '@/lib/units/unit-labels';
+import { listLiveUnitOptions } from '@/lib/units/unit-labels';
 import {
   createCertificateRequest,
   getInsurancePolicyById,
@@ -79,10 +81,12 @@ export const POST = withErrorHandler(
     const scoped = createScopedClient(communityId);
     // Before the rate limit, so a refused unit does not spend one of the
     // owner's five daily sends.
-    const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
-    if (!actorUnitIds.includes(body.unitId)) {
+    const ownUnits = await listLiveUnitOptions(scoped, await listActorUnitIds(scoped, actorUserId));
+    const unit = ownUnits.find((candidate) => candidate.id === body.unitId);
+    if (!unit) {
       throw new ForbiddenError('You can only request a certificate for your own unit.');
     }
+    const unitLabel = unit.label;
 
     // Emails an external party on user input — rate-limit per user.
     const rate = getRateLimiter().check(
@@ -96,10 +100,7 @@ export const POST = withErrorHandler(
       );
     }
 
-    const [policy, { unitLabel }] = await Promise.all([
-      getInsurancePolicyById(scoped, body.policyId),
-      withUnitLabel(scoped, { unitId: body.unitId }),
-    ]);
+    const policy = await getInsurancePolicyById(scoped, body.policyId);
     if (!policy) throw new ValidationError('Policy not found in this community');
     const agentEmail = policy.agentEmail;
     if (typeof agentEmail !== 'string' || agentEmail.length === 0) {

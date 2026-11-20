@@ -19,6 +19,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from '@propertypro/db/filters';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
@@ -217,6 +218,26 @@ describeDb('insurance certificate-request visibility (db-backed)', () => {
     );
     expect(res.status).toBe(403);
     expect(await listAs(ownerAId)).toHaveLength(1);
+  });
+
+  it('refuses a linked unit that has since been soft-deleted', async () => {
+    const { state, route, communityId, policyId } = req();
+    const { id: ownerCId, unitId: unitCId } = await seedOwner(state, 'c');
+    await state.dbModule
+      .createScopedClient(communityId)
+      .softDelete(state.dbModule.units, eq(state.dbModule.units.id, unitCId));
+    setActorById(state, ownerCId);
+    const res = await route.POST(
+      jsonRequest(apiUrl('/api/v1/insurance/certificate-requests'), 'POST', {
+        communityId,
+        policyId,
+        unitId: unitCId,
+        recipientName: 'Lender C',
+        recipientEmail: `lender-c+${state.runSuffix}@example.com`,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await listAs(ownerCId)).toHaveLength(0);
   });
 
   it("owner B's GET returns only owner B's request", async () => {
