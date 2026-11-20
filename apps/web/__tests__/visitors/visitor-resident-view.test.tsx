@@ -209,7 +209,11 @@ describe('<VisitorResidentView> — revoke', () => {
     expect(screen.getByText('You can only revoke passes you registered')).toBeInTheDocument();
   });
 
-  it('hides Revoke on a checked-out pass', () => {
+  // Today one log row is one visit, so a checked-out pass derives
+  // `checked_out` and is spent. (When reusable passes read `expected` again
+  // between visits, this case flips: the derived status, not checkedOutAt,
+  // decides.)
+  it('hides Revoke on a pass whose status is checked out', () => {
     useMyVisitorsMock.mockReturnValue(
       queryState({
         data: [{
@@ -218,6 +222,17 @@ describe('<VisitorResidentView> — revoke', () => {
           checkedOutAt: '2026-11-20T20:00:00.000Z',
         }],
       }),
+    );
+
+    renderView();
+
+    expect(screen.getByText('Jane Guest')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Revoke' })).toBeNull();
+  });
+
+  it('hides Revoke once the pass has expired', () => {
+    useMyVisitorsMock.mockReturnValue(
+      queryState({ data: [{ ...HOST_PASS, validUntil: '2020-01-01T00:00:00.000Z' }] }),
     );
 
     renderView();

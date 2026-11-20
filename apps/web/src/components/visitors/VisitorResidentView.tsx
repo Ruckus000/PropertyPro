@@ -125,12 +125,17 @@ function VisitorCard({
   const [revoking, setRevoking] = useState(false);
 
   // One-time passes stay non-revocable by residents (visitor spec: a one-time
-  // pass simply expires). A checked-out pass has nothing left to revoke.
+  // pass simply expires). Read the DERIVED status, not `checkedOutAt`: a pass
+  // whose status is checked out or expired has nothing left to revoke, while a
+  // reusable pass that reads `expected` between visits is still a live
+  // credential and must stay revocable.
+  const status = getVisitorStatus(visitor);
   const canRevoke = allowResidentVisitorRevoke
     && visitor.hostUserId === currentUserId
     && (visitor.guestType === 'recurring' || visitor.guestType === 'permanent')
     && !visitor.revokedAt
-    && !visitor.checkedOutAt;
+    && status !== 'checked_out'
+    && status !== 'expired';
 
   const passCode = visitor.passCode;
 
