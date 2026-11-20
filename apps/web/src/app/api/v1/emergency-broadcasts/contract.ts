@@ -1,16 +1,20 @@
 /**
  * Route contracts for `GET` and `POST /api/v1/emergency-broadcasts`.
  *
- * Plan A1 drain #114. Paginated list + create draft broadcast.
+ * Paginated list + create draft broadcast.
  *
  * Emergency broadcasts bypass subscription guard (life-safety over revenue).
  *
- * GET auth surface (preserved verbatim):
+ * GET auth surface:
  *   requireAuthenticatedUserId
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → requireCommunityMembership
  *     → requirePermission('emergency_broadcasts', 'read')
- *     → paginateEmergencyBroadcasts({ communityId, cursor, pageSize })
+ *     → paginateEmergencyBroadcasts({ communityId, cursor, pageSize,
+ *         recipientUserId: non-managers only })
+ *
+ * Managers page over every broadcast row. Everyone else pages over the
+ * broadcasts sent to them, as `{ id, title, body, severity, completedAt }`.
  *
  * `cursor` and `pageSize` are parsed manually in the handler (NOT in Zod)
  * to preserve empty-string → missing semantics via `||`.
@@ -23,18 +27,7 @@
  *     → requirePermission('emergency_broadcasts', 'write')
  *     → createBroadcast (NO requireActiveSubscriptionForMutation)
  *
- * B1-style envelope migration on POST: pre-migration returned flat
- * `NextResponse.json(result)` without `{data}` wrapper. Post-migration the
- * runner wraps into canonical `{ data: result }`. Integration test in
- * `apps/web/__tests__/emergency/emergency-broadcast-routes.test.ts` swept
- * in the same change (drain #76 send precedent).
- *
- * POST validation: body fields validated by contract Zod (400
- * `VALIDATION_ERROR`) instead of pre-migration 422 `UnprocessableEntityError`
- * — status/body shape change only for invalid payloads; success path unchanged
- * at 200.
- *
- * `emergency_broadcasts` IS in `RBAC_RESOURCES`.
+ * POST returns `{ data: result }`; invalid bodies are 400 `VALIDATION_ERROR`.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

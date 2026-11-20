@@ -6,10 +6,8 @@ interface Broadcast {
   id: number;
   title: string;
   severity: string;
-  recipientCount: number;
-  sentCount: number;
-  deliveredCount: number;
-  failedCount: number;
+  /** Manager rows only. */
+  recipientCount?: number;
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
@@ -18,6 +16,8 @@ interface Broadcast {
 interface Props {
   broadcasts: Broadcast[];
   communityId: number;
+  /** Recipients + Status columns. Off for residents: every row is an alert they received. */
+  showDelivery?: boolean;
 }
 
 const SEVERITY_BADGE: Record<string, string> = {
@@ -32,7 +32,7 @@ function getStatusLabel(broadcast: Broadcast): { label: string; className: strin
   return { label: 'Draft', className: 'text-status-warning' };
 }
 
-export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {
+export function BroadcastHistoryTable({ broadcasts, communityId, showDelivery = true }: Props) {
   if (broadcasts.length === 0) {
     return (
       <div className="rounded-md border border-edge bg-surface-card p-8 text-center">
@@ -48,8 +48,12 @@ export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Title</th>
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Severity</th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Recipients</th>
-            <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
+            {showDelivery && (
+              <>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Recipients</th>
+                <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Status</th>
+              </>
+            )}
             <th className="px-4 py-3 text-left text-xs font-medium uppercase text-content-tertiary">Date</th>
           </tr>
         </thead>
@@ -71,14 +75,18 @@ export function BroadcastHistoryTable({ broadcasts, communityId }: Props) {
                     {b.severity}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-content-secondary">
-                  {b.recipientCount}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-sm font-medium ${status.className}`}>
-                    {status.label}
-                  </span>
-                </td>
+                {showDelivery && (
+                  <>
+                    <td className="px-4 py-3 text-sm text-content-secondary">
+                      {b.recipientCount}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm font-medium ${status.className}`}>
+                        {status.label}
+                      </span>
+                    </td>
+                  </>
+                )}
                 <td className="px-4 py-3 text-sm text-content-tertiary">
                   {new Date(b.initiatedAt).toLocaleString()}
                 </td>

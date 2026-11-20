@@ -1,20 +1,20 @@
 /**
  * Route contract for `GET /api/v1/emergency-broadcasts/[id]`.
  *
- * Plan A1 drain #115. Detail + delivery report. Sibling collection drained in #114.
+ * Managers get the broadcast with its delivery report. Everyone else with
+ * read access (owners, board seats included) gets only the message, and only
+ * for a broadcast that was sent to them — anything else is 404.
  *
  * Auth surface (handler order after runRoute validates params/query):
  *   requireAuthenticatedUserId
  *     → resolveEffectiveCommunityId(req, query.communityId)
  *     → requireCommunityMembership
  *     → requirePermission('emergency_broadcasts', 'read')
- *     → getBroadcastWithReport
+ *     → membership.isAdmin ? getBroadcastWithReport : getBroadcastForRecipient
  *
- * Invalid params/query return 400 before auth (standard runRoute delta vs legacy).
+ * Invalid params/query return 400 before auth.
  *
- * `emergency_broadcasts` IS in `RBAC_RESOURCES`.
- *
- * Response: loose `z.unknown()` — report rows may carry `Date` fields.
+ * Response: loose `z.unknown()` — two shapes by viewer, both carry `Date` fields.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

@@ -52,10 +52,12 @@ export const GET = withErrorHandler(
       throw new ValidationError('Invalid query parameters');
     }
 
+    // Non-managers (owners, incl. board seats) list only what was sent to them.
     const result = await paginateEmergencyBroadcasts({
       communityId,
       cursor: parsedQuery.data.cursor,
       pageSize: parsedQuery.data.pageSize,
+      ...(membership.isAdmin ? {} : { recipientUserId: userId }),
     });
 
     return { data: result.data, pagination: result.pagination };
