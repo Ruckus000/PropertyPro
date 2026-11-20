@@ -39,6 +39,7 @@ import { useComplianceMutations } from '@/hooks/use-compliance-mutations';
 import {
   buildStarterSet,
   buildStatutorySteps,
+  hasDraft,
   isApplicable,
   isPosted,
   statutoryProgress,
@@ -98,18 +99,19 @@ function StatutorySetup({
       { itemId: item.id, documentId, replace: item.documentId != null },
       {
         onSuccess: () => {
-          onChanged();
           const posted = progress.posted + (item.isConditional ? 0 : 1);
           onAnnounce(`${item.title} posted. ${posted} of ${progress.required} required.`);
         },
         onError: (err) => toast.error(err.message),
+        // The file is posted either way: refresh so the library shows it.
+        onSettled: onChanged,
       },
     );
   }
 
   const guideSteps: SetupStep[] = steps.map((step) => {
     const items = step.items as ChecklistItemData[];
-    const nextInStep = items.find((i) => !i.isConditional && isApplicable(i) && !isPosted(i));
+    const nextInStep = items.find((i) => !i.isConditional && isApplicable(i) && !isPosted(i) && !hasDraft(i));
     return {
       id: step.key,
       label: step.label,
@@ -284,7 +286,7 @@ function ApartmentSetup({
       done: true,
       system: true,
       heading: 'Your folders are ready',
-      description: `${categories.length} folders were created with your community.`,
+      description: `Your community has ${categories.length} folders to file into.`,
       items: categories.map((c) => ({ label: c.name })),
     },
     {
@@ -319,7 +321,9 @@ function ApartmentSetup({
       eyebrow="Document library"
       title="Give residents the papers they ask for most"
       description="Start with the ones your tenants can open from their own portal. This is a suggested starter set, not a legal list, so skip anything you don't use."
-      progress={{ done: essentialsFilled, total: residentFacing.length, label: 'resident essentials' }}
+      {...(residentFacing.length > 0
+        ? { progress: { done: essentialsFilled, total: residentFacing.length, label: 'resident essentials' } }
+        : {})}
       facts={[
         { icon: <CheckCircle2 aria-hidden="true" className="size-4 text-status-success" />, label: `${categories.length} folders already set up` },
         { icon: <Smartphone aria-hidden="true" className="size-4" />, label: 'Tenants open these in their portal' },

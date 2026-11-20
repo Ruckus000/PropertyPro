@@ -269,6 +269,8 @@ const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementati
 
 describe('the view switcher', () => {
   beforeEach(() => {
+    // A loaded library: while the list may still be empty the views are hidden.
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
     searchParams = new URLSearchParams();
     routerReplace.mockClear();
     historyReplace.mockClear();
@@ -569,6 +571,25 @@ describe('empty states', () => {
     expect(screen.getByTestId('table-empty-message').textContent).toBe('No documents match these filters.');
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     expect(screen.getByTestId('table-empty-message').textContent).toBe('');
+  });
+
+  it('while the record list is still loading, an empty list waits: no plain empty state, no toolbar', () => {
+    useComplianceChecklistMock.mockReturnValue({ isLoading: true, isSuccess: false, error: null, data: undefined } as never);
+    renderLibrary();
+    expect(screen.queryByText(/Build your document library/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open upload panel' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'List' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Post the records owners can see' })).toBeNull();
+  });
+
+  it('says so, with Try again, when the record list fails to load', () => {
+    const refetch = vi.fn();
+    useComplianceChecklistMock.mockReturnValue({ isLoading: false, isSuccess: false, isError: true, error: new Error('x'), data: undefined, refetch } as never);
+    useDocumentsMock.mockReturnValue({ ...READY, data: [DOC] });
+    renderLibrary();
+    expect(screen.getByText("We couldn't load your record list.")).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledOnce();
   });
 
   it('offers no Timeline where there are no statutory records to put on it', () => {

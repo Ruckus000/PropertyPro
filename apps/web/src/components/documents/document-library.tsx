@@ -34,13 +34,7 @@ import { type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { DocumentsScene } from '@propertypro/ui';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import { getTemplateDocumentCategory } from '@/components/compliance/compliance-visibility';
-import {
-  ContextLinks,
-  ContextRows,
-  ContextSection,
-  ContinueSetupBar,
-  useSetupDismissed,
-} from '@/components/shared/setup-guide';
+import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -253,7 +247,10 @@ export function DocumentLibrary({
   );
   const documentCountByCategory = useMemo(() => {
     const counts = new Map<number, number>();
-    for (const d of documents) if (d.categoryId != null) counts.set(d.categoryId, (counts.get(d.categoryId) ?? 0) + 1);
+    // Drafts are not posted, so a folder holding only a draft is still empty for tenants.
+    for (const d of documents) {
+      if (d.categoryId != null && !isDraft(d)) counts.set(d.categoryId, (counts.get(d.categoryId) ?? 0) + 1);
+    }
     return counts;
   }, [documents]);
   const documentTitleById = useMemo(() => new Map(documents.map((d) => [d.id, d.title])), [documents]);
@@ -296,6 +293,11 @@ export function DocumentLibrary({
   const setupIncomplete = !!setupProgress && !setupProgress.complete && documents.length > 0;
   const showContinueBar = setupIncomplete && !setupOpen && !setupDismissal.dismissed;
   const filtersActive = selectedCategoryId !== null || quickFilter !== 'all';
+  // The list can arrive (prefetched on hover) before the checklist or folders
+  // that decide whether this is setup: until then, an empty list is "still
+  // loading", never the plain empty state and never the full toolbar.
+  const maybeEmpty = documents.length === 0 && !settled;
+  const hideChrome = hideLibrary || maybeEmpty;
 
   // The selection is a snapshot taken on click; a lifecycle change (posted,
   // taken off the site, file replaced) refetches the list but not the
@@ -426,7 +428,7 @@ export function DocumentLibrary({
                 Setup guide
               </Button>
             )}
-            {!hideLibrary && (
+            {!hideChrome && (
             <button
               type="button"
               onClick={() => setSearchMode(!searchMode)}
@@ -457,7 +459,7 @@ export function DocumentLibrary({
                 Author Document
               </Link>
             )}
-            {canUpload && !inSetup && (
+            {canUpload && !inSetup && !maybeEmpty && (
               <button
                 type="button"
                 onClick={() => {
@@ -493,7 +495,7 @@ export function DocumentLibrary({
           px-1` bleed, which is itself 4px of overflow when the parent is already at
           its minimum (measured: the first attempt at this fix left +4px behind).
         */}
-        {!hideLibrary && (
+        {!hideChrome && (
           <div className="max-w-full overflow-x-auto">
             <Tabs value={view} onValueChange={setView}>
               <TabsList aria-label="View">
@@ -574,6 +576,20 @@ export function DocumentLibrary({
         />
       )}
 
+      {canUpload && showStatutory && checklistQuery.isError && (
+        <AlertBanner
+          status="danger"
+          variant="subtle"
+          title="We couldn't load your record list."
+          description="The setup guide and the statutory columns need it. Your documents are not affected."
+          action={
+            <Button size="sm" onClick={() => void checklistQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      )}
+
       {showContinueBar && setupProgress && (
         <ContinueSetupBar
           done={setupProgress.done}
@@ -630,12 +646,12 @@ export function DocumentLibrary({
             {view === 'list' && (
               <DocumentsTable
                 rows={rows}
-                isLoading={documentsQuery.isLoading}
+                isLoading={documentsQuery.isLoading || maybeEmpty}
                 selectedId={selectedDocument?.id ?? null}
                 showStatutoryColumns={showStatutory}
                 categoryNameById={categoryNameById}
                 onSelectDocument={setSelectedDocument}
-                {...(documents.length === 0 && !documentsQuery.isLoading
+                {...(documents.length === 0 && settled
                   ? {
                       // Empty with no setup guide to offer (e.g. the record list
                       // failed to load): the plain section-size empty state.

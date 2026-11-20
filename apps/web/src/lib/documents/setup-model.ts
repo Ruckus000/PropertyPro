@@ -64,7 +64,7 @@ const STEP_COPY: Record<StatutoryStepKey, { label: string; heading: string; desc
   meetings: {
     label: 'Meetings',
     heading: 'Post your meeting records',
-    description: 'Minutes and notices are never “done”: each new one is posted as it happens.',
+    description: 'Each new set of minutes and each notice is posted as it happens.',
   },
   board: {
     label: 'Board, insurance & contracts',
@@ -102,7 +102,12 @@ export function statutoryStepFor(item: Pick<SetupChecklistItem, 'templateKey' | 
 }
 
 export const isApplicable = (item: SetupChecklistItem) => item.isApplicable !== false;
+// ponytail: a rolling-window record (minutes, notices) counts as posted while its
+// file is posted, however old; Compliance owns currency. Trigger: a manager sees
+// setup "complete" while Compliance shows those records overdue.
 export const isPosted = (item: SetupChecklistItem) => item.documentId != null && item.documentState === 'posted';
+/** A record whose linked file is a saved draft: post the draft, don't upload over it. */
+export const hasDraft = (item: SetupChecklistItem) => item.documentId != null && item.documentState === 'draft';
 
 /**
  * Statutory steps, in order, empty groups dropped (an HOA has no Building step).
@@ -150,7 +155,9 @@ export interface StatutoryProgress {
 export function statutoryProgress(steps: StatutoryStep[]): StatutoryProgress {
   const all = steps.flatMap((s) => s.items);
   const required = all.filter((i) => !i.isConditional && isApplicable(i));
-  const next = required.find((i) => !isPosted(i)) ?? null;
+  // A draft-linked record is "post it from the library", never "upload next":
+  // an upload would link over the draft and orphan it.
+  const next = required.find((i) => !isPosted(i) && !hasDraft(i)) ?? null;
   return {
     posted: required.filter(isPosted).length,
     required: required.length,

@@ -66,7 +66,8 @@ describe('statutory progress', () => {
     rows = post(rows, '718_articles', 'deleted');
     const progress = statutoryProgress(buildStatutorySteps(rows, categoryFor));
     expect(progress.posted).toBe(1);
-    expect(progress.next?.templateKey).toBe('718_bylaws');
+    // The bylaws draft is posted from the library, not uploaded over: next is the articles.
+    expect(progress.next?.templateKey).toBe('718_articles');
   });
 
   it('a record marked "doesn\'t apply" leaves the count', () => {

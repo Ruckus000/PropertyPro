@@ -51,7 +51,7 @@ export function DocumentsTimeline({
   if (rows.length === 0) {
     return (
       <p className="rounded-md border border-edge bg-surface-card p-6 text-sm text-content-secondary">
-        Nothing matches those filters.
+        No statutory records to show yet.
       </p>
     );
   }
