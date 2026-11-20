@@ -17,6 +17,20 @@ import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 export const STOCK_PHOTO_SIZE: Readonly<Record<StockPhotoId, { width: number; height: number }>> = {
   sunset: { width: 1440, height: 1080 },
   palms: { width: 1100, height: 1100 },
+  // The thirteen library photos are all cropped 3:2 at 2400 wide.
+  'pilings-dusk': { width: 2400, height: 1600 },
+  'gulf-sunset': { width: 2400, height: 1600 },
+  shoreline: { width: 2400, height: 1600 },
+  'oak-avenue': { width: 2400, height: 1600 },
+  'lake-reflection': { width: 2400, height: 1600 },
+  'royal-palms': { width: 2400, height: 1600 },
+  'palm-walk': { width: 2400, height: 1600 },
+  'sea-oats': { width: 2400, height: 1600 },
+  'palm-sky': { width: 2400, height: 1600 },
+  'marsh-sunset': { width: 2400, height: 1600 },
+  'dune-sunset': { width: 2400, height: 1600 },
+  'mangrove-boardwalk': { width: 2400, height: 1600 },
+  sailboats: { width: 2400, height: 1600 },
 };
 
 export interface HeroPhotoImgAttributes {

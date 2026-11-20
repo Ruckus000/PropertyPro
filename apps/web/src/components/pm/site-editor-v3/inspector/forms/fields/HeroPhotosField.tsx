@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Trash2, X } from 'lucide-react';
 import {
   MAX_HERO_PHOTOS,
   STOCK_PHOTO_ALT,
+  STOCK_PHOTOS,
   STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
   type HeroPhoto,
@@ -32,10 +33,12 @@ const ALT_MAX = 200;
 const ACCEPTED_TYPES = 'image/jpeg,image/png,image/webp';
 
 /** What a manager calls each stock photo, in the sentence "the ___ photo". */
-const STOCK_PHOTO_NAME: Readonly<Record<StockPhotoId, string>> = {
-  sunset: 'sunset',
-  palms: 'palm-lined street',
-};
+const STOCK_PHOTO_NAME = Object.fromEntries(
+  STOCK_PHOTO_IDS.map((id) => {
+    const { name } = STOCK_PHOTOS[id];
+    return [id, name.charAt(0).toLowerCase() + name.slice(1)];
+  }),
+) as Readonly<Record<StockPhotoId, string>>;
 
 /** A picked file, described but not yet uploaded. */
 interface StagedPhoto {
