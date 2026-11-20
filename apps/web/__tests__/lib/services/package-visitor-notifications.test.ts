@@ -76,9 +76,13 @@ function visitorRow(overrides: Record<string, unknown> = {}) {
     visitorName: 'Ana Ruiz',
     hostUnitId: 3,
     hostUserId: 'tenant-3',
+    guestType: 'one_time',
     checkedInAt: null,
+    checkedOutAt: null,
     revokedAt: null,
+    validFrom: null,
     validUntil: null,
+    recurrenceRule: null,
     ...overrides,
   };
 }
@@ -126,8 +130,11 @@ describe('package and visitor notices', () => {
       selectFrom: vi.fn().mockResolvedValue([existing]),
       update: vi.fn().mockResolvedValue([{ ...existing, checkedInAt: new Date() }]),
     });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-20T15:00:00Z'));
 
     await checkInVisitorForCommunity(COMMUNITY_ID, 12, 'staff-1');
+    vi.useRealTimers();
 
     const { event, recipient } = lastEvent();
     expect(event).toEqual({
@@ -137,12 +144,37 @@ describe('package and visitor notices', () => {
       description: 'Your visitor Ana Ruiz was checked in successfully.',
       severity: 'info',
       recordId: '12',
-      sourceId: '12:checked_in',
+      sourceId: `12:checked_in:${Date.parse('2026-11-20T15:00:00Z')}`,
     });
     expect(recipient).toEqual({ type: 'specific_user', userId: 'tenant-3' });
     expect(residentNoticePath(event.topic, COMMUNITY_ID, event.recordId)).toBe(
       `/dashboard/visitors?communityId=${COMMUNITY_ID}`,
     );
+  });
+
+  it('notifies the host on every visit of a multi-use pass, not only the first', async () => {
+    // The digest queue dedupes on (topic, sourceId): one key per pass would
+    // silently drop visit two onwards.
+    const sourceIds: unknown[] = [];
+    for (const at of ['2026-11-20T15:00:00Z', '2026-11-21T15:00:00Z']) {
+      const existing = visitorRow({
+        guestType: 'permanent',
+        checkedInAt: new Date('2026-11-19T15:00:00Z'),
+        checkedOutAt: new Date('2026-11-19T16:00:00Z'),
+      });
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([existing]),
+        update: vi.fn().mockResolvedValue([{ ...existing, checkedInAt: new Date(at), checkedOutAt: null }]),
+      });
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(at));
+      await checkInVisitorForCommunity(COMMUNITY_ID, 12, 'staff-1');
+      vi.useRealTimers();
+      sourceIds.push(lastEvent().event.sourceId);
+    }
+
+    expect(queueNotificationMock).toHaveBeenCalledTimes(2);
+    expect(new Set(sourceIds).size).toBe(2);
   });
 
   it('tells the host their pass was revoked, under a digest key distinct from check-in', async () => {

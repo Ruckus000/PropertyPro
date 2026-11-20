@@ -27,6 +27,7 @@ import {
   users,
   userRoles,
   accountDeletionRequests,
+  visitorLog,
   logAuditEvent,
 } from '@propertypro/db';
 import type { AccessPlan } from '@propertypro/db';
@@ -36,6 +37,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
+import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
 import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
@@ -316,6 +318,51 @@ export async function cancelUserDeletion(requestId: number, cancelledBy: string)
 }
 
 /**
+ * A deleted account must not leave a visitor pass working at the gate: a used
+ * recurring, vendor or permanent pass never runs out on its own. Revokes them
+ * in every community the user hosted passes in, the same way removing a
+ * resident does. Best effort per community, and never fatal: a failure here
+ * must not undo or abort the soft delete itself.
+ */
+async function revokeDeletedUsersVisitorPasses(
+  db: ReturnType<typeof createUnscopedClient>,
+  userIds: string[],
+): Promise<void> {
+  if (userIds.length === 0) return;
+  let hosts: { communityId: number; hostUserId: string | null }[];
+  try {
+    hosts = await db
+      .select({ communityId: visitorLog.communityId, hostUserId: visitorLog.hostUserId })
+      .from(visitorLog)
+      .where(
+        and(
+          inArray(visitorLog.hostUserId, userIds),
+          isNull(visitorLog.revokedAt),
+          isNull(visitorLog.deletedAt),
+        ),
+      );
+  } catch (err) {
+    console.warn('[account-lifecycle] Failed to find visitor passes of deleted users:', err);
+    return;
+  }
+
+  const pairs = new Map<string, { communityId: number; userId: string }>();
+  for (const { communityId, hostUserId } of hosts) {
+    if (hostUserId) pairs.set(`${communityId}|${hostUserId}`, { communityId, userId: hostUserId });
+  }
+  for (const { communityId, userId } of pairs.values()) {
+    try {
+      await revokeVisitorPassesForUser(communityId, userId);
+    } catch (err) {
+      console.warn(
+        `[account-lifecycle] Failed to revoke visitor passes of user ${userId} in community ${communityId}:`,
+        err,
+      );
+    }
+  }
+}
+
+/**
  * Soft-deletes a user: sets users.deletedAt and bans in Supabase auth.
  * The auth ban is non-fatal — if Supabase is unreachable the DB state
  * is still committed.
@@ -356,6 +403,8 @@ export async function executeUserSoftDelete(requestIds: number[]) {
 
     return requests;
   });
+
+  await revokeDeletedUsersVisitorPasses(db, results.map((r) => r.userId));
 
   // Ban in Supabase auth (non-fatal)
   const admin = createAdminClient();

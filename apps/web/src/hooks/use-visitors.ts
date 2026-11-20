@@ -170,7 +170,9 @@ export function useCheckinVisitor(communityId: number) {
           body: JSON.stringify({ communityId }),
         },
       ),
-    onSuccess: async () => {
+    // onSettled, not onSuccess: a refused check-in (pass revoked meanwhile)
+    // must still drop the stale row that offered it.
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: VISITOR_KEYS.all });
     },
   });
@@ -189,7 +191,8 @@ export function useCheckoutVisitor(communityId: number) {
           body: JSON.stringify({ communityId }),
         },
       ),
-    onSuccess: async () => {
+    // onSettled, not onSuccess: a refused check-out must still refresh the row.
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: VISITOR_KEYS.all });
     },
   });

@@ -12,15 +12,20 @@ import {
   type PackageLogStatus,
   type PaginationInput,
 } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, notInArray, or, sql } from '@propertypro/db/filters';
 import { BadRequestError, NotFoundError } from '@/lib/api/errors';
 import { queueNotification } from '@/lib/services/notification-service';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import { listUnitResidentUserIds } from '@/lib/units/actor-units';
 import { withUnitLabels } from '@/lib/units/unit-labels';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import {
   deriveVisitorStatus,
   filterDeniedVisitorMatches,
+  isAllowedVisitDay,
+  isMultiUsePass,
+  MULTI_USE_GUEST_TYPES,
+  visitDaysLabel,
   type VisitorStatus,
 } from '@/lib/visitors/visitor-logic';
 
@@ -171,8 +176,24 @@ function buildVisitorWhereClause(options: {
   if (options.hostUnitId !== undefined) {
     clauses.push(eq(visitorLog.hostUnitId, options.hostUnitId));
   }
+  // Multi-use passes (see `isMultiUsePass`) are reused after a check-out, so a
+  // checked-out one stays "active" until it is revoked or its window ends.
+  const multiUse = inArray(visitorLog.guestType, MULTI_USE_GUEST_TYPES);
+  const onSite = and(isNotNull(visitorLog.checkedInAt), isNull(visitorLog.checkedOutAt));
+  const reusable = or(
+    and(isNull(visitorLog.checkedInAt), isNull(visitorLog.checkedOutAt)),
+    and(isNotNull(visitorLog.checkedOutAt), multiUse),
+  );
+  const now = new Date();
+  const notPastWindow = or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now));
+
   if (options.onlyActive) {
-    clauses.push(isNull(visitorLog.checkedOutAt));
+    clauses.push(
+      or(
+        isNull(visitorLog.checkedOutAt),
+        and(multiUse, isNull(visitorLog.revokedAt), notPastWindow),
+      ),
+    );
   }
   if (options.hostUserId) {
     clauses.push(eq(visitorLog.hostUserId, options.hostUserId));
@@ -186,52 +207,35 @@ function buildVisitorWhereClause(options: {
     clauses.push(eq(visitorLog.guestType, options.guestType));
   }
   if (options.status) {
-    const now = new Date();
+    // Keep in step with `deriveVisitorStatus` (visitor-logic.ts).
     switch (options.status) {
       case 'expected':
-        clauses.push(
-          isNull(visitorLog.checkedInAt),
-          isNull(visitorLog.revokedAt),
-          or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now)),
-        );
+        clauses.push(isNull(visitorLog.revokedAt), reusable, notPastWindow);
         break;
       case 'checked_in':
-        clauses.push(
-          isNotNull(visitorLog.checkedInAt),
-          isNull(visitorLog.checkedOutAt),
-          isNull(visitorLog.revokedAt),
-          or(isNull(visitorLog.validUntil), gte(visitorLog.validUntil, now)),
-        );
+        clauses.push(isNull(visitorLog.revokedAt), onSite, notPastWindow);
         break;
       case 'checked_out':
-        clauses.push(isNotNull(visitorLog.checkedOutAt));
+        clauses.push(
+          isNull(visitorLog.revokedAt),
+          isNotNull(visitorLog.checkedOutAt),
+          notInArray(visitorLog.guestType, MULTI_USE_GUEST_TYPES),
+        );
         break;
       case 'expired':
-        clauses.push(
-          lt(visitorLog.validUntil, now),
-          isNull(visitorLog.checkedInAt),
-          isNull(visitorLog.revokedAt),
-        );
+        clauses.push(isNull(visitorLog.revokedAt), reusable, lt(visitorLog.validUntil, now));
         break;
       case 'overstayed':
-        clauses.push(
-          isNotNull(visitorLog.checkedInAt),
-          isNull(visitorLog.checkedOutAt),
-          isNull(visitorLog.revokedAt),
-          lt(visitorLog.validUntil, now),
-        );
+        clauses.push(isNull(visitorLog.revokedAt), onSite, lt(visitorLog.validUntil, now));
         break;
       case 'revoked':
         clauses.push(
           isNotNull(visitorLog.revokedAt),
-          isNotNull(visitorLog.checkedOutAt),
+          or(isNull(visitorLog.checkedInAt), isNotNull(visitorLog.checkedOutAt)),
         );
         break;
       case 'revoked_on_site':
-        clauses.push(
-          isNotNull(visitorLog.revokedAt),
-          isNull(visitorLog.checkedOutAt),
-        );
+        clauses.push(isNotNull(visitorLog.revokedAt), onSite);
         break;
     }
   }
@@ -330,8 +334,11 @@ async function notifyHostResidentOfVisitorEvent(
   actorUserId: string,
   visitorId: number,
   hostUserId: string | null,
-  /** Digest key: check-in and revocation of one pass must not dedupe against each other. */
-  eventKey: 'checked_in' | 'revoked',
+  /**
+   * Digest key: check-in and revocation of one pass must not dedupe against
+   * each other, and each visit's check-in is its own notice.
+   */
+  eventKey: `checked_in:${number}` | 'revoked',
   title: string,
   description: string,
 ): Promise<void> {
@@ -667,29 +674,29 @@ export async function checkInVisitorForCommunity(
   requestId?: string | null,
 ): Promise<VisitorLogRow> {
   const scoped = createScopedClient(communityId);
-  const rows = await scoped.selectFrom<VisitorLogRow>(
-    visitorLog,
-    {},
-    eq(visitorLog.id, visitorId),
-  );
-  const existing = rows[0];
+  const readPass = async () =>
+    (await scoped.selectFrom<VisitorLogRow>(visitorLog, {}, eq(visitorLog.id, visitorId)))[0];
+  const existing = await readPass();
   if (!existing) {
     throw new NotFoundError('Visitor pass not found');
   }
 
+  const now = new Date();
   if (existing.revokedAt) {
     throw new BadRequestError('This visitor pass has been revoked');
   }
-  if (existing.validUntil && new Date(existing.validUntil) < new Date()) {
+  if (existing.validUntil && new Date(existing.validUntil) < now) {
     throw new BadRequestError('This visitor pass has expired');
   }
 
-  if (existing.checkedInAt) {
+  const onSite = existing.checkedInAt !== null && existing.checkedOutAt === null;
+  const used = existing.checkedInAt !== null && !isMultiUsePass(existing.guestType);
+  const alreadyCheckedIn = async (row: VisitorLogRow) => {
     await logAuditEvent({
       userId: actorUserId,
       action: 'update',
       resourceType: 'visitor_log',
-      resourceId: String(existing.id),
+      resourceId: String(row.id),
       communityId,
       metadata: {
         requestId: requestId ?? null,
@@ -697,20 +704,56 @@ export async function checkInVisitorForCommunity(
         transition: 'checkin',
       },
     });
-    return attachUnitLabel(communityId, existing);
+    return attachUnitLabel(communityId, row);
+  };
+  if (onSite || used) return alreadyCheckedIn(existing);
+
+  const daysLabel = visitDaysLabel(existing.recurrenceRule);
+  // The start date belongs to multi-use passes; a one-time pass is timed by
+  // expectedArrival, which stays a hint the guard can ignore.
+  const validFrom =
+    existing.validFrom && isMultiUsePass(existing.guestType) ? new Date(existing.validFrom) : null;
+  const startsLater = validFrom !== null && validFrom > now;
+  if (startsLater || daysLabel) {
+    const timeZone = await getCommunityTimezone(communityId);
+    if (validFrom && startsLater) {
+      const starts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(validFrom);
+      throw new BadRequestError(`This visitor pass starts on ${starts}`);
+    }
+    if (daysLabel && !isAllowedVisitDay(existing.recurrenceRule, now, timeZone)) {
+      throw new BadRequestError(`This visitor pass is valid on ${daysLabel} only`);
+    }
   }
 
+  // Compare-and-set: of two concurrent check-ins only one matches, so the
+  // visit is recorded and the host notified once; a revoke that lands
+  // between the read above and this write also makes it match nothing.
   const [updated] = await scoped.update(
     visitorLog,
     {
-      checkedInAt: new Date(),
+      checkedInAt: now,
+      checkedOutAt: null,
       staffUserId: actorUserId,
     },
-    eq(visitorLog.id, visitorId),
+    and(
+      eq(visitorLog.id, visitorId),
+      isNull(visitorLog.revokedAt),
+      or(
+        isNull(visitorLog.checkedInAt),
+        and(isNotNull(visitorLog.checkedOutAt), inArray(visitorLog.guestType, MULTI_USE_GUEST_TYPES)),
+      ),
+    ),
   );
 
   if (!updated) {
-    throw new NotFoundError('Visitor pass not found');
+    const current = await readPass();
+    if (!current) throw new NotFoundError('Visitor pass not found');
+    if (current.revokedAt) throw new BadRequestError('This visitor pass has been revoked');
+    return alreadyCheckedIn(current);
   }
 
   const row = updated as unknown as VisitorLogRow;
@@ -734,12 +777,23 @@ export async function checkInVisitorForCommunity(
     actorUserId,
     visitorId,
     existing.hostUserId,
-    'checked_in',
+    // One notice per visit: a multi-use pass is checked in many times.
+    `checked_in:${now.getTime()}`,
     `${existing.visitorName} has checked in`,
     `Your visitor ${existing.visitorName} was checked in successfully.`,
   );
 
   return attachUnitLabel(communityId, row);
+}
+
+async function getCommunityTimezone(communityId: number): Promise<string> {
+  const scoped = createScopedClient(communityId);
+  const rows = (await scoped.selectFrom(
+    communities,
+    { timezone: communities.timezone },
+    eq(communities.id, communityId),
+  )) as { timezone: string | null }[];
+  return resolveTimezone(rows[0]?.timezone);
 }
 
 export async function checkOutVisitorForCommunity(
@@ -1005,9 +1059,9 @@ export async function revokeVisitorPassesForUser(
     and(
       eq(visitorLog.hostUserId, userId),
       isNull(visitorLog.revokedAt),
-      isNull(visitorLog.checkedOutAt),
       isNull(visitorLog.deletedAt),
-      inArray(visitorLog.guestType, ['recurring', 'permanent']),
+      // Multi-use passes are reused after a visit, so a used one is still live.
+      inArray(visitorLog.guestType, MULTI_USE_GUEST_TYPES),
     ),
   );
 

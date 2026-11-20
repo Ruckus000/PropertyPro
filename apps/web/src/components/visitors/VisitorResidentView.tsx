@@ -33,6 +33,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { VisitorRegistrationForm } from './VisitorRegistrationForm';
 import { VisitorQRCode } from './VisitorQRCode';
 import { getVisitorStatus } from './visitor-columns';
+import { isMultiUsePass } from '@/lib/visitors/visitor-logic';
 
 interface VisitorResidentViewProps {
   communityId: number;
@@ -132,7 +133,7 @@ function VisitorCard({
   const status = getVisitorStatus(visitor);
   const canRevoke = allowResidentVisitorRevoke
     && visitor.hostUserId === currentUserId
-    && (visitor.guestType === 'recurring' || visitor.guestType === 'permanent')
+    && isMultiUsePass(visitor.guestType)
     && !visitor.revokedAt
     && status !== 'checked_out'
     && status !== 'expired';

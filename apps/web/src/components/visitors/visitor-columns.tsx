@@ -1,7 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@/components/shared/data-table-types';
-import { format, parseISO } from 'date-fns';
+import { format, isToday, parseISO } from 'date-fns';
 import { AlertTriangle, Ban } from 'lucide-react';
 import type { VisitorListItem } from '@/hooks/use-visitors';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { VisitorQRCode } from './VisitorQRCode';
 import {
   deriveVisitorStatus,
+  isAllowedVisitDay,
+  isMultiUsePass,
   type VisitorStatus,
 } from '@/lib/visitors/visitor-logic';
 
@@ -62,11 +64,36 @@ function formatVehicle(visitor: VisitorListItem): string {
 
 export function getVisitorStatus(visitor: VisitorListItem): VisitorStatus {
   return deriveVisitorStatus({
+    guestType: visitor.guestType,
     checkedInAt: parseDate(visitor.checkedInAt),
     checkedOutAt: parseDate(visitor.checkedOutAt),
     validUntil: parseDate(visitor.validUntil),
     revokedAt: parseDate(visitor.revokedAt),
   });
+}
+
+/**
+ * The staff Today tab: passes arriving today, plus a recurring, vendor or
+ * permanent pass on every day the guest may use it (its `expectedArrival` is
+ * only its first day). The day rule uses this device's timezone: the gate
+ * tablet is on site.
+ */
+export function isOnTodayList(
+  visitor: VisitorListItem,
+  now: Date = new Date(),
+  timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
+): boolean {
+  const arrival = parseDate(visitor.expectedArrival);
+  if (arrival && isToday(arrival)) return true;
+  if (!isMultiUsePass(visitor.guestType)) return false;
+  const status = getVisitorStatus(visitor);
+  if (status === 'checked_in' || status === 'overstayed') return true;
+  const validFrom = parseDate(visitor.validFrom);
+  return (
+    status === 'expected' &&
+    (!validFrom || validFrom <= now) &&
+    isAllowedVisitDay(visitor.recurrenceRule, now, timeZone)
+  );
 }
 
 function StatusBadge({ visitor }: { visitor: VisitorListItem }) {

@@ -99,8 +99,13 @@ export function VisitorRegistrationForm({
       expectedArrival: expectedArrival ? new Date(expectedArrival).toISOString() : undefined,
       notes: notes.trim() || null,
       guestType,
-      validFrom: validFrom ? new Date(validFrom).toISOString() : null,
-      validUntil: guestType === 'permanent' ? null : (validUntil ? new Date(validUntil).toISOString() : null),
+      // Switching a draft from Recurring to One-Time keeps the old dates in
+      // state; a one-time pass must not carry them.
+      validFrom: guestType !== 'one_time' && validFrom ? new Date(validFrom).toISOString() : null,
+      validUntil:
+        guestType === 'one_time' || guestType === 'permanent' || !validUntil
+          ? null
+          : new Date(validUntil).toISOString(),
       recurrenceRule: guestType === 'recurring' ? recurrenceRule : null,
       expectedDurationMinutes:
         guestType === 'permanent'

@@ -29,6 +29,7 @@ const {
   logAuditEventMock,
   findCommunitiesUserIsRootOfMock,
   findRootOffboardingImpactMock,
+  revokeVisitorPassesForUserMock,
   eqMock,
   andMock,
   isNullMock,
@@ -38,6 +39,7 @@ const {
   communitiesTable,
   communityExportJobsTable,
   usersTable,
+  visitorLogTable,
   accountDeletionRequestsTable,
 } = vi.hoisted(() => {
   return {
@@ -49,6 +51,7 @@ const {
     logAuditEventMock: vi.fn().mockResolvedValue(undefined),
     findCommunitiesUserIsRootOfMock: vi.fn().mockResolvedValue([]),
     findRootOffboardingImpactMock: vi.fn().mockResolvedValue([]),
+    revokeVisitorPassesForUserMock: vi.fn().mockResolvedValue(0),
     eqMock: vi.fn((col: unknown, val: unknown) => ({ _eq: [col, val] })),
     andMock: vi.fn((...conditions: unknown[]) => ({ _and: conditions })),
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
@@ -78,6 +81,12 @@ const {
       communityId: 'community_export_jobs.community_id',
       status: 'community_export_jobs.status',
       deletedAt: 'community_export_jobs.deleted_at',
+    },
+    visitorLogTable: {
+      communityId: 'visitor_log.community_id',
+      hostUserId: 'visitor_log.host_user_id',
+      revokedAt: 'visitor_log.revoked_at',
+      deletedAt: 'visitor_log.deleted_at',
     },
     usersTable: {
       id: 'users.id',
@@ -118,7 +127,12 @@ vi.mock('@propertypro/db', () => ({
   users: usersTable,
   accountDeletionRequests: accountDeletionRequestsTable,
   communityExportJobs: communityExportJobsTable,
+  visitorLog: visitorLogTable,
   logAuditEvent: logAuditEventMock,
+}));
+
+vi.mock('@/lib/services/package-visitor-service', () => ({
+  revokeVisitorPassesForUser: revokeVisitorPassesForUserMock,
 }));
 
 vi.mock('@propertypro/db/filters', () => ({
@@ -590,6 +604,73 @@ describe('executeUserSoftDelete', () => {
 
     const result = await executeUserSoftDelete([999]);
     expect(result).toEqual([]);
+  });
+
+  // A used recurring, vendor or permanent pass never expires, so a deleted
+  // account would otherwise leave it opening the gate.
+  it("revokes the deleted user's visitor passes once per community", async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      updateReturning: [[request], [{}]],
+      selectResults: [[
+        { communityId: 7, hostUserId: 'user-uuid-001' },
+        { communityId: 7, hostUserId: 'user-uuid-001' },
+        { communityId: 9, hostUserId: 'user-uuid-001' },
+      ]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: vi.fn().mockResolvedValue({}) } },
+    });
+
+    await executeUserSoftDelete([1]);
+
+    expect(revokeVisitorPassesForUserMock.mock.calls).toEqual([
+      [7, 'user-uuid-001'],
+      [9, 'user-uuid-001'],
+    ]);
+  });
+
+  it('keeps going when revoking in one community fails, and never fails the soft delete', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      updateReturning: [[request], [{}]],
+      selectResults: [[
+        { communityId: 7, hostUserId: 'user-uuid-001' },
+        { communityId: 9, hostUserId: 'user-uuid-001' },
+      ]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = vi.fn().mockResolvedValue({});
+    createAdminClientMock.mockReturnValue({ auth: { admin: { updateUserById: updateUserByIdMock } } });
+    revokeVisitorPassesForUserMock.mockRejectedValueOnce(new Error('db down'));
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await executeUserSoftDelete([1]);
+
+    expect(result).toEqual([request]);
+    expect(revokeVisitorPassesForUserMock).toHaveBeenCalledTimes(2);
+    expect(updateUserByIdMock).toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('still soft-deletes when the pass lookup itself fails', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({ updateReturning: [[request], [{}]] });
+    dbMock.select = () => {
+      throw new Error('select failed');
+    };
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: vi.fn().mockResolvedValue({}) } },
+    });
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await executeUserSoftDelete([1]);
+
+    expect(result).toEqual([request]);
+    expect(revokeVisitorPassesForUserMock).not.toHaveBeenCalled();
+    consoleWarnSpy.mockRestore();
   });
 });
 
