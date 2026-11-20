@@ -14,6 +14,7 @@ import { ApiRequestError } from '@/lib/api/request-json';
 import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -271,7 +272,8 @@ export function VisitorResidentView({
   if (isError && isNoUnitAssociationError(error)) {
     return (
       <EmptyState
-        icon="building"
+        size="section"
+        illustration={<PropScene size="section" prop="calendar" />}
         title="Your account isn't linked to a unit yet"
         description="Visitor passes are issued per unit. Once your manager links your account to your unit, you can register visitors here."
         action={

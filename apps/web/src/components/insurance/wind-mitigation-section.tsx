@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import {
   useDeleteWindMitigationReport,
@@ -286,6 +287,8 @@ export function WindMitigationSection({
         <Card>
           <CardContent className="pt-4">
             <EmptyState
+              size="section"
+              illustration={<PropScene size="section" prop="shield" />}
               preset={canManage ? 'wind_mitigation_empty_admin' : 'wind_mitigation_empty_resident'}
               action={
                 canManage ? (

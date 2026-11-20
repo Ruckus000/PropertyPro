@@ -7,8 +7,11 @@
 
 import * as React from "react";
 import {
+  Bell,
   Building,
+  Calendar,
   Clipboard,
+  Coins,
   Cloud,
   Document,
   DoneMark,
@@ -16,8 +19,11 @@ import {
   Ground,
   INK,
   Palm,
+  Package,
   PlusMark,
+  Shield,
   Sun,
+  Wrench,
 } from "./parts";
 import { Scene, type SceneProps } from "./scene";
 
@@ -100,6 +106,38 @@ export function StormCalmScene({ size = "hero", className }: SceneProps) {
       <Building x={20} y={214} columns={2} floors={2} />
       <Palm x={180} y={214} />
       <Clipboard x={236} y={112} />
+    </Scene>
+  );
+}
+
+const PROPS = { shield: Shield, coins: Coins, package: Package, wrench: Wrench, calendar: Calendar, bell: Bell, clipboard: Clipboard } as const;
+
+/** Which prop a PropScene shows. */
+export type SceneProp = keyof typeof PROPS;
+
+/**
+ * The general composition for a page without its own scene: the community's
+ * building on a calm day, with the one prop that says what the page holds
+ * (spec §5.3: a new screen is existing parts plus at most one prop). Compact
+ * keeps the prop alone on the sky tile.
+ */
+export function PropScene({ size = "hero", className, prop }: SceneProps & { prop: SceneProp }) {
+  const Prop = PROPS[prop];
+  if (size === "compact") {
+    return (
+      <Scene size="compact" className={className}>
+        <Tile />
+        <Prop x={16} y={16} scale={0.53} />
+      </Scene>
+    );
+  }
+  return (
+    <Scene size={size} className={className}>
+      <Sun x={292} y={46} />
+      <Cloud x={24} y={52} />
+      <Ground y={214} />
+      <Building x={40} y={214} columns={3} floors={2} />
+      <Prop x={226} y={136} scale={1.2} />
     </Scene>
   );
 }

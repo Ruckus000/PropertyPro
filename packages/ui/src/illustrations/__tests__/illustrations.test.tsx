@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
+import * as React from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { DirectoryScene, DocumentsScene, ProgressRing, StormCalmScene } from '..';
+import { DirectoryScene, DocumentsScene, ProgressRing, PropScene, StormCalmScene, type SceneProp } from '..';
 
-const SCENES = { DocumentsScene, DirectoryScene, StormCalmScene } as const;
+const PROP_NAMES: SceneProp[] = ['shield', 'coins', 'package', 'wrench', 'calendar', 'bell'];
+const SCENES: Record<string, (p: { size?: 'hero' | 'section' | 'compact' }) => React.ReactElement> = {
+  DocumentsScene,
+  DirectoryScene,
+  StormCalmScene,
+  ...Object.fromEntries(PROP_NAMES.map((prop) => [`PropScene(${prop})`, (p: { size?: 'hero' | 'section' | 'compact' }) => <PropScene {...p} prop={prop} />])),
+};
 const SIZES = ['hero', 'section', 'compact'] as const;
 
 describe('empty-state scenes', () => {
@@ -20,7 +27,8 @@ describe('empty-state scenes', () => {
 
         // Anti-vacuity: a scene that rendered nothing would pass the paint check below.
         const painted = [...container.querySelectorAll('[fill], [stroke]')];
-        expect(painted.length).toBeGreaterThan(3);
+        // The tile alone is one element: more proves the prop (or landscape) rendered.
+        expect(painted.length).toBeGreaterThan(size === 'compact' ? 1 : 3);
         for (const el of painted) {
           for (const attr of ['fill', 'stroke'] as const) {
             const value = el.getAttribute(attr);
