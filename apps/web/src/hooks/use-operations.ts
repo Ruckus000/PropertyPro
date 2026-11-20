@@ -8,6 +8,7 @@ import {
 } from '@/lib/api/admin-maintenance';
 import { listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
+import type { BookingRules } from '@/lib/amenities/booking-rules';
 import { walkAndSlice, walkPaginated } from '@/lib/api/walk-paginated';
 
 export interface OperationsListItem {
@@ -402,6 +403,9 @@ export interface AmenityListItem {
   name: string;
   description: string | null;
   location: string | null;
+  capacity: number | null;
+  isBookable: boolean;
+  bookingRules: BookingRules;
 }
 
 export const AMENITY_KEYS = {
@@ -409,7 +413,8 @@ export const AMENITY_KEYS = {
   list: (communityId: number) => ['amenities', 'list', communityId] as const,
 } as const;
 
-export function useAmenities(communityId: number) {
+export function useAmenities(communityId: number, options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
   return useQuery({
     queryKey: AMENITY_KEYS.list(communityId),
     queryFn: ({ signal }) =>
@@ -418,8 +423,34 @@ export function useAmenities(communityId: number) {
         { communityId: String(communityId) },
         { signal },
       ),
-    enabled: communityId > 0,
+    enabled: enabled && communityId > 0,
     staleTime: 5 * 60_000,
+  });
+}
+
+/** The fields the amenity form edits; `bookingRules` is replaced whole, so `{}` clears every limit. */
+export interface AmenityInput {
+  name: string;
+  description: string | null;
+  location: string | null;
+  capacity: number | null;
+  isBookable: boolean;
+  bookingRules: BookingRules;
+}
+
+/** Create (POST /api/v1/amenities) or, with an `amenityId`, update (PATCH /api/v1/amenities/[id]). */
+export function useSaveAmenity(communityId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ amenityId, input }: { amenityId?: number; input: AmenityInput }) =>
+      requestJson<AmenityListItem>(amenityId ? `/api/v1/amenities/${amenityId}` : '/api/v1/amenities', {
+        method: amenityId ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ communityId, ...input }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: AMENITY_KEYS.list(communityId) });
+    },
   });
 }
 

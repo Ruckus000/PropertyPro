@@ -275,6 +275,18 @@ describe('PATCH /api/v1/amenities/[id]', () => {
     expect(updateAmenityForCommunityMock).not.toHaveBeenCalled();
   });
 
+  it('returns 400 VALIDATION_ERROR when the shortest booking is longer than the longest', async () => {
+    const res = await PATCH(
+      jsonPatch(7, { communityId: 42, bookingRules: { minDurationMinutes: 120, maxDurationMinutes: 60 } }),
+      routeCtx('7'),
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string } };
+    expect(json.error.code).toBe('VALIDATION_ERROR');
+    expect(updateAmenityForCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('returns 403 during the demo grace window (before membership checks run)', async () => {
     assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
 

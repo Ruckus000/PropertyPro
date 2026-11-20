@@ -29,7 +29,7 @@
  *       }
  *     → createReservationForCommunity(
  *         communityId, actorUserId,
- *         { amenityId, unitId, startTime, endTime, notes },
+ *         { amenityId, unitId, startTime, endTime, notes, timeZone: membership.timezone },
  *         x-request-id)
  *
  * B1 Slice 5 inline-error migration: the pre-migration resident
@@ -102,6 +102,7 @@ export const POST = withErrorHandler(
         startTime: body.startTime,
         endTime: body.endTime,
         notes: body.notes ?? null,
+        timeZone: membership.timezone,
       },
       req.headers.get('x-request-id'),
     );

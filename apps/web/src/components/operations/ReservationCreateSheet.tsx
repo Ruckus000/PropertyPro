@@ -1,14 +1,24 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { PropScene } from '@propertypro/ui';
+import { EmptyState } from '@/components/shared/empty-state';
 import { SlideOverPanel } from '@/components/shared/slide-over-panel';
 import { useAmenities, useCreateReservation } from '@/hooks/use-operations';
+import { describeBookingRules } from '@/lib/amenities/booking-rules';
 
 interface ReservationCreateSheetProps {
   open: boolean;
   onClose: () => void;
   communityId: number;
   communityTimezone: string;
+  /**
+   * Managers may book for any unit. Residents never see the Unit ID field:
+   * the reserve route books their own unit.
+   */
+  isAdmin?: boolean;
+  /** Preselects an amenity (the Amenities tab's "Reserve"). */
+  initialAmenityId?: number;
 }
 
 /**
@@ -39,8 +49,10 @@ export function ReservationCreateSheet({
   onClose,
   communityId,
   communityTimezone,
+  isAdmin = false,
+  initialAmenityId,
 }: ReservationCreateSheetProps) {
-  const [amenityId, setAmenityId] = useState('');
+  const [amenityId, setAmenityId] = useState(initialAmenityId ? String(initialAmenityId) : '');
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -50,6 +62,11 @@ export function ReservationCreateSheet({
 
   const amenitiesQuery = useAmenities(communityId);
   const createMutation = useCreateReservation(communityId);
+  // A non-bookable amenity would only fail with a 422, so it is never offered.
+  const bookable = (amenitiesQuery.data ?? []).filter((a) => a.isBookable);
+  const selected = bookable.find((a) => String(a.id) === amenityId);
+  const limits = selected ? describeBookingRules(selected.bookingRules ?? {}) : [];
+  const nothingToBook = amenitiesQuery.data !== undefined && bookable.length === 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -81,6 +98,14 @@ export function ReservationCreateSheet({
       title="Reserve Amenity"
       description="Book a community amenity for a time slot."
     >
+      {nothingToBook ? (
+        <EmptyState
+          size="compact"
+          illustration={<PropScene size="compact" prop="calendar" />}
+          title="Nothing to book yet"
+          description="No amenity is open for booking right now."
+        />
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="res-amenity" className="block text-sm font-medium text-content-secondary">Amenity</label>
@@ -91,10 +116,13 @@ export function ReservationCreateSheet({
             className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
           >
             <option value="">(Select an amenity)</option>
-            {amenitiesQuery.data?.map((a) => (
+            {bookable.map((a) => (
               <option key={a.id} value={String(a.id)}>{a.name}</option>
             ))}
           </select>
+          {limits.length > 0 && (
+            <p className="mt-1 text-sm text-content-secondary">{limits.join(' · ')}</p>
+          )}
         </div>
         <div>
           <label htmlFor="res-date" className="block text-sm font-medium text-content-secondary">Date</label>
@@ -128,17 +156,19 @@ export function ReservationCreateSheet({
             />
           </div>
         </div>
-        <div>
-          <label htmlFor="res-unit" className="block text-sm font-medium text-content-secondary">Unit ID (optional)</label>
-          <input
-            id="res-unit"
-            type="number"
-            min={1}
-            value={unitId}
-            onChange={(e) => setUnitId(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
-          />
-        </div>
+        {isAdmin && (
+          <div>
+            <label htmlFor="res-unit" className="block text-sm font-medium text-content-secondary">Unit ID (optional)</label>
+            <input
+              id="res-unit"
+              type="number"
+              min={1}
+              value={unitId}
+              onChange={(e) => setUnitId(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-edge-strong px-3 py-2 text-sm"
+            />
+          </div>
+        )}
         <div>
           <label htmlFor="res-notes" className="block text-sm font-medium text-content-secondary">Notes</label>
           <textarea
@@ -162,6 +192,7 @@ export function ReservationCreateSheet({
           {createMutation.isPending ? 'Reserving\u2026' : 'Reserve'}
         </button>
       </form>
+      )}
     </SlideOverPanel>
   );
 }

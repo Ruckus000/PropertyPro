@@ -10,8 +10,14 @@ export const bookingRulesSchema = z.object({
   minDurationMinutes: z.number().int().positive().optional(),
   maxDurationMinutes: z.number().int().positive().optional(),
   advanceBookingDays: z.number().int().positive().optional(),
-  blackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
-});
+  blackoutDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(366).optional(),
+}).refine(
+  (rules) =>
+    rules.minDurationMinutes === undefined
+    || rules.maxDurationMinutes === undefined
+    || rules.minDurationMinutes <= rules.maxDurationMinutes,
+  { message: 'The shortest booking cannot be longer than the longest', path: ['minDurationMinutes'] },
+);
 
 export const createAmenitySchema = z.object({
   communityId: z.number().int().positive(),

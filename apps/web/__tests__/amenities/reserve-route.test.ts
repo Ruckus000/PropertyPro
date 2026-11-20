@@ -105,6 +105,7 @@ const ADMIN_MEMBERSHIP = {
   isUnitOwner: false,
   displayTitle: 'Community Association Manager',
   communityType: 'condo_718' as const,
+  timezone: 'America/New_York',
 };
 
 const RESIDENT_MEMBERSHIP = {
@@ -115,6 +116,7 @@ const RESIDENT_MEMBERSHIP = {
   isUnitOwner: true,
   displayTitle: 'Unit Owner',
   communityType: 'condo_718' as const,
+  timezone: 'America/Chicago',
 };
 
 const RESERVATION_RESULT = {
@@ -202,6 +204,7 @@ describe('POST /api/v1/amenities/[id]/reserve', () => {
         startTime: '2026-06-01T12:00:00+00:00',
         endTime: '2026-06-01T13:00:00+00:00',
         notes: 'birthday party',
+        timeZone: 'America/New_York',
       },
       'req-admin',
     );
@@ -221,6 +224,7 @@ describe('POST /api/v1/amenities/[id]/reserve', () => {
       startTime: '2026-06-01T12:00:00+00:00',
       endTime: '2026-06-01T13:00:00+00:00',
       notes: null,
+      timeZone: 'America/New_York',
     });
   });
 
@@ -242,7 +246,8 @@ describe('POST /api/v1/amenities/[id]/reserve', () => {
     expect(createReservationForCommunityMock).toHaveBeenCalledWith(
       42,
       'user-resident-1',
-      expect.objectContaining({ amenityId: 7, unitId: 5 }),
+      // The community's own zone reaches the service, for blackout dates.
+      expect.objectContaining({ amenityId: 7, unitId: 5, timeZone: 'America/Chicago' }),
       'req-res',
     );
   });
