@@ -158,6 +158,35 @@ describe('getVisibleItems', () => {
     expect(tenant).not.toContain('payments');
   });
 
+  // D9 (2026-11-20 resident review): the insurance hub's RBAC cell excludes
+  // tenants (legal review 2026-07-17), so the link only led a condo tenant to
+  // two permanent error banners. The page now redirects them too.
+  it('shows Insurance to owners and management but hides it from tenants', () => {
+    const condo = getFeaturesForCommunity('condo_718');
+    expect(condo.hasInsuranceHub).toBe(true);
+    const owner = getVisibleItems(NAV_ITEMS, 'resident', condo, true).map((i) => i.id);
+    const tenant = getVisibleItems(NAV_ITEMS, 'resident', condo, false).map((i) => i.id);
+    const manager = getVisibleItems(NAV_ITEMS, 'property_manager', condo).map((i) => i.id);
+    expect(owner).toContain('insurance');
+    expect(manager).toContain('insurance');
+    expect(tenant).not.toContain('insurance');
+    // Control: the tenant still sees the community surfaces open to them.
+    expect(tenant).toContain('documents');
+  });
+
+  // The leases page redirects every non-admin, so an apartment tenant's
+  // Leases link bounced straight back to the dashboard.
+  it('shows Leases only to the management tier', () => {
+    const apartment = getFeaturesForCommunity('apartment');
+    expect(apartment.hasLeaseTracking).toBe(true);
+    const tenant = getVisibleItems(NAV_ITEMS, 'resident', apartment, false).map((i) => i.id);
+    const manager = getVisibleItems(NAV_ITEMS, 'property_manager', apartment).map((i) => i.id);
+    expect(tenant).not.toContain('leases');
+    expect(manager).toContain('leases');
+    // Control: the tenant keeps the apartment surfaces open to residents.
+    expect(tenant).toContain('packages');
+  });
+
   // R-5 (2026-11-11 empty-state audit): owners and tenants can submit ARC
   // applications, but the only ARC link was admin-gated, so the resident
   // sidebar had no way to reach the page.

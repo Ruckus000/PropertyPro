@@ -23,8 +23,9 @@
  * ISO-serializes them.
  *
  * `insurance` IS in `RBAC_RESOURCES` (packages/shared/src/rbac-matrix.ts):
- * read is open to every community role (owners retrieve the report for their
- * own insurer), write is admin-tier.
+ * read is open to unit owners and the management tier (owners retrieve the
+ * report for their own insurer; tenants are excluded per the 2026-07-17 legal
+ * review), write is admin-tier.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 

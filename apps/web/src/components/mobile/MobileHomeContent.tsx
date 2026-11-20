@@ -9,7 +9,8 @@ import {
   CreditCard,
   ShieldCheck,
 } from "lucide-react";
-import { toInitials } from "@propertypro/shared";
+import { toInitials, type CommunityRole } from "@propertypro/shared";
+import { matchesRoleVisibility } from "@/lib/navigation/role-visibility";
 import {
   SlideUp,
   StaggerChildren,
@@ -29,7 +30,9 @@ interface MobileHomeContentProps {
   city: string | null;
   state: string | null;
   timezone: string;
-  role: string;
+  role: CommunityRole;
+  /** Owner vs tenant for a resident; Payments is owners + management only. */
+  isUnitOwner: boolean;
   hasCompliance: boolean;
   hasFinance: boolean;
   hasMaintenanceRequests: boolean;
@@ -50,6 +53,7 @@ export function MobileHomeContent({
   state,
   timezone,
   role,
+  isUnitOwner,
   hasCompliance,
   hasFinance,
   hasMaintenanceRequests,
@@ -63,6 +67,10 @@ export function MobileHomeContent({
   // v3: property_manager / root_manager are uniformly management-tier (admin).
   const isAdminRole = role === "property_manager" || role === "root_manager";
   const showCompliance = isAdminRole && hasCompliance;
+  // Same gate as the sidebar's Payments item: tenants are excluded by the
+  // `finances` RBAC cell, so the page would only redirect them.
+  const showPayments =
+    hasFinance && matchesRoleVisibility("owner_or_admin", role, isUnitOwner);
 
   return (
     <PageTransition>
@@ -152,7 +160,7 @@ export function MobileHomeContent({
                 href={`/mobile/maintenance?communityId=${communityId}`}
               />
             )}
-            {hasFinance && (
+            {showPayments && (
               <MobileNavRow
                 icon={CreditCard}
                 title="Payments"

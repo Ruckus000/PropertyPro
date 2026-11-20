@@ -24,6 +24,7 @@ function renderProfile(overrides: Partial<Parameters<typeof MobileProfileContent
       communityName="Palm Shores HOA"
       communityId={42}
       role="root_manager"
+      isUnitOwner={false}
       hasCompliance
       hasFinance
       {...overrides}
@@ -64,5 +65,20 @@ describe('MobileProfileContent (Wave 3 C3 — dead-link audit)', () => {
     expect(
       screen.queryByRole('link', { name: /compliance dashboard/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('shows Payments to a unit owner and to management', () => {
+    renderProfile({ role: 'resident', isUnitOwner: true });
+    expect(screen.getByRole('link', { name: /^payments$/i })).toHaveAttribute(
+      'href',
+      '/communities/42/payments',
+    );
+  });
+
+  it('hides Payments from a tenant (the page would redirect them)', () => {
+    renderProfile({ role: 'resident', isUnitOwner: false });
+    expect(screen.queryByRole('link', { name: /^payments$/i })).not.toBeInTheDocument();
+    // Control: Search stays.
+    expect(screen.getByRole('link', { name: /search/i })).toBeInTheDocument();
   });
 });

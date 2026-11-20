@@ -10,7 +10,11 @@
  *
  * - `'all'`: every viewer, including one with no role yet.
  * - `'admin'`: management tier only (`property_manager` / `root_manager`).
- * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
+ * - `'owner_or_admin'`: unit owners + management tier. Use it for any surface
+ *   whose RBAC cell admits `owner` but not `tenant` — today `finances`
+ *   (Payments) and `insurance` (the insurance hub; tenant read was ruled out
+ *   by the 2026-07-17 legal review). Callers must pass `isUnitOwner`; without
+ *   it an owner is treated as a tenant (fail closed).
  *
  * A gated item with no role fails closed. This is display only — every route
  * behind these links enforces its own gate.

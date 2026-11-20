@@ -11,6 +11,10 @@
  * The first case pins that premise against a real database, so the route test
  * below cannot pass for the wrong reason: an unfiltered scoped read returns
  * BOTH owners' rows.
+ *
+ * The POST names one of the owner's own units (D9, 2026-11-20): the unit label
+ * the agent sees is derived from that unit row, and a neighbour's unit is
+ * refused before anything is sent or stored.
  */
 import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
@@ -46,6 +50,7 @@ type CertificateRequestsRouteModule =
 interface RequestRow {
   id: number;
   requestedBy: string;
+  unitLabel: string;
   recipientEmail: string;
   loanNumber: string | null;
 }
@@ -57,6 +62,8 @@ interface Ctx {
   policyId: number;
   ownerAId: string;
   ownerBId: string;
+  unitAId: number;
+  unitBId: number;
 }
 
 let ctx: Ctx | null = null;
@@ -65,8 +72,17 @@ function req(): Ctx {
   return ctx;
 }
 
-async function seedOwner(state: TestKitState, label: string): Promise<string> {
+async function seedOwner(
+  state: TestKitState,
+  label: string,
+): Promise<{ id: string; unitId: number }> {
   const communityA = requireCommunity(state, 'communityA');
+  const scoped = state.dbModule.createScopedClient(communityA.id);
+  const [unit] = await scoped.insert(state.dbModule.units, {
+    unitNumber: `${label.toUpperCase()}-${state.runSuffix}`,
+    building: 'Bldg C',
+  });
+  const unitId = readNumberField(unit!, 'id');
   const id = randomUUID();
   await state.db.insert(state.dbModule.users).values({
     id,
@@ -75,16 +91,16 @@ async function seedOwner(state: TestKitState, label: string): Promise<string> {
     phone: null,
   });
   trackUserForCleanup(state, id);
-  await state.dbModule.createScopedClient(communityA.id).insert(state.dbModule.userRoles, {
+  await scoped.insert(state.dbModule.userRoles, {
     userId: id,
     role: 'resident',
     isUnitOwner: true,
     displayTitle: 'Owner',
     presetKey: null,
     permissions: null,
-    unitId: null,
+    unitId,
   });
-  return id;
+  return { id, unitId };
 }
 
 async function listAs(userId: string): Promise<RequestRow[]> {
@@ -126,8 +142,8 @@ describeDb('insurance certificate-request visibility (db-backed)', () => {
         createdBy: requireUser(state, 'actorA').id,
       });
 
-    const ownerAId = await seedOwner(state, 'a');
-    const ownerBId = await seedOwner(state, 'b');
+    const { id: ownerAId, unitId: unitAId } = await seedOwner(state, 'a');
+    const { id: ownerBId, unitId: unitBId } = await seedOwner(state, 'b');
 
     ctx = {
       state,
@@ -136,19 +152,21 @@ describeDb('insurance certificate-request visibility (db-backed)', () => {
       policyId: readNumberField(policy!, 'id'),
       ownerAId,
       ownerBId,
+      unitAId,
+      unitBId,
     };
 
     // Each owner creates a request through the real POST.
-    for (const [ownerId, label] of [
-      [ownerAId, 'a'],
-      [ownerBId, 'b'],
+    for (const [ownerId, label, unitId] of [
+      [ownerAId, 'a', unitAId],
+      [ownerBId, 'b', unitBId],
     ] as const) {
       setActorById(state, ownerId);
       const res = await ctx.route.POST(
         jsonRequest(apiUrl('/api/v1/insurance/certificate-requests'), 'POST', {
           communityId: communityA.id,
           policyId: ctx.policyId,
-          unitLabel: `Unit ${label.toUpperCase()}`,
+          unitId,
           recipientName: `Lender ${label.toUpperCase()}`,
           recipientEmail: `lender-${label}+${state.runSuffix}@example.com`,
           loanNumber: `LOAN-${label.toUpperCase()}-${state.runSuffix}`,
@@ -177,6 +195,28 @@ describeDb('insurance certificate-request visibility (db-backed)', () => {
     expect(rows[0]!.requestedBy).toBe(ownerAId);
     expect(rows[0]!.loanNumber).toBe(`LOAN-A-${state.runSuffix}`);
     expect(rows.some((r) => r.requestedBy === ownerBId)).toBe(false);
+  });
+
+  it("stores the label derived from the owner's unit row, not anything the client typed", async () => {
+    const { state, ownerAId } = req();
+    const [row] = await listAs(ownerAId);
+    expect(row!.unitLabel).toBe(`Bldg C • Unit A-${state.runSuffix}`);
+  });
+
+  it("refuses owner A naming owner B's unit, and stores nothing", async () => {
+    const { state, route, communityId, policyId, ownerAId, unitBId } = req();
+    setActorById(state, ownerAId);
+    const res = await route.POST(
+      jsonRequest(apiUrl('/api/v1/insurance/certificate-requests'), 'POST', {
+        communityId,
+        policyId,
+        unitId: unitBId,
+        recipientName: 'Lender X',
+        recipientEmail: `lender-x+${state.runSuffix}@example.com`,
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(await listAs(ownerAId)).toHaveLength(1);
   });
 
   it("owner B's GET returns only owner B's request", async () => {

@@ -5,7 +5,8 @@
  * The board posts the building's inspection report once; every owner reads it
  * and hands it to their own HO-6/wind insurer for mitigation credits
  * (§627.0629). Hence the asymmetry enforced here: `insurance:read` is open to
- * every community role, `insurance:write` is admin-tier.
+ * unit owners and the management tier (tenants are excluded — legal review
+ * 2026-07-17), `insurance:write` is admin-tier.
  *
  * Patterns (see ./contract.ts for the full auth-chain rationale):
  * - createScopedClient for tenant isolation (AGENTS #13)
@@ -113,7 +114,7 @@ function withExpiryStatus(row: Record<string, unknown>): Record<string, unknown>
 }
 
 // ---------------------------------------------------------------------------
-// GET — list reports (every community role)
+// GET — list reports (owners + management; tenants 403 on insurance:read)
 // ---------------------------------------------------------------------------
 
 export const GET = withErrorHandler(

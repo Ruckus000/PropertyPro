@@ -106,6 +106,27 @@ describe('buildSlimNavSections', () => {
   });
 });
 
+describe('getVisibleItemsWithPlanGate — owner vs tenant (D9)', () => {
+  // The plan-gate path is what the sidebar and top nav actually render, so pin
+  // the owner/tenant split there too, not only in getVisibleItems.
+  const idsFor = (isUnitOwner: boolean) =>
+    getVisibleItemsWithPlanGate(
+      NAV_ITEMS,
+      'resident',
+      CONDO_ESSENTIALS_FEATURES,
+      'condo_718',
+      'essentials',
+      isUnitOwner,
+    ).map((item) => item.id);
+
+  it('shows Insurance to an owner and hides it from a tenant', () => {
+    expect(idsFor(true)).toContain('insurance');
+    expect(idsFor(false)).not.toContain('insurance');
+    // Control: an all-roles item survives for the tenant.
+    expect(idsFor(false)).toContain('documents');
+  });
+});
+
 describe('getVisibleItemsWithPlanGate — lapsed communities', () => {
   // Found by live verification, not by the unit suite: the sidebar kept
   // advertising Operations/Insurance/Reserves for a lapsed community even

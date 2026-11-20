@@ -19,6 +19,7 @@ import {
 import {
   INSURANCE_POLICY_TYPE_LABELS,
   type InsurancePolicyRecord,
+  type OwnUnitOption,
 } from './types';
 import { InsurancePolicyFormDialog } from './insurance-policy-form-dialog';
 import { CertificateRequestDialog } from './certificate-request-dialog';
@@ -26,8 +27,8 @@ import { CertificateRequestDialog } from './certificate-request-dialog';
 interface Props {
   communityId: number;
   canManage: boolean;
-  /** The member's own unit, to prefill the certificate request where known. */
-  ownUnitLabel?: string;
+  /** The member's own units — the only ones a certificate request may name. */
+  ownUnits: readonly OwnUnitOption[];
 }
 
 function formatIsoDate(iso: string | null): string {
@@ -58,13 +59,13 @@ function PolicyCard({
   policy,
   communityId,
   canManage,
-  ownUnitLabel,
+  ownUnits,
   onEdit,
 }: {
   policy: InsurancePolicyRecord;
   communityId: number;
   canManage: boolean;
-  ownUnitLabel?: string;
+  ownUnits: readonly OwnUnitOption[];
   onEdit: (p: InsurancePolicyRecord) => void;
 }) {
   const deletePolicy = useDeleteInsurancePolicy(communityId);
@@ -164,13 +165,13 @@ function PolicyCard({
         policy={policy}
         open={requestOpen}
         onOpenChange={setRequestOpen}
-        defaultUnitLabel={ownUnitLabel}
+        ownUnits={ownUnits}
       />
     </Card>
   );
 }
 
-export function InsuranceSummarySection({ communityId, canManage, ownUnitLabel }: Props) {
+export function InsuranceSummarySection({ communityId, canManage, ownUnits }: Props) {
   const { data: policies, isLoading, isError, refetch } = useInsurancePolicies({ communityId });
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<InsurancePolicyRecord | null>(null);
@@ -242,7 +243,7 @@ export function InsuranceSummarySection({ communityId, canManage, ownUnitLabel }
               policy={policy}
               communityId={communityId}
               canManage={canManage}
-              ownUnitLabel={ownUnitLabel}
+              ownUnits={ownUnits}
               onEdit={openEdit}
             />
           ))}

@@ -2,8 +2,8 @@
  * Wind-mitigation report detail page (Wave 1).
  *
  * Route: /communities/[id]/insurance/wind-mitigation/[reportId]
- * Auth: same as the insurance hub — READ IS DELIBERATELY OPEN to any community
- *       member (owners retrieve the building's report for their own insurer).
+ * Auth: same as the insurance hub — unit owners + management tier
+ *       (`insurance:read`); tenants are redirected (2026-07-17 legal review).
  *       Management controls inside the card are admin-gated (`canManage`).
  * Feature gate: hasInsuranceHub (condo/HOA only).
  *
@@ -19,6 +19,7 @@ import { createScopedClient } from '@propertypro/db';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { getWindMitigationReportById } from '@/lib/services/wind-mitigation-service';
 import { PageHeader } from '@/components/shared/page-header';
 import { WindMitigationReportDetail } from '@/components/insurance/wind-mitigation-report-detail';
@@ -56,6 +57,15 @@ export default async function WindMitigationReportPage({ params }: PageProps) {
   const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
   if (!features.hasInsuranceHub) {
     redirect('/dashboard?reason=feature-not-available');
+  }
+
+  // Before the report read: a tenant must not learn which reports exist.
+  if (
+    !checkPermissionV2(membership.role, membership.communityType, 'insurance', 'read', {
+      isUnitOwner: membership.isUnitOwner,
+    })
+  ) {
+    redirect('/dashboard?reason=insufficient-permissions');
   }
 
   const scoped = createScopedClient(communityId);

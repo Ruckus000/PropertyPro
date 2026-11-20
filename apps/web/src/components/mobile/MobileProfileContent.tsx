@@ -13,7 +13,8 @@ import {
   ChevronRight,
   LogOut,
 } from "lucide-react";
-import { toInitials } from "@propertypro/shared";
+import { toInitials, type CommunityRole } from "@propertypro/shared";
+import { matchesRoleVisibility } from "@/lib/navigation/role-visibility";
 import { MobileBackHeader } from "@/components/mobile/MobileBackHeader";
 import { PageTransition, SlideUp } from "@/components/motion";
 
@@ -22,7 +23,9 @@ interface MobileProfileContentProps {
   userRole: string;
   communityName: string;
   communityId: number;
-  role: string;
+  role: CommunityRole;
+  /** Owner vs tenant for a resident; Payments is owners + management only. */
+  isUnitOwner: boolean;
   hasCompliance: boolean;
   hasFinance: boolean;
 }
@@ -72,6 +75,7 @@ export function MobileProfileContent({
   communityName,
   communityId,
   role,
+  isUnitOwner,
   hasCompliance,
   hasFinance,
 }: MobileProfileContentProps) {
@@ -82,6 +86,9 @@ export function MobileProfileContent({
   const canAccessCompliance =
     hasCompliance &&
     (role === "property_manager" || role === "root_manager");
+  // Same gate as the sidebar's Payments item (tenants: `finances` excluded).
+  const showPayments =
+    hasFinance && matchesRoleVisibility("owner_or_admin", role, isUnitOwner);
 
   async function handleSignOut() {
     if (loggingOut) return;
@@ -150,9 +157,9 @@ export function MobileProfileContent({
               icon={Search}
               label="Search"
               href={`/mobile/search?communityId=${communityId}`}
-              isLast={!hasFinance && !canAccessCompliance}
+              isLast={!showPayments && !canAccessCompliance}
             />
-            {hasFinance && (
+            {showPayments && (
               <SettingsRow
                 icon={CreditCard}
                 label="Payments"

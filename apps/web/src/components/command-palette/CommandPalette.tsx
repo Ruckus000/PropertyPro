@@ -120,6 +120,12 @@ export interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
   role: CommunityRole | null;
+  /**
+   * Owner vs tenant for a resident. `owner_or_admin` entries (Payments) are
+   * hidden unless this is true or the role is management — omitted, an owner
+   * is treated as a tenant (fail closed).
+   */
+  isUnitOwner?: boolean;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
@@ -130,11 +136,12 @@ export function CommandPalette({
   onOpenChange,
   communityId,
   role,
+  isUnitOwner = false,
   features,
   resourceAccess,
   enableGlobalShortcut = true,
 }: CommandPaletteProps) {
-  const registryItems = useFilteredRegistry(role, features, communityId, resourceAccess);
+  const registryItems = useFilteredRegistry(role, features, communityId, resourceAccess, isUnitOwner);
   const router = useRouter();
   const { recentPages, addPage } = useRecentPages();
   const [query, setQuery] = useState('');

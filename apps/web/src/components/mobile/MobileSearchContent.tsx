@@ -49,14 +49,22 @@ function categoryToBadge(category: 'page' | 'action' | 'setting'): string {
 interface MobileSearchContentProps {
   communityId: number;
   role: CommunityRole;
+  /** Owner vs tenant for a resident; gates `owner_or_admin` entries (Payments). */
+  isUnitOwner: boolean;
   features: CommunityFeatures;
   resourceAccess: ResourceAccessMap;
 }
 
-export function MobileSearchContent({ communityId, role, features, resourceAccess }: MobileSearchContentProps) {
+export function MobileSearchContent({
+  communityId,
+  role,
+  isUnitOwner,
+  features,
+  resourceAccess,
+}: MobileSearchContentProps) {
   const router = useRouter();
   const { recentPages, addPage } = useRecentPages();
-  const registryItems = useFilteredRegistry(role, features, communityId, resourceAccess);
+  const registryItems = useFilteredRegistry(role, features, communityId, resourceAccess, isUnitOwner);
   const [query, setQuery] = useState('');
 
   // Filtered results

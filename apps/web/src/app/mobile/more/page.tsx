@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
  */
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
-import { getFeaturesForCommunity } from '@propertypro/shared';
+import { getFeaturesForCommunity, type CommunityRole } from '@propertypro/shared';
 import { requirePageAuthenticatedUser as requireAuthenticatedUser } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { MobileProfileContent } from '@/components/mobile/MobileProfileContent';
@@ -32,7 +32,8 @@ export default async function MobileMorePage() {
 
   let communityName = '';
   let displayTitle = '';
-  let role = '';
+  let role: CommunityRole | null = null;
+  let isUnitOwner = false;
   let hasCompliance = false;
   let hasFinance = false;
 
@@ -42,6 +43,7 @@ export default async function MobileMorePage() {
     communityName = membership.communityName;
     displayTitle = membership.displayTitle;
     role = membership.role;
+    isUnitOwner = membership.isUnitOwner;
     hasCompliance = features.hasCompliance;
     hasFinance = features.hasFinance;
   } catch {
@@ -54,7 +56,8 @@ export default async function MobileMorePage() {
       userRole={displayTitle}
       communityName={communityName}
       communityId={communityId}
-      role={role}
+      role={role!}
+      isUnitOwner={isUnitOwner}
       hasCompliance={hasCompliance}
       hasFinance={hasFinance}
     />
