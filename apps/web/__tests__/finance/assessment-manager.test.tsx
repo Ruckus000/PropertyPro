@@ -155,10 +155,37 @@ describe('AssessmentManager', () => {
       </Wrapper>,
     );
 
-    await waitFor(() => {
-      const bodyText = document.body.textContent || '';
-      expect(bodyText).toMatch(/no assessment|create|get started/i);
-    }, { timeout: 10000 });
+    // The first-run hero is dynamically loaded: find it, don't get it.
+    expect(
+      await screen.findByRole('heading', { level: 2, name: 'Set up the dues your units pay' }, { timeout: 10000 }),
+    ).toBeInTheDocument();
+    // The hero owns the one action; the tab header (and its button) is hidden while empty.
+    expect(screen.getAllByRole('button', { name: 'Create Assessment' })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Assessments' })).toBeNull();
+    // Help points only at articles that exist.
+    expect(screen.getByRole('link', { name: 'Create dues and special assessments' })).toHaveAttribute(
+      'href',
+      '/help/payments/create-assessment',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create Assessment' }));
+    expect(await screen.findByText('Amount ($)')).toBeInTheDocument();
+  });
+
+  it('keeps the tab header and drops the first-run hero once an assessment exists', async () => {
+    mockAssessmentsSuccess([makeAssessment()]);
+
+    const AssessmentManager = await importAssessmentManager();
+    const { Wrapper } = createWrapper();
+
+    render(
+      <Wrapper>
+        <AssessmentManager communityId={42} userId="user-1" userRole="board_president" />
+      </Wrapper>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Assessments' }, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Set up the dues your units pay' })).toBeNull();
   });
 
   it('shows Create Assessment button', async () => {
