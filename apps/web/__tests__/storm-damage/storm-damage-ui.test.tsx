@@ -43,7 +43,7 @@ vi.mock('@/hooks/use-storm-damage', () => ({
 
 import { StormDamageSection } from '@/components/storm-damage/storm-damage-section';
 import { StormDamageFormDialog } from '@/components/storm-damage/storm-damage-form-dialog';
-import { STORM_DAMAGE_SUBMITTED_CONFIRMATION } from '@/lib/constants/storm-disclaimers';
+import { STORM_DAMAGE_DISCLAIMER, STORM_DAMAGE_SUBMITTED_CONFIRMATION } from '@/lib/constants/storm-disclaimers';
 import type { StormDamageReportRecord } from '@/components/storm-damage/types';
 
 function mutationStub(overrides: Record<string, unknown> = {}) {
@@ -172,5 +172,39 @@ describe('StormDamageFormDialog — success confirmation is wired', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     expect(toastSuccessMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── Empty states (docs/design-system/patterns/empty-states.md; plan D18) ──
+
+describe('StormDamageSection — the §626.854 notice stays verbatim and visible in every state', () => {
+  const empty = { data: [], isLoading: false, isError: false, refetch: vi.fn() };
+  const notice = () => screen.getByText(STORM_DAMAGE_DISCLAIMER);
+
+  it('manager, no reports: setup guide, then the full notice as a note', () => {
+    useStormDamageReportsMock.mockReturnValue(empty);
+    render(<StormDamageSection communityId={42} canManage />, { wrapper: makeWrapper() });
+    expect(screen.getByRole('heading', { level: 2, name: 'One place for every damage report' })).toBeInTheDocument();
+    expect(notice()).toBeInTheDocument();
+    expect(notice().closest('[role="note"]')).not.toBeNull();
+    // The real statuses, in order; no repair stage.
+    expect(screen.getAllByText('Logged → Reviewed by management → Archived').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/repair/i)).not.toBeInTheDocument();
+  });
+
+  it('resident, no reports: calm waiting state with their one action, then the full notice', () => {
+    useStormDamageReportsMock.mockReturnValue(empty);
+    render(<StormDamageSection communityId={42} canManage={false} />, { wrapper: makeWrapper() });
+    expect(screen.getByRole('heading', { level: 2, name: 'Your damage reports appear here' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Setup steps' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Report damage' })).toBeInTheDocument();
+    expect(notice()).toBeInTheDocument();
+  });
+
+  it('with reports: the notice stays in the section header', () => {
+    useStormDamageReportsMock.mockReturnValue({ data: [REPORT], isLoading: false, isError: false, refetch: vi.fn() });
+    render(<StormDamageSection communityId={42} canManage />, { wrapper: makeWrapper() });
+    expect(notice()).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'One place for every damage report' })).not.toBeInTheDocument();
   });
 });
