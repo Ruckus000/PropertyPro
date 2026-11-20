@@ -791,19 +791,49 @@ describe('DirectoryPageClient — setup', () => {
     expect(rail.getByRole('button', { name: /Invitations/ }).textContent).not.toContain('Completed:');
   });
 
+  // The guide is next/dynamic, so "absent" is proven by what renders INSTEAD:
+  // the units tab's own empty state lives inside the tabs, which setup hides.
   it('a resident who cannot write units sees no setup guide', () => {
     useUnitsMock.mockReturnValue(ok([]));
     renderClient({ isAdmin: false, canWrite: false, canSeeBalances: false });
-    expect(screen.queryByRole('heading', { name: 'Build your community directory' })).toBeNull();
+    expect(screen.getByText('No units yet')).toBeTruthy();
+  });
+
+  it('nor does a non-admin who can write units', () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    renderClient({ isAdmin: false, canWrite: true, canSeeBalances: false });
+    expect(screen.getByText('No units yet')).toBeTruthy();
+  });
+
+  it('an apartment guide offers tenants only: the importer refuses owners there', async () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    useResidentsListMock.mockReturnValue(ok([]));
+    renderClient({ communityType: 'apartment', hasOwnerRole: false });
+    const others = within(await screen.findByRole('list', { name: 'Other steps' }));
+    const residents = others.getByRole('button', { name: /Residents/ });
+    expect(residents.textContent).toContain('Tenants');
+    expect(residents.textContent).not.toContain('Owners');
   });
 
   it('with units but nobody invited yet, a Continue setup bar names the next step', () => {
-    useResidentsListMock.mockReturnValue(ok([resident('Ivy Invited', { unitId: 3, portalStatus: 'invited' })]));
+    useResidentsListMock.mockReturnValue(ok([resident('Nell New', { unitId: 3, portalStatus: 'not_invited' })]));
     renderClient();
     const bar = screen.getByRole('region', { name: 'Continue setup' });
     expect(bar.textContent).toContain('2 of 3');
     expect(bar.textContent).toContain('Next: Invitations');
     expect(screen.getByRole('group', { name: 'Directory overview' })).toBeTruthy();
+  });
+
+  it('shows no bar once everyone has been invited, accepted or not', () => {
+    useResidentsListMock.mockReturnValue(ok([resident('Ivy Invited', { unitId: 3, portalStatus: 'invited' })]));
+    renderClient();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+  });
+
+  it('a residents load error is not "no residents": no bar', () => {
+    useResidentsListMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false, refetch: vi.fn() });
+    renderClient();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
   });
 
   it('shows no bar once everyone with a login is active', () => {

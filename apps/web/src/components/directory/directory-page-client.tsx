@@ -38,8 +38,9 @@ import { useDirectoryExport, type DirectoryExportInput } from '@/hooks/use-direc
 import { occupantIdOf, occupantToResident, useCreateOccupant, useOccupants, useRemoveOccupant } from '@/hooks/use-occupants';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
 import { AddResidentDialog } from '@/components/residents/add-resident-dialog';
-import { DirectoryScene } from '@propertypro/ui';
-import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide';
+// Direct path, not the barrel: the barrel also re-exports SetupGuide, which
+// this page loads only on demand.
+import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide/continue-setup-bar';
 import dynamic from 'next/dynamic';
 import { DirectorySheet } from './directory-sheet';
 import { EditResidentDialog } from './edit-resident-dialog';
@@ -47,10 +48,6 @@ import { PastDueRuleDialog } from './past-due-rule-dialog';
 import { SendDocumentsDialog } from './send-documents-dialog';
 import { UnitFormDialog } from './unit-form-dialog';
 
-// Rendered only on an empty directory or from "Continue setup".
-const DirectorySetup = dynamic(() => import('./directory-setup').then((m) => m.DirectorySetup), {
-  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
-});
 import { DirectoryToolbar, type FilterToken, type StatusOption, type UnitsView } from './directory-toolbar';
 import {
   ANY_OVERDUE_RULE,
@@ -82,6 +79,11 @@ import { UnitDetailPanel } from './unit-detail-panel';
 import { UnitCards, UnitsByBuilding, UnitsSplitList } from './units-views';
 import type { DirectoryTab } from '@/lib/directory/directory-href';
 import { TOP_NAV_ENABLED } from '@/components/layout/top-nav-flag';
+
+// Rendered only on an empty directory or from "Continue setup".
+const DirectorySetup = dynamic(() => import('./directory-setup').then((m) => m.DirectorySetup), {
+  loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
+});
 
 // ponytail: this route sits ~35 KiB under the 1160 KiB hard per-route budget
 // (perf:check on a local production build, 2026-10-13; enforced on this
@@ -617,12 +619,31 @@ export function DirectoryPageClient({
   const loaded = !unitsLoading && !residentsLoading && !unitsQ.isError;
   const setupAllowed = isAdmin && canWrite;
   const inSetup = setupAllowed && loaded && dirUnits.length === 0;
+  // Invitations are done once everyone with a login has been invited; whether
+  // they accept is theirs (the review list still shows who is not active).
+  const notInvitedCount = residentRows.filter((r) => r.portalStatus === 'not_invited').length;
   const nextSetupStep =
-    dirUnits.length === 0 ? 'Units' : residentRows.length === 0 ? 'Residents' : stats.notActiveResidents > 0 ? 'Invitations' : null;
-  const setupDone = [dirUnits.length > 0, residentRows.length > 0, residentRows.length > 0 && stats.notActiveResidents === 0].filter(
+    dirUnits.length === 0 ? 'Units' : residentRows.length === 0 ? 'Residents' : notInvitedCount > 0 ? 'Invitations' : null;
+  const setupDone = [dirUnits.length > 0, residentRows.length > 0, residentRows.length > 0 && notInvitedCount === 0].filter(
     Boolean,
   ).length;
-  const showContinueBar = setupAllowed && loaded && !inSetup && nextSetupStep !== null && !setupOpen && !setupDismissal.dismissed;
+  // A residents load error is not "no residents": the tab's own banner says so.
+  const showContinueBar =
+    setupAllowed && loaded && !residentsQ.isError && !inSetup && nextSetupStep !== null && !setupOpen && !setupDismissal.dismissed;
+
+  // When the guide closes (the first unit saved, "Review who to invite",
+  // Close setup), the control that had focus unmounts with it: hand focus to
+  // the selected tab so keyboard and screen-reader users keep their place.
+  const guideShown = inSetup || (setupOpen && setupAllowed && loaded);
+  const guideWasShown = useRef(guideShown);
+  useEffect(() => {
+    if (guideWasShown.current && !guideShown) {
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLElement>('[role="tablist"] [role="tab"][aria-selected="true"]')?.focus();
+      });
+    }
+    guideWasShown.current = guideShown;
+  }, [guideShown]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -639,13 +660,13 @@ export function DirectoryPageClient({
         />
       ) : null}
 
-      {inSetup || (setupOpen && setupAllowed && loaded) ? (
+      {guideShown ? (
         <DirectorySetup
           communityId={communityId}
           communityType={communityType}
           unitCount={dirUnits.length}
           residentCount={residentRows.length}
-          notActiveCount={stats.notActiveResidents}
+          notInvitedCount={notInvitedCount}
           onAddUnit={() => setUnitForm({ open: true, unitId: null })}
           onAddResident={() => openAddResident(null)}
           onReviewInvites={() => {
@@ -663,6 +684,7 @@ export function DirectoryPageClient({
           stats={stats}
           requestCount={joinRequestsQ.data ? pendingRequests : null}
           canSeeBalances={balancesVisible}
+          unsetLabel={communityType === 'apartment' ? 'offline' : 'not set'}
           onOccupancy={() => {
             setTab('units');
             setUnitStatus('vacant');

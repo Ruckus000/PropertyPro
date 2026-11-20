@@ -282,14 +282,14 @@ export function LeaseRosterPage({
               {query
                 ? `No ${noun[1]} in ${TITLES[filter]} match “${query}”.`
                 : {
-                    all: data.units.length === 0 ? 'Leases hang off units, and there are none yet.' : 'No units on record.',
+                    all: data.units.length === 0 && !data.isError ? 'Leases hang off units, and there are none yet.' : 'No units on record.',
                     expiring: `No renewals due in the next ${Math.max(...data.settings.alertWindows)} days.`,
                     vacant: 'Every unit is occupied and no move-outs are recorded.',
                     m2m: 'No month-to-month leases.',
                     past: 'No past leases on record yet.',
                   }[filter]}
             </p>
-            {!query && filter === 'all' && data.units.length === 0 && (
+            {!query && filter === 'all' && data.units.length === 0 && !data.isError && (
               // No units means no leases can exist yet: point at where units are added.
               <Button asChild variant="outline" size="sm" className="mt-3">
                 <Link href={`/dashboard/directory?communityId=${communityId}`}>Add units in the Directory</Link>

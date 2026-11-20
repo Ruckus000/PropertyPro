@@ -37,8 +37,8 @@ interface DirectorySetupProps {
   communityType: CommunityType;
   unitCount: number;
   residentCount: number;
-  /** Residents with a login who are not active yet: the invitations still to send. */
-  notActiveCount: number;
+  /** Residents with a login who have never been invited: the invitations still to send. */
+  notInvitedCount: number;
   onAddUnit: () => void;
   onAddResident: () => void;
   /** Open the residents list filtered to who is not active. */
@@ -52,7 +52,7 @@ export function DirectorySetup({
   communityType,
   unitCount,
   residentCount,
-  notActiveCount,
+  notInvitedCount,
   onAddUnit,
   onAddResident,
   onReviewInvites,
@@ -67,7 +67,7 @@ export function DirectorySetup({
   // even if (say) a resident exists without a unit.
   const unitsDone = unitCount > 0;
   const residentsDone = unitsDone && residentCount > 0;
-  const invitationsDone = residentsDone && notActiveCount === 0;
+  const invitationsDone = residentsDone && notInvitedCount === 0;
 
   const steps: SetupStep[] = [
     {
@@ -124,7 +124,8 @@ export function DirectorySetup({
       heading: 'Add the people who live here',
       description: 'Importing residents sends no email, so you choose when to invite them.',
       countLabel: `${residentCount} ${residentCount === 1 ? 'resident' : 'residents'}`,
-      items: [{ label: 'Owners' }, { label: 'Tenants' }],
+      // Apartments have tenants only: the importer refuses role=owner there.
+      items: apartment ? [{ label: 'Tenants' }] : [{ label: 'Owners' }, { label: 'Tenants' }],
       action: (
         <Button asChild>
           <Link href={importResidents}>Import residents</Link>
@@ -151,7 +152,11 @@ export function DirectorySetup({
           <CsvFormat
             label="Resident spreadsheet format"
             columns={RESIDENT_CSV_COLUMNS}
-            note="role is owner or tenant, and unit_number must match a unit you added."
+            note={
+              apartment
+                ? 'role is tenant, and unit_number must match a unit you added.'
+                : 'role is owner or tenant, and unit_number must match a unit you added.'
+            }
           />
         </div>
       ),
@@ -163,7 +168,7 @@ export function DirectorySetup({
       ...(!residentsDone ? { disabledReason: 'Invitations unlock after residents.' } : {}),
       heading: 'Invite residents to the portal',
       description: 'Residents can sign in once you invite them. Review who has not been invited, or has not accepted yet.',
-      countLabel: `${notActiveCount} not active`,
+      countLabel: `${notInvitedCount} not invited`,
       action: (
         <Button onClick={onReviewInvites} disabled={!residentsDone}>
           Review who to invite
