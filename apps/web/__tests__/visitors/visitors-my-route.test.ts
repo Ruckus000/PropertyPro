@@ -1,7 +1,7 @@
 /**
  * Route unit tests — `GET /api/v1/visitors/my`.
  *
- * Plan A1 drain #105. Covers filter branches, passCode stripping, and auth gates.
+ * Covers filter branches, host-only passCode, and auth gates.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -90,6 +90,18 @@ const VISITOR_ROW = {
   updatedAt: new Date('2026-06-01T12:05:00Z'),
 };
 
+/** A co-resident's pass on the same unit — the default branch returns it too. */
+const CO_RESIDENT_ROW = {
+  ...VISITOR_ROW,
+  id: 3,
+  visitorName: 'Neighbour Guest',
+  hostUserId: 'resident-2',
+  passCode: 'OTHER456',
+};
+
+/** Staff-registered pass on the actor's unit (no host user). */
+const STAFF_ROW = { ...VISITOR_ROW, id: 4, hostUserId: null, passCode: 'STAFF789' };
+
 const RESIDENT_MEMBERSHIP = {
   userId: ACTOR_USER_ID,
   communityId: COMMUNITY_ID,
@@ -131,9 +143,37 @@ describe('GET /api/v1/visitors/my', () => {
     expect(listVisitorsForCommunityMock).not.toHaveBeenCalled();
 
     const json = (await res.json()) as { data: Record<string, unknown>[] };
-    expect(json.data[0]).not.toHaveProperty('passCode');
     expect(json.data[0]?.visitorName).toBe('Jane Guest');
   });
+
+  it('keeps passCode on the actor\'s own passes and strips it from every other row', async () => {
+    listMyVisitorsForCommunityMock.mockResolvedValueOnce([VISITOR_ROW, CO_RESIDENT_ROW, STAFF_ROW]);
+
+    const res = await GET(buildGetReq(`?communityId=${COMMUNITY_ID}`));
+
+    const json = (await res.json()) as { data: Record<string, unknown>[] };
+    expect(json.data.map((row) => row.id)).toEqual([1, 3, 4]);
+    expect(json.data[0]?.passCode).toBe('SECRET123');
+    expect(json.data[1]).not.toHaveProperty('passCode');
+    expect(json.data[1]?.visitorName).toBe('Neighbour Guest');
+    expect(json.data[2]).not.toHaveProperty('passCode');
+  });
+
+  it.each(['active', 'upcoming', 'past'])(
+    'returns the host\'s passCode on the %s filter',
+    async (filter) => {
+      const row = filter === 'past'
+        ? { ...VISITOR_ROW, checkedOutAt: new Date('2026-06-01T14:00:00Z') }
+        : VISITOR_ROW;
+      listVisitorsForCommunityMock.mockResolvedValueOnce([row, CO_RESIDENT_ROW]);
+
+      const res = await GET(buildGetReq(`?communityId=${COMMUNITY_ID}&filter=${filter}`));
+
+      const json = (await res.json()) as { data: Record<string, unknown>[] };
+      expect(json.data[0]?.passCode).toBe('SECRET123');
+      if (filter !== 'past') expect(json.data[1]).not.toHaveProperty('passCode');
+    },
+  );
 
   it('uses listVisitorsForCommunity for active filter', async () => {
     await GET(buildGetReq(`?communityId=${COMMUNITY_ID}&filter=active`));
