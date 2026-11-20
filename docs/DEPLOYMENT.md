@@ -202,8 +202,8 @@ surfaced:
   tokens. The billing portal and account deletion 500 without it.
 
 - **`OAUTH_STATE_SECRET`** (min 16) — HMAC for the OAuth `state` parameter on
-  Stripe Connect onboarding. Signing throws without it, so onboarding returns
-  500 rather than degrading.
+  "Connect Google Calendar". Signing throws without it, so that connect returns
+  500 rather than degrading. (Stripe Connect onboarding no longer uses OAuth.)
 
 - **`COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET`**, **`SNOWBIRD_UNSUBSCRIBE_SECRET`**,
   **`INSURANCE_ALERTS_UNSUBSCRIBE_SECRET`** (min 16) — sign the no-login

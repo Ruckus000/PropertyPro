@@ -4,15 +4,15 @@ import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useCompleteStripeConnect } from '@/hooks/use-stripe-connect-complete';
 
-type Status = 'exchanging' | 'success' | 'error';
+type Status = 'exchanging' | 'success' | 'reviewing' | 'incomplete' | 'error';
 
 /**
- * OAuth callback page for Stripe Connect Standard.
+ * Return page for Stripe's hosted Connect onboarding.
  *
- * Stripe redirects here with `?code=ac_...&state=...` after the
- * association admin authorises their Stripe account. This page
- * exchanges the code for a connected account via the backend API,
- * then redirects to the payments settings page.
+ * Stripe sends the admin here with only `?communityId=` when they finish OR
+ * leave onboarding, so arriving here proves nothing. The page asks the backend
+ * to re-read the saved account from Stripe, says whether setup is finished,
+ * then returns to the payments settings page.
  */
 export default function StripeConnectCallbackPage() {
   const searchParams = useSearchParams();
@@ -30,35 +30,23 @@ export default function StripeConnectCallbackPage() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    const code = searchParams.get('code');
-    const stateRaw = searchParams.get('state');
-
-    if (!code || !stateRaw) {
+    const communityId = Number(searchParams.get('communityId'));
+    if (!Number.isInteger(communityId) || communityId <= 0) {
       setStatus('error');
-      setErrorMsg('Missing authorization code or state parameter from Stripe.');
+      setErrorMsg('This link is missing its community. Please start again from payment settings.');
       return;
     }
 
-    let communityId: number;
-    try {
-      // Decode the outer envelope to extract communityId for the API call.
-      // The full signed state is forwarded to the backend for HMAC verification.
-      const outer = JSON.parse(
-        Buffer.from(stateRaw, 'base64url').toString('utf-8'),
-      );
-      const parsed = JSON.parse(outer.p);
-      communityId = parsed.communityId;
-      if (!communityId || typeof communityId !== 'number') throw new Error('Invalid communityId');
-    } catch {
-      setStatus('error');
-      setErrorMsg('Invalid state parameter. Please try connecting again.');
-      return;
-    }
-
-    completeStripeConnect({ communityId, code, state: stateRaw })
-      .then(() => {
-        setStatus('success');
-        // Redirect to payments settings after short delay
+    completeStripeConnect({ communityId })
+      .then((result) => {
+        setStatus(
+          !result.onboardingComplete
+            ? 'incomplete'
+            : result.chargesEnabled
+              ? 'success'
+              : 'reviewing',
+        );
+        // Redirect to payments settings after a short delay
         setTimeout(() => {
           router.push(`/settings/payments?communityId=${communityId}`);
         }, 2000);
@@ -75,7 +63,7 @@ export default function StripeConnectCallbackPage() {
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-edge border-t-interactive" />
           <h2 className="text-lg font-semibold text-content">
-            Connecting your Stripe account&hellip;
+            Checking your Stripe account&hellip;
           </h2>
           <p className="mt-1 text-sm text-content-secondary">
             Please wait while we finalize your account setup.
@@ -97,6 +85,34 @@ export default function StripeConnectCallbackPage() {
           <h2 className="text-lg font-semibold text-content">Stripe Connected!</h2>
           <p className="mt-1 text-sm text-content-secondary">
             Your account has been linked. Redirecting to payment settings&hellip;
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'reviewing') {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="max-w-md text-center">
+          <h2 className="text-lg font-semibold text-content">Stripe is reviewing your account</h2>
+          <p className="mt-1 text-sm text-content-secondary">
+            Your details are submitted. Payments turn on once Stripe finishes verifying the
+            account. Redirecting&hellip;
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'incomplete') {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="max-w-md text-center">
+          <h2 className="text-lg font-semibold text-content">Stripe setup isn&apos;t finished</h2>
+          <p className="mt-1 text-sm text-content-secondary">
+            Your account is saved. Choose Resume Setup on the payments page whenever you&apos;re
+            ready to finish. Redirecting&hellip;
           </p>
         </div>
       </div>

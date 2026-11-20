@@ -4,9 +4,8 @@
  * Plan A1 drain #167. Migrated to `runRoute(contract, handler)`; see
  * `./contract.ts`.
  *
- * Exchanges the Stripe OAuth authorization code for a connected account ID.
- * Called from the /settings/payments/connected callback page after
- * the user completes Stripe Connect Standard onboarding.
+ * Re-reads the community's saved Stripe connected account after Stripe's
+ * hosted onboarding sends the admin back to /settings/payments/connected.
  */
 import { runRoute } from '@/lib/api/run-route';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -19,19 +18,12 @@ import {
   requirePaymentsEnabled,
   requireFinanceWritePermission,
 } from '@/lib/finance/common';
-import {
-  completeConnectOnboarding,
-  validateConnectOAuthState,
-} from '@/lib/services/finance-service';
+import { completeConnectOnboarding } from '@/lib/services/finance-service';
 import { stripeConnectCompletePostContract } from './contract';
 
 export const POST = withErrorHandler(
-  runRoute(stripeConnectCompletePostContract, async ({ body, req, communityId }) => {
+  runRoute(stripeConnectCompletePostContract, async ({ req, communityId }) => {
     const userId = await requireAuthenticatedUserId();
-    const { code, state } = body;
-
-    validateConnectOAuthState(state, communityId, userId);
-
     const membership = await requireCommunityMembership(communityId, userId);
     await requireFinanceEnabled(membership);
     // Legal gate — online payments ship disabled (audit F-15).
@@ -42,7 +34,6 @@ export const POST = withErrorHandler(
 
     return completeConnectOnboarding(
       communityId,
-      code,
       userId,
       req.headers.get('x-request-id'),
     );

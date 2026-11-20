@@ -31,7 +31,13 @@ beforeEach(() => {
 });
 
 describe('useCompleteStripeConnect', () => {
-  const payload = { communityId: 42, code: 'ac_123', state: 'state_raw_b64' };
+  const payload = { communityId: 42 };
+  const synced = {
+    stripeAccountId: 'acct_123',
+    onboardingComplete: false,
+    chargesEnabled: false,
+    payoutsEnabled: false,
+  };
 
   it('POSTs to the exact URL with the exact method/headers/body', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: {} }));
@@ -48,28 +54,24 @@ describe('useCompleteStripeConnect', () => {
     expect(call[1]).toEqual({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        communityId: 42,
-        code: 'ac_123',
-        state: 'state_raw_b64',
-      }),
+      body: JSON.stringify({ communityId: 42 }),
     });
   });
 
-  it('resolves on a successful (ok) response', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: {} }));
+  it('resolves with the synced account on a successful (ok) response', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: synced }));
 
     const { result } = renderHook(() => useCompleteStripeConnect(), {
       wrapper: createWrapper(),
     });
 
-    await expect(result.current.mutateAsync(payload)).resolves.toBeUndefined();
+    await expect(result.current.mutateAsync(payload)).resolves.toEqual(synced);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 
   it('throws the API error.message on a non-OK response', async () => {
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(400, { error: { message: 'Stripe rejected the code' } }),
+      jsonResponse(400, { error: { message: 'Stripe Connect account is not configured for this community' } }),
     );
 
     const { result } = renderHook(() => useCompleteStripeConnect(), {
@@ -77,7 +79,7 @@ describe('useCompleteStripeConnect', () => {
     });
 
     await expect(result.current.mutateAsync(payload)).rejects.toThrow(
-      'Stripe rejected the code',
+      'Stripe Connect account is not configured for this community',
     );
   });
 

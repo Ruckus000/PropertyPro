@@ -12,7 +12,6 @@ const {
   requireFinanceAdminWriteMock,
   requireActiveSubscriptionForMutationMock,
   completeConnectOnboardingMock,
-  validateConnectOAuthStateMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -21,7 +20,6 @@ const {
   requireFinanceAdminWriteMock: vi.fn(),
   requireActiveSubscriptionForMutationMock: vi.fn(),
   completeConnectOnboardingMock: vi.fn(),
-  validateConnectOAuthStateMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/auth', () => ({
@@ -45,7 +43,6 @@ vi.mock('@/lib/middleware/subscription-guard', () => ({
 
 vi.mock('@/lib/services/finance-service', () => ({
   completeConnectOnboarding: completeConnectOnboardingMock,
-  validateConnectOAuthState: validateConnectOAuthStateMock,
 }));
 
 import { POST } from '../../src/app/api/v1/stripe/connect/complete/route';
@@ -67,9 +64,9 @@ describe('POST /api/v1/stripe/connect/complete', () => {
     requireFinanceWritePermissionMock.mockReturnValue(undefined);
     requireFinanceAdminWriteMock.mockReturnValue(undefined);
     requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
-    validateConnectOAuthStateMock.mockReturnValue(undefined);
     completeConnectOnboardingMock.mockResolvedValue({
       stripeAccountId: 'acct_123',
+      onboardingComplete: true,
       chargesEnabled: true,
       payoutsEnabled: true,
     });
@@ -83,11 +80,7 @@ describe('POST /api/v1/stripe/connect/complete', () => {
           'content-type': 'application/json',
           'x-request-id': 'req-finance-test-1',
         },
-        body: JSON.stringify({
-          communityId: 42,
-          code: 'ac_test_code',
-          state: 'valid-state-token',
-        }),
+        body: JSON.stringify({ communityId: 42 }),
       }),
     );
     const json = await response.json();
@@ -95,21 +88,16 @@ describe('POST /api/v1/stripe/connect/complete', () => {
     expect(response.status).toBe(200);
     expect(json.data).toEqual({
       stripeAccountId: 'acct_123',
+      onboardingComplete: true,
       chargesEnabled: true,
       payoutsEnabled: true,
     });
-    expect(validateConnectOAuthStateMock).toHaveBeenCalledWith(
-      'valid-state-token',
-      42,
-      'user-finance-1',
-    );
     expect(requireFinanceEnabledMock).toHaveBeenCalled();
     expect(requireFinanceWritePermissionMock).toHaveBeenCalled();
     expect(requireFinanceAdminWriteMock).toHaveBeenCalled();
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(42);
     expect(completeConnectOnboardingMock).toHaveBeenCalledWith(
       42,
-      'ac_test_code',
       'user-finance-1',
       'req-finance-test-1',
     );
@@ -122,42 +110,11 @@ describe('POST /api/v1/stripe/connect/complete', () => {
       new NextRequest(URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 42,
-          code: 'ac_test_code',
-          state: 'valid-state-token',
-        }),
+        body: JSON.stringify({ communityId: 42 }),
       }),
     );
 
     expect(response.status).toBe(401);
-    expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
-    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
-    expect(requireFinanceEnabledMock).not.toHaveBeenCalled();
-    expect(requireFinanceWritePermissionMock).not.toHaveBeenCalled();
-    expect(requireFinanceAdminWriteMock).not.toHaveBeenCalled();
-    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
-    expect(requireActiveSubscriptionForMutationMock).not.toHaveBeenCalled();
-  });
-
-  it('returns 403 when OAuth state validation fails', async () => {
-    validateConnectOAuthStateMock.mockImplementationOnce(() => {
-      throw new ForbiddenError('OAuth state signature invalid');
-    });
-
-    const response = await POST(
-      new NextRequest(URL, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 42,
-          code: 'ac_test_code',
-          state: 'forged-state',
-        }),
-      }),
-    );
-
-    expect(response.status).toBe(403);
     expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
     expect(requireFinanceEnabledMock).not.toHaveBeenCalled();
     expect(requireFinanceWritePermissionMock).not.toHaveBeenCalled();
@@ -175,11 +132,7 @@ describe('POST /api/v1/stripe/connect/complete', () => {
       new NextRequest(URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 42,
-          code: 'ac_test_code',
-          state: 'valid-state-token',
-        }),
+        body: JSON.stringify({ communityId: 42 }),
       }),
     );
 
@@ -197,11 +150,7 @@ describe('POST /api/v1/stripe/connect/complete', () => {
       new NextRequest(URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          communityId: 42,
-          code: 'ac_test_code',
-          state: 'valid-state-token',
-        }),
+        body: JSON.stringify({ communityId: 42 }),
       }),
     );
 
@@ -214,13 +163,12 @@ describe('POST /api/v1/stripe/connect/complete', () => {
       new NextRequest(URL, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ communityId: 42 }),
+        body: JSON.stringify({ communityId: 'not-a-number' }),
       }),
     );
 
     expect(response.status).toBe(400);
     expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
-    expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
     expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
   describe('tenant header cross-check (roadmap 3.6)', () => {
@@ -230,7 +178,7 @@ describe('POST /api/v1/stripe/connect/complete', () => {
       return new NextRequest(URL, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ communityId: 42, code: 'ac_test_code', state: 'valid-state-token' }),
+        body: JSON.stringify({ communityId: 42 }),
       });
     }
 
@@ -240,7 +188,6 @@ describe('POST /api/v1/stripe/connect/complete', () => {
 
       expect(response.status).toBe(404);
       expect(json.error.code).toBe('NOT_FOUND');
-      expect(validateConnectOAuthStateMock).not.toHaveBeenCalled();
       expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
       expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
     });
@@ -250,14 +197,13 @@ describe('POST /api/v1/stripe/connect/complete', () => {
 
       expect(response.status).toBe(200);
       expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-finance-1');
-      expect(completeConnectOnboardingMock).toHaveBeenCalledWith(42, 'ac_test_code', 'user-finance-1', null);
+      expect(completeConnectOnboardingMock).toHaveBeenCalledWith(42, 'user-finance-1', null);
     });
 
-    it('uses the body communityId when no tenant header is present (apex OAuth callback)', async () => {
+    it('uses the body communityId when no tenant header is present (apex return URL)', async () => {
       const response = await POST(withHeader(null));
 
       expect(response.status).toBe(200);
-      expect(validateConnectOAuthStateMock).toHaveBeenCalledWith('valid-state-token', 42, 'user-finance-1');
       expect(requireCommunityMembershipMock).toHaveBeenCalledWith(42, 'user-finance-1');
     });
   });

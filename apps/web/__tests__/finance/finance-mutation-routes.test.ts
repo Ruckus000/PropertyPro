@@ -16,7 +16,6 @@ const {
   waiveLateFeesForUnitMock,
   startConnectOnboardingMock,
   completeConnectOnboardingMock,
-  validateConnectOAuthStateMock,
   getConnectStatusMock,
   eqMock,
   userRolesTableMock,
@@ -34,7 +33,6 @@ const {
   waiveLateFeesForUnitMock: vi.fn(),
   startConnectOnboardingMock: vi.fn(),
   completeConnectOnboardingMock: vi.fn(),
-  validateConnectOAuthStateMock: vi.fn(),
   getConnectStatusMock: vi.fn(),
   eqMock: vi.fn((column: unknown, value: unknown) => ({ column, value })),
   userRolesTableMock: {
@@ -82,7 +80,6 @@ vi.mock('@/lib/services/finance-service', () => ({
   waiveLateFeesForUnit: waiveLateFeesForUnitMock,
   startConnectOnboarding: startConnectOnboardingMock,
   completeConnectOnboarding: completeConnectOnboardingMock,
-  validateConnectOAuthState: validateConnectOAuthStateMock,
   getConnectStatus: getConnectStatusMock,
 }));
 
@@ -151,10 +148,10 @@ describe('WS66 finance mutation routes', () => {
     });
     completeConnectOnboardingMock.mockResolvedValue({
       stripeAccountId: 'acct_123',
+      onboardingComplete: true,
       chargesEnabled: true,
       payoutsEnabled: true,
     });
-    validateConnectOAuthStateMock.mockReturnValue(undefined);
     getConnectStatusMock.mockResolvedValue({
       connected: true,
       stripeAccountId: 'acct_123',
@@ -584,25 +581,15 @@ describe('WS66 finance mutation routes', () => {
     expect(getConnectStatusMock).not.toHaveBeenCalled();
   });
 
-  it('completes connect onboarding with valid state and code', async () => {
+  it('completes connect onboarding for the body community', async () => {
     const response = await connectCompletePost(
-      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
-        communityId,
-        code: 'ac_test_code',
-        state: 'valid-state-token',
-      }),
+      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', { communityId }),
     );
 
     expect(response.status).toBe(200);
-    expect(validateConnectOAuthStateMock).toHaveBeenCalledWith(
-      'valid-state-token',
-      communityId,
-      'user-finance-1',
-    );
     expect(requireActiveSubscriptionForMutationMock).toHaveBeenCalledWith(communityId);
     expect(completeConnectOnboardingMock).toHaveBeenCalledWith(
       communityId,
-      'ac_test_code',
       'user-finance-1',
       'req-finance-test-1',
     );
@@ -610,39 +597,10 @@ describe('WS66 finance mutation routes', () => {
     const body = await response.json();
     expect(body.data).toEqual({
       stripeAccountId: 'acct_123',
+      onboardingComplete: true,
       chargesEnabled: true,
       payoutsEnabled: true,
     });
-  });
-
-  it('rejects connect completion with invalid state', async () => {
-    validateConnectOAuthStateMock.mockImplementationOnce(() => {
-      throw new AppError('OAuth state signature invalid', 403, 'FORBIDDEN');
-    });
-
-    const response = await connectCompletePost(
-      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
-        communityId,
-        code: 'ac_test_code',
-        state: 'forged-state',
-      }),
-    );
-
-    expect(response.status).toBe(403);
-    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
-  });
-
-  it('rejects connect completion with missing state', async () => {
-    const response = await connectCompletePost(
-      jsonRequest('http://localhost:3000/api/v1/stripe/connect/complete', {
-        communityId,
-        code: 'ac_test_code',
-      }),
-    );
-
-    // Missing state field fails validation → 400
-    expect(response.status).toBe(400);
-    expect(completeConnectOnboardingMock).not.toHaveBeenCalled();
   });
 
   // ── Online payments gate ───────────────────────────────────────────────────

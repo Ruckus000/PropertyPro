@@ -240,6 +240,16 @@ operation that has already half-completed.
    reaches the finance handlers, never signup or billing, and only when the
    sending account is the one connected to the community the payment names.
    Skip this endpoint while no community has `assessmentPaymentsEnabled`.
+
+   **Associations connect through Stripe's hosted onboarding, not OAuth.**
+   Stripe no longer offers OAuth to new Connect platforms, so there is no client
+   ID and no redirect URI to register. "Connect with Stripe" creates the
+   association's account through the API (full Stripe Dashboard; the association
+   pays Stripe's fees and carries its own disputes) and sends the admin to a
+   one-time Stripe onboarding link. Before the first one, in **Settings →
+   Connect**, finish the platform profile and set the onboarding **branding**
+   (name, colour, icon), which Stripe's hosted onboarding requires. Do this in
+   each mode you use.
 2. Update the env vars in Vercel production — `--no-sensitive`, because a
    sensitive var is written back by `vercel pull` as the literal `[SENSITIVE]`
    and then **inlined into the build**:

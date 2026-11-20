@@ -142,14 +142,14 @@ line says where.
   It is irreversible; see [`DEPLOYMENT.md`](DEPLOYMENT.md) §7.3.
 - **Reserve transparency** and **storm tools** ship dark by design.
 - **Resident payments** are gated per community (`assessmentPaymentsEnabled`) and are not
-  launching. `STRIPE_CONNECT_CLIENT_ID` is unset, which now returns a typed 503 rather than
-  a raw 500.
+  launching. Associations connect through Stripe-hosted onboarding (account links), not
+  OAuth, which Stripe no longer offers to new platforms, so no client ID is needed.
   - The three money items from ponytail audit #17 are fixed in code: the route verifies
     the Connect endpoint's `STRIPE_CONNECT_WEBHOOK_SECRET` and checks that a
     connected-account event comes from the community's own account; the finance fence
     and its ledger writes commit in one transaction; `charge.dispute.closed` reverses a
     won dispute. What remains is setup and a decision, not code: register the Connect
-    endpoint and set `STRIPE_CONNECT_WEBHOOK_SECRET` and `STRIPE_CONNECT_CLIENT_ID`
+    endpoint, set `STRIPE_CONNECT_WEBHOOK_SECRET` and the Connect onboarding branding
     ([cutover runbook](runbooks/stripe-live-cutover.md) §3), decide chargeback liability
     and the matching terms, then prove one real payment, refund and dispute on a single
     community before turning `assessmentPaymentsEnabled` on anywhere else.
