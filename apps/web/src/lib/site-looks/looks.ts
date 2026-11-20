@@ -22,10 +22,13 @@ import {
   BLOCK_TYPES,
   blockSchemaRegistry,
   fingerprint,
+  heroBlockSchema,
+  resolveHeroPhotos,
   stableStringify,
   STOCK_PHOTO_ALT,
   type BlockType,
   type CommunityType,
+  type ResolvedHeroPhoto,
   type StockHeroPhoto,
 } from '@propertypro/shared';
 import type { LayoutId } from '@/components/public-site/blocks/types';
@@ -303,6 +306,8 @@ export interface LookSwitchCounts {
   replaced: number;
   /** Edited or hidden sections kept as they are, in their slot. */
   kept: number;
+  // A kept hero that took the incoming look's photo still counts as kept: its
+  // words are the manager's, and only the photo the look supplies changed.
   /** The incoming look's sections of a type the page did not have. */
   added: number;
   /** Untouched sections dropped: the incoming look has no section of their type left for them. */
@@ -345,10 +350,14 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * - Otherwise each untouched section is replaced in its slot by the incoming
  *   section of its type, or dropped when there is none. Each incoming section
  *   is used once, so none shows twice. Kept sections stay as they are, in their
- *   slots. The incoming types the page still lacks go in after the nearest
- *   section before them in the incoming order, or first.
+ *   slots, except that a kept hero showing no photo of its own takes the
+ *   incoming look's ("A kept hero's photo", below). The incoming types the page
+ *   still lacks go in after the nearest section before them in the incoming
+ *   order, or first.
  *
- * Content the switch supplies is a copy; kept sections are handed back as given.
+ * Content the switch supplies is a copy. Kept sections are handed back as given,
+ * except a kept hero whose photos changed, which is a new object: compare
+ * content, never rely on a kept section's row id meaning "unchanged".
  */
 export function planLookSwitch(input: PlanLookSwitchInput): SiteSection[] {
   return planLookSwitchWithCounts(input).sections;
@@ -424,6 +433,7 @@ function planAgainst(
   for (const lookSection of incoming) {
     unused.set(lookSection.blockType, [...(unused.get(lookSection.blockType) ?? []), lookSection]);
   }
+  const incomingPhotos = heroPhotosIn(incoming);
 
   const sections: SiteSection[] = [];
   let replaced = 0;
@@ -431,7 +441,7 @@ function planAgainst(
   let removed = 0;
   current.forEach((siteSection, i) => {
     if (!untouched[i]) {
-      sections.push(keep(siteSection));
+      sections.push(withLookPhotos(keep(siteSection), incomingPhotos));
       kept += 1;
       return;
     }
@@ -632,7 +642,9 @@ function planBackToLive(
   live.forEach((row, j) => {
     const i = standIn[j]!;
     // A section standing for the row with other content is the manager's edit.
-    sections.push(i !== -1 && identity[i] !== liveIdentity[j] ? keep(current[i]!) : keep(row));
+    // A look's photo on a hero is not: the row's own photos come back.
+    const now = i === -1 ? null : withPhotosOf(current[i]!, row);
+    sections.push(now !== null && contentIdentity(now) !== liveIdentity[j] ? keep(now) : keep(row));
     if (i === -1 && !placed.has(j)) added += 1;
     sections.push(...(addedAfter.get(j) ?? []));
   });
@@ -688,6 +700,102 @@ function countByType(sections: readonly SiteSection[]): Map<string, number> {
   return counts;
 }
 
+// ---------------------------------------------------------------------------
+// A kept hero's photo
+// ---------------------------------------------------------------------------
+//
+// A look's photo lives in its hero's content, so a switch only brought it with
+// a hero it REPLACED. A hero the manager had edited (their own headline) was
+// kept whole, photo-less if it was written before the looks had photos, and a
+// photo look then drew its text-only hero: in production, an existing site
+// never got a photo by switching. So a kept hero that shows no photo of its own
+// takes the incoming look's, keeping its words. "Of its own" means the photos
+// were never the manager's choice: none, or exactly the set a look's hero starts
+// with. A photo they uploaded, a set no look starts with, the single legacy
+// image and a hidden hero are theirs, and stay. Returning to the live look puts
+// the live row's photos back over a look's own set, the only photos a switch
+// gives, so that photo never outlives the switch. A hero with no photo at all
+// is left alone there: a switch never takes a photo away, so none is an edit.
+
+/** The parsed photos of each look's own hero, as `stableStringify` keys. Lazy: `LOOKS` is defined above. */
+let lookPhotoSets: Set<string> | null = null;
+
+function isLookPhotoSet(photos: readonly ResolvedHeroPhoto[]): boolean {
+  lookPhotoSets ??= new Set(
+    LOOKS.flatMap((lookDef) =>
+      lookDef.sections.flatMap((s) => {
+        const parsed = s.blockType === 'hero' ? heroBlockSchema.safeParse(s.content) : null;
+        const photos = parsed?.success ? resolveHeroPhotos(parsed.data) : [];
+        return photos.length > 0 ? [stableStringify(photos)] : [];
+      }),
+    ),
+  );
+  return lookPhotoSets.has(stableStringify(photos));
+}
+
+/**
+ * A visible hero's photos, or null for content that does not parse. The hero
+ * schema is strict and has no `hidden` key today, so the hidden check only
+ * guards against one being added later.
+ */
+function visibleHeroPhotos(content: unknown): ResolvedHeroPhoto[] | null {
+  const parsed = heroBlockSchema.safeParse(content);
+  if (!parsed.success || isHidden(parsed.data)) return null;
+  return resolveHeroPhotos(parsed.data);
+}
+
+/** Whether a hero shows no photo the manager chose: none, or exactly a look's own. */
+function showsNoPhotoOfItsOwn(content: unknown): boolean {
+  const photos = visibleHeroPhotos(content);
+  return photos !== null && (photos.length === 0 || isLookPhotoSet(photos));
+}
+
+/** Whether a hero shows exactly a look's own photos: the only photos a switch gives a kept hero. */
+function showsLookPhotos(content: unknown): boolean {
+  const photos = visibleHeroPhotos(content);
+  return photos !== null && photos.length > 0 && isLookPhotoSet(photos);
+}
+
+/** The photos a look's hero starts with, or null when it has none (Plain & Simple). */
+function heroPhotosIn(sections: readonly LookSection[]): unknown[] | null {
+  const hero = sections.find((s) => s.blockType === 'hero');
+  const photos = (hero?.content as { photos?: unknown } | undefined)?.photos;
+  return Array.isArray(photos) && photos.length > 0 ? photos : null;
+}
+
+/** The hero's content with `photos` set (a copy), or removed when `photos` is undefined. */
+function heroWithPhotos(content: unknown, photos: unknown[] | undefined): unknown {
+  const { photos: _replaced, ...rest } = content as Record<string, unknown>;
+  return photos === undefined ? rest : { ...rest, photos: copyJson(photos) };
+}
+
+/** A kept section, given the incoming look's photos when it is a hero showing none of its own. */
+function withLookPhotos(section: SiteSection, photos: unknown[] | null): SiteSection {
+  if (section.blockType !== 'hero' || photos === null || !showsNoPhotoOfItsOwn(section.content)) return section;
+  return { ...section, content: heroWithPhotos(section.content, photos) };
+}
+
+/**
+ * A section standing for a live row, with the row's photos back where it is a
+ * hero showing a look's own photos and the row a hero showing none of its own:
+ * the look's photo was the switch's, not an edit.
+ */
+function withPhotosOf(section: SiteSection, row: SiteSection): SiteSection {
+  if (
+    section.blockType !== 'hero' ||
+    row.blockType !== 'hero' ||
+    !showsLookPhotos(section.content) ||
+    !showsNoPhotoOfItsOwn(row.content)
+  ) {
+    return section;
+  }
+  const rowPhotos = (row.content as { photos?: unknown }).photos;
+  return {
+    ...section,
+    content: heroWithPhotos(section.content, Array.isArray(rowPhotos) ? rowPhotos : undefined),
+  };
+}
+
 /** A section kept as it is: its id, type and content, and nothing else the caller attached. */
 function keep({ id, blockType, content }: SiteSection): SiteSection {
   return id === undefined ? { blockType, content } : { id, blockType, content };
@@ -695,7 +803,12 @@ function keep({ id, blockType, content }: SiteSection): SiteSection {
 
 /** An incoming section for the page, as a copy the caller may change (section content is plain JSON). */
 function fromLook({ blockType, content }: LookSection): SiteSection {
-  return { blockType, content: JSON.parse(JSON.stringify(content)) as unknown };
+  return { blockType, content: copyJson(content) };
+}
+
+/** A deep copy of plain JSON (section content is plain JSON), so a caller can change it without changing a look. */
+function copyJson(value: unknown): unknown {
+  return JSON.parse(JSON.stringify(value)) as unknown;
 }
 
 /**
