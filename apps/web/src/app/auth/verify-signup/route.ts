@@ -52,6 +52,7 @@ import {
   bindingMatches,
   sha256Hex,
 } from '@/lib/auth/signup-binding';
+import { redactParams } from '@propertypro/shared/observability';
 
 /**
  * Whatever GoTrue reported when the link was minted (`generateStartLink`):
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (error) {
       // Not fatal, and not surfaced here: with no session, `/signup` shows its
       // "link failed" notice. Logged without the token.
-      console.error('[verify-signup] verifyOtp failed:', error.message);
+      console.error('[verify-signup] verifyOtp failed:', redactParams(error.message));
     }
   }
 

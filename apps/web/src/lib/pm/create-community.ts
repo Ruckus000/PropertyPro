@@ -7,6 +7,7 @@ import {
 } from '@propertypro/db';
 // AUTHZ: P3-PRE-03: PM community creation — root tenant table bootstrap, no communityId available yet
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { createChecklistItems } from '@/lib/services/onboarding-checklist-service';
 import { initializeNewCommunityRecords, seedNewCommunitySite } from '@/lib/services/new-community-site';
 import {
@@ -102,7 +103,7 @@ export async function createCommunityForPm(
     });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('createChecklistItems failed', { communityId, err });
+    console.error('createChecklistItems failed', { communityId, err: formatErrorForLog(err) });
   }
 
   // 5b. The website, live from day one: the suggested look for the community's
@@ -130,7 +131,7 @@ export async function createCommunityForPm(
     });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error('logAuditEvent failed during community creation', { communityId, err });
+    console.error('logAuditEvent failed during community creation', { communityId, err: formatErrorForLog(err) });
   }
 
   return { communityId, slug };

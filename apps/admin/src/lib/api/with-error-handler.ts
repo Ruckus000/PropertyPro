@@ -20,6 +20,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { AppError, extractSentryRequestContext } from '@propertypro/shared/http';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 
 /**
  * Wrap an admin Route Handler with structured error handling.
@@ -57,7 +58,13 @@ export function withAdminErrorHandler<TArgs extends unknown[]>(
       }
 
       // Unknown error — 500, nothing internal exposed [AGENTS #43].
-      console.error('Unhandled admin error:', error);
+      // Logged as a REDACTED STRING, not the Error object: the console write
+      // is what Vercel function logs capture, and `scrubServerEvent` only
+      // scrubs the Sentry copy below. Drizzle embeds bound values in
+      // `error.message` after `params: ` (#1092). `captureException`
+      // deliberately still gets the RAW object. (#951 residual — mirror of
+      // web's error-handler.ts; the handler duplication is deliberate.)
+      console.error('Unhandled admin error:', formatErrorForLog(error));
 
       // NOTE: no `app` tag here — sentry.server.config.ts / sentry.edge.config.ts
       // set it via `initialScope`, so it lands on EVERY admin event including the

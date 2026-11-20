@@ -7,6 +7,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, pendingSignups } from '@propertypro/db';
 import { and, eq, gt, isNull, notInArray, or } from '@propertypro/db/filters';
+import { redactParams } from '@propertypro/shared/observability';
 import { sendEmail } from '@propertypro/email';
 import { createElement } from 'react';
 import { SignupVerificationEmail } from '@propertypro/email';
@@ -103,7 +104,7 @@ export async function checkSignupSubdomainAvailability(
     console.error(JSON.stringify({
       event: 'subdomain.check.db_failure',
       ...logContext,
-      error: dbError instanceof Error ? dbError.message : String(dbError),
+      error: redactParams(dbError instanceof Error ? dbError.message : String(dbError)),
     }));
     return {
       normalizedSubdomain,

@@ -71,6 +71,7 @@ import {
   type PlanLookSwitchInput,
   type SiteSection,
 } from '@/lib/site-looks/looks';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 
 type UnscopedDb = ReturnType<typeof createUnscopedClient>;
 /** The drizzle transaction handle, the same alias site-pages-service uses. */
@@ -242,7 +243,7 @@ export async function fillDemoCommunitySite(communityId: number): Promise<void> 
     if ((await scoped.queryIncludingDeleted(siteBlocks)).length > 0) return;
     await applyLookAtCreation(communityId, community.communityType, { keepBrand: true });
   } catch (err) {
-    console.error('fillDemoCommunitySite failed', { communityId, err });
+    console.error('fillDemoCommunitySite failed', { communityId, err: formatErrorForLog(err) });
     captureException(err, { tags: { site_seed: 'demo_look' }, extra: { communityId } });
   }
 }

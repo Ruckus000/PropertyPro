@@ -49,6 +49,7 @@
  * message and reading the sender's NDR.
  */
 import * as Sentry from '@sentry/nextjs';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { normalizeForwardEmailPayload } from '@/lib/services/support-inbox/normalize';
@@ -162,7 +163,7 @@ export const POST = async (req: NextRequest): Promise<NextResponse> => {
      * and the first sign of trouble would be an NDR after the window is spent.
      */
     Sentry.captureException(error, { tags: { component: 'inbound-email-webhook' } });
-    console.error('[inbound-email-webhook] unhandled', error);
+    console.error('[inbound-email-webhook] unhandled', formatErrorForLog(error));
     logInboundEmailEvent('error', 'inbound email handler threw', {
       outcome: 'failure',
       errorCode: 'PERSIST_FAILED',
@@ -290,7 +291,7 @@ const handleInboundEmail = async (req: NextRequest): Promise<NextResponse> => {
       errorCode: 'PERSIST_FAILED',
       mailbox: email.mailbox,
     });
-    console.error('[inbound-email-webhook] persist error', error);
+    console.error('[inbound-email-webhook] persist error', formatErrorForLog(error));
     return NextResponse.json({ error: 'failed to store message' }, { status: 429 });
   }
 };

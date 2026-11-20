@@ -72,6 +72,7 @@
     "guard:sanitizer-deps": "tsx scripts/verify-sanitizer-deps.ts",
     "guard:read-entitlement": "tsx scripts/verify-read-entitlement-coverage.ts",
     "guard:admin-error-leakage": "tsx scripts/verify-admin-error-leakage.ts",
+    "guard:console-error-redaction": "tsx scripts/verify-console-error-redaction.ts",
     "guard:internal-cron-auth": "tsx scripts/verify-internal-cron-auth.ts",
     "guard:cron-job-tagging": "tsx scripts/verify-cron-job-tagging.ts",
     "guard:token-auth-routes": "tsx scripts/verify-token-auth-routes.ts",

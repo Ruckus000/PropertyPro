@@ -30,6 +30,7 @@ import { captureException } from '@sentry/nextjs';
 import type { CommunityType } from '@propertypro/shared';
 import { applyLookAtCreation } from '@/lib/services/site-look-service';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 
 export async function seedNewCommunitySite(
   communityId: number,
@@ -38,7 +39,7 @@ export async function seedNewCommunitySite(
   try {
     await applyLookAtCreation(communityId, communityType);
   } catch (err) {
-    console.error('applyLookAtCreation failed', { communityId, err });
+    console.error('applyLookAtCreation failed', { communityId, err: formatErrorForLog(err) });
     captureException(err, { tags: { site_seed: 'look' }, extra: { communityId } });
   }
 }
@@ -63,7 +64,7 @@ export async function initializeNewCommunityRecords(
   try {
     await ensureTransparencyChecklistInitialized(communityId, communityType);
   } catch (err) {
-    console.error('ensureTransparencyChecklistInitialized failed', { communityId, err });
+    console.error('ensureTransparencyChecklistInitialized failed', { communityId, err: formatErrorForLog(err) });
     captureException(err, { tags: { records_seed: 'checklist' }, extra: { communityId } });
   }
 }

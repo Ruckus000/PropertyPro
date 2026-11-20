@@ -160,9 +160,13 @@ describe('Twilio webhook route', () => {
 
     expect(res.status).toBe(500);
     expect(body.error).toBe('Internal error');
+    // A STRING, not the Error object: the console write is what Vercel logs
+    // capture, and a drizzle failure's message embeds bound values (#1092).
+    // This assertion used to pin `expect.any(Error)` — the leak itself. (#951
+    // residual; formatErrorForLog keeps the message for triage.)
     expect(errorSpy).toHaveBeenCalledWith(
       '[twilio-webhook] Error processing webhook:',
-      expect.any(Error),
+      expect.stringContaining('db write failed'),
     );
 
     errorSpy.mockRestore();

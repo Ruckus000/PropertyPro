@@ -26,6 +26,7 @@ import { eq } from '@propertypro/db/filters';
 import { createServerClient } from '@propertypro/db/supabase/server';
 // AUTHZ: Pre-tenant Stripe checkout — writes pending_signups before any community exists; no communityId available yet (the community is provisioned after successful payment).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
+import { redactParams } from '@propertypro/shared/observability';
 import { pendingSignups } from '@propertypro/db';
 import {
   closeCheckoutSession,
@@ -189,7 +190,7 @@ export async function createCheckoutSession(
     console.error(JSON.stringify({
       event: 'checkout.session_creation_failed',
       signupRequestId,
-      error: err instanceof Error ? err.message : String(err),
+      error: redactParams(err instanceof Error ? err.message : String(err)),
     }));
     return { ok: false, error: 'Unable to start checkout. Please try again.' };
   }

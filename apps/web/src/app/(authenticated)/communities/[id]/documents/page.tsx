@@ -7,6 +7,7 @@ import { checkPermissionV2 } from '@/lib/db/access-control';
 import { DocumentLibrary } from '@/components/documents/document-library';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
 import { PageHeader } from '@/components/shared/page-header';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,7 +61,7 @@ export default async function DocumentsPage({ params, searchParams }: PageProps)
     try {
       await ensureTransparencyChecklistInitialized(communityId, membership.communityType);
     } catch (err) {
-      console.error('[documents] ensureTransparencyChecklistInitialized failed', { communityId, err });
+      console.error('[documents] ensureTransparencyChecklistInitialized failed', { communityId, err: formatErrorForLog(err) });
     }
   }
 

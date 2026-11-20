@@ -11,6 +11,7 @@ import { runRoute } from '@propertypro/api-contract';
 import { captureException } from '@sentry/nextjs';
 import { logAuditEvent } from '@propertypro/db';
 import { CURRENT_TERMS_VERSION } from '@propertypro/shared';
+import { redactParams } from '@propertypro/shared/observability';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -157,7 +158,7 @@ export const PATCH = withErrorHandler(
       // Safe to log: the reason carries user ids, never the token or password.
       // eslint-disable-next-line no-console
       console.error(
-        `[invitations] accept failed for user ${userId} in community ${communityId}: ${result.error}`,
+        `[invitations] accept failed for user ${userId} in community ${communityId}: ${redactParams(result.error)}`,
       );
       throw new ValidationError('Failed to create user');
     }
