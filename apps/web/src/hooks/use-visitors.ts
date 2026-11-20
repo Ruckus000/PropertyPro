@@ -2,6 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
+import { retryUnlessRefused } from '@/lib/api/retry-unless-refused';
 import { walkPaginated } from '@/lib/api/walk-paginated';
 
 // ---------------------------------------------------------------------------
@@ -19,6 +20,7 @@ export interface VisitorListItem {
   expectedArrival: string;
   checkedInAt: string | null;
   checkedOutAt: string | null;
+  /** Present only on passes the viewer hosts (`/visitors/my`) or for staff. */
   passCode?: string;
   staffUserId: string | null;
   notes: string | null;
@@ -107,6 +109,9 @@ export function useMyVisitors(communityId: number, filter?: MyVisitorFilter) {
       return requestJson<VisitorListItem[]>(`/api/v1/visitors/my?${params.toString()}`);
     },
     enabled: communityId > 0,
+    // A resident with no linked unit gets a 403 that no retry can change;
+    // retrying held the skeleton for ~7s before the "not linked" state showed.
+    retry: retryUnlessRefused,
   });
 }
 

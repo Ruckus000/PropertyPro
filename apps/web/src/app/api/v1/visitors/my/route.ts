@@ -5,8 +5,12 @@
  * filter query (`active` | `upcoming` | `past`). Unknown filters fall back
  * to the default active-passes list.
  *
- * Plan A1 drain #105 — migrated to `runRoute()`; see `./contract.ts`.
- * `passCode` is stripped from every row before response (staff list parity).
+ * Contract: `./contract.ts`.
+ *
+ * `passCode` is the credential staff check at the gate, so it is returned only
+ * on rows the actor registered (`hostUserId === actorUserId`) — the host needs
+ * it to show the QR and share the pass. Every other row (a co-resident's pass
+ * on the same unit, returned by the default branch) has it stripped.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { createScopedClient } from '@propertypro/db';
@@ -29,9 +33,16 @@ import {
 import { deriveVisitorStatus } from '@/lib/visitors/visitor-logic';
 import { visitorsMyContract } from './contract';
 
-/** Strip passCode from resident responses — mirrors GET /visitors */
-function stripPassCode<T extends Record<string, unknown>>(rows: T[]) {
-  return rows.map(({ passCode: _, ...rest }) => rest);
+/** Keep `passCode` only on the actor's own passes; strip it from every other row. */
+function withHostOnlyPassCode<T extends { hostUserId: string | null; passCode: string }>(
+  rows: T[],
+  actorUserId: string,
+) {
+  return rows.map((row) => {
+    if (row.hostUserId === actorUserId) return row;
+    const { passCode: _, ...rest } = row;
+    return rest;
+  });
 }
 
 export const GET = withErrorHandler(
@@ -56,7 +67,7 @@ export const GET = withErrorHandler(
 
     if (!filter) {
       const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
-      return stripPassCode(data);
+      return withHostOnlyPassCode(data, actorUserId);
     }
 
     if (filter === 'active') {
@@ -65,7 +76,7 @@ export const GET = withErrorHandler(
         hostUserId: actorUserId,
         status: 'checked_in',
       });
-      return stripPassCode(rows);
+      return withHostOnlyPassCode(rows, actorUserId);
     }
 
     if (filter === 'upcoming') {
@@ -74,7 +85,7 @@ export const GET = withErrorHandler(
         hostUserId: actorUserId,
         status: 'expected',
       });
-      return stripPassCode(rows);
+      return withHostOnlyPassCode(rows, actorUserId);
     }
 
     if (filter === 'past') {
@@ -85,10 +96,10 @@ export const GET = withErrorHandler(
       });
       const pastStatuses = new Set(['checked_out', 'expired', 'revoked', 'revoked_on_site']);
       const filtered = rows.filter((row) => pastStatuses.has(deriveVisitorStatus(row)));
-      return stripPassCode(filtered);
+      return withHostOnlyPassCode(filtered, actorUserId);
     }
 
     const data = await listMyVisitorsForCommunity(communityId, actorUserId, allowedUnitIds);
-    return stripPassCode(data);
+    return withHostOnlyPassCode(data, actorUserId);
   }),
 );
