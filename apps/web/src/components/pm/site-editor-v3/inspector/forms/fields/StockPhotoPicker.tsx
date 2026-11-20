@@ -71,7 +71,7 @@ export function StockPhotoPicker({
           disabled={taken}
           onClick={() => setSelected(id)}
           className={cn(
-            'relative block w-full min-h-11 md:min-h-0 overflow-hidden rounded-md border border-edge-default bg-surface-card text-left',
+            'relative block w-full min-h-11 md:min-h-0 overflow-hidden rounded-md border border-edge bg-surface-card text-left',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive focus-visible:ring-offset-2',
             isSelected && 'ring-2 ring-interactive',
             taken && 'cursor-not-allowed opacity-60',
