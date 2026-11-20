@@ -54,9 +54,11 @@ describe('EmptyState scene sizes (empty-state pattern)', () => {
 
   it('splits into scene and context columns only when there is an aside', () => {
     const columns = (c: HTMLElement) => c.querySelector('section > div')?.className ?? '';
-    expect(columns(render(<EmptyState size="hero" title="T" />).container)).not.toContain('cq-md:grid-cols-12');
+    // Matched without its container variant prefix: a test file naming that
+    // variant would count as a container-query consumer in container-queries.test.ts.
+    expect(columns(render(<EmptyState size="hero" title="T" />).container)).not.toContain('grid-cols-12');
     expect(columns(render(<EmptyState size="hero" title="T" aside={<p>ctx</p>} />).container)).toContain(
-      'cq-md:grid-cols-12',
+      'grid-cols-12',
     );
   });
 
