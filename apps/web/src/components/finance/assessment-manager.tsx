@@ -20,6 +20,12 @@ const AssessmentsFirstRun = dynamic(
   { loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
 );
 
+// Only an uncharged One-Time assessment renders it.
+const OneTimeCharges = dynamic(
+  () => import('./one-time-charges').then((m) => m.OneTimeCharges),
+  { loading: () => <div className="h-24 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
+);
+
 /* ─────── Types ─────── */
 
 interface AssessmentManagerProps {
@@ -261,10 +267,13 @@ function LineItemsPanel({
             <div className="h-8 rounded bg-surface-muted" />
           </div>
         ) : lineItems && lineItems.length === 0 ? (
-          <p className="py-4 text-center text-sm text-content-tertiary">
-            No line items generated yet. Line items are created automatically on the 1st of each month,
-            or when manually triggered.
-          </p>
+          assessment.frequency === 'one_time' ? (
+            <OneTimeCharges communityId={communityId} assessment={assessment} />
+          ) : (
+            <p className="py-4 text-center text-sm text-content-tertiary">
+              No charges yet. Every unit is charged on the 1st of each month this assessment falls due.
+            </p>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-edge">

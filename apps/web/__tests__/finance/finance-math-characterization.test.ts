@@ -1615,14 +1615,22 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     expect(result).toEqual({ insertedCount: 3, skippedCount: 0, dueDate: override });
   });
 
-  it('one_time keeps exact-dueDate idempotency', async () => {
-    seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate: '2026-04-20', amountCents: 30000 })]);
+  it('one_time charges a unit once, whatever due date an earlier run used', async () => {
+    // Changed 2026-11-20 (was exact-dueDate idempotency): Generate charges lets the
+    // manager pick the due date, so a second run with another date used to charge
+    // every unit a second time. Any item for the assessment now counts as charged.
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate: '2026-04-01', amountCents: 30000 })]);
     seed(assessmentLineItemsTable, [
       lineItem({ id: 1, assessmentId: 7, unitId: 1, dueDate: '2026-04-20' }),
-      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-04-01' }),
+      lineItem({ id: 2, assessmentId: 7, unitId: 2, dueDate: '2026-05-01' }),
+      // Another assessment's item does not count.
+      lineItem({ id: 3, assessmentId: 8, unitId: 3, dueDate: '2026-04-20' }),
     ]);
-    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
-    expect(result).toEqual({ insertedCount: 2, skippedCount: 1, dueDate: '2026-04-20' });
+    const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-06-15');
+    expect(result).toEqual({ insertedCount: 1, skippedCount: 2, dueDate: '2026-06-15' });
+    expect(insertMock).toHaveBeenCalledWith(assessmentLineItemsTable, [
+      { assessmentId: 7, unitId: 3, amountCents: 30000, dueDate: '2026-06-15', status: 'pending', lateFeeCents: 0 },
+    ]);
   });
 
   it('a community with no units is a 422', async () => {

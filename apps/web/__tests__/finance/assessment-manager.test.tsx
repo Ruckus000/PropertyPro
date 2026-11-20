@@ -314,4 +314,40 @@ describe('AssessmentManager', () => {
     expect(screen.queryByText('Unit #2')).not.toBeInTheDocument();
     expect(mockFetch.mock.calls[1]![0]).toContain('/api/v1/assessments/1/line-items?communityId=42');
   });
+  describe('a selected assessment with no charges', () => {
+    async function openLineItems(assessment: AssessmentData, lineItems: unknown[]) {
+      mockAssessmentsSuccess([assessment]);
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ data: lineItems }) });
+      const AssessmentManager = await importAssessmentManager();
+      const { Wrapper } = createWrapper();
+      render(
+        <Wrapper>
+          <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        </Wrapper>,
+      );
+      fireEvent.click(await screen.findByText(assessment.title, {}, { timeout: 10000 }));
+    }
+
+    it('offers Generate charges on a One-Time assessment', async () => {
+      await openLineItems(makeAssessment({ title: 'Roof Special', frequency: 'one_time' }), []);
+      expect(await screen.findByRole('button', { name: 'Generate charges' }, { timeout: 10000 })).toBeInTheDocument();
+      expect(screen.getByLabelText('Due date')).toBeInTheDocument();
+    });
+
+    it('says when a recurring assessment is charged, with no button', async () => {
+      await openLineItems(makeAssessment({ title: 'Monthly Maintenance' }), []);
+      expect(
+        await screen.findByText('No charges yet. Every unit is charged on the 1st of each month this assessment falls due.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Generate charges' })).not.toBeInTheDocument();
+    });
+
+    it('drops Generate charges once a One-Time assessment has charges', async () => {
+      await openLineItems(makeAssessment({ id: 1, title: 'Roof Special', frequency: 'one_time' }), [
+        { id: 10, assessmentId: 1, unitId: 2, unitLabel: 'Unit 1B', amountCents: 35000, dueDate: '2026-12-01', status: 'pending', lateFeeCents: 0, paidAt: null },
+      ]);
+      expect(await screen.findByText('Unit 1B', {}, { timeout: 10000 })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Generate charges' })).not.toBeInTheDocument();
+    });
+  });
 });
