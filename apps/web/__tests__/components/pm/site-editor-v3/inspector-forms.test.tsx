@@ -608,6 +608,14 @@ describe('HeroForm — the words as the page shows them', () => {
     expect(screen.getByRole('button', { name: 'Choose one of our photos' })).toBeInTheDocument();
   });
 
+  it("opens the photo library on the chosen look's suggestions", async () => {
+    // `useChosenLookId` is mocked to Bayfront at the top of this file.
+    const user = setupTimers();
+    renderHero({ headline: 'Welcome home' });
+    await user.click(screen.getByRole('button', { name: 'Choose one of our photos' }));
+    expect(await screen.findByRole('group', { name: 'Suggested for Bayfront' })).toBeInTheDocument();
+  });
+
   it('shows words with no detail in them exactly as stored', () => {
     renderHero({ headline: 'Welcome home', subtitle: 'Our own words.' });
     expect(headline()).toHaveValue('Welcome home');
