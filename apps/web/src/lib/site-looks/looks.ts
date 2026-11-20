@@ -321,7 +321,7 @@ export interface LookSwitchCounts {
   /** Edited or hidden sections kept as they are, in their slot. */
   kept: number;
   // A kept hero that took the incoming look's photo still counts as kept: its
-  // words are the manager's, and only the photo the look supplies changed.
+  // words are the manager's, and only a stock photo changed.
   /** The incoming look's sections of a type the page did not have. */
   added: number;
   /** Untouched sections dropped: the incoming look has no section of their type left for them. */
@@ -339,7 +339,8 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * A section is UNTOUCHED when its content, parsed by its block schema, equals a
  * default the site could have received (`outgoingDefaults`), parsed the same
  * way. Parsing both sides is what makes a section stored with the schema's
- * defaults filled in, or with its keys in jsonb's order, still count. Anything
+ * defaults filled in, or with its keys in jsonb's order, still count. A hero
+ * showing only stock photos is compared without them, on both sides. Anything
  * else is the manager's: edited content, content that does not parse, and every
  * hidden section, even one whose default hides it too (an admin's starter-pack
  * version can).
@@ -364,10 +365,10 @@ export interface LookSwitchPlan extends LookSwitchCounts {
  * - Otherwise each untouched section is replaced in its slot by the incoming
  *   section of its type, or dropped when there is none. Each incoming section
  *   is used once, so none shows twice. Kept sections stay as they are, in their
- *   slots, except that a kept hero showing no photo of its own takes the
- *   incoming look's ("A kept hero's photo", below). The incoming types the page
- *   still lacks go in after the nearest section before them in the incoming
- *   order, or first.
+ *   slots, except that a kept hero showing only stock photos, or none, takes
+ *   the incoming look's default ("A kept hero's photo", below). The incoming
+ *   types the page still lacks go in after the nearest section before them in
+ *   the incoming order, or first.
  *
  * Content the switch supplies is a copy. Kept sections are handed back as given,
  * except a kept hero whose photos changed, which is a new object: compare
@@ -690,7 +691,7 @@ function defaultsByType(sets: readonly (readonly LookSection[])[]): Map<string, 
       const parsed = parsedContent(lookSection.blockType, lookSection.content);
       if (parsed === null) continue;
       const identities = byType.get(lookSection.blockType) ?? new Set<string>();
-      identities.add(stableStringify(parsed.data));
+      identities.add(untouchedIdentity(lookSection.blockType, parsed.data));
       byType.set(lookSection.blockType, identities);
     }
   }
@@ -701,7 +702,20 @@ function isUntouched(siteSection: SiteSection, defaults: ReadonlyMap<string, Rea
   const parsed = parsedContent(siteSection.blockType, siteSection.content);
   // Hiding a section is the manager's choice, even where a default hides it too.
   if (parsed === null || isHidden(parsed.data)) return false;
-  return defaults.get(siteSection.blockType)?.has(stableStringify(parsed.data)) ?? false;
+  return defaults.get(siteSection.blockType)?.has(untouchedIdentity(siteSection.blockType, parsed.data)) ?? false;
+}
+
+/**
+ * Parsed content as "untouched" compares it, the same for a section and for a
+ * default: a hero showing only stock photos (or none) is compared without them.
+ * Stock photos are ours, so picking another one, or a hero still showing a
+ * look's earlier default, does not make it edited. A hero with an upload keeps
+ * its photos in the comparison, so it never matches a default with stock ones.
+ */
+function untouchedIdentity(blockType: string, data: unknown): string {
+  if (blockType !== 'hero' || !onlyStockPhotos(data)) return stableStringify(data);
+  const { photos: _stock, ...rest } = data as Record<string, unknown>;
+  return stableStringify(rest);
 }
 
 function isHidden(data: unknown): boolean {
@@ -718,34 +732,24 @@ function countByType(sections: readonly SiteSection[]): Map<string, number> {
 // A kept hero's photo
 // ---------------------------------------------------------------------------
 //
-// A look's photo lives in its hero's content, so a switch only brought it with
-// a hero it REPLACED. A hero the manager had edited (their own headline) was
-// kept whole, photo-less if it was written before the looks had photos, and a
-// photo look then drew its text-only hero: in production, an existing site
-// never got a photo by switching. So a kept hero that shows no photo of its own
-// takes the incoming look's, keeping its words. "Of its own" means the photos
-// were never the manager's choice: none, or exactly the set a look's hero starts
-// with. A photo they uploaded, a set no look starts with, the single legacy
-// image and a hidden hero are theirs, and stay. Returning to the live look puts
-// the live row's photos back over a look's own set, the only photos a switch
-// gives, so that photo never outlives the switch. A hero with no photo at all
-// is left alone there: a switch never takes a photo away, so none is an edit.
-
-/** The parsed photos of each look's own hero, as `stableStringify` keys. Lazy: `LOOKS` is defined above. */
-let lookPhotoSets: Set<string> | null = null;
-
-function isLookPhotoSet(photos: readonly ResolvedHeroPhoto[]): boolean {
-  lookPhotoSets ??= new Set(
-    LOOKS.flatMap((lookDef) =>
-      lookDef.sections.flatMap((s) => {
-        const parsed = s.blockType === 'hero' ? heroBlockSchema.safeParse(s.content) : null;
-        const photos = parsed?.success ? resolveHeroPhotos(parsed.data) : [];
-        return photos.length > 0 ? [stableStringify(photos)] : [];
-      }),
-    ),
-  );
-  return lookPhotoSets.has(stableStringify(photos));
-}
+// A photo the manager uploaded always stays; a stock photo may be swapped for
+// the new look's default. A look's photo lives in its hero's content, so a
+// switch only brought it with a hero it REPLACED, and a hero the manager had
+// edited (their own headline) kept whatever it showed. So a kept, parseable hero
+// whose photos are all stock photos (any id, retired ones included) or none
+// takes the incoming look's default photo, keeping its words. A strip of only
+// stock photos becomes the look's single default: stock photos are ours, not the
+// manager's, so the strip is not theirs to keep across a look change. A hero
+// with an upload, the single legacy image, or content that does not parse
+// stays exactly as it is. A look with no photo (Plain & Simple) leaves the hero
+// alone, stock photo included.
+//
+// "Untouched" leaves stock photos out of its comparison (`untouchedIdentity`),
+// so a hero that differs from a default only in its stock photo takes the
+// incoming look's whole hero. Returning to the live look puts the live row's
+// photos back over a hero showing only stock photos, when the live row shows no
+// upload, so a switch's photo never outlives the switch. A hero with no photo at
+// all is left alone there: a switch never takes a photo away, so none is an edit.
 
 /**
  * A visible hero's photos, or null for content that does not parse. The hero
@@ -758,16 +762,16 @@ function visibleHeroPhotos(content: unknown): ResolvedHeroPhoto[] | null {
   return resolveHeroPhotos(parsed.data);
 }
 
-/** Whether a hero shows no photo the manager chose: none, or exactly a look's own. */
-function showsNoPhotoOfItsOwn(content: unknown): boolean {
+/** Whether a parseable, visible hero shows only stock photos. None counts: no upload either. */
+function onlyStockPhotos(content: unknown): boolean {
   const photos = visibleHeroPhotos(content);
-  return photos !== null && (photos.length === 0 || isLookPhotoSet(photos));
+  return photos !== null && photos.every((photo) => 'stock' in photo);
 }
 
-/** Whether a hero shows exactly a look's own photos: the only photos a switch gives a kept hero. */
-function showsLookPhotos(content: unknown): boolean {
+/** Whether a hero shows only stock photos, and at least one. */
+function showsStockPhotos(content: unknown): boolean {
   const photos = visibleHeroPhotos(content);
-  return photos !== null && photos.length > 0 && isLookPhotoSet(photos);
+  return photos !== null && photos.length > 0 && photos.every((photo) => 'stock' in photo);
 }
 
 /** The photos a look's hero starts with, or null when it has none (Plain & Simple). */
@@ -783,23 +787,23 @@ function heroWithPhotos(content: unknown, photos: unknown[] | undefined): unknow
   return photos === undefined ? rest : { ...rest, photos: copyJson(photos) };
 }
 
-/** A kept section, given the incoming look's photos when it is a hero showing none of its own. */
+/** A kept section, given the incoming look's photos when it is a hero showing only stock photos, or none. */
 function withLookPhotos(section: SiteSection, photos: unknown[] | null): SiteSection {
-  if (section.blockType !== 'hero' || photos === null || !showsNoPhotoOfItsOwn(section.content)) return section;
+  if (section.blockType !== 'hero' || photos === null || !onlyStockPhotos(section.content)) return section;
   return { ...section, content: heroWithPhotos(section.content, photos) };
 }
 
 /**
  * A section standing for a live row, with the row's photos back where it is a
- * hero showing a look's own photos and the row a hero showing none of its own:
- * the look's photo was the switch's, not an edit.
+ * hero showing stock photos and the row a hero showing no upload: a stock photo
+ * follows the look, so it is not an edit.
  */
 function withPhotosOf(section: SiteSection, row: SiteSection): SiteSection {
   if (
     section.blockType !== 'hero' ||
     row.blockType !== 'hero' ||
-    !showsLookPhotos(section.content) ||
-    !showsNoPhotoOfItsOwn(row.content)
+    !showsStockPhotos(section.content) ||
+    !onlyStockPhotos(row.content)
   ) {
     return section;
   }
