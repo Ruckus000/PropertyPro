@@ -2,17 +2,23 @@
 
 /**
  * Violation report form for owners/residents.
+ * The resident picks the unit where the problem is — usually a neighbour's
+ * (D1); a problem in a shared space is not a violation against anyone and goes
+ * to a maintenance request instead, which the form says up front.
  * Allows submitting a violation with category, description, severity, and photo evidence.
  * Photos are uploaded through the dedicated hidden evidence flow
  * (/api/v1/upload -> /api/v1/violations/evidence), returning document IDs stored
  * in evidenceDocumentIds.
  */
 import { useCallback, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
 import { createViolation } from '@/lib/api/violations';
 import { uploadEvidencePhoto } from '@/lib/violations/evidence-upload';
 import type { ViolationSeverity } from '@propertypro/db';
+import { operationsTabHref } from '@/lib/operations/routes';
+import { ViolationUnitPicker, useViolationUnitOptions } from './ViolationUnitPicker';
 
 const MAX_PHOTOS = 3;
 const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -37,6 +43,7 @@ const SEVERITY_OPTIONS: { value: ViolationSeverity; label: string }[] = [
 ];
 
 const formSchema = z.object({
+  unitId: z.number().int().positive({ message: 'Please select the unit the report is about' }),
   category: z.string().min(1, 'Category is required'),
   description: z.string().min(1, 'Description is required').max(4000, 'Description must be 4000 characters or less'),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),
@@ -44,18 +51,14 @@ const formSchema = z.object({
 
 interface ViolationReportFormProps {
   communityId: number;
-  userId: string;
-  defaultUnitId: number | null;
-  unitIds: number[];
+  /** The reporter's own units, marked in the picker. */
+  ownUnitIds: number[];
 }
 
-export function ViolationReportForm({
-  communityId,
-  userId,
-  defaultUnitId,
-  unitIds,
-}: ViolationReportFormProps) {
+export function ViolationReportForm({ communityId, ownUnitIds }: ViolationReportFormProps) {
   const router = useRouter();
+  const unitOptions = useViolationUnitOptions(communityId);
+  const [unitId, setUnitId] = useState<number | ''>('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [severity, setSeverity] = useState<ViolationSeverity>('minor');
@@ -97,18 +100,18 @@ export function ViolationReportForm({
       setFieldErrors({});
       setServerError('');
 
-      const parsed = formSchema.safeParse({ category, description, severity });
+      const parsed = formSchema.safeParse({
+        unitId: typeof unitId === 'number' ? unitId : undefined,
+        category,
+        description,
+        severity,
+      });
       if (!parsed.success) {
         const errors: Record<string, string> = {};
         for (const issue of parsed.error.issues) {
           errors[issue.path[0] as string] = issue.message;
         }
         setFieldErrors(errors);
-        return;
-      }
-
-      if (!defaultUnitId) {
-        setServerError('No unit association found. Please contact your community manager.');
         return;
       }
 
@@ -129,13 +132,14 @@ export function ViolationReportForm({
 
         await createViolation({
           communityId,
-          unitId: defaultUnitId,
+          unitId: parsed.data.unitId,
           category: parsed.data.category,
           description: parsed.data.description,
           severity: parsed.data.severity,
           evidenceDocumentIds,
         });
 
+        setUnitId('');
         setCategory('');
         setDescription('');
         setSeverity('minor');
@@ -151,7 +155,7 @@ export function ViolationReportForm({
         setUploading(false);
       }
     },
-    [communityId, defaultUnitId, category, description, severity, photos],
+    [communityId, unitId, category, description, severity, photos, router],
   );
 
   return (
@@ -164,6 +168,28 @@ export function ViolationReportForm({
           Violation report submitted successfully.
         </div>
       )}
+
+      <p className="text-sm text-content-secondary">
+        Report a rule being broken at a specific home. For a problem in a shared space — a
+        hallway, the pool, the parking garage — or something that needs fixing,{' '}
+        <Link
+          href={operationsTabHref(communityId, 'requests')}
+          className="font-medium text-content-link underline-offset-2 hover:underline"
+        >
+          submit a maintenance request
+        </Link>{' '}
+        instead. Only the board and management see who filed a report.
+      </p>
+
+      <ViolationUnitPicker
+        id="violation-unit"
+        label="Unit the report is about"
+        options={unitOptions}
+        value={unitId}
+        onChange={setUnitId}
+        error={fieldErrors['unitId']}
+        ownUnitIds={ownUnitIds}
+      />
 
       {/* Category */}
       <div>
@@ -265,17 +291,11 @@ export function ViolationReportForm({
       {/* Submit */}
       <button
         type="submit"
-        disabled={submitting || !defaultUnitId}
+        disabled={submitting || unitOptions.loading || unitOptions.units.length === 0}
         className="w-full rounded-md bg-interactive px-4 py-2.5 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50"
       >
         {uploading ? 'Uploading photos...' : submitting ? 'Submitting...' : 'Submit Violation Report'}
       </button>
-
-      {!defaultUnitId && (
-        <p className="text-xs text-status-warning">
-          You are not associated with a unit in this community. Contact your community manager to be assigned a unit.
-        </p>
-      )}
     </form>
   );
 }

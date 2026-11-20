@@ -20,6 +20,13 @@ describe('resolveReportMode', () => {
     expect(resolveReportMode('resident', [5, 9])).toBe('resident');
   });
 
+  // D1: the resident form now targets any unit, so a member's own units gate
+  // only WHETHER they may file — a unitless member still gets the guard state,
+  // matching the POST route's "must be associated with a unit" refusal.
+  it('still requires a unit of their own before a resident may file about anyone', () => {
+    expect(resolveReportMode('resident', [])).not.toBe('resident');
+  });
+
   it('returns "resident_no_unit" when resident has zero units', () => {
     expect(resolveReportMode('resident', [])).toBe('resident_no_unit');
   });

@@ -6,7 +6,12 @@
  * Feature gate: hasViolations must be enabled for the community type
  *
  * UX by role:
- *  - Resident w/ unit association → self-report form auto-scoped to their unit(s)
+ *  - Resident w/ unit association → report form with a unit picker (any unit:
+ *    neighbour complaints belong on the neighbour's unit, D1), then two lists:
+ *    "On your unit" — cases on the resident's own units, minus a neighbour's
+ *    report still awaiting review (D1a) — and "Your reports", what they filed,
+ *    linked only where the unit is their own. Reporters are named only to the
+ *    filer (D1b).
  *  - Resident w/o unit association → guard state, no form
  *  - Staff (property_manager / root_manager) → file-on-behalf form with scoped unit picker
  */
@@ -17,15 +22,49 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
-import { getActorUnitIds, isResidentRole } from '@/lib/violations/common';
+import {
+  getActorUnitIds,
+  isResidentRole,
+  residentVisibleViolationsWhere,
+} from '@/lib/violations/common';
 import { resolveReportMode } from '@/lib/violations/report-mode';
 import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import { listViolationsForCommunity } from '@/lib/services/violations-service';
+import { withUnitLabels } from '@/lib/units/unit-labels';
 import { ViolationReportForm } from '@/components/violations/ViolationReportForm';
 import { StaffViolationReportForm } from '@/components/violations/StaffViolationReportForm';
 import { ViolationCard } from '@/components/violations/ViolationCard';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { PageHeader } from '@/components/shared/page-header';
+
+/**
+ * Only what the card renders crosses to the client. A "Your reports" row can be
+ * a neighbour's case, and the full row carries its hearing details and
+ * resolution notes, which are that household's business, not the reporter's.
+ */
+function toCardFields(v: {
+  id: number;
+  unitId: number;
+  category: string;
+  description: string;
+  status: string;
+  severity: string;
+  createdAt: unknown;
+  reportedByRole: 'staff' | 'resident' | null;
+  unitLabel: string;
+}) {
+  return {
+    id: v.id,
+    unitId: v.unitId,
+    category: v.category,
+    description: v.description,
+    status: v.status,
+    severity: v.severity,
+    createdAt: v.createdAt as string | Date,
+    reportedByRole: v.reportedByRole,
+    unitLabel: v.unitLabel,
+  };
+}
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -60,13 +99,26 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
   const residentUnitIds = isResident ? await getActorUnitIds(scoped, userId) : [];
   const mode = resolveReportMode(membership.role, residentUnitIds);
 
-  const ownViolations =
+  const viewer = { membership, userId };
+  const [onYourUnit, yourReports] =
     mode === 'resident'
-      ? await hydrateReportedByRole(
-          scoped,
-          await listViolationsForCommunity(communityId, { allowedUnitIds: residentUnitIds }),
-        )
-      : [];
+      ? await Promise.all([
+          listViolationsForCommunity(communityId, {
+            allowedUnitIds: residentUnitIds,
+            visibleWhere: residentVisibleViolationsWhere(membership, userId),
+          }).then(async (rows) =>
+            (await hydrateReportedByRole(scoped, await withUnitLabels(scoped, rows), viewer)).map(
+              toCardFields,
+            ),
+          ),
+          listViolationsForCommunity(communityId, { reportedByUserId: userId }).then(
+            async (rows) =>
+              (await hydrateReportedByRole(scoped, await withUnitLabels(scoped, rows), viewer)).map(
+                toCardFields,
+              ),
+          ),
+        ])
+      : [[], []];
 
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>
@@ -74,12 +126,7 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
       <PageHeader title="Report a Violation" />
 
       {mode === 'resident' && (
-        <ViolationReportForm
-          communityId={communityId}
-          userId={userId}
-          defaultUnitId={residentUnitIds[0] ?? null}
-          unitIds={residentUnitIds}
-        />
+        <ViolationReportForm communityId={communityId} ownUnitIds={residentUnitIds} />
       )}
 
       {mode === 'resident_no_unit' && (
@@ -113,12 +160,32 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
         </>
       )}
 
-      {ownViolations.length > 0 && (
+      {onYourUnit.length > 0 && (
         <section className="mt-10">
-          <h2 className="mb-4 text-lg font-medium text-content">Your Reports</h2>
+          <h2 className="mb-4 text-lg font-medium text-content">On your unit</h2>
           <div className="space-y-3">
-            {ownViolations.map((v) => (
+            {onYourUnit.map((v) => (
               <ViolationCard key={v.id} violation={v} communityId={communityId} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {yourReports.length > 0 && (
+        <section className="mt-10">
+          <h2 className="mb-1 text-lg font-medium text-content">Your reports</h2>
+          <p className="mb-4 text-sm text-content-secondary">
+            Reports you filed. A report about another home opens only for that household and the
+            board.
+          </p>
+          <div className="space-y-3">
+            {yourReports.map((v) => (
+              <ViolationCard
+                key={v.id}
+                violation={v}
+                communityId={communityId}
+                linkable={residentUnitIds.includes(v.unitId)}
+              />
             ))}
           </div>
         </section>

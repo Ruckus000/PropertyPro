@@ -32,6 +32,7 @@ const {
   requireActiveSubscriptionForMutationMock,
   createViolationForCommunityMock,
   unitExistsInCommunityMock,
+  rateCheckMock,
 } = vi.hoisted(() => ({
   paginateMock: vi.fn(),
   scopedClient: { __scoped: true },
@@ -60,6 +61,7 @@ const {
   requireActiveSubscriptionForMutationMock: vi.fn(),
   createViolationForCommunityMock: vi.fn(),
   unitExistsInCommunityMock: vi.fn(),
+  rateCheckMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -109,6 +111,22 @@ vi.mock('@/lib/violations/common', () => ({
   getViolationReadUnitIds: async (scoped: unknown, m: { role: string }, userId: string) =>
     isResidentRoleMock(m.role) ? getActorUnitIdsMock(scoped, userId) : undefined,
   requireViolationsEnabled: requireViolationsEnabledMock,
+  // D1a/D1b rules for a mock membership; the SQL and the redaction rule
+  // themselves are pinned in lib/violations/__tests__/read-scope.test.ts.
+  residentVisibleViolationsWhere: (m: { isAdmin: boolean }, userId: string) =>
+    m.isAdmin ? undefined : { __residentVisible: userId },
+  redactViolationReporter: (
+    row: Record<string, unknown>,
+    m: { isAdmin: boolean },
+    userId: string,
+  ) =>
+    m.isAdmin || row['reportedByUserId'] === userId
+      ? row
+      : { ...row, reportedByUserId: null, reportedByRole: null },
+}));
+
+vi.mock('@/lib/middleware/rate-limiter', () => ({
+  getRateLimiter: () => ({ check: rateCheckMock }),
 }));
 
 vi.mock('@/lib/violations/hydrate-reporter-role', () => ({
@@ -129,6 +147,8 @@ vi.mock('@/lib/services/violations-service', () => ({
     severity?: string;
     unitId?: number;
     allowedUnitIds?: number[];
+    visibleWhere?: unknown;
+    viewer: unknown;
     createdAfter?: string;
     createdBefore?: string;
   }) => {
@@ -146,6 +166,7 @@ vi.mock('@/lib/services/violations-service', () => ({
     if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
       clauses.push(inArray(violationsTable.unitId as never, params.allowedUnitIds as never));
     }
+    if (params.visibleWhere) clauses.push(params.visibleWhere);
     if (params.createdAfter) {
       clauses.push(gte(violationsTable.createdAt as never, new Date(params.createdAfter) as never));
     }
@@ -244,6 +265,7 @@ beforeEach(() => {
   requireActiveSubscriptionForMutationMock.mockResolvedValue(undefined);
   unitExistsInCommunityMock.mockResolvedValue(true);
   createViolationForCommunityMock.mockResolvedValue({ id: 1, category: 'Noise' });
+  rateCheckMock.mockReturnValue({ allowed: true, retryAfter: 0 });
 });
 
 describe('GET /api/v1/violations', () => {
@@ -369,6 +391,7 @@ describe('GET /api/v1/violations', () => {
 
   it('confines residents to their allowed unit ids via inArray()', async () => {
     requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
     isResidentRoleMock.mockReturnValue(true);
     getActorUnitIdsMock.mockResolvedValue([10, 11]);
     paginateMock.mockResolvedValueOnce({
@@ -385,8 +408,60 @@ describe('GET /api/v1/violations', () => {
       { where: unknown },
     ];
     expect(options.where).toEqual({
-      __inArray: { col: violationsTable.unitId, vals: [10, 11] },
+      __and: [
+        { __inArray: { col: violationsTable.unitId, vals: [10, 11] } },
+        // D1a: a neighbour's still-reported case is filtered in SQL, not after.
+        { __residentVisible: 'user-tenant' },
+      ],
     });
+  });
+
+  it('adds no D1a predicate for staff (they see every case)', async () => {
+    paginateMock.mockResolvedValueOnce({
+      data: [],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    await GET(makeGetRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}`));
+
+    const [, , , options] = paginateMock.mock.calls[0] as [unknown, unknown, unknown, { where: unknown }];
+    expect(options.where).toBeUndefined();
+  });
+
+  it('strips the reporter from rows a resident did not file, and keeps it on their own (D1b)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
+    isResidentRoleMock.mockReturnValue(true);
+    getActorUnitIdsMock.mockResolvedValue([10]);
+    // Bypass the hydrate mock's pass-through so only the route can redact.
+    hydrateReportedByRoleMock.mockImplementationOnce((async (_s: unknown, rows: Array<Record<string, unknown>>) =>
+      rows.map((r) => ({ ...r, reportedByRole: 'resident' }))) as never);
+    paginateMock.mockResolvedValueOnce({
+      data: [
+        { id: 1, unitId: 10, status: 'noticed', reportedByUserId: 'neighbour-1' },
+        { id: 2, unitId: 10, status: 'reported', reportedByUserId: 'user-tenant' },
+      ],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    const response = await GET(makeGetRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}`));
+    const json = await response.json();
+
+    expect(json.data.data[0]).toMatchObject({ id: 1, reportedByUserId: null, reportedByRole: null });
+    expect(json.data.data[1]).toMatchObject({ id: 2, reportedByUserId: 'user-tenant', reportedByRole: 'resident' });
+  });
+
+  it('keeps the reporter for staff', async () => {
+    hydrateReportedByRoleMock.mockImplementationOnce((async (_s: unknown, rows: Array<Record<string, unknown>>) =>
+      rows.map((r) => ({ ...r, reportedByRole: 'resident' }))) as never);
+    paginateMock.mockResolvedValueOnce({
+      data: [{ id: 1, unitId: 10, status: 'reported', reportedByUserId: 'neighbour-1' }],
+      pagination: { nextCursor: null, hasMore: false, pageSize: 50 },
+    });
+
+    const json = await (await GET(makeGetRequest(`/api/v1/violations?communityId=${COMMUNITY_ID}`))).json();
+
+    expect(json.data.data[0]).toMatchObject({ reportedByUserId: 'neighbour-1', reportedByRole: 'resident' });
   });
 
   it('returns an empty paginated envelope for a resident with zero allowed units (no paginate call)', async () => {
@@ -580,27 +655,91 @@ describe('POST /api/v1/violations', () => {
     expect(order).toEqual(['demo-grace', 'membership']);
   });
 
-  it('creates a violation for a resident actor (own-unit path)', async () => {
+  it('creates a violation for a resident actor on their own unit', async () => {
     requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
     isResidentRoleMock.mockReturnValue(true);
     getActorUnitIdsMock.mockResolvedValue([10]);
 
     const response = await POST(makePostRequest(CREATE_BODY));
 
     expect(response.status).toBe(200);
-    expect(unitExistsInCommunityMock).not.toHaveBeenCalled();
+    expect(unitExistsInCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, 10);
     expect(createViolationForCommunityMock).toHaveBeenCalled();
   });
 
-  it('returns 403 when a resident reports for a unit they do not own', async () => {
+  it('lets a resident report a NEIGHBOUR\'s unit (D1) — filed against that unit, not their own', async () => {
     requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
     isResidentRoleMock.mockReturnValue(true);
     getActorUnitIdsMock.mockResolvedValue([11]);
 
     const response = await POST(makePostRequest(CREATE_BODY));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(200);
+    expect(createViolationForCommunityMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      'user-tenant',
+      expect.objectContaining({ unitId: 10 }),
+      null,
+    );
+  });
+
+  it('refuses a resident report against a unit that is not in the community (404)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    isResidentRoleMock.mockReturnValue(true);
+    getActorUnitIdsMock.mockResolvedValue([11]);
+    unitExistsInCommunityMock.mockResolvedValueOnce(false);
+
+    const response = await POST(makePostRequest({ ...CREATE_BODY, unitId: 999 }));
+
+    expect(response.status).toBe(404);
+    expect(unitExistsInCommunityMock).toHaveBeenCalledWith(COMMUNITY_ID, 999);
     expect(createViolationForCommunityMock).not.toHaveBeenCalled();
+    // A mistyped unit does not spend one of the resident's reports.
+    expect(rateCheckMock).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits resident filing per user (429), before anything is written', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
+    isResidentRoleMock.mockReturnValue(true);
+    rateCheckMock.mockReturnValueOnce({ allowed: false, retryAfter: 120 });
+
+    const response = await POST(makePostRequest(CREATE_BODY));
+
+    expect(response.status).toBe(429);
+    expect(rateCheckMock).toHaveBeenCalledWith('violation-report:user-tenant', 10, 24 * 60 * 60 * 1000);
+    expect(createViolationForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('does not rate-limit staff filing', async () => {
+    await POST(makePostRequest(CREATE_BODY));
+
+    expect(rateCheckMock).not.toHaveBeenCalled();
+    expect(createViolationForCommunityMock).toHaveBeenCalled();
+  });
+
+  it('limits a resident\'s evidence to their own uploads (D1b)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(residentMembership);
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-tenant');
+    isResidentRoleMock.mockReturnValue(true);
+
+    await POST(makePostRequest({ ...CREATE_BODY, evidenceDocumentIds: [5] }));
+
+    expect(createViolationForCommunityMock).toHaveBeenCalledWith(
+      COMMUNITY_ID,
+      'user-tenant',
+      expect.objectContaining({ evidenceDocumentIds: [5], evidenceUploadedBy: 'user-tenant' }),
+      null,
+    );
+  });
+
+  it('leaves staff evidence to the community check (no uploader restriction)', async () => {
+    await POST(makePostRequest({ ...CREATE_BODY, evidenceDocumentIds: [5] }));
+
+    const input = createViolationForCommunityMock.mock.calls[0]![2] as Record<string, unknown>;
+    expect(input).not.toHaveProperty('evidenceUploadedBy');
   });
 
   it('returns 403 when a resident has no associated units', async () => {

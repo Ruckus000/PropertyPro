@@ -48,7 +48,7 @@ function makeSubmission(overrides: Partial<ArcSubmission> = {}): ArcSubmission {
 
 function withSubmissions(data: ArcSubmission[] | undefined, isLoading = false) {
   useArcSubmissionsMock.mockReturnValue({ data, isLoading, isError: false, refetch: vi.fn() });
-  render(<ResidentArcRequests communityId={42} />);
+  render(<ResidentArcRequests communityId={42} userId="resident-1" />);
 }
 
 describe('ResidentArcRequests', () => {
@@ -81,7 +81,7 @@ describe('ResidentArcRequests', () => {
       isError: true,
       refetch,
     });
-    render(<ResidentArcRequests communityId={42} />);
+    render(<ResidentArcRequests communityId={42} userId="resident-1" />);
 
     expect(screen.getByRole('alert')).toHaveTextContent(/couldn't load your requests/i);
     expect(screen.queryByText(/No architectural requests yet/)).toBeNull();
@@ -139,5 +139,29 @@ describe('ResidentArcRequests', () => {
     withSubmissions([makeSubmission({ status: 'under_review' })]);
 
     expect(screen.getByRole('button', { name: 'Withdraw' })).toBeVisible();
+  });
+
+  // HB 1203 (§720.3035): on a denial the cited rule is the part the statute
+  // requires, so the resident must be able to read it, not only the notes.
+  it('shows the rule or covenant a denial relied on', () => {
+    withSubmissions([
+      makeSubmission({
+        status: 'denied',
+        ruleReference: 'Declaration Art. VII §3',
+        reviewNotes: 'Exceeds the height limit.',
+      }),
+    ]);
+
+    expect(screen.getByText('Rule or covenant relied on')).toBeVisible();
+    expect(screen.getByText('Declaration Art. VII §3')).toBeVisible();
+  });
+
+  it('offers Withdraw only on requests the viewer submitted, not a co-owner\'s', () => {
+    withSubmissions([
+      makeSubmission({ id: 1, title: 'Mine' }),
+      makeSubmission({ id: 2, title: 'Spouse', submittedByUserId: 'resident-2' }),
+    ]);
+
+    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1);
   });
 });

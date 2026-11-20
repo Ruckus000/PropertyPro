@@ -14,7 +14,7 @@ import {
   violationFines,
   violations,
 } from '@propertypro/db';
-import { and, desc, eq, gte, inArray, lte } from '@propertypro/db/filters';
+import { and, desc, eq, gte, inArray, lte, type SQL } from '@propertypro/db/filters';
 import type {
   ArcSubmissionStatus,
   FiningCommitteeMember,
@@ -112,6 +112,13 @@ export interface CreateViolationInput {
   description: string;
   severity?: ViolationSeverity;
   evidenceDocumentIds?: number[];
+  /**
+   * When set, every evidence document must be a `violation_evidence` row this
+   * user uploaded (D1b). The route sets it for residents, so a resident cannot
+   * attach another member's document — or a library document — to a case and
+   * have it shown to the cited household.
+   */
+  evidenceUploadedBy?: string;
 }
 
 export interface UpdateViolationInput {
@@ -243,13 +250,20 @@ function assertIdArray(values: number[] | undefined, label: string): number[] {
 async function assertDocumentsBelongToCommunity(
   communityId: number,
   documentIds: number[],
+  uploadedBy?: string,
 ): Promise<void> {
   if (documentIds.length === 0) return;
   const scoped = createScopedClient(communityId);
   const rows = await scoped.selectFrom<{ id: number }>(
     documents,
     {},
-    inArray(documents.id, documentIds),
+    uploadedBy === undefined
+      ? inArray(documents.id, documentIds)
+      : and(
+          inArray(documents.id, documentIds),
+          eq(documents.uploadedBy, uploadedBy),
+          eq(documents.sourceType, 'violation_evidence'),
+        ),
   );
   const foundIds = new Set(rows.map((r) => r.id));
   const missing = documentIds.filter((id) => !foundIds.has(id));
@@ -348,6 +362,24 @@ async function notifyViolationNotice(
   }
 }
 
+/**
+ * The denial email carries the written reason itself. HB 1203 (§720.3035)
+ * makes the cited rule or covenant the substance of a denial, and an email that
+ * only says "denied" sends the owner to the office to find out why. The
+ * decide path already refuses a denial without a rule reference, so both parts
+ * are normally present; each is omitted when blank rather than printed empty.
+ */
+function arcDenialDescription(
+  submission: Pick<ArcSubmissionRecord, 'id' | 'ruleReference' | 'reviewNotes'>,
+): string {
+  const parts = [`Your ARC application #${submission.id} was denied.`];
+  const rule = submission.ruleReference?.trim();
+  const notes = submission.reviewNotes?.trim();
+  if (rule) parts.push(`Rule or covenant relied on: ${rule}`);
+  if (notes) parts.push(`Committee notes: ${notes}`);
+  return parts.join(' ');
+}
+
 async function notifyArcDecision(
   communityId: number,
   submission: ArcSubmissionRecord,
@@ -363,7 +395,7 @@ async function notifyArcDecision(
         title: approved ? 'ARC Application Approved' : 'ARC Application Decision',
         description: approved
           ? `Your ARC application #${submission.id} was approved.`
-          : `Your ARC application #${submission.id} was denied.`,
+          : arcDenialDescription(submission),
         severity: approved ? 'info' : 'warning',
         recordId: String(submission.id),
         sourceId: String(submission.id),
@@ -400,11 +432,11 @@ async function notifyArcDecision(
 /**
  * List violations for a community.
  *
- * Note (Plan B3): the `/api/v1/violations` route NO LONGER uses this helper —
- * it owns its where construction inline and calls `paginate()` directly. This
- * helper is kept for the resident-self-view page
- * (`apps/web/src/app/(authenticated)/violations/report/page.tsx`), which
- * fetches its own small list of "my reports" without needing pagination.
+ * Note (Plan B3): the `/api/v1/violations` route uses
+ * `paginateViolationsForCommunity` instead. This helper serves the resident
+ * report page (`(authenticated)/violations/report/page.tsx`), which fetches
+ * two small unpaginated lists: "On your unit" (`allowedUnitIds` + the D1a
+ * `visibleWhere`) and "Your reports" (`reportedByUserId` = the viewer, any unit).
  */
 export async function listViolationsForCommunity(
   communityId: number,
@@ -412,6 +444,10 @@ export async function listViolationsForCommunity(
     status?: ViolationStatus;
     unitId?: number;
     allowedUnitIds?: number[];
+    /** Cases this user filed, on any unit. */
+    reportedByUserId?: string;
+    /** `residentVisibleViolationsWhere` for a non-board viewer (D1a). */
+    visibleWhere?: SQL;
     createdAfter?: string;
     createdBefore?: string;
   },
@@ -430,6 +466,12 @@ export async function listViolationsForCommunity(
       return [];
     }
     whereFilters.push(inArray(violations.unitId, filters.allowedUnitIds));
+  }
+  if (filters.reportedByUserId !== undefined) {
+    whereFilters.push(eq(violations.reportedByUserId, filters.reportedByUserId));
+  }
+  if (filters.visibleWhere) {
+    whereFilters.push(filters.visibleWhere);
   }
   if (filters.createdAfter) {
     whereFilters.push(gte(violations.createdAt, new Date(filters.createdAfter)));
@@ -455,6 +497,8 @@ export async function getViolationForCommunity(
   communityId: number,
   violationId: number,
   allowedUnitIds?: number[],
+  /** `residentVisibleViolationsWhere` for a non-board viewer (D1a): a hidden case is a 404. */
+  visibleWhere?: SQL,
 ): Promise<ViolationRecord> {
   const scoped = createScopedClient(communityId);
   const whereFilters = [eq(violations.id, violationId)];
@@ -464,6 +508,9 @@ export async function getViolationForCommunity(
       throw new NotFoundError('Violation not found');
     }
     whereFilters.push(inArray(violations.unitId, allowedUnitIds));
+  }
+  if (visibleWhere) {
+    whereFilters.push(visibleWhere);
   }
 
   const whereClause = whereFilters.length === 1 ? whereFilters[0] : and(...whereFilters);
@@ -537,7 +584,7 @@ export async function createViolationForCommunity(
   requestId?: string | null,
 ): Promise<ViolationRecord> {
   const validatedDocIds = assertIdArray(input.evidenceDocumentIds, 'evidenceDocumentIds');
-  await assertDocumentsBelongToCommunity(communityId, validatedDocIds);
+  await assertDocumentsBelongToCommunity(communityId, validatedDocIds, input.evidenceUploadedBy);
 
   const scoped = createScopedClient(communityId);
   const [inserted] = await scoped.insert(violations, {
@@ -1384,7 +1431,11 @@ export async function paginateArcSubmissionsForCommunity(params: {
 // Violations list helpers (used by /api/v1/violations GET + POST)
 // ---------------------------------------------------------------------------
 
-import { hydrateReportedByRole, type WithReportedByRole } from '@/lib/violations/hydrate-reporter-role';
+import {
+  hydrateReportedByRole,
+  type ReporterViewer,
+  type WithReportedByRole,
+} from '@/lib/violations/hydrate-reporter-role';
 
 export interface PaginatedViolations {
   data: WithReportedByRole<ViolationRecord>[];
@@ -1401,6 +1452,7 @@ export interface PaginatedViolations {
  * - `severity` → `eq(violations.severity, severity)`
  * - `unitId` → `eq(violations.unitId, unitId)`
  * - `allowedUnitIds` → `inArray(violations.unitId, allowedUnitIds)`
+ * - `visibleWhere` → the D1a predicate (`residentVisibleViolationsWhere`)
  * - `createdAfter` → `gte(violations.createdAt, parsed)`
  * - `createdBefore` → `lte(violations.createdAt, parsed)`
  *
@@ -1409,11 +1461,11 @@ export interface PaginatedViolations {
  *
  * Rows are mapped through `mapViolationRow` then decorated with the
  * reporter's role via `hydrateReportedByRole` (one extra round-trip per
- * page; no per-row N+1).
+ * page; no per-row N+1), which also redacts reporters `viewer` may not see.
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
  * community membership, violations feature gate, and `violations:read`
- * permission. For resident roles, `allowedUnitIds` MUST be passed.
+ * permission. For resident roles, `allowedUnitIds` and `visibleWhere` MUST be passed.
  */
 export async function paginateViolationsForCommunity(params: {
   communityId: number;
@@ -1423,6 +1475,8 @@ export async function paginateViolationsForCommunity(params: {
   severity?: ViolationSeverity;
   unitId?: number;
   allowedUnitIds?: number[];
+  visibleWhere?: SQL;
+  viewer: ReporterViewer;
   createdAfter?: string;
   createdBefore?: string;
 }): Promise<PaginatedViolations> {
@@ -1446,6 +1500,9 @@ export async function paginateViolationsForCommunity(params: {
   if (params.allowedUnitIds && params.allowedUnitIds.length > 0) {
     filterClauses.push(inArray(violations.unitId, params.allowedUnitIds));
   }
+  if (params.visibleWhere) {
+    filterClauses.push(params.visibleWhere);
+  }
   if (params.createdAfter) {
     filterClauses.push(gte(violations.createdAt, new Date(params.createdAfter)));
   }
@@ -1468,7 +1525,11 @@ export async function paginateViolationsForCommunity(params: {
   );
 
   const mapped = result.data.map(mapViolationRow);
-  const hydrated = await hydrateReportedByRole(scoped, await withUnitLabels(scoped, mapped));
+  const hydrated = await hydrateReportedByRole(
+    scoped,
+    await withUnitLabels(scoped, mapped),
+    params.viewer,
+  );
   return {
     data: hydrated,
     pagination: result.pagination,

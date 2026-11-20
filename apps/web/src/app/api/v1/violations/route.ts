@@ -18,6 +18,16 @@
  *
  * Resident-with-no-units short circuit preserved inside the service helper.
  *
+ * Resident reads (D1a/D1b, `lib/violations/common.ts`): a resident sees their
+ * own units' cases minus any a neighbour filed that are still `reported`
+ * (`residentVisibleViolationsWhere`), and never learns who filed a case they
+ * did not file themselves (`redactViolationReporter`).
+ *
+ * Resident filing (D1): a resident may name ANY unit in the community — a
+ * neighbour complaint belongs on the neighbour's unit, not the reporter's own
+ * household. Guarded by a live-unit check, a per-user rate limit, and evidence
+ * limited to the filer's own `violation_evidence` uploads.
+ *
  * `communityId` resolution stays on `parseCommunityIdFromQuery` /
  * `parseCommunityIdFromBody` (NOT the contract schema) so the pre-migration
  * `BadRequestError` messages are preserved byte-identically.
@@ -31,17 +41,20 @@ import {
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
-import { ForbiddenError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { ForbiddenError, NotFoundError, RateLimitError, ValidationError } from '@/lib/api/errors';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscription-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { parsePositiveInt } from '@/lib/finance/common';
+import { getRateLimiter } from '@/lib/middleware/rate-limiter';
 import {
   getActorUnitIds,
   getViolationReadUnitIds,
   isResidentRole,
+  redactViolationReporter,
   requireViolationsEnabled,
+  residentVisibleViolationsWhere,
 } from '@/lib/violations/common';
 import { requirePermission } from '@/lib/db/access-control';
 import {
@@ -62,6 +75,12 @@ const listStatusSchema = z.enum([
 ]);
 
 const listSeveritySchema = z.enum(['minor', 'moderate', 'major']);
+
+// A resident can now file against any unit, so cap how often one member can
+// put cases in front of the board. Generous enough for a real run of
+// problems; a burst beyond it is noise or harassment.
+const RESIDENT_REPORT_RATE_LIMIT_MAX = 10;
+const RESIDENT_REPORT_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export const GET = withErrorHandler(
   runRoute(violationsListContract, async ({ query, req }) => {
@@ -129,11 +148,16 @@ export const GET = withErrorHandler(
       severity,
       unitId,
       allowedUnitIds: residentUnitIds,
+      visibleWhere: residentVisibleViolationsWhere(membership, actorUserId),
+      viewer: { membership, userId: actorUserId },
       createdAfter,
       createdBefore,
     });
 
-    return { data: result.data, pagination: result.pagination };
+    return {
+      data: result.data.map((row) => redactViolationReporter(row, membership, actorUserId)),
+      pagination: result.pagination,
+    };
   }),
 );
 
@@ -148,20 +172,32 @@ export const POST = withErrorHandler(
     await requireViolationsEnabled(membership);
     requirePermission(membership, 'violations', 'write');
 
-    const scoped = createScopedClient(communityId);
-    if (isResidentRole(membership.role)) {
+    const isResident = isResidentRole(membership.role);
+    if (isResident) {
+      // Still required: a member with no unit is not yet a settled resident of
+      // the community, and the report page shows them the same guard.
+      const scoped = createScopedClient(communityId);
       const unitIds = await getActorUnitIds(scoped, actorUserId);
       if (unitIds.length === 0) {
         throw new ForbiddenError('You must be associated with a unit before reporting a violation');
       }
-      if (!unitIds.includes(body.unitId)) {
-        throw new ForbiddenError('Residents can only report violations for their own unit');
-      }
-    } else {
-      // Staff path: validate target unit belongs to this scoped community.
-      const exists = await unitExistsInCommunity(communityId, body.unitId);
-      if (!exists) {
-        throw new NotFoundError(`Unit ${body.unitId} not found in this community`);
+    }
+    // Any live unit in this community — residents report neighbours too (D1).
+    const exists = await unitExistsInCommunity(communityId, body.unitId);
+    if (!exists) {
+      throw new NotFoundError(`Unit ${body.unitId} not found in this community`);
+    }
+    if (isResident) {
+      // After the unit check, so a mistyped unit does not spend a report.
+      const rate = getRateLimiter().check(
+        `violation-report:${actorUserId}`,
+        RESIDENT_REPORT_RATE_LIMIT_MAX,
+        RESIDENT_REPORT_RATE_LIMIT_WINDOW_MS,
+      );
+      if (!rate.allowed) {
+        throw new RateLimitError(
+          `You've filed too many reports today. Try again in ${rate.retryAfter}s.`,
+        );
       }
     }
 
@@ -175,6 +211,7 @@ export const POST = withErrorHandler(
         description: body.description,
         severity: body.severity as ViolationSeverity | undefined,
         evidenceDocumentIds: body.evidenceDocumentIds,
+        ...(isResident ? { evidenceUploadedBy: actorUserId } : {}),
       },
       requestId,
     );

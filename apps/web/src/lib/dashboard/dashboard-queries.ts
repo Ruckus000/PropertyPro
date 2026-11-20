@@ -19,6 +19,7 @@ import {
   isNull,
   lte,
   sql,
+  type SQL,
 } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { canReadAnnouncementAudience, type AnnouncementAudience } from '@/lib/announcements/read-visibility';
@@ -225,14 +226,18 @@ export async function listDashboardMeetings(
 
 /**
  * `unitIds` scopes the card to a resident's own units (getViolationReadUnitIds);
- * `undefined` is community-wide, for managers and board seats.
+ * `undefined` is community-wide, for managers and board seats. `visibleWhere`
+ * is the resident's D1a predicate (residentVisibleViolationsWhere): a
+ * neighbour's report still awaiting review is neither counted nor listed.
  */
 export async function getDashboardViolationSummary(
   scoped: ScopedClient,
   unitIds?: number[],
+  visibleWhere?: SQL,
 ): Promise<DashboardViolationSummary> {
   if (unitIds?.length === 0) return buildViolationSummary([], []);
-  const where = unitIds ? inArray(violations.unitId, unitIds) : undefined;
+  const unitWhere = unitIds ? inArray(violations.unitId, unitIds) : undefined;
+  const where = unitWhere && visibleWhere ? and(unitWhere, visibleWhere) : (unitWhere ?? visibleWhere);
   const [statusRows, recentRows] = await Promise.all([
     scoped
       .selectFrom<DashboardViolationStatusCountRow>(

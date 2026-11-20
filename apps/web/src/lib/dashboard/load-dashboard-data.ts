@@ -13,7 +13,7 @@ import {
 } from './dashboard-selectors';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { listMyPendingSigners } from '@/lib/services/esign-service';
-import { getViolationReadUnitIds } from '@/lib/violations/common';
+import { getViolationReadUnitIds, residentVisibleViolationsWhere } from '@/lib/violations/common';
 import {
   getDashboardOpenMaintenanceCount,
   getDashboardUserLookup,
@@ -80,7 +80,11 @@ export async function loadDashboardData(
     listDashboardAnnouncements(scoped, membership),
     listDashboardMeetings(scoped),
     getViolationReadUnitIds(scoped, membership, userId).then((unitIds) =>
-      getDashboardViolationSummary(scoped, unitIds),
+      getDashboardViolationSummary(
+        scoped,
+        unitIds,
+        residentVisibleViolationsWhere(membership, userId),
+      ),
     ),
     getDashboardOpenMaintenanceCount(scoped),
     pendingSignersPromise,

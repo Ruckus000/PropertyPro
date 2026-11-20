@@ -13,6 +13,9 @@ vi.mock('@/lib/units/actor-units', () => ({
   requireActorUnitId: vi.fn(),
 }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+// common.ts reads these tables at import (the D1a predicate); the predicate
+// itself is tested against the real tables in __tests__/violations/reporter-visibility.test.ts.
+vi.mock('@propertypro/db', () => ({ userRoles: {}, violations: {} }));
 
 import { getViolationReadUnitIds } from '../common';
 

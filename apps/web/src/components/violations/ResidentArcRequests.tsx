@@ -11,7 +11,9 @@
  *
  * The list is scoped by the server — `/api/v1/arc` filters to the caller's own
  * units for a resident role — so this renders whatever it is given without
- * doing any filtering of its own.
+ * doing any filtering of its own. That list is per UNIT, so a household member
+ * sees requests a co-owner filed; Withdraw is offered only on the viewer's own
+ * (the withdraw service refuses anyone but the submitter).
  */
 import { useState } from 'react';
 import Link from 'next/link';
@@ -33,9 +35,11 @@ import { formatShortDate } from '@/lib/utils/format-date';
 
 interface ResidentArcRequestsProps {
   communityId: number;
+  /** The signed-in user — Withdraw shows only on requests they submitted. */
+  userId: string;
 }
 
-export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
+export function ResidentArcRequests({ communityId, userId }: ResidentArcRequestsProps) {
   const { data: submissions, isLoading, isError, refetch } = useArcSubmissions(communityId);
   const withdrawMutation = useWithdrawArcSubmission(communityId);
   const [pendingId, setPendingId] = useState<number | null>(null);
@@ -105,7 +109,9 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
   return (
     <ul className="space-y-3">
       {submissions.map((submission) => {
-        const canWithdraw = allowedArcActions(submission.status).includes('withdraw');
+        const canWithdraw =
+          submission.submittedByUserId === userId &&
+          allowedArcActions(submission.status).includes('withdraw');
         return (
           <li
             key={submission.id}
@@ -130,6 +136,22 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
             <p className="mt-3 whitespace-pre-wrap text-sm text-content-secondary">
               {submission.description}
             </p>
+
+            {/*
+              Rule reference ABOVE the notes, as in the reviewer's view
+              (ArcSubmissionsTab): on a denial it is the part HB 1203 requires
+              (§720.3035), and the owner should not have to find it in prose.
+            */}
+            {submission.ruleReference && (
+              <div className="mt-3 rounded-md bg-surface-hover px-3 py-2">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-content-secondary">
+                  {submission.status === 'denied' ? 'Rule or covenant relied on' : 'Rule reference'}
+                </h4>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-content">
+                  {submission.ruleReference}
+                </p>
+              </div>
+            )}
 
             {/*
               Shown to the resident whenever it exists, not only on a denial.

@@ -3,8 +3,10 @@
  * Violation Detail Page — Phase 1C
  *
  * Route: /violations/:id?communityId=X
- * Auth: residents see own-unit violations only; managers and board seats see
- * all and get the actions (getViolationReadUnitIds, canActAsBoard)
+ * Auth: residents see own-unit violations only, minus a neighbour's report still
+ * awaiting review, and never the reporter's identity; managers and board seats
+ * see all and get the actions (getViolationReadUnitIds,
+ * residentVisibleViolationsWhere, redactViolationReporter, canActAsBoard)
  * Feature gate: hasViolations must be enabled for the community type
  */
 import { redirect, notFound } from 'next/navigation';
@@ -13,7 +15,11 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
-import { getViolationReadUnitIds } from '@/lib/violations/common';
+import {
+  getViolationReadUnitIds,
+  redactViolationReporter,
+  residentVisibleViolationsWhere,
+} from '@/lib/violations/common';
 import { canActAsBoard } from '@/lib/db/access-control';
 import { getViolationForCommunity } from '@/lib/services/violations-service';
 import { ViolationDetailView } from '@/components/violations/ViolationDetailView';
@@ -63,7 +69,16 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
   try {
     violation = await withUnitLabel(
       scoped,
-      await getViolationForCommunity(communityId, violationId, allowedUnitIds),
+      redactViolationReporter(
+        await getViolationForCommunity(
+          communityId,
+          violationId,
+          allowedUnitIds,
+          residentVisibleViolationsWhere(membership, userId),
+        ),
+        membership,
+        userId,
+      ),
     );
   } catch {
     notFound();
