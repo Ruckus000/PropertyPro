@@ -27,6 +27,7 @@
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { pendingSignups } from '@propertypro/db';
 import { eq, notInArray } from '@propertypro/db/filters';
+import { redactParams } from '@propertypro/shared/observability';
 // AUTHZ: GoTrue admin generateLink for the address the caller typed; the link is emailed only to that address.
 import { createAdminClient } from '@propertypro/db/supabase/admin';
 import { randomBytes } from 'node:crypto';
@@ -173,7 +174,7 @@ export async function startEmailFirstSignup(
       // user, say). Logged for us; the user simply receives no email.
       console.error(JSON.stringify({
         event: 'signup.start.link_failed',
-        error: linkError instanceof Error ? linkError.message : String(linkError),
+        error: redactParams(linkError instanceof Error ? linkError.message : String(linkError)),
       }));
       return { message: START_SIGNUP_MESSAGE };
     }
@@ -185,7 +186,7 @@ export async function startEmailFirstSignup(
       console.error(JSON.stringify({
         event: 'signup.start.email_failed',
         authUserId: auth.authUserId,
-        error: emailError instanceof Error ? emailError.message : String(emailError),
+        error: redactParams(emailError instanceof Error ? emailError.message : String(emailError)),
       }));
       throw new SignupEmailDeliveryError();
     }

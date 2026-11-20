@@ -30,6 +30,7 @@
  */
 import { type NextRequest, NextResponse } from 'next/server';
 import { SUPPORT_SESSION_COOKIE } from '@propertypro/shared';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import {
   buildSupportSessionClearCookie,
   resolveSupportCookieHostname,
@@ -94,7 +95,7 @@ export const POST = withErrorHandler(async (request: NextRequest) => {
       // operator trapped in an impersonated session because an audit insert
       // failed is strictly worse than a row that the expiry sweep will close
       // within 30 minutes anyway.
-      console.error('[support] Failed to close support session row:', error);
+      console.error('[support] Failed to close support session row:', formatErrorForLog(error));
     }
   }
 

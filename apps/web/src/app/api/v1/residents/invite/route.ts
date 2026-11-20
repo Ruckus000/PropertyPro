@@ -12,6 +12,7 @@
  * `./contract.ts`.
  */
 import { runRoute } from '@propertypro/api-contract';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ForbiddenError, ValidationError } from '@/lib/api/errors';
@@ -98,7 +99,7 @@ export const POST = withErrorHandler(
         invitationExpiresAt = invitation.expiresAt;
       } catch (inviteError) {
         invitationFailed = true;
-        console.error('[residents/invite] Invitation failed after resident created:', inviteError);
+        console.error('[residents/invite] Invitation failed after resident created:', formatErrorForLog(inviteError));
 
         await logAuditEvent({
           userId: actorUserId,

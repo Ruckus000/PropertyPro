@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { isEntitledState, resolveLifecycleState, type CommunityType } from '@propertypro/shared';
 import { SUPPORT_SESSION_HEADER } from '@/lib/request/forwarded-headers';
 import { ensureTransparencyChecklistInitialized } from '@/lib/services/transparency-service';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 
 interface ChecklistPageMembership {
   isAdmin: boolean;
@@ -43,6 +44,6 @@ export async function ensureChecklistForManagerPage(
   try {
     await ensureTransparencyChecklistInitialized(communityId, membership.communityType);
   } catch (err) {
-    console.error('[compliance] ensureTransparencyChecklistInitialized failed', { communityId, err });
+    console.error('[compliance] ensureTransparencyChecklistInitialized failed', { communityId, err: formatErrorForLog(err) });
   }
 }

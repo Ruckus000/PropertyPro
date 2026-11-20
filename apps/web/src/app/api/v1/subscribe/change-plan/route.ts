@@ -14,6 +14,7 @@
  */
 import { runRoute } from '@propertypro/api-contract';
 import { canChangeExistingPlan, comparePlanTiers, type PlanId } from '@propertypro/shared';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
@@ -99,7 +100,7 @@ export const POST = withErrorHandler(
     try {
       await changeSubscriptionPlan(community.stripeSubscriptionId, priceId);
     } catch (err) {
-      console.error('[change-plan] Stripe update failed:', err);
+      console.error('[change-plan] Stripe update failed:', formatErrorForLog(err));
       if (err instanceof AppError) throw err;
       throw new AppError(
         'Could not update your subscription. Please try again or contact support.',

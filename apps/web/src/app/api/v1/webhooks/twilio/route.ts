@@ -23,6 +23,7 @@
  * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
  */
 import { NextResponse, type NextRequest } from 'next/server';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { validateSmsWebhookSignature } from '@/lib/services/sms/sms-service';
 import { mapTwilioStatus } from '@/lib/services/sms/twilio-provider';
 import { updateRecipientSmsStatusByIds } from '@/lib/services/emergency-broadcast-service';
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('[twilio-webhook] Error processing webhook:', error);
+    console.error('[twilio-webhook] Error processing webhook:', formatErrorForLog(error));
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 }

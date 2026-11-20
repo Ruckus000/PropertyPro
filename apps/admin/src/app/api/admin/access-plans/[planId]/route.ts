@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { redactParams } from '@propertypro/shared/observability';
 import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
@@ -78,7 +79,7 @@ export const DELETE = withAdminErrorHandler(async (request: NextRequest, { param
   if (otherErr) {
     console.error(
       '[admin/access-plans/revoke] Plan revoked but other-plans lookup failed:',
-      otherErr.message,
+      redactParams(otherErr.message),
     );
   } else if ((otherPlans ?? []).length === 0) {
     const { error: clearErr } = await (db
@@ -89,7 +90,7 @@ export const DELETE = withAdminErrorHandler(async (request: NextRequest, { param
     if (clearErr) {
       console.error(
         '[admin/access-plans/revoke] Plan revoked but community clear failed:',
-        clearErr.message,
+        redactParams(clearErr.message),
       );
     }
   }

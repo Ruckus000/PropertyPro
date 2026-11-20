@@ -6,6 +6,7 @@
  * barrel arrives as `undefined` inside them. A `beforeSend` hook resolving to
  * `undefined` would make Sentry drop every event — silently.
  */
+export * from './format-error-for-log';
 export * from './scrub-browser-event';
 export * from './scrub-server-event';
 export * from './server-sentry-options';

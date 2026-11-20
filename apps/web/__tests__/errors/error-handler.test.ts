@@ -113,6 +113,41 @@ describe('withErrorHandler', () => {
     consoleSpy.mockRestore();
   });
 
+  it('logs unknown errors as a REDACTED string, never the raw Error object', async () => {
+    /*
+     * The Vercel function-log channel (#951 residual): `console.error` writes
+     * go to stdout/stderr, which `scrubServerEvent` cannot reach — only the
+     * Sentry event copy is scrubbed. Drizzle embeds bound VALUES in
+     * `error.message` after `params: ` (#1092), so logging the object (or its
+     * raw message) leaks them to the logs. The logged string must be redacted
+     * yet keep the SQL and the stack frames for triage. The 500 envelope above
+     * is the control: it never carried internals and must not change.
+     */
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const handler = withErrorHandler(async () => {
+      throw new Error(
+        'Failed query: select * from users where email = $1\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+      );
+    });
+
+    const res = await handler(createMockRequest());
+    expect(res.status).toBe(500);
+
+    const logged = consoleSpy.mock.calls[0]?.[1];
+    expect(logged).toBeTypeOf('string');
+    expect(logged).toContain('Failed query:');
+    expect(logged).toContain('params: [redacted]');
+    expect(logged).toContain('\n    at '); // stack frames survive for triage
+    expect(logged).not.toContain('canary@x.com');
+    expect(logged).not.toContain('CANARY_VALUE_9F3');
+    // Sentry still gets the RAW error object — beforeSend scrubs that copy and
+    // stack fidelity matters there.
+    expect(sentryMocks.captureException).toHaveBeenCalledWith(expect.any(Error));
+
+    consoleSpy.mockRestore();
+  });
+
   it('tags community_id and user context when headers are present', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 

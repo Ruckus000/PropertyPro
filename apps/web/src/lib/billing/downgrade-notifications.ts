@@ -3,6 +3,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { communities, userRoles } from '@propertypro/db';
 import { eq, and, isNull, inArray } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { createNotificationsForEvent } from '../services/notification-service';
 import { tierToPercentOff, type VolumeTier } from './tier-calculator';
 
@@ -65,7 +66,7 @@ export async function notifyDowngrade(input: {
         },
         { type: 'specific_user', userId },
       ).catch((err) => {
-        console.error('[downgrade-notifications] failed to notify user', userId, 'in community', communityId, err);
+        console.error('[downgrade-notifications] failed to notify user', userId, 'in community', communityId, formatErrorForLog(err));
       });
     }
   }

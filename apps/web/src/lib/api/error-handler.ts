@@ -11,6 +11,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import * as Sentry from '@sentry/nextjs';
 import { isContractValidationError } from '@propertypro/api-contract';
+import { formatErrorForLog, redactParams } from '@propertypro/shared/observability';
 import { AppError } from './errors/AppError';
 import { extractSentryRequestContext } from '../sentry/request-context';
 import { runWithAuditActor } from '@propertypro/db/audit-actor';
@@ -62,7 +63,14 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
       //                              this is a server bug we never expose)
       if (isContractValidationError(error)) {
         if (error.source === 'response') {
-          console.error('Contract response-validation failure:', error.fields);
+          // Wrapped so this file carries no guard-baselined site of its own:
+          // `fields` is Zod `{field, message}` descriptors — type names today,
+          // but a custom `.superRefine` message could interpolate a payload
+          // value, and the chokepoint file should model the compliant shape.
+          console.error(
+            'Contract response-validation failure:',
+            redactParams(JSON.stringify(error.fields)),
+          );
           Sentry.withScope((scope) => {
             scope.setTag('request_id', sentryContext.requestId);
             scope.setTag('contract_violation', 'response');
@@ -96,8 +104,15 @@ export function withErrorHandler(handler: RouteHandler): RouteHandler {
         );
       }
 
-      // Unknown error — 500, no stack trace exposed [AGENTS #43]
-      console.error('Unhandled error:', error);
+      // Unknown error — 500, no stack trace exposed [AGENTS #43].
+      // Logged as a REDACTED STRING, not the Error object: this console write
+      // is what Vercel function logs capture, and `scrubServerEvent` only
+      // scrubs the Sentry copy below. A drizzle failure embeds bound values
+      // (tenant PII, tokens) in `error.message` after `params: ` (#1092);
+      // `formatErrorForLog` strips them and keeps SQL + frames for triage.
+      // `captureException` deliberately still gets the RAW object. (#951
+      // residual.)
+      console.error('Unhandled error:', formatErrorForLog(error));
 
       // Report to Sentry with request_id for correlation
       Sentry.withScope((scope) => {

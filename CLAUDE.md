@@ -102,7 +102,8 @@ docs/                   # Specs, ADRs, audits, design system
 > the defect lives in the relationship between two sibling files. And
 > `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
 > `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
-> `packages/ui/src`. There are **34** guards in `scripts/run-lint-guards.mjs`;
+> `packages/ui/src`. There are **35** guards in `scripts/run-lint-guards.mjs`
+> (measured 2026-11-20, when `guard:console-error-redaction` joined);
 > `guard:admin-semantic-css` is deliberately not one of them, because it reads
 > `apps/admin/.next/static/css` and so needs a build first.
 

@@ -14,6 +14,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { runRoute } from '@propertypro/api-contract';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { AppError, UnauthorizedError } from '@/lib/api/errors';
 import { requireAuthenticatedUser } from '@/lib/api/auth';
@@ -51,7 +52,7 @@ export const POST = withErrorHandler(async (req, ctx) => {
     try {
       cookieParams = await mintReauthCookie(user.id);
     } catch (err) {
-      console.error('[reauth] mintReauthCookie failed:', err);
+      console.error('[reauth] mintReauthCookie failed:', formatErrorForLog(err));
       throw new AppError(
         'Re-authentication is misconfigured on the server. Please contact support.',
         500,

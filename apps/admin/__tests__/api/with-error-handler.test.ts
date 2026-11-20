@@ -101,6 +101,35 @@ describe('withAdminErrorHandler', () => {
     expect(captureException).toHaveBeenCalledTimes(1);
   });
 
+  it('logs unknown errors as a REDACTED string, never the raw Error object', async () => {
+    // The Vercel function-log channel (#951 residual) — the console write is
+    // not covered by scrubServerEvent, and drizzle embeds bound values in
+    // error.message after `params: ` (#1092). Mirror of the web handler test;
+    // the duplication of the handlers is deliberate, so is the duplication of
+    // this pin.
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const handler = withAdminErrorHandler(async () => {
+      throw new Error(
+        'Failed query: update platform_admin_users set x = $1\nparams: ["canary@x.com","CANARY_VALUE_9F3"]',
+      );
+    });
+
+    const res = await handler(makeRequest());
+    expect(res.status).toBe(500);
+
+    const logged = consoleSpy.mock.calls[0]?.[1];
+    expect(logged).toBeTypeOf('string');
+    expect(logged).toContain('params: [redacted]');
+    expect(logged).toContain('\n    at '); // frames survive for triage
+    expect(logged).not.toContain('canary@x.com');
+    expect(logged).not.toContain('CANARY_VALUE_9F3');
+    // Sentry still gets the RAW error object.
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error));
+
+    consoleSpy.mockRestore();
+  });
+
   it('does not leak a raw Postgres error object either', async () => {
     const handler = withAdminErrorHandler(async () => {
       throw { code: '23505', detail: 'Key (user_id)=(abc) already exists.' };

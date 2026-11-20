@@ -176,3 +176,14 @@ and a suite that boots a production build would not be run. To repeat it: build 
 gunzips, POST a canary body to `/api/v1/public/pm-inquiries`, and read the envelope. For
 the capture question specifically, instrument the compiled scrubber's `delete` — Run A
 cannot answer it.
+
+---
+
+**Addendum (2026-11-20):** the Vercel-runtime-log channel noted in the Limitations section
+("the ~90 other console sites that log the raw Error object") is now closed on main:
+`formatErrorForLog` (`packages/shared/src/observability/format-error-for-log.ts`) replaced
+the raw-object `console.error` in both central handlers and across the secret-handling
+satellite sites, and `guard:console-error-redaction` holds the line with a shrink-only
+baseline for the remainder. This document's other naming is preserved as-measured,
+including the fix-branch name `redactQueryParams` — the export that landed is
+`redactParams`.

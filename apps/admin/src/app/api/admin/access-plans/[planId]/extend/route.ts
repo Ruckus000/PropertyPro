@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
+import { redactParams } from '@propertypro/shared/observability';
 import { z } from 'zod';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { assertNoDbError } from '@/lib/api/assert-no-db-error';
@@ -103,7 +104,7 @@ export const POST = withAdminErrorHandler(async (request: NextRequest, { params 
   if (communityUpdateError) {
     console.error(
       '[admin/access-plans/extend] Plan extended but community.free_access_expires_at update failed:',
-      communityUpdateError.message,
+      redactParams(communityUpdateError.message),
     );
   }
 
