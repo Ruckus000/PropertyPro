@@ -268,10 +268,16 @@ function AuditEmpty({
         ? 'Activity appears here automatically as people post documents, send notices and change access.'
         : 'Try looking further back, or show everything.';
 
+  // A scene only when the trail itself is empty. A view or period that hides
+  // entries is "no results" (spec state table: no scene, the way out instead).
+  const trulyEmpty = state.period === 'all' && (state.view === 'all' || (state.view === 'important' && hidden === 0));
+  const art = trulyEmpty
+    ? ({ size: 'section', illustration: <PropScene size="section" prop="clipboard" /> } as const)
+    : ({ size: 'sm', icon: 'inbox' } as const);
+
   return (
     <EmptyState
-      size="section"
-      illustration={<PropScene size="section" prop="clipboard" />}
+      {...art}
       className="mt-4"
       title={title}
       description={description}

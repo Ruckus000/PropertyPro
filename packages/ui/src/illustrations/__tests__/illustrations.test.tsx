@@ -2,9 +2,11 @@
 import * as React from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { DirectoryScene, DocumentsScene, ProgressRing, PropScene, StormCalmScene, type SceneProp } from '..';
+import { DirectoryScene, DocumentsScene, ProgressRing, PropScene, SCENE_PROPS, StormCalmScene } from '..';
+import { SCENE_PROP_HEIGHT } from '../scenes';
 
-const PROP_NAMES: SceneProp[] = ['shield', 'coins', 'package', 'wrench', 'calendar', 'bell'];
+// Every prop the kit has, so a new one cannot skip these checks.
+const PROP_NAMES = SCENE_PROPS;
 const SCENES: Record<string, (p: { size?: 'hero' | 'section' | 'compact' }) => React.ReactElement> = {
   DocumentsScene,
   DirectoryScene,
@@ -27,8 +29,10 @@ describe('empty-state scenes', () => {
 
         // Anti-vacuity: a scene that rendered nothing would pass the paint check below.
         const painted = [...container.querySelectorAll('[fill], [stroke]')];
-        // The tile alone is one element: more proves the prop (or landscape) rendered.
-        expect(painted.length).toBeGreaterThan(size === 'compact' ? 1 : 3);
+        // A compact PropScene is the tile plus the prop, so its floor is lower;
+        // the named scenes keep the stricter one.
+        const floor = size !== 'compact' ? 3 : name.startsWith('PropScene') ? 1 : 3;
+        expect(painted.length).toBeGreaterThan(floor);
         for (const el of painted) {
           for (const attr of ['fill', 'stroke'] as const) {
             const value = el.getAttribute(attr);
@@ -38,6 +42,24 @@ describe('empty-state scenes', () => {
         }
       });
     }
+  }
+
+  it('covers every prop', () => {
+    expect(PROP_NAMES).toEqual(['shield', 'coins', 'package', 'wrench', 'calendar', 'bell', 'clipboard']);
+  });
+
+  for (const prop of PROP_NAMES) {
+    it(`PropScene(${prop}) stands above the ground band, inside the frame`, () => {
+      const { container } = render(<PropScene size="section" prop={prop} />);
+      const groups = container.querySelectorAll('svg > g');
+      const transform = groups[groups.length - 1]?.getAttribute('transform') ?? '';
+      const match = /translate\(([\d.]+) ([\d.]+)\) scale\(([\d.]+)\)/.exec(transform);
+      expect(match, transform).not.toBeNull();
+      const y = Number(match![2]);
+      const scale = Number(match![3]);
+      // 214 is the top of the ground band; the viewBox is 230 tall.
+      expect(y + SCENE_PROP_HEIGHT[prop] * scale).toBeLessThanOrEqual(214);
+    });
   }
 
   it('compact drops the landscape: no ground band', () => {

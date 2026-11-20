@@ -115,6 +115,23 @@ const PROPS = { shield: Shield, coins: Coins, package: Package, wrench: Wrench, 
 /** Which prop a PropScene shows. */
 export type SceneProp = keyof typeof PROPS;
 
+/** Every prop, for callers and tests that must cover them all. */
+export const SCENE_PROPS = Object.keys(PROPS) as SceneProp[];
+
+/** Each prop's height in its own units (the part docblocks in parts.tsx). */
+export const SCENE_PROP_HEIGHT: Record<SceneProp, number> = {
+  shield: 64,
+  coins: 52,
+  package: 60,
+  wrench: 60,
+  calendar: 56,
+  bell: 56,
+  clipboard: 88,
+};
+
+const GROUND_Y = 214;
+const PROP_SCALE = 1.2;
+
 /**
  * The general composition for a page without its own scene: the community's
  * building on a calm day, with the one prop that says what the page holds
@@ -135,9 +152,10 @@ export function PropScene({ size = "hero", className, prop }: SceneProps & { pro
     <Scene size={size} className={className}>
       <Sun x={292} y={46} />
       <Cloud x={24} y={52} />
-      <Ground y={214} />
-      <Building x={40} y={214} columns={3} floors={2} />
-      <Prop x={226} y={136} scale={1.2} />
+      <Ground y={GROUND_Y} />
+      <Building x={40} y={GROUND_Y} columns={3} floors={2} />
+      {/* Props share a line at y=136; a taller one is raised so its foot stays above the ground band. */}
+      <Prop x={226} y={Math.min(136, GROUND_Y - SCENE_PROP_HEIGHT[prop] * PROP_SCALE)} scale={PROP_SCALE} />
     </Scene>
   );
 }

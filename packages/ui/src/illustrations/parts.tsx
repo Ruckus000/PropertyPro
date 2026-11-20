@@ -165,7 +165,7 @@ export function Document(props: PartProps) {
   );
 }
 
-/** Clipboard holding a short form, 64 × 80. Origin at its top-left. */
+/** Clipboard holding a short form, 64 × 88 (the clip sits above the board). Origin at its top-left. */
 export function Clipboard(props: PartProps) {
   return (
     <g transform={place(props)} {...ROUND}>
