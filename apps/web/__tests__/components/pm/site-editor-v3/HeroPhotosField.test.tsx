@@ -384,6 +384,22 @@ describe('HeroPhotosField — stock photos', () => {
       ]);
     });
 
+    it('changes the row whose button was pressed when the same photo is stored twice', async () => {
+      // The picker never adds a duplicate, but stored data can hold one.
+      const user = userEvent.setup();
+      const { onChange } = renderField([PILINGS, UP1, PILINGS]);
+
+      await user.click(screen.getByRole('button', { name: 'Change photo 3' }));
+      await user.click(screen.getByRole('button', { name: 'Gulf sunset' }));
+      await user.click(screen.getByRole('button', { name: 'Use this photo' }));
+
+      expect(onChange).toHaveBeenCalledWith([
+        PILINGS,
+        UP1,
+        { stock: 'gulf-sunset', alt: STOCK_PHOTO_ALT['gulf-sunset'] },
+      ]);
+    });
+
     it('returns focus to the changed row\'s Change photo', async () => {
       const user = userEvent.setup();
       render(<Harness initial={[UP1, PILINGS, UP2]} />);

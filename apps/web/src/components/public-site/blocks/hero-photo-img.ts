@@ -13,6 +13,7 @@
  */
 import {
   STOCK_PHOTOS,
+  STOCK_PHOTO_IDS,
   STOCK_PHOTO_SRC,
   stockPhotoSrc,
   type ResolvedHeroPhoto,
@@ -20,25 +21,21 @@ import {
 } from '@propertypro/shared';
 import { buildPublicAssetUrl } from '@/lib/site-assets/public-url';
 
-/** Each stock photo file's pixel size. `hero-photo-img.test.ts` reads them from the files. */
-export const STOCK_PHOTO_SIZE: Readonly<Record<StockPhotoId, { width: number; height: number }>> = {
+type PhotoSize = { width: number; height: number };
+
+/** Every library photo is built 3:2 at 2400 wide (`scripts/build-stock-photos.ts`). */
+const LIBRARY_SIZE: PhotoSize = { width: 2400, height: 1600 };
+
+/** The two retired photos are single files of their own size. */
+const RETIRED_SIZE: Partial<Record<StockPhotoId, PhotoSize>> = {
   sunset: { width: 1440, height: 1080 },
   palms: { width: 1100, height: 1100 },
-  // The thirteen library photos are all cropped 3:2 at 2400 wide.
-  'pilings-dusk': { width: 2400, height: 1600 },
-  'gulf-sunset': { width: 2400, height: 1600 },
-  shoreline: { width: 2400, height: 1600 },
-  'oak-avenue': { width: 2400, height: 1600 },
-  'lake-reflection': { width: 2400, height: 1600 },
-  'royal-palms': { width: 2400, height: 1600 },
-  'palm-walk': { width: 2400, height: 1600 },
-  'sea-oats': { width: 2400, height: 1600 },
-  'palm-sky': { width: 2400, height: 1600 },
-  'marsh-sunset': { width: 2400, height: 1600 },
-  'dune-sunset': { width: 2400, height: 1600 },
-  'mangrove-boardwalk': { width: 2400, height: 1600 },
-  sailboats: { width: 2400, height: 1600 },
 };
+
+/** Each stock photo file's pixel size. `hero-photo-img.test.ts` reads them from the files. */
+export const STOCK_PHOTO_SIZE: Readonly<Record<StockPhotoId, PhotoSize>> = Object.fromEntries(
+  STOCK_PHOTO_IDS.map((id) => [id, RETIRED_SIZE[id] ?? LIBRARY_SIZE]),
+) as Record<StockPhotoId, PhotoSize>;
 
 export interface HeroPhotoImgAttributes {
   src: string;

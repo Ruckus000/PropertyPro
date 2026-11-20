@@ -127,7 +127,10 @@ export function HeroPhotosField({
   const stagedSeqRef = useRef(0);
   // The library picker. It has no trigger of its own, so Radix cannot return focus
   // when it closes: the opener is kept here and focused by hand (see `closePicker`).
-  const [picker, setPicker] = useState<{ replacing: StockPhotoId | null } | null>(null);
+  // `index` is the row whose "Change photo" opened it (null when adding).
+  const [picker, setPicker] = useState<{ replacing: StockPhotoId | null; index: number | null } | null>(
+    null,
+  );
   const openerRef = useRef<HTMLElement | null>(null);
 
   // `handleUploaded` fires once per file from inside the queue's sequential
@@ -257,9 +260,9 @@ export function HeroPhotosField({
     focusAfterRef.current = { index, action: 'remove' };
   };
 
-  const openPicker = (opener: HTMLElement, replacing: StockPhotoId | null) => {
+  const openPicker = (opener: HTMLElement, replacing: StockPhotoId | null, index: number | null = null) => {
     openerRef.current = opener;
-    setPicker({ replacing });
+    setPicker({ replacing, index });
   };
 
   /**
@@ -281,10 +284,17 @@ export function HeroPhotosField({
     // would tell a screen-reader user about a picture that is not there.
     const chosen: HeroPhoto = { stock: id, alt: STOCK_PHOTO_ALT[id] };
     if (from !== null) {
-      const index = current.findIndex((photo) => 'stock' in photo && photo.stock === from);
+      const shows = (photo: HeroPhoto | undefined) =>
+        photo !== undefined && 'stock' in photo && photo.stock === from;
+      // The row whose button was pressed, while it still shows that photo; else
+      // the first that does. Stored data can hold the same stock photo twice.
+      const pressed = picker?.index ?? -1;
+      const index = shows(current[pressed]) ? pressed : current.findIndex(shows);
       if (index < 0) return;
-      onChange(current.map((photo, i) => (i === index ? chosen : photo)));
-      followStockPhoto(from, id);
+      const next = current.map((photo, i) => (i === index ? chosen : photo));
+      onChange(next);
+      // A waiting file follows the photo only once no row shows it any more.
+      if (!next.some(shows)) followStockPhoto(from, id);
       setAnnouncement(`Photo changed to ${name}.`);
       focusAfterRef.current = { index, action: 'change' };
       return;
@@ -444,7 +454,7 @@ export function HeroPhotosField({
                       // rule in design.md); the md twins cancel the primitive's fixed
                       // heights.
                       className="h-auto md:h-auto min-h-11 max-w-full whitespace-normal py-1.5 text-left md:min-h-8"
-                      onClick={(event) => openPicker(event.currentTarget, photo.stock)}
+                      onClick={(event) => openPicker(event.currentTarget, photo.stock, index)}
                     >
                       Change photo
                     </Button>
