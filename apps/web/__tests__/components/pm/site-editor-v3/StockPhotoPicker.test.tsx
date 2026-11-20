@@ -42,6 +42,16 @@ describe('StockPhotoPicker', () => {
     expect(screen.queryByRole('button', { name: 'Palm-lined street' })).toBeNull();
   });
 
+  it('fills every row: the three suggestions in three columns at every width, the rest two then three', () => {
+    // At phone width a 2-column grid left the third suggestion alone on its row.
+    setup();
+    const grid = (name: string) => screen.getByRole('group', { name }).querySelector('ul')!;
+    const suggested = grid('Suggested for Bayfront');
+    expect(suggested).toHaveClass('grid-cols-3');
+    expect(suggested.className).not.toMatch(/(^|\s)(\w+:)?grid-cols-2(\s|$)/);
+    expect(grid('More photos')).toHaveClass('grid-cols-2', 'sm:grid-cols-3');
+  });
+
   it.each([null, 'plain-simple'] as const)('lookId %s has one Our photos group', (lookId) => {
     setup({ lookId });
     expect(screen.queryByRole('group', { name: /Suggested for/ })).toBeNull();

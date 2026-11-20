@@ -95,7 +95,9 @@ export function StockPhotoPicker({
           disabled={taken}
           onClick={() => setSelected(id)}
           className={cn(
-            'relative block w-full min-h-11 md:min-h-0 overflow-hidden rounded-md border border-edge bg-surface-card text-left',
+            // A flex column, top-aligned: a <button> centres its content, so in a
+            // row whose names wrap to different lengths the photos would not line up.
+            'relative flex h-full w-full min-h-11 md:min-h-0 flex-col justify-start overflow-hidden rounded-md border border-edge bg-surface-card text-left',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-interactive focus-visible:ring-offset-2',
             isSelected && 'ring-2 ring-interactive',
             taken && 'cursor-not-allowed opacity-60',
@@ -109,16 +111,19 @@ export function StockPhotoPicker({
             className="aspect-[3/2] w-full object-cover"
           />
           {badge ? (
-            <span
-              id={badgeId}
-              data-badge
-              className={cn(
-                'absolute right-1 top-1 inline-flex items-center gap-1 rounded-full border border-edge px-2 py-0.5 text-xs font-medium',
-                badge.className,
-              )}
-            >
-              <Check className="h-3 w-3" aria-hidden="true" />
-              {badge.text}
+            // The outer span spans the tile's top edge and right-aligns the badge,
+            // so in a narrow tile (three across on a phone) the badge's words wrap
+            // inside the tile instead of running off it.
+            <span id={badgeId} data-badge className="absolute inset-x-1 top-1 flex justify-end">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md border border-edge px-2 py-0.5 text-xs font-medium',
+                  badge.className,
+                )}
+              >
+                <Check className="h-3 w-3 shrink-0" aria-hidden="true" />
+                {badge.text}
+              </span>
             </span>
           ) : null}
           <span className="block px-2 py-1 text-sm text-content">{STOCK_PHOTOS[id].name}</span>
@@ -127,12 +132,16 @@ export function StockPhotoPicker({
     );
   }
 
-  const group = (label: string, ids: readonly StockPhotoId[]) => (
+  // A look suggests three photos: three across at every width, so on a phone the
+  // third never sits alone on its row (a name may wrap to a second line there).
+  // The rest are two across on a phone, three from `sm` up.
+  const group = (label: string, ids: readonly StockPhotoId[], columns: string) => (
     <div role="group" aria-label={label} className="space-y-2">
       <h3 className="text-sm font-medium text-content">{label}</h3>
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">{ids.map(tile)}</ul>
+      <ul className={cn('grid gap-3', columns)}>{ids.map(tile)}</ul>
     </div>
   );
+  const REST_COLUMNS = 'grid-cols-2 sm:grid-cols-3';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,11 +159,11 @@ export function StockPhotoPicker({
         <div className="space-y-4">
           {suggested.length > 0 ? (
             <>
-              {group(`Suggested for ${look?.name}`, suggested)}
-              {group('More photos', rest)}
+              {group(`Suggested for ${look?.name}`, suggested, 'grid-cols-3')}
+              {group('More photos', rest, REST_COLUMNS)}
             </>
           ) : (
-            group('Our photos', rest)
+            group('Our photos', rest, REST_COLUMNS)
           )}
         </div>
         <DialogFooter>
