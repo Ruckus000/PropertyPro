@@ -9,6 +9,6 @@ import { lookIdForLayout, type LookId } from './looks';
 export function chosenLookId(design: SiteDesignRecord): LookId | null {
   const live = design.live.layoutId;
   const drafted = design.draft.layoutId;
-  if (drafted && drafted !== live) return lookIdForLayout(drafted);
-  return lookIdForLayout(live);
+  // A drafted layout that is not a look (legacy/unknown) falls back to live.
+  return (drafted && drafted !== live ? lookIdForLayout(drafted) : null) ?? lookIdForLayout(live);
 }

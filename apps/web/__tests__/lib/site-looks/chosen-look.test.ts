@@ -11,6 +11,9 @@ describe('chosenLookId', () => {
   it('is the drafted look when a different layout is drafted', () => {
     expect(chosenLookId(design('bayfront', 'heritage'))).toBe('heritage');
   });
+  it('falls back to the live look when the drafted layout is not a look', () => {
+    expect(chosenLookId(design('bayfront', 'tidewater'))).toBe('bayfront');
+  });
   it('is null for a legacy live layout', () => {
     expect(chosenLookId(design('tidewater'))).toBeNull();
   });
