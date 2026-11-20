@@ -50,10 +50,16 @@ vi.mock('@/hooks/use-operations', async () => {
 });
 
 vi.mock('../../../src/components/operations/RequestCreateSheet', () => ({
-  RequestCreateSheet: (props: { open: boolean; onClose: () => void }) =>
+  RequestCreateSheet: (props: {
+    open: boolean;
+    onClose: () => void;
+    defaultUnitId?: number;
+    defaultUnitLabel?: string;
+  }) =>
     props.open ? (
       <div>
         <div role="heading">Submit Request</div>
+        <div data-testid="request-sheet-unit">{`${props.defaultUnitId ?? ''}|${props.defaultUnitLabel ?? ''}`}</div>
         <button type="button" onClick={props.onClose}>Close sheet</button>
       </div>
     ) : null,
@@ -449,6 +455,25 @@ describe('OperationsHub', () => {
     );
     // Create-sheets are loaded via next/dynamic, so wait for the chunk.
     expect(await screen.findByRole('heading', { name: /submit request/i })).toBeInTheDocument();
+  });
+
+  it("hands the resident's own unit to the request sheet", async () => {
+    searchParamsMock.mockReturnValue('tab=requests&create=request');
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={false}
+        reservationsEnabled={false}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        defaultUnitId={7}
+        defaultUnitLabel="Unit 4B"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(await screen.findByTestId('request-sheet-unit')).toHaveTextContent('7|Unit 4B');
   });
 
   it('pushes ?create=request when the CTA button is clicked', () => {

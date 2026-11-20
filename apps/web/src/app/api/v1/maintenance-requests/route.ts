@@ -17,6 +17,7 @@
  * - Resident add_comment always stores isInternal=false regardless of request body
  * - Photo count ≤ 5 checked before issuing a new upload URL (resident callers)
  * - Resident read scope = own requests only
+ * - Resident create with a unitId: the unit must be one of the resident's own
  */
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
@@ -36,6 +37,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { resolveEffectiveCommunityId } from '@/lib/api/tenant-context';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { validateUploadFilePath } from '@/lib/api/upload-path';
+import { listActorUnitIds } from '@/lib/units/actor-units';
 import { formatZodErrors } from '@/lib/api/zod/error-formatter';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { getMaintenancePhotoUploadUrl, processAndStoreThumbnail } from '@/lib/services/photo-processor';
@@ -251,11 +253,22 @@ async function handleCreateRequest(
 
   const scoped = createScopedClient(communityId);
 
-  // Validate unitId belongs to this community (scoped client auto-injects communityId filter)
+  // unitId is optional (a request can be about a common area). When sent:
+  // residents may only name one of their own units (role assignment or
+  // recorded ownership, scoped to this community, so it also proves the unit
+  // exists here); staff may name any unit in the community.
   if (payload.unitId != null) {
-    const unit = await getMaintenanceRequestUnitById(scoped, payload.unitId);
-    if (!unit) {
-      throw new ValidationError('Unit not found in this community');
+    if (createMembership.role === 'resident') {
+      const ownUnitIds = await listActorUnitIds(scoped, actorUserId);
+      if (!ownUnitIds.includes(payload.unitId)) {
+        throw new ForbiddenError('Residents can only submit requests for their own unit');
+      }
+    } else {
+      // Scoped client auto-injects the communityId filter.
+      const unit = await getMaintenanceRequestUnitById(scoped, payload.unitId);
+      if (!unit) {
+        throw new ValidationError('Unit not found in this community');
+      }
     }
   }
 

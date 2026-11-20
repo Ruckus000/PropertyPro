@@ -1,7 +1,9 @@
 /**
  * Maintenance Requests [id] API — P3-50/P3-51
  *
- * GET  — Fetch a single maintenance request (resident: own only; staff: any in community)
+ * GET  — Fetch a single maintenance request (resident: own only; staff: any in community).
+ *        Photo URLs are re-signed from each photo's `storagePath` on every read:
+ *        the URL stored at create time is a 1-hour presigned URL.
  * PATCH — Update request (staff only)
  * DELETE — Soft-delete request (staff only)
  *
@@ -28,7 +30,8 @@ import {
   updateMaintenanceRequestById,
 } from '@/lib/services/maintenance-request-service';
 import { isMaintenanceStaffAssignee } from '@/lib/services/maintenance-assignee-service';
-import { createScopedClient, logAuditEvent } from '@propertypro/db';
+import { createPresignedDownloadUrl, createScopedClient, logAuditEvent } from '@propertypro/db';
+import { validateUploadFilePath } from '@/lib/api/upload-path';
 import {
   maintenanceRequestDeleteContract,
   maintenanceRequestGetContract,
@@ -43,6 +46,39 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   resolved:     ['closed'],
   closed:       [],
 };
+
+/**
+ * Replace each stored photo's `url` with a fresh presigned download URL.
+ *
+ * The stored `url` is the 1-hour presigned URL issued at create time, so it is
+ * dead for any request older than an hour; `storagePath` is the durable key.
+ * The path is re-validated against the resolved community before signing (the
+ * signer is the service-role client, so a row carrying a foreign or traversal
+ * path must not be signed). One bad photo — invalid path, object gone from
+ * storage — yields `url: null` for that photo and never fails the request.
+ */
+async function resignPhotos(
+  photos: unknown,
+  communityId: number,
+  requestId: number,
+): Promise<unknown> {
+  if (!Array.isArray(photos)) return photos ?? null;
+  return Promise.all(
+    photos.map(async (photo: unknown, index) => {
+      const entry = (photo && typeof photo === 'object' ? photo : {}) as Record<string, unknown>;
+      const storagePath = entry['storagePath'];
+      try {
+        if (typeof storagePath !== 'string') throw new Error('missing storagePath');
+        validateUploadFilePath(storagePath, communityId, 'maintenance');
+        const url = await createPresignedDownloadUrl('maintenance', storagePath);
+        return { ...entry, url };
+      } catch {
+        console.warn('[maintenance] photo re-sign failed', { communityId, requestId, index });
+        return { ...entry, url: null };
+      }
+    }),
+  );
+}
 
 export const GET = withErrorHandler(
   runRoute(maintenanceRequestGetContract, async ({ params, query, req }) => {
@@ -75,7 +111,8 @@ export const GET = withErrorHandler(
       return true;
     });
 
-    return formatRequest(request, comments, isResident);
+    const photos = await resignPhotos(request['photos'], communityId, params.id);
+    return formatRequest({ ...request, photos }, comments, isResident);
   }),
 );
 

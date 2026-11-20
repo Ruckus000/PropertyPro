@@ -10,6 +10,7 @@
  * - Missing communityId (400)
  * - Invalid id (400)
  * - Legacy status normalization: open → submitted, normal → medium
+ * - Photos re-signed from storagePath; a bad photo gets url: null, not a 500
  *
  * PATCH:
  * - Admin can update status with valid transition (200, audit logged)
@@ -48,6 +49,7 @@ const {
   requirePlanFeatureMock,
   queueNotificationMock,
   createNotificationsForEventMock,
+  createPresignedDownloadUrlMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -61,11 +63,13 @@ const {
   requirePlanFeatureMock: vi.fn().mockResolvedValue(undefined),
   queueNotificationMock: vi.fn().mockResolvedValue(undefined),
   createNotificationsForEventMock: vi.fn().mockResolvedValue({ created: 0 }),
+  createPresignedDownloadUrlMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
   logAuditEvent: logAuditEventMock,
+  createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   maintenanceRequests: maintenanceRequestsTableMock,
   maintenanceComments: maintenanceCommentsTableMock,
   userRoles: userRolesTableMock,
@@ -265,6 +269,9 @@ describe('maintenance requests [id] route', () => {
     queueNotificationMock.mockResolvedValue(undefined);
     logAuditEventMock.mockResolvedValue(undefined);
     createScopedClientMock.mockReturnValue(makeDefaultScopedClient());
+    createPresignedDownloadUrlMock.mockImplementation(
+      async (_bucket: string, path: string) => `https://storage.example.com/fresh/${path}`,
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -302,6 +309,75 @@ describe('maintenance requests [id] route', () => {
       const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests/1?communityId=42');
       const res = await GET(req, { params: Promise.resolve({ id: '1' }) });
       expect(res.status).toBe(403);
+    });
+
+    describe('photos', () => {
+      const STALE = 'https://storage.example.com/expired-1h-url';
+      function photo(storagePath: unknown) {
+        return { url: STALE, thumbnailUrl: null, storagePath, uploadedAt: '2026-01-15T10:00:00.000Z' };
+      }
+      async function getPhotos(photos: unknown[]) {
+        createScopedClientMock.mockReturnValue(
+          makeDefaultScopedClient({ requestRows: [makeMaintenanceRow({ photos })] }),
+        );
+        const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests/1?communityId=42');
+        const res = await GET(req, { params: Promise.resolve({ id: '1' }) });
+        // A photo that cannot be signed must never fail the whole request.
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { data: { photos: Array<Record<string, unknown>> } };
+        return { res, photos: body.data.photos };
+      }
+
+      it('re-signs every photo from its storagePath instead of returning the stored 1-hour URL', async () => {
+        const { res, photos } = await getPhotos([
+          photo('maintenance/42/tmp/a.jpg'),
+          photo('maintenance/42/tmp/b.jpg'),
+        ]);
+        expect(res.status).toBe(200);
+        expect(photos.map((p) => p['url'])).toEqual([
+          'https://storage.example.com/fresh/maintenance/42/tmp/a.jpg',
+          'https://storage.example.com/fresh/maintenance/42/tmp/b.jpg',
+        ]);
+        expect(photos[0]).toMatchObject({ storagePath: 'maintenance/42/tmp/a.jpg', uploadedAt: '2026-01-15T10:00:00.000Z' });
+        expect(createPresignedDownloadUrlMock).toHaveBeenCalledWith('maintenance', 'maintenance/42/tmp/a.jpg');
+      });
+
+      it('gives a photo whose object is gone url: null and still returns the request', async () => {
+        createPresignedDownloadUrlMock.mockImplementation(async (_bucket: string, path: string) => {
+          if (path.endsWith('gone.jpg')) {
+            throw new Error('Failed to create presigned download URL: Object not found');
+          }
+          return `https://storage.example.com/fresh/${path}`;
+        });
+        const { res, photos } = await getPhotos([
+          photo('maintenance/42/tmp/gone.jpg'),
+          photo('maintenance/42/tmp/ok.jpg'),
+        ]);
+        expect(res.status).toBe(200);
+        expect(photos.map((p) => p['url'])).toEqual([
+          null,
+          'https://storage.example.com/fresh/maintenance/42/tmp/ok.jpg',
+        ]);
+      });
+
+      it('never signs a path outside this community, or a traversal path', async () => {
+        const { res, photos } = await getPhotos([
+          photo('maintenance/99/tmp/other-tenant.jpg'),
+          photo('maintenance/42/../99/tmp/x.jpg'),
+          photo(undefined),
+          // URL parsing turns %2e%2e into `..` after the literal check.
+          photo('maintenance/42/%2e%2e/%2e%2e/%2E%2e/documents/x.pdf'),
+        ]);
+        expect(res.status).toBe(200);
+        expect(photos.map((p) => p['url'])).toEqual([null, null, null, null]);
+        expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+      });
+
+      it('leaves a request without photos as photos: null and signs nothing', async () => {
+        const { photos } = await getPhotos(null as unknown as unknown[]);
+        expect(photos).toBeNull();
+        expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+      });
     });
 
     it('returns 404 when request not found', async () => {

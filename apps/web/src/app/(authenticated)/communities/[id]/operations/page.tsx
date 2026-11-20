@@ -1,3 +1,4 @@
+import { createScopedClient } from '@propertypro/db';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { OperationsHub } from '@/components/operations/operations-hub';
 import { ForbiddenError } from '@/lib/api/errors';
@@ -5,6 +6,8 @@ import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requirePageAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership } from '@/lib/request/page-community-context';
 import { FeatureGateAnyOf } from '@/components/billing/feature-gate-any-of';
+import { listActorUnitIds } from '@/lib/units/actor-units';
+import { listLiveUnitOptions } from '@/lib/units/unit-labels';
 
 function canReadResource(
   membership: Awaited<ReturnType<typeof requirePageCommunityMembership>>,
@@ -71,6 +74,16 @@ export default async function OperationsPage({ params, searchParams }: PageProps
   // requireCommunityMembership() in lib/api/community-membership.ts.
   const communityTimezone = membership.timezone;
 
+  // A resident's request form opens on their own unit (the POST only accepts
+  // a resident's own unit). ponytail: a resident with several units gets the
+  // first by label and must retype the label for another, which then files the
+  // request without a unitId. Trigger: a multi-unit owner reports it.
+  let defaultUnit: { id: number; label: string } | undefined;
+  if (requestsEnabled && membership.role === 'resident') {
+    const scoped = createScopedClient(communityId);
+    [defaultUnit] = await listLiveUnitOptions(scoped, await listActorUnitIds(scoped, userId));
+  }
+
   return (
     <FeatureGateAnyOf
       features={['hasMaintenanceRequests', 'hasWorkOrders', 'hasAmenities']}
@@ -85,6 +98,8 @@ export default async function OperationsPage({ params, searchParams }: PageProps
         requestScope={requestScope}
         isAdmin={membership.isAdmin}
         userId={userId}
+        defaultUnitId={defaultUnit?.id}
+        defaultUnitLabel={defaultUnit?.label}
         communityTimezone={communityTimezone}
         initialTab={tab}
         initialFilters={{ status, priority, unitId, q, cursor, page, create }}

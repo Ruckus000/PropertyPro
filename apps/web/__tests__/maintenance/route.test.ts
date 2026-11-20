@@ -14,6 +14,8 @@
  * - Priority legacy normalization (emergency → urgent)
  * - POST add_comment: admin internal, resident isInternal=false, resident own-request gate
  * - POST request_upload_url: success, photo limit, ownership check, unknown action
+ * - POST create unitId: a resident may only name their own unit; managers any
+ *   unit in the community; unitId stays optional
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -36,6 +38,7 @@ const {
   getMaintenancePhotoUploadUrlMock,
   processAndStoreThumbnailMock,
   getFeaturesForCommunityMock,
+  listActorUnitIdsMock,
 } = vi.hoisted(() => ({
   createScopedClientMock: vi.fn(),
   logAuditEventMock: vi.fn().mockResolvedValue(undefined),
@@ -59,6 +62,7 @@ const {
   }),
   processAndStoreThumbnailMock: vi.fn().mockResolvedValue(undefined),
   getFeaturesForCommunityMock: vi.fn().mockReturnValue({ hasMaintenanceRequests: true }),
+  listActorUnitIdsMock: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -104,6 +108,10 @@ vi.mock('@/lib/middleware/plan-guard', () => ({
 vi.mock('@/lib/services/photo-processor', () => ({
   getMaintenancePhotoUploadUrl: getMaintenancePhotoUploadUrlMock,
   processAndStoreThumbnail: processAndStoreThumbnailMock,
+}));
+
+vi.mock('@/lib/units/actor-units', () => ({
+  listActorUnitIds: listActorUnitIdsMock,
 }));
 
 import { GET, POST } from '../../src/app/api/v1/maintenance-requests/route';
@@ -198,6 +206,7 @@ describe('maintenance requests route', () => {
     requireCommunityMembershipMock.mockResolvedValue(ADMIN_MEMBERSHIP);
     requirePermissionMock.mockImplementation(() => {});
     getFeaturesForCommunityMock.mockReturnValue({ hasMaintenanceRequests: true });
+    listActorUnitIdsMock.mockResolvedValue([]);
     createScopedClientMock.mockReturnValue(makeDefaultScopedClient());
     // Plan B3 default: paginate returns empty page so feature-gate tests +
     // POST tests don't need to set this themselves. Tests that exercise
@@ -606,6 +615,29 @@ describe('maintenance requests route', () => {
       expect(json.error.message).toContain('Invalid file path');
     });
 
+    it('returns 400 for a percent-encoded traversal path, which URL parsing would decode to ..', async () => {
+      const insert = vi.fn();
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+      const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          communityId: 42,
+          title: 'Leaky pipe',
+          unitLabel: '4B',
+          description: 'Water dripping',
+          storagePaths: ['maintenance/42/%2e%2e/%2e%2e/%2E%2e/documents/x.pdf'],
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+
+      const res = await POST(req);
+      // The service-role signer must never see the path.
+      expect(createPresignedDownloadUrlMock).not.toHaveBeenCalled();
+      expect(res.status).toBe(400);
+      expect(insert).not.toHaveBeenCalled();
+    });
+
     it('returns 400 when storagePaths exceeds 5 items', async () => {
       const req = new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
         method: 'POST',
@@ -933,6 +965,98 @@ describe('maintenance requests route', () => {
       expect(res.status).toBe(400);
       const json = (await res.json()) as { error: { message: string } };
       expect(json.error.message).toContain('Unknown action');
+    });
+  });
+  // -------------------------------------------------------------------------
+  // POST create — unitId ownership (PR-5)
+  // -------------------------------------------------------------------------
+
+  describe('POST action: create — unitId', () => {
+    function createRequest(extra: Record<string, unknown>) {
+      return new NextRequest('http://localhost:3000/api/v1/maintenance-requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          communityId: 42,
+          title: 'Leaky pipe',
+          unitLabel: 'Unit 4B',
+          description: 'Water dripping from ceiling',
+          ...extra,
+        }),
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
+    it("returns 403 when a resident names a unit that is not one of their own", async () => {
+      requireCommunityMembershipMock.mockResolvedValue(RESIDENT_MEMBERSHIP);
+      listActorUnitIdsMock.mockResolvedValue([7]);
+      const insert = vi.fn().mockResolvedValue([{ id: 99, communityId: 42 }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+
+      const res = await POST(createRequest({ unitId: 8 }));
+
+      expect(res.status).toBe(403);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toBe('Residents can only submit requests for their own unit');
+      expect(listActorUnitIdsMock).toHaveBeenCalledWith(expect.anything(), 'session-user-1');
+      expect(insert).not.toHaveBeenCalled();
+    });
+
+    it('lets a resident file against their own unit', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(RESIDENT_MEMBERSHIP);
+      listActorUnitIdsMock.mockResolvedValue([7, 12]);
+      const insert = vi.fn().mockResolvedValue([{ id: 99, communityId: 42 }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+
+      const res = await POST(createRequest({ unitId: 12 }));
+
+      expect(res.status).toBe(200);
+      expect(insert).toHaveBeenCalledWith(
+        maintenanceRequestsTableMock,
+        expect.objectContaining({ unitId: 12, submittedById: 'session-user-1' }),
+      );
+    });
+
+    it('keeps unitId optional for a resident (common-area request)', async () => {
+      requireCommunityMembershipMock.mockResolvedValue(RESIDENT_MEMBERSHIP);
+      const insert = vi.fn().mockResolvedValue([{ id: 99, communityId: 42 }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+
+      const res = await POST(createRequest({}));
+
+      expect(res.status).toBe(200);
+      expect(listActorUnitIdsMock).not.toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledWith(
+        maintenanceRequestsTableMock,
+        expect.objectContaining({ unitId: null }),
+      );
+    });
+
+    it('lets a manager name any unit in the community, without an own-unit check', async () => {
+      const insert = vi.fn().mockResolvedValue([{ id: 99, communityId: 42 }]);
+      const selectFrom = vi.fn().mockImplementation((table: unknown) =>
+        makeChainableBuilder(table === unitsTableMock ? [{ id: 8, communityId: 42 }] : []),
+      );
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ selectFrom, insert }));
+
+      const res = await POST(createRequest({ unitId: 8 }));
+
+      expect(res.status).toBe(200);
+      expect(listActorUnitIdsMock).not.toHaveBeenCalled();
+      expect(insert).toHaveBeenCalledWith(
+        maintenanceRequestsTableMock,
+        expect.objectContaining({ unitId: 8 }),
+      );
+    });
+
+    it('still refuses a manager a unit outside the community', async () => {
+      const insert = vi.fn().mockResolvedValue([{ id: 99, communityId: 42 }]);
+      createScopedClientMock.mockReturnValue(makeDefaultScopedClient({ insert }));
+
+      const res = await POST(createRequest({ unitId: 8 }));
+
+      expect(res.status).toBe(400);
+      expect(insert).not.toHaveBeenCalled();
     });
   });
 });

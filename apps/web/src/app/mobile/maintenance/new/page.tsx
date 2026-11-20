@@ -10,6 +10,9 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { MobileSubmitRequestContent } from '@/components/mobile/MobileSubmitRequestContent';
+import { createScopedClient } from '@propertypro/db';
+import { listActorUnitIds } from '@/lib/units/actor-units';
+import { listLiveUnitOptions } from '@/lib/units/unit-labels';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -26,11 +29,26 @@ export default async function MobileMaintenanceNewPage({ searchParams }: PagePro
     redirect('/auth/login');
   }
 
+  let membership: Awaited<ReturnType<typeof requireCommunityMembership>>;
   try {
-    await requireCommunityMembership(communityId, userId);
+    membership = await requireCommunityMembership(communityId, userId);
   } catch {
     redirect('/auth/login');
   }
 
-  return <MobileSubmitRequestContent communityId={communityId} userId={userId} />;
+  // Same default as the operations page: a resident's form opens on their own unit.
+  let defaultUnit: { id: number; label: string } | undefined;
+  if (membership.role === 'resident') {
+    const scoped = createScopedClient(communityId);
+    [defaultUnit] = await listLiveUnitOptions(scoped, await listActorUnitIds(scoped, userId));
+  }
+
+  return (
+    <MobileSubmitRequestContent
+      communityId={communityId}
+      userId={userId}
+      defaultUnitId={defaultUnit?.id}
+      defaultUnitLabel={defaultUnit?.label}
+    />
+  );
 }
