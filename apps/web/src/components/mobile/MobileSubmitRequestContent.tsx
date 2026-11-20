@@ -8,11 +8,16 @@ import { PageTransition } from "@/components/motion";
 interface MobileSubmitRequestContentProps {
   communityId: number;
   userId: string;
+  /** The resident's own unit, prefilled into the form (see SubmitForm). */
+  defaultUnitId?: number;
+  defaultUnitLabel?: string;
 }
 
 export function MobileSubmitRequestContent({
   communityId,
   userId,
+  defaultUnitId,
+  defaultUnitLabel,
 }: MobileSubmitRequestContentProps) {
   const router = useRouter();
 
@@ -24,6 +29,8 @@ export function MobileSubmitRequestContent({
           <SubmitForm
             communityId={communityId}
             userId={userId}
+            defaultUnitId={defaultUnitId}
+            defaultUnitLabel={defaultUnitLabel}
             onCreated={() => {
               router.push(`/mobile/maintenance?communityId=${communityId}`);
             }}

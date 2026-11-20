@@ -10,9 +10,19 @@ interface RequestCreateSheetProps {
   onClose: () => void;
   communityId: number;
   userId: string;
+  /** The resident's own unit, prefilled into the form (see SubmitForm). */
+  defaultUnitId?: number;
+  defaultUnitLabel?: string;
 }
 
-export function RequestCreateSheet({ open, onClose, communityId, userId }: RequestCreateSheetProps) {
+export function RequestCreateSheet({
+  open,
+  onClose,
+  communityId,
+  userId,
+  defaultUnitId,
+  defaultUnitLabel,
+}: RequestCreateSheetProps) {
   const queryClient = useQueryClient();
 
   return (
@@ -25,6 +35,8 @@ export function RequestCreateSheet({ open, onClose, communityId, userId }: Reque
       <SubmitForm
         communityId={communityId}
         userId={userId}
+        defaultUnitId={defaultUnitId}
+        defaultUnitLabel={defaultUnitLabel}
         onCreated={async () => {
           await queryClient.invalidateQueries({ queryKey: ['maintenance-requests', 'list'] });
           await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });

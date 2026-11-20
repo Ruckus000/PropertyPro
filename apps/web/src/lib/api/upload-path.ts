@@ -9,7 +9,12 @@ import { ValidationError } from '@/lib/api/errors';
  *   1. Cross-tenant writes: e.g. caller submits `communityId: X` in the body
  *      but tenant context resolves to community Y; the path must match Y.
  *   2. Path traversal: any `..` segment in the path, even after a valid
- *      prefix (e.g. `communities/X/documents/../../communities/Y/...`).
+ *      prefix (e.g. `communities/X/documents/../../communities/Y/...`), and
+ *      any character outside `[A-Za-z0-9._/-]`. storage-js puts the path into
+ *      the request URL unencoded, and URL parsing turns `%2e%2e` into `..`, so
+ *      `maintenance/X/%2e%2e/%2e%2e/%2e%2e/<bucket>/<key>` passed the literal
+ *      check and had the service-role client sign an object in another bucket.
+ *      Every path the app generates is in that set (`sanitizeFilename`).
  *
  * Call this in route handlers AFTER `resolveEffectiveCommunityId()` —
  * never in the Zod schema, where the authoritative id is not yet known.
@@ -28,12 +33,14 @@ import { ValidationError } from '@/lib/api/errors';
  * `purgeCommunitySiteAssets` fall a kind behind its writer — the fix there was
  * to make the two the same list, not to lengthen one of them.
  */
+const SAFE_PATH = /^[A-Za-z0-9._/-]+$/;
+
 function uploadPathScopeFailure(
   filePath: string,
   effectiveCommunityId: number,
   bucketPrefix: string,
 ): { reason: 'traversal' } | { reason: 'prefix'; expectedPrefix: string } | null {
-  if (filePath.includes('..')) return { reason: 'traversal' };
+  if (filePath.includes('..') || !SAFE_PATH.test(filePath)) return { reason: 'traversal' };
   const expectedPrefix = `${bucketPrefix}/${effectiveCommunityId}/`;
   if (!filePath.startsWith(expectedPrefix)) return { reason: 'prefix', expectedPrefix };
   return null;

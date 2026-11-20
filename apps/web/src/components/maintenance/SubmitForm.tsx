@@ -39,11 +39,25 @@ interface SubmitFormProps {
   communityId: number;
   userId: string;
   onCreated?: (request: MaintenanceRequestItem) => void;
+  /**
+   * The resident's own unit, resolved server-side by the page. Sent as
+   * `unitId` only while the unit field still holds `defaultUnitLabel`: once the
+   * resident types something else (a common area, another apartment label),
+   * the request is no longer tied to that unit.
+   */
+  defaultUnitId?: number;
+  /** Prefills the Apartment/Unit field. */
+  defaultUnitLabel?: string;
 }
 
-export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
+export function SubmitForm({
+  communityId,
+  onCreated,
+  defaultUnitId,
+  defaultUnitLabel,
+}: SubmitFormProps) {
   const [title, setTitle] = useState('');
-  const [unitLabel, setUnitLabel] = useState('');
+  const [unitLabel, setUnitLabel] = useState(defaultUnitLabel ?? '');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<typeof CATEGORIES[number]>('general');
   const [priority, setPriority] = useState<typeof PRIORITIES[number]>('normal');
@@ -77,7 +91,11 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
         fileSize: file.size,
         mimeType: file.type,
       });
-      await fetch(data.uploadUrl, { method: 'PUT', body: file });
+      const failure = `We couldn't upload ${file.name}. Please try again, or remove the photo and submit without it.`;
+      const res = await fetch(data.uploadUrl, { method: 'PUT', body: file }).catch(() => null);
+      if (!res?.ok) {
+        throw new Error(failure);
+      }
       storagePaths.push(data.storagePath);
     }
     return storagePaths;
@@ -109,9 +127,14 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
         setUploading(false);
       }
 
+      const unitId =
+        defaultUnitId !== undefined && parsed.data.unitLabel === defaultUnitLabel?.trim()
+          ? defaultUnitId
+          : undefined;
       const result = await createMaintenanceRequest({
         communityId,
         title: parsed.data.title,
+        unitId,
         unitLabel: parsed.data.unitLabel,
         description: parsed.data.description,
         category: parsed.data.category,
@@ -120,7 +143,7 @@ export function SubmitForm({ communityId, onCreated }: SubmitFormProps) {
       });
 
       setTitle('');
-      setUnitLabel('');
+      setUnitLabel(defaultUnitLabel ?? '');
       setDescription('');
       setCategory('general');
       setPriority('normal');

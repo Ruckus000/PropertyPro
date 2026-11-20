@@ -86,6 +86,9 @@ interface OperationsHubProps {
   requestScope: MaintenanceRequestScope;
   isAdmin: boolean;
   userId: string;
+  /** A resident's own unit, prefilled into the request form. Unset for staff. */
+  defaultUnitId?: number;
+  defaultUnitLabel?: string;
   communityTimezone: string;
   initialTab?: string;
   initialFilters?: {
@@ -108,6 +111,8 @@ export function OperationsHub({
   requestScope,
   isAdmin,
   userId,
+  defaultUnitId,
+  defaultUnitLabel,
   communityTimezone,
   // initialTab/initialFilters are accepted for SSR hydration symmetry,
   // but we read live state from useSearchParams() to stay in sync with
@@ -595,6 +600,8 @@ export function OperationsHub({
           onClose={closeCreate}
           communityId={communityId}
           userId={userId}
+          defaultUnitId={defaultUnitId}
+          defaultUnitLabel={defaultUnitLabel}
         />
       ) : null}
       {createValue === 'work-order' && isAdmin && workOrdersEnabled ? (
