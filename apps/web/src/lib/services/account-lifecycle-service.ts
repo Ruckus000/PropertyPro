@@ -318,11 +318,6 @@ export async function cancelUserDeletion(requestId: number, cancelledBy: string)
 }
 
 /**
- * Soft-deletes a user: sets users.deletedAt and bans in Supabase auth.
- * The auth ban is non-fatal — if Supabase is unreachable the DB state
- * is still committed.
- */
-/**
  * A deleted account must not leave a visitor pass working at the gate: a used
  * recurring, vendor or permanent pass never runs out on its own. Revokes them
  * in every community the user hosted passes in, the same way removing a
@@ -367,6 +362,11 @@ async function revokeDeletedUsersVisitorPasses(
   }
 }
 
+/**
+ * Soft-deletes a user: sets users.deletedAt and bans in Supabase auth.
+ * The auth ban is non-fatal — if Supabase is unreachable the DB state
+ * is still committed.
+ */
 export async function executeUserSoftDelete(requestIds: number[]) {
   if (requestIds.length === 0) return [];
 
