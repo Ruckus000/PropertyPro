@@ -12,18 +12,28 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { useRequestCertificate } from '@/hooks/use-insurance';
 import { INSURANCE_CERTIFICATE_REQUEST_HINT } from '@/lib/constants/insurance-disclaimers';
-import type { InsurancePolicyRecord } from './types';
+import type { InsurancePolicyRecord, OwnUnitOption } from './types';
 
 interface Props {
   communityId: number;
   policy: InsurancePolicyRecord | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Prefills the unit from the member's own unit where known. */
-  defaultUnitLabel?: string;
+  /**
+   * The member's own units. The request can only name one of these — the
+   * server refuses any other and derives the label the agent sees.
+   */
+  ownUnits: readonly OwnUnitOption[];
 }
 
 export function CertificateRequestDialog({
@@ -31,10 +41,11 @@ export function CertificateRequestDialog({
   policy,
   open,
   onOpenChange,
-  defaultUnitLabel,
+  ownUnits,
 }: Props) {
   const request = useRequestCertificate(communityId);
-  const [unitLabel, setUnitLabel] = React.useState('');
+  const onlyUnitId = ownUnits.length === 1 ? String(ownUnits[0]!.id) : '';
+  const [unitId, setUnitId] = React.useState('');
   const [recipientName, setRecipientName] = React.useState('');
   const [recipientEmail, setRecipientEmail] = React.useState('');
   const [loanNumber, setLoanNumber] = React.useState('');
@@ -45,24 +56,24 @@ export function CertificateRequestDialog({
     if (!open) return;
     setError(null);
     setSent(false);
-    setUnitLabel(defaultUnitLabel ?? '');
+    setUnitId(onlyUnitId);
     setRecipientName('');
     setRecipientEmail('');
     setLoanNumber('');
-  }, [open, defaultUnitLabel]);
+  }, [open, onlyUnitId]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
     if (!policy) return;
-    if (!unitLabel.trim() || !recipientName.trim() || !recipientEmail.trim()) {
-      setError('Enter your unit, and the lender or title company’s name and email.');
+    if (!unitId || !recipientName.trim() || !recipientEmail.trim()) {
+      setError('Choose your unit, and enter the lender or title company’s name and email.');
       return;
     }
     try {
       await request.mutateAsync({
         policyId: policy.id,
-        unitLabel: unitLabel.trim(),
+        unitId: Number(unitId),
         recipientName: recipientName.trim(),
         recipientEmail: recipientEmail.trim(),
         loanNumber: loanNumber.trim() || null,
@@ -94,12 +105,36 @@ export function CertificateRequestDialog({
               </Button>
             </DialogFooter>
           </div>
+        ) : ownUnits.length === 0 ? (
+          <div className="space-y-4">
+            <AlertBanner
+              status="info"
+              title="Your account isn’t linked to a unit yet"
+              description="A certificate is issued for your unit. Ask your manager to link your unit to your account, then send the request."
+            />
+            <DialogFooter>
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <AlertBanner status="danger" title={error} />}
             <div className="space-y-2">
               <Label htmlFor="cert-unit">Your unit *</Label>
-              <Input id="cert-unit" value={unitLabel} onChange={(e) => setUnitLabel(e.target.value)} maxLength={120} />
+              <Select value={unitId} onValueChange={setUnitId}>
+                <SelectTrigger id="cert-unit">
+                  <SelectValue placeholder="Choose your unit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ownUnits.map((unit) => (
+                    <SelectItem key={unit.id} value={String(unit.id)}>
+                      {unit.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="cert-recipient">Lender / title company *</Label>

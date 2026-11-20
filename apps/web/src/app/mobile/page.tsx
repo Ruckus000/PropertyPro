@@ -93,6 +93,7 @@ export default async function MobileHomePage({ searchParams }: PageProps) {
       state={membership!.state}
       timezone={data.timezone}
       role={membership!.role}
+      isUnitOwner={membership!.isUnitOwner}
       hasCompliance={features.hasCompliance}
       hasFinance={features.hasFinance}
       hasMaintenanceRequests={features.hasMaintenanceRequests}

@@ -86,7 +86,8 @@ export function useDeleteInsurancePolicy(communityId: number) {
 
 export interface CertificateRequestInput {
   policyId: number;
-  unitLabel: string;
+  /** One of the requester's own units; the server derives the label. */
+  unitId: number;
   recipientName: string;
   recipientEmail: string;
   loanNumber?: string | null;

@@ -79,6 +79,7 @@ interface LazyCommandPaletteProps {
   onOpenChange: (open: boolean) => void;
   communityId: number | null;
   role: CommunityRole | null;
+  isUnitOwner: boolean;
   features: CommunityFeatures | null;
   resourceAccess: ResourceAccessMap | null;
   enableGlobalShortcut?: boolean;
@@ -320,6 +321,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
           onOpenChange={setSearchOpen}
           communityId={community?.id ?? null}
           role={role}
+          isUnitOwner={isUnitOwner ?? false}
           features={features}
           resourceAccess={resourceAccess}
           enableGlobalShortcut={false}

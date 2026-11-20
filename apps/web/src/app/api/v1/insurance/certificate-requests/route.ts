@@ -6,6 +6,12 @@
  * to the agent of record with Reply-To set to the owner, so the agent replies
  * directly and PropertyPro exits the loop (§626.854 line). Rate-limited because
  * it emails an external party on user input.
+ *
+ * The request names one of the requester's OWN, still-existing units
+ * (`listActorUnitIds` ∩ live `units` rows); the unit label in the agent's email
+ * is derived from that unit row, never typed, so an owner cannot ask the agent
+ * for a certificate on a neighbour's unit. The email builder collapses line
+ * breaks in every free-text field so none can forge a "Unit:" line either.
  */
 import { createElement } from 'react';
 import { createScopedClient, logAuditEvent } from '@propertypro/db';
@@ -21,6 +27,8 @@ import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { getRateLimiter } from '@/lib/middleware/rate-limiter';
+import { listActorUnitIds } from '@/lib/units/actor-units';
+import { listLiveUnitOptions } from '@/lib/units/unit-labels';
 import {
   createCertificateRequest,
   getInsurancePolicyById,
@@ -70,6 +78,16 @@ export const POST = withErrorHandler(
     requireInsuranceHubCommunity(membership.communityType);
     requirePermission(membership, 'insurance', 'read');
 
+    const scoped = createScopedClient(communityId);
+    // Before the rate limit, so a refused unit does not spend one of the
+    // owner's five daily sends.
+    const ownUnits = await listLiveUnitOptions(scoped, await listActorUnitIds(scoped, actorUserId));
+    const unit = ownUnits.find((candidate) => candidate.id === body.unitId);
+    if (!unit) {
+      throw new ForbiddenError('You can only request a certificate for your own unit.');
+    }
+    const unitLabel = unit.label;
+
     // Emails an external party on user input — rate-limit per user.
     const rate = getRateLimiter().check(
       `certificate-request:${actorUserId}`,
@@ -82,7 +100,6 @@ export const POST = withErrorHandler(
       );
     }
 
-    const scoped = createScopedClient(communityId);
     const policy = await getInsurancePolicyById(scoped, body.policyId);
     if (!policy) throw new ValidationError('Policy not found in this community');
     const agentEmail = policy.agentEmail;
@@ -102,7 +119,7 @@ export const POST = withErrorHandler(
       communityName: membership.communityName,
       carrierName: String(policy.carrierName),
       policyNumber: typeof policy.policyNumber === 'string' ? policy.policyNumber : null,
-      unitLabel: body.unitLabel,
+      unitLabel,
       requesterName,
       requesterEmail,
       recipientName: body.recipientName,
@@ -137,7 +154,7 @@ export const POST = withErrorHandler(
       communityId,
       policyId: body.policyId,
       requestedBy: actorUserId,
-      unitLabel: body.unitLabel,
+      unitLabel,
       recipientName: body.recipientName,
       recipientEmail: body.recipientEmail,
       loanNumber: body.loanNumber ?? null,
@@ -150,7 +167,12 @@ export const POST = withErrorHandler(
       resourceType: 'insurance_certificate_request',
       resourceId: String(created?.id ?? ''),
       communityId,
-      newValues: { policyId: body.policyId, recipientEmail: body.recipientEmail, status },
+      newValues: {
+        policyId: body.policyId,
+        unitId: body.unitId,
+        recipientEmail: body.recipientEmail,
+        status,
+      },
     });
 
     if (status === 'failed') {

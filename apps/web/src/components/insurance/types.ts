@@ -84,3 +84,10 @@ export const INSURANCE_POLICY_TYPE_LABELS: Record<InsurancePolicyType, string> =
   umbrella: 'Umbrella',
   other: 'Other',
 };
+
+/** One of the viewer's own units, as offered by the certificate request. */
+export interface OwnUnitOption {
+  id: number;
+  /** `formatUnitLabel` output, e.g. "Bldg A • Unit 1B". */
+  label: string;
+}

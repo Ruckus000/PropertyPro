@@ -94,7 +94,9 @@ export const certificateRequestsCreateContract = defineRoute({
     body: z.object({
       communityId: z.number().int().positive(),
       policyId: z.number().int().positive(),
-      unitLabel: z.string().min(1).max(120),
+      // The requester's own unit. The server derives the label the agent sees
+      // from the unit row, so a member cannot name a unit they are not linked to.
+      unitId: z.number().int().positive(),
       recipientName: z.string().min(1).max(300),
       recipientEmail: z.string().email().max(320),
       loanNumber: z.string().max(120).nullable().optional(),

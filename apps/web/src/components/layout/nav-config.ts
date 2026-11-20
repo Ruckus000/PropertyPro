@@ -47,7 +47,8 @@ export type NavTier = 'default' | 'more';
 /**
  * Role-based visibility for a nav item (v3-native, ADR-006).
  * - `'admin'`: management tier only (`property_manager` / `root_manager`).
- * - `'owner_or_admin'`: unit owners + management tier (finance-read surfaces).
+ * - `'owner_or_admin'`: unit owners + management tier — surfaces whose RBAC
+ *   cell excludes tenants (Payments, Insurance). See role-visibility.ts.
  * Omit to make an item visible to all roles.
  */
 export type NavVisibility = Exclude<RoleVisibility, 'all'>;
@@ -156,6 +157,9 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: FileText,
     href: (cid) => `/dashboard/leases?communityId=${cid}`,
     children: ['move-in-out'],
+    // The leases page redirects every non-admin (`isAdminRole` gate), so a
+    // resident link here would only bounce. No resident lease view (D17).
+    visibility: 'admin',
     featureKey: 'hasLeaseTracking',
     navTier: 'more',
     matchPrefixes: ['/dashboard/leases'],
@@ -259,9 +263,12 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     icon: Umbrella,
     // Path-scoped tenancy: the [id] segment is authoritative, no query param.
     href: (cid) => `/communities/${cid}/insurance`,
-    // Intentionally NO `roles` gate — every owner needs to reach the building's
-    // wind-mitigation report to share it with their own insurer. Management
-    // controls inside the page are admin-gated.
+    // Owners + management only. Owners need the building's wind-mitigation
+    // report for their own insurer; TENANTS are excluded by the `insurance`
+    // RBAC cell (legal review 2026-07-17: that records section is "unit
+    // owners and employees only"), so the page redirects them and the APIs
+    // 403. Management controls inside the page are admin-gated.
+    visibility: 'owner_or_admin',
     featureKey: 'hasInsuranceHub',
     navTier: 'more',
     // Bare segment, matching the `documents`/`meetings` convention: active-state
@@ -521,8 +528,10 @@ function itemVisibleForRole(
  * Filter nav items by user role and community features.
  *
  * `isUnitOwner` distinguishes unit owners from tenants for `owner_or_admin`
- * items (finance-read surfaces). Omit it to gate those items on management tier
- * only — the command palette does this deliberately.
+ * items (Payments, Insurance). Omit it and those items fail closed to the
+ * management tier. Every caller that renders for residents passes it — the
+ * sidebar, the top nav, and (via `useFilteredRegistry`) the command palette
+ * and mobile search.
  */
 export function getVisibleItems(
   items: readonly NavItemConfig[],

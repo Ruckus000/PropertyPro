@@ -17,7 +17,7 @@ vi.mock('@/components/mobile/FeatureCard', () => ({
 }));
 
 describe('MobileHomeContent', () => {
-  it('shows payments when finance is enabled', () => {
+  it('shows payments to a unit owner when finance is enabled', () => {
     render(
       <MobileHomeContent
         userName="Jane Doe"
@@ -26,7 +26,8 @@ describe('MobileHomeContent', () => {
         city="Miami"
         state="FL"
         timezone="America/New_York"
-        role="owner"
+        role="resident"
+        isUnitOwner
         hasCompliance={false}
         hasFinance
         hasMaintenanceRequests
@@ -37,8 +38,39 @@ describe('MobileHomeContent', () => {
       />,
     );
 
-    expect(screen.getByRole('link', { name: /payments/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /payments/i })).toHaveAttribute(
+      'href',
+      '/communities/42/payments',
+    );
     expect(screen.queryByRole('link', { name: /compliance/i })).not.toBeInTheDocument();
+  });
+
+  // Tenants are excluded by the `finances` RBAC cell and the payments page
+  // redirects them, so the row would be a dead end.
+  it('hides payments from a tenant even when finance is enabled', () => {
+    render(
+      <MobileHomeContent
+        userName="Tia Tenant"
+        communityName="Palm Gardens"
+        communityId={42}
+        city="Miami"
+        state="FL"
+        timezone="America/New_York"
+        role="resident"
+        isUnitOwner={false}
+        hasCompliance={false}
+        hasFinance
+        hasMaintenanceRequests
+        hasMeetings
+        announcementCount={2}
+        openMaintenanceCount={1}
+        nextMeetingDate={null}
+      />,
+    );
+
+    expect(screen.queryByRole('link', { name: /payments/i })).not.toBeInTheDocument();
+    // Control: the tenant still gets the rows that are open to them.
+    expect(screen.getByRole('link', { name: /maintenance/i })).toBeInTheDocument();
   });
 
   it('shows compliance only for eligible admin roles', () => {
@@ -51,6 +83,7 @@ describe('MobileHomeContent', () => {
         state="FL"
         timezone="America/New_York"
         role="property_manager"
+        isUnitOwner={false}
         hasCompliance
         hasFinance
         hasMaintenanceRequests
@@ -62,6 +95,7 @@ describe('MobileHomeContent', () => {
     );
 
     expect(screen.getByRole('link', { name: /compliance/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /payments/i })).toBeInTheDocument();
   });
 });
 
@@ -73,7 +107,8 @@ describe('MobileHomeContent — the community logo', () => {
     city: 'Miami',
     state: 'FL',
     timezone: 'America/New_York',
-    role: 'resident',
+    role: 'resident' as const,
+    isUnitOwner: true,
     hasCompliance: false,
     hasFinance: false,
     hasMaintenanceRequests: false,

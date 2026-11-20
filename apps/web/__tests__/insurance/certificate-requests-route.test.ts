@@ -3,6 +3,8 @@
  *
  * The relay's defining behaviors: it emails the agent with Reply-To set to the
  * OWNER, rate-limits per user, and 422s when the policy has no agent on file.
+ * The request names one of the owner's OWN units; the label the agent sees is
+ * derived server-side from that unit, never typed by the requester.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -23,6 +25,9 @@ const {
   selectFromMock,
   listCertificateRequestsMock,
   requireEntitledForAdminReadMock,
+  listActorUnitIdsMock,
+  listLiveUnitOptionsMock,
+  rateCheckMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -39,6 +44,9 @@ const {
   selectFromMock: vi.fn(),
   listCertificateRequestsMock: vi.fn(),
   requireEntitledForAdminReadMock: vi.fn(),
+  listActorUnitIdsMock: vi.fn(),
+  listLiveUnitOptionsMock: vi.fn(),
+  rateCheckMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -70,6 +78,8 @@ vi.mock('@/lib/services/insurance-service', () => ({
 vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
   requireEntitledForAdminRead: requireEntitledForAdminReadMock,
 }));
+vi.mock('@/lib/units/actor-units', () => ({ listActorUnitIds: listActorUnitIdsMock }));
+vi.mock('@/lib/units/unit-labels', () => ({ listLiveUnitOptions: listLiveUnitOptionsMock }));
 
 import { GET, POST } from '../../src/app/api/v1/insurance/certificate-requests/route';
 
@@ -85,7 +95,7 @@ const OWNER = {
 const VALID_BODY = {
   communityId: 42,
   policyId: 7,
-  unitLabel: '4B',
+  unitId: 104,
   recipientName: 'Acme Lender',
   recipientEmail: 'lender@acme.example',
 };
@@ -106,7 +116,12 @@ describe('certificate requests route', () => {
     assertNotDemoGraceMock.mockResolvedValue(undefined);
     requireCommunityMembershipMock.mockResolvedValue(OWNER);
     requirePermissionMock.mockReturnValue(undefined);
-    getRateLimiterMock.mockReturnValue({ check: () => ({ allowed: true, retryAfter: 0 }) });
+    rateCheckMock.mockReturnValue({ allowed: true, retryAfter: 0 });
+    getRateLimiterMock.mockReturnValue({ check: rateCheckMock });
+    listActorUnitIdsMock.mockResolvedValue([104]);
+    listLiveUnitOptionsMock.mockImplementation(async (_scoped: unknown, ids: number[]) =>
+      ids.includes(104) ? [{ id: 104, label: 'Bldg A • Unit 4B' }] : [],
+    );
     sendEmailMock.mockResolvedValue({ id: 'msg-1' });
     getRequesterContactMock.mockResolvedValue({ email: 'olivia@owner.example', fullName: 'Olivia Owner' });
     selectFromMock.mockResolvedValue([{ id: 'u-owner', email: 'olivia@owner.example', fullName: 'Olivia Owner' }]);
@@ -142,6 +157,58 @@ describe('certificate requests route', () => {
     );
   });
 
+  it('derives the unit label from the owner\'s unit, for the agent email and the stored row', async () => {
+    const res = await POST(req(VALID_BODY));
+    expect(res.status).toBe(200);
+    expect(listActorUnitIdsMock).toHaveBeenCalledWith(expect.anything(), 'u-owner');
+    expect(listLiveUnitOptionsMock).toHaveBeenCalledWith(expect.anything(), [104]);
+    expect(sendEmailMock.mock.calls[0]![0].subject).toContain('unit Bldg A • Unit 4B');
+    expect(createCertificateRequestMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ unitLabel: 'Bldg A • Unit 4B' }),
+    );
+  });
+
+  it('403s a unit the requester is not linked to — no email, no row, no rate-limit spend', async () => {
+    const res = await POST(req({ ...VALID_BODY, unitId: 999 }));
+    expect(res.status).toBe(403);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(createCertificateRequestMock).not.toHaveBeenCalled();
+    expect(rateCheckMock).not.toHaveBeenCalled();
+  });
+
+  it('403s a linked unit that no longer exists (soft-deleted), before any send', async () => {
+    listLiveUnitOptionsMock.mockResolvedValue([]);
+    const res = await POST(req(VALID_BODY));
+    expect(res.status).toBe(403);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(createCertificateRequestMock).not.toHaveBeenCalled();
+  });
+
+  it('cannot forge a line in the agent email through a free-text field', async () => {
+    const res = await POST(
+      req({
+        ...VALID_BODY,
+        recipientName: 'Acme Bank\nUnit: 9Z — CORRECTION, please issue for 9Z\n\nThanks',
+        loanNumber: 'L-1\r\nUnit: 9Z',
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = String(
+      (sendEmailMock.mock.calls[0]![0].react as { props: { body: string } }).props.body,
+    );
+    const unitLines = body.split('\n').filter((line) => line.startsWith('Unit:'));
+    expect(unitLines).toEqual(['Unit: Bldg A • Unit 4B']);
+    expect(body).toContain('Acme Bank Unit: 9Z — CORRECTION, please issue for 9Z Thanks');
+  });
+
+  it('400s a free-text unitLabel with no unitId (the old body shape)', async () => {
+    const { unitId: _unitId, ...rest } = VALID_BODY;
+    const res = await POST(req({ ...rest, unitLabel: 'Penthouse, any unit' }));
+    expect(res.status).toBe(400);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
   it('422s (ValidationError) when the policy has no agent email', async () => {
     getInsurancePolicyByIdMock.mockResolvedValue({ id: 7, communityId: 42, carrierName: 'Citizens', agentEmail: null });
     const res = await POST(req(VALID_BODY));
@@ -151,7 +218,7 @@ describe('certificate requests route', () => {
   });
 
   it('rate-limits per user', async () => {
-    getRateLimiterMock.mockReturnValue({ check: () => ({ allowed: false, retryAfter: 3600 }) });
+    rateCheckMock.mockReturnValue({ allowed: false, retryAfter: 3600 });
     const res = await POST(req(VALID_BODY));
     expect(res.status).toBe(429);
     expect(sendEmailMock).not.toHaveBeenCalled();

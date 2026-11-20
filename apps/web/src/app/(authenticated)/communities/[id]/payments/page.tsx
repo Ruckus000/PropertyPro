@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createScopedClient, units } from '@propertypro/db';
 import { getFeaturesForCommunity } from '@propertypro/shared';
+import { checkPermissionV2 } from '@/lib/db/access-control';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { FeatureGate } from '@/components/billing/feature-gate';
@@ -19,8 +20,10 @@ interface PageProps {
  * Owner Payment Portal — view balance, upcoming assessments, make payments.
  *
  * Route: /communities/[id]/payments
- * Auth: any community member (owners see their own unit, staff sees all).
- * Non-owner roles must provide ?unitId= to specify which unit to view.
+ * Auth: unit owners + management tier (`finances:read`). Tenants are
+ *       redirected: the RBAC cell excludes them, the APIs behind the portal
+ *       403 them, and there is no tenant rent pay (help `pay-dues.mdx`).
+ * Owners see their own unit(s); management sees the admin tabs.
  */
 export default async function PaymentsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
@@ -41,6 +44,14 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
   const typeFeatures = getFeaturesForCommunity(membership.communityType);
   if (!typeFeatures.hasFinance) {
     redirect('/dashboard?reason=feature-not-available');
+  }
+
+  if (
+    !checkPermissionV2(membership.role, membership.communityType, 'finances', 'read', {
+      isUnitOwner: membership.isUnitOwner,
+    })
+  ) {
+    redirect('/dashboard?reason=insufficient-permissions');
   }
 
   const resolved = await searchParams;

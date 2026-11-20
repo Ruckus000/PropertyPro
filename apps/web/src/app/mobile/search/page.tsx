@@ -41,6 +41,7 @@ export default async function MobileSearchPage({ searchParams }: PageProps) {
     <MobileSearchContent
       communityId={communityId}
       role={membership.role}
+      isUnitOwner={membership.isUnitOwner}
       features={features}
       resourceAccess={getMembershipResourceAccess(membership)}
     />
