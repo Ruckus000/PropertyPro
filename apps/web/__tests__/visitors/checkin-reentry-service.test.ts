@@ -168,6 +168,17 @@ describe('checkInVisitorForCommunity — validity window and schedule', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('ignores a start date left on a one-time pass', async () => {
+    // The registration form used to keep a Recurring draft's dates after a
+    // switch to One-Time; that pass must still work at the gate.
+    const existing = pass({ guestType: 'one_time', validFrom: new Date('2026-11-25T14:00:00Z') });
+    const { update } = mockDb([existing], [{ ...existing, checkedInAt: NOW }]);
+
+    await checkInVisitorForCommunity(COMMUNITY_ID, 12, 'staff-1');
+
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it('refuses a recurring pass on a day its rule leaves out', async () => {
     const { update } = mockDb([pass({ guestType: 'recurring', recurrenceRule: 'tue_thu' })], []);
 

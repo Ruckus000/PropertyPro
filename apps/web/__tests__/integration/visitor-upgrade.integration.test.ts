@@ -1051,4 +1051,72 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     // Every pass falls in exactly one status.
     expect(matched).toBe(ids.length);
   });
+
+  it('records one visit when two devices check the same returning visitor in at once', async () => {
+    const kit = requireState();
+    const communityA = requireCommunity(kit, 'communityA');
+    const name = `Concurrent Permanent ${kit.runSuffix}`;
+
+    setActor(kit, 'tenantA');
+    const passId = await createPass(communityA.id, {
+      visitorName: name,
+      guestType: 'permanent',
+      validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+    });
+
+    setActor(kit, 'actorA');
+    expect((await checkIn(communityA.id, passId)).status).toBe(200);
+    expect((await checkOut(communityA.id, passId)).status).toBe(200);
+
+    clearCapturedNotifications();
+    const responses = await Promise.all([1, 2, 3, 4].map(() => checkIn(communityA.id, passId)));
+    expect(responses.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+
+    const notices = getCapturedNotifications().filter(
+      (entry) => entry.event.type === 'resident_notice' && entry.event.title === `${name} has checked in`,
+    );
+    expect(notices).toHaveLength(1);
+
+    const audit = await kit.dbModule.createScopedClient(communityA.id).selectFrom<Record<string, unknown>>(
+      kit.dbModule.complianceAuditLog,
+      {},
+      eq(kit.dbModule.complianceAuditLog.resourceId, String(passId)),
+    );
+    const realCheckIns = audit.filter((row) => {
+      const metadata = row.metadata as Record<string, unknown> | null;
+      return metadata?.transition === 'checkin' && !metadata.idempotent;
+    });
+    // One for the first visit, one for this one.
+    expect(realCheckIns).toHaveLength(2);
+  });
+
+  it('refuses check-in of a used permanent pass once it is revoked', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    setActor(kit, 'tenantA');
+    const passId = await createPass(communityA.id, {
+      visitorName: `Revoked Permanent ${kit.runSuffix}`,
+      guestType: 'permanent',
+      validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+    });
+
+    setActor(kit, 'actorA');
+    expect((await checkIn(communityA.id, passId)).status).toBe(200);
+    expect((await checkOut(communityA.id, passId)).status).toBe(200);
+    const revokeResponse = await routeModules.visitorRevoke.POST(
+      jsonRequest(apiUrl(`/api/v1/visitors/${passId}/revoke`), 'POST', {
+        communityId: communityA.id,
+        reason: 'Resident moved out',
+      }),
+      { params: Promise.resolve({ id: String(passId) }) },
+    );
+    expect(revokeResponse.status).toBe(200);
+
+    expect((await checkIn(communityA.id, passId)).status).toBe(400);
+    const row = await loadVisitorRow(communityA.id, passId);
+    expect(row.checkedOutAt).toBeTruthy();
+    expect(statusOf(row)).toBe('revoked');
+  });
 });

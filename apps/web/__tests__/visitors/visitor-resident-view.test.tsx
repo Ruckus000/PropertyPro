@@ -229,6 +229,18 @@ describe('<VisitorResidentView> — revoke', () => {
     expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
   });
 
+  it('offers Revoke on a vendor pass, which is reusable too', () => {
+    useMyVisitorsMock.mockReturnValue(
+      queryState({
+        data: [{ ...HOST_PASS, guestType: 'vendor', validUntil: '2099-01-01T00:00:00.000Z' }],
+      }),
+    );
+
+    renderView();
+
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument();
+  });
+
   it('hides Revoke once the pass has expired', () => {
     useMyVisitorsMock.mockReturnValue(
       queryState({ data: [{ ...HOST_PASS, validUntil: '2020-01-01T00:00:00.000Z' }] }),

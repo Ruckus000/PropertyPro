@@ -709,7 +709,10 @@ export async function checkInVisitorForCommunity(
   if (onSite || used) return alreadyCheckedIn(existing);
 
   const daysLabel = visitDaysLabel(existing.recurrenceRule);
-  const validFrom = existing.validFrom ? new Date(existing.validFrom) : null;
+  // The start date belongs to multi-use passes; a one-time pass is timed by
+  // expectedArrival, which stays a hint the guard can ignore.
+  const validFrom =
+    existing.validFrom && isMultiUsePass(existing.guestType) ? new Date(existing.validFrom) : null;
   const startsLater = validFrom !== null && validFrom > now;
   if (startsLater || daysLabel) {
     const timeZone = await getCommunityTimezone(communityId);
