@@ -348,7 +348,6 @@ describe('MeetingsPageShell — first run and empty months', () => {
   it('an empty month on a community with meetings is just an empty month, not the set-up nudge (F-11)', () => {
     renderShell();
     expect(screen.getByText(/^Nothing scheduled in /)).toBeTruthy();
-    expect(screen.queryByText('Schedule and track board meetings')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Run meetings residents can follow' })).toBeNull();
   });
 });

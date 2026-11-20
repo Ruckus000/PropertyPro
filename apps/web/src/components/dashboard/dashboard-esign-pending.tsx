@@ -2,7 +2,6 @@
 
 import { FileSignature } from 'lucide-react';
 import type { DashboardPendingSigner } from '@/lib/dashboard/load-dashboard-data';
-import { EmptyState } from '@/components/shared/empty-state';
 
 interface DashboardEsignPendingProps {
   items: DashboardPendingSigner[];
@@ -13,10 +12,8 @@ export function DashboardEsignPending({ items }: DashboardEsignPendingProps) {
     <section id="documents-to-sign" className="rounded-md border border-edge bg-surface-card p-5">
       <h2 className="text-lg font-semibold text-content">Documents to Sign</h2>
       <div className="mt-4 space-y-3">
-        {items.length === 0 ? (
-          <EmptyState preset="no_esign_pending" size="sm" />
-        ) : (
-          items.map((item) => (
+        {/* Mounted only when something waits (dashboard/page.tsx), so it has no empty state (audit R-8). */}
+        {items.map((item) => (
           <article
             key={item.signerId}
             className="rounded-md border border-edge-subtle p-3"
@@ -53,8 +50,7 @@ export function DashboardEsignPending({ items }: DashboardEsignPendingProps) {
               )}
             </div>
           </article>
-          ))
-        )}
+        ))}
       </div>
     </section>
   );

@@ -1,6 +1,7 @@
 import type { DashboardAnnouncement } from '@/lib/dashboard/dashboard-selectors';
 import Link from 'next/link';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
 import { formatShortDate } from '@/lib/utils/format-date';
 
@@ -33,8 +34,9 @@ export function DashboardAnnouncements({
       <div className="mt-4 space-y-3">
         {items.length === 0 ? (
           <EmptyState
+            size="compact"
+            illustration={<PropScene size="compact" prop="bell" />}
             preset={canWriteAnnouncements ? 'no_announcements' : 'no_announcements_yet'}
-            size="sm"
             action={
               createHref ? (
                 <Button asChild size="sm">

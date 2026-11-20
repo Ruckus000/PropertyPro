@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { cn } from '@/lib/utils';
 import {
   useArcSubmissions,
@@ -86,6 +87,8 @@ export function ResidentArcRequests({ communityId }: ResidentArcRequestsProps) {
   if (!submissions || submissions.length === 0) {
     return (
       <EmptyState
+        size="section"
+        illustration={<PropScene size="section" prop="clipboard" />}
         title="No architectural requests yet"
         description="Planning an exterior change — paint, a fence, new windows? Submit it here before work begins and keep the approval on record."
         action={

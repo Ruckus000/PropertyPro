@@ -14,12 +14,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { Building2, CheckCircle2, SearchX } from 'lucide-react';
+import { SearchX } from 'lucide-react';
 import { COMMUNITY_TYPES, type CommunityType } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DirectoryScene, PropScene } from '@propertypro/ui';
 import { PageHeader } from '@/components/shared/page-header';
 import { usePortfolioDashboard, type PortfolioCommunity } from '@/hooks/use-portfolio-dashboard';
 import { useAddCommunityAccess } from '@/hooks/use-add-community';
@@ -209,7 +210,8 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
     if (data.portfolioCount === 0) {
       return (
         <EmptyState
-          icon={Building2}
+          size="section"
+          illustration={<DirectoryScene size="section" />}
           title="Add your first community"
           description="Set up a community to start managing documents, compliance and residents."
           action={openAdd && <Button onClick={openAdd}>Add Community</Button>}
@@ -234,7 +236,8 @@ export function PmDashboardClient({ showTemplates = false }: PmDashboardClientPr
     }
     return (
       <EmptyState
-        icon={CheckCircle2}
+        size="section"
+        illustration={<PropScene size="section" prop="shield" />}
         title={view === 'overdue_dues' ? 'No overdue dues' : 'Nothing needs attention'}
         description={
           view === 'overdue_dues'

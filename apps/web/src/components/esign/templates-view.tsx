@@ -24,6 +24,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DocumentsScene } from '@propertypro/ui';
 import { formatShortDate } from '@/lib/utils/format-date';
 import { useEsignTemplates } from '@/hooks/use-esign-templates';
 
@@ -85,6 +86,8 @@ export function TemplatesView({ communityId }: TemplatesViewProps) {
     return (
       <Card className="p-6">
         <EmptyState
+          size="section"
+          illustration={<DocumentsScene size="section" />}
           preset="no_esign_templates"
           action={
             <Button asChild>

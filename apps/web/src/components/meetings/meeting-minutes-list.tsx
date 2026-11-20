@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { FilePlus2 } from 'lucide-react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -93,7 +94,8 @@ export function MeetingMinutesList({
   } else if (past.length === 0) {
     body = (
       <EmptyState
-        size="sm"
+        size="section"
+        illustration={<PropScene size="section" prop="calendar" />}
         title="No meeting has happened yet."
         description="Minutes appear here after a meeting takes place."
       />

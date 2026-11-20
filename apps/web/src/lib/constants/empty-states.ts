@@ -30,39 +30,12 @@ export interface EmptyStateConfig {
 }
 
 export const EMPTY_STATE_CONFIGS = {
-  no_owners_registered: {
-    title: "Add your first owner",
-    description:
-      "Import owners via CSV or add them manually to enable portal access.",
-    actionLabel: "Add Owners",
-    icon: "users",
-  },
   no_announcements: {
     title: "Keep your community informed",
     description:
       "Post announcements to notify owners about meetings, updates, and community news.",
     actionLabel: "Create Announcement",
     icon: "bell",
-  },
-  no_maintenance_requests: {
-    title: "All clear!",
-    description:
-      "There are no open maintenance requests. Residents can submit requests through the portal.",
-    icon: "wrench",
-  },
-  // Manager and resident pairs: managers get the set-up nudge, residents get
-  // copy that holds in every community type (apartments have no board).
-  no_meetings: {
-    title: "Schedule and track board meetings",
-    description:
-      "Post meeting notices with the required advance notice. PropertyPro tracks the compliance timeline for you.",
-    actionLabel: "Schedule Meeting",
-    icon: "bell",
-  },
-  no_meetings_yet: {
-    title: "No upcoming meetings",
-    description: "Meeting notices appear here as soon as they're posted.",
-    icon: "calendar",
   },
   no_documents: {
     title: "Build your document library",
@@ -76,23 +49,6 @@ export const EMPTY_STATE_CONFIGS = {
     description: "Documents your community shares with you will appear here.",
     icon: "file-text",
   },
-  no_communities: {
-    title: "Add your first community",
-    description:
-      "Get started by onboarding a community to manage their compliance and operations.",
-    actionLabel: "Add Community",
-    icon: "building",
-  },
-  no_violations: {
-    title: "Community is in good standing",
-    description: "No violations have been reported. Great job!",
-    icon: "shield-check",
-  },
-  no_violations_yours: {
-    title: "Nothing on your unit",
-    description: "No violations have been reported for your unit.",
-    icon: "shield-check",
-  },
   no_residents: {
     title: "Add the people in your community",
     description:
@@ -104,11 +60,6 @@ export const EMPTY_STATE_CONFIGS = {
     title: "No announcements yet",
     description: "Nothing has been posted yet. You'll be notified when there's news.",
     icon: "bell",
-  },
-  no_esign_pending: {
-    title: "No documents awaiting signature",
-    description: "All signature requests have been completed.",
-    icon: "check",
   },
   no_esign_requests: {
     title: "Send your first document for signature",
@@ -158,18 +109,6 @@ export const EMPTY_STATE_CONFIGS = {
     description:
       "Try adjusting your search or filters to find what you're looking for.",
     icon: "inbox",
-  },
-  api_error: {
-    title: "Something went wrong",
-    description: "We couldn't load this data. Please try again.",
-    actionLabel: "Retry",
-    icon: "alert",
-  },
-  offline: {
-    title: "You're offline",
-    description: "Check your internet connection and try again.",
-    actionLabel: "Retry",
-    icon: "wifi-off",
   },
   action_required_clear: {
     title: "You're all set!",

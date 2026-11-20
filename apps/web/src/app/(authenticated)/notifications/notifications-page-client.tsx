@@ -11,6 +11,7 @@ import { NotificationListItem } from '@/components/notifications/notification-li
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 
 interface NotificationsPageClientProps {
   communityId: number;
@@ -113,10 +114,10 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
           </div>
         ) : allItems.length === 0 ? (
           <EmptyState
-            icon="bell"
+            size="section"
+            illustration={<PropScene size="section" prop="bell" />}
             title="You're all caught up"
             description="New activity will appear here as it happens."
-            size="md"
           />
         ) : (
           <div role="list">

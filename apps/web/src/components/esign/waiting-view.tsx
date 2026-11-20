@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DocumentsScene } from '@propertypro/ui';
 import {
   describeExpiry,
   outstandingSigners,
@@ -74,7 +75,7 @@ export function WaitingView({
   if (outstanding.length === 0) {
     return (
       <Card className="p-6">
-        <EmptyState preset="no_esign_waiting" />
+        <EmptyState preset="no_esign_waiting" size="section" illustration={<DocumentsScene size="section" next={false} />} />
       </Card>
     );
   }

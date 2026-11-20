@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { AUDIT_VIEW_LABELS, periodLabel, type AuditPeriod, type AuditView } from '@/lib/audit/audit-catalog';
 import {
   AuditQueryError,
@@ -267,10 +268,16 @@ function AuditEmpty({
         ? 'Activity appears here automatically as people post documents, send notices and change access.'
         : 'Try looking further back, or show everything.';
 
+  // A scene only when the trail itself is empty. A view or period that hides
+  // entries is "no results" (spec state table: no scene, the way out instead).
+  const trulyEmpty = state.period === 'all' && (state.view === 'all' || (state.view === 'important' && hidden === 0));
+  const art = trulyEmpty
+    ? ({ size: 'section', illustration: <PropScene size="section" prop="clipboard" /> } as const)
+    : ({ size: 'sm', icon: 'inbox' } as const);
+
   return (
     <EmptyState
-      icon="inbox"
-      size="sm"
+      {...art}
       className="mt-4"
       title={title}
       description={description}

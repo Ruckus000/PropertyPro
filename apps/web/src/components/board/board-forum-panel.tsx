@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { CreateThreadDialog } from '@/components/board/forum/create-thread-dialog';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ export function BoardForumPanel({ communityId }: BoardForumPanelProps) {
         </div>
 
         {!data || data.length === 0 ? (
-          <EmptyState preset="no_board_threads" />
+          <EmptyState preset="no_board_threads" size="section" illustration={<PropScene size="section" prop="bell" />} />
         ) : (
           data.map((thread) => (
             <Link

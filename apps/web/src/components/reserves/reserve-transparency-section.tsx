@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { useDeleteReserveAsset, useReserveAssets } from '@/hooks/use-reserve-assets';
 import {
@@ -222,6 +223,8 @@ export function ReserveTransparencySection({ communityId, canManage }: ReserveTr
         <Card>
           <CardContent className="pt-4">
             <EmptyState
+              size="section"
+              illustration={<PropScene size="section" prop="coins" />}
               preset={
                 canManage ? 'reserve_transparency_empty_admin' : 'reserve_transparency_empty_resident'
               }
