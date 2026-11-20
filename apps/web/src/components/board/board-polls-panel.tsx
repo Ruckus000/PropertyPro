@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { CreatePollDialog } from '@/components/board/polls/create-poll-dialog';
 import { PollResultsSection } from '@/components/board/polls/poll-results-section';
@@ -52,7 +53,7 @@ export function BoardPollsPanel({ communityId, isAdmin }: BoardPollsPanelProps) 
         ) : null}
 
         {!data || data.length === 0 ? (
-          <EmptyState preset="no_board_polls" />
+          <EmptyState preset="no_board_polls" size="section" illustration={<PropScene size="section" prop="clipboard" />} />
         ) : (
           data.map((poll) => (
             <article key={poll.id} className="space-y-4 rounded-xl border border-edge bg-surface-card p-5">

@@ -33,6 +33,7 @@ import type { ChecklistItemData } from '@/components/compliance/compliance-check
 import { getTemplateDocumentCategory } from '@/components/compliance/compliance-visibility';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DocumentsScene } from '@propertypro/ui';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -202,10 +203,10 @@ export function DocumentUploadQueue({
   if (categories.length === 0) {
     return (
       <EmptyState
-        icon="file-text"
+        size="compact"
+        illustration={<DocumentsScene size="compact" next={false} />}
         title="Create a category before uploading"
         description="Document uploads are blocked until this community has at least one document category."
-        size="sm"
       />
     );
   }

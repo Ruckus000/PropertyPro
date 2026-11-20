@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { countByTier, type AttentionItem } from '@/lib/dashboard/attention-queue';
@@ -50,7 +51,7 @@ export function AttentionQueueList({ items, communityId, error }: AttentionQueue
         <AlertBanner status="danger" title="We couldn't load your to-do list. Please refresh the page." />
       ) : null}
       {items && items.length === 0 && !error ? (
-        <EmptyState preset="action_required_clear" size="sm" />
+        <EmptyState preset="action_required_clear" size="compact" illustration={<PropScene size="compact" prop="shield" />} />
       ) : null}
       {items && items.length > 0 ? (
         <>

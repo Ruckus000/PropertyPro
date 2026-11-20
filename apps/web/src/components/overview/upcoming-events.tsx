@@ -1,6 +1,7 @@
 'use client';
 
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import type { UpcomingEvent } from '@/lib/queries/cross-community.types';
 
 export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
@@ -9,7 +10,8 @@ export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
       <div className="rounded-md border border-edge bg-surface-card p-5">
         <h3 className="text-base font-semibold mb-4">Upcoming</h3>
         <EmptyState
-          size="sm"
+          size="compact"
+          illustration={<PropScene size="compact" prop="calendar" />}
           title="No upcoming events"
           description="Nothing scheduled across your communities in the next 30 days."
         />

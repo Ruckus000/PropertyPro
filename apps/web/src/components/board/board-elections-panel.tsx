@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PropScene } from '@propertypro/ui';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { ElectionDetailDialog } from '@/components/board/elections/election-detail-dialog';
 import { Button } from '@/components/ui/button';
@@ -117,7 +118,7 @@ export function BoardElectionsPanel({
   }
 
   if (!data || data.length === 0) {
-    return <EmptyState preset="no_board_elections" />;
+    return <EmptyState preset="no_board_elections" size="section" illustration={<PropScene size="section" prop="clipboard" />} />;
   }
 
   return (
