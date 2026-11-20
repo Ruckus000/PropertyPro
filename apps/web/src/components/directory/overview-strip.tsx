@@ -39,8 +39,11 @@ export function OverviewStrip({
   onPastDue,
   onPortal,
   onRequests,
+  unsetLabel = 'not set',
 }: {
   stats: OverviewStats;
+  /** A unit with no occupancy: "not set" (condo/HOA) or "offline" (apartment: leases decide occupancy, so only an offline unit has none). */
+  unsetLabel?: string;
   requestCount: number | null;
   canSeeBalances: boolean;
   onOccupancy: () => void;
@@ -62,7 +65,7 @@ export function OverviewStrip({
             <span className="text-sm font-medium text-content-tertiary"> / {stats.totalUnits}</span>
           </>
         }
-        label={`units occupied · ${stats.vacantUnits} vacant`}
+        label={`units occupied · ${stats.vacantUnits} vacant${stats.unsetUnits > 0 ? ` · ${stats.unsetUnits} ${unsetLabel}` : ''}`}
       />
       {canSeeBalances ? (
         <Cell

@@ -272,7 +272,7 @@ describe('computeOverview', () => {
 
   it('sums past due, tracks the oldest, and computes adoption', () => {
     const units = buildDirectoryUnits(
-      [unit(1, { occupancy: 'vacant' }), unit(2), unit(3)],
+      [unit(1, { occupancy: 'vacant' }), unit(2, { occupancy: 'rented' }), unit(3)],
       [],
       [
         { unitId: 2, overdueAmountCents: 10_000, daysOverdue: 12 },
@@ -287,13 +287,26 @@ describe('computeOverview', () => {
     expect(computeOverview(units, rows)).toEqual({
       totalUnits: 3,
       vacantUnits: 1,
-      occupiedUnits: 2,
+      occupiedUnits: 1,
+      unsetUnits: 1,
       pastDueCents: 30_000,
       pastDueUnits: 2,
       oldestPastDueDays: 45,
       adoptionPct: 33,
       notActiveResidents: 2,
     });
+  });
+});
+
+describe('computeOverview occupancy (audit F-4)', () => {
+  it('counts a unit whose occupancy is not set as neither occupied nor vacant', () => {
+    const units = buildDirectoryUnits(
+      [unit(1, { occupancy: 'owner_occupied' }), unit(2, { occupancy: 'vacant' }), unit(3), unit(4)],
+      [],
+      [],
+      ADMIN,
+    );
+    expect(computeOverview(units, [])).toMatchObject({ totalUnits: 4, occupiedUnits: 1, vacantUnits: 1, unsetUnits: 2 });
   });
 });
 

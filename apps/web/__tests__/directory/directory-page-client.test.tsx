@@ -759,3 +759,86 @@ describe('DirectoryPageClient — household members (no portal login)', () => {
     expect(useOccupantsMock).toHaveBeenCalledWith(42, { enabled: false });
   });
 });
+
+// ── Empty states (docs/design-system/patterns/empty-states.md §4.1, §4.3) ──
+
+describe('DirectoryPageClient — setup', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('a manager with no units gets the setup guide instead of zeros (F-4) and tabs', async () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    useResidentsListMock.mockReturnValue(ok([]));
+    renderClient();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Build your community directory' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Directory overview' })).toBeNull();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    // Both ways in, the CSV importer no longer hidden in a menu (F-2).
+    expect(screen.getByRole('button', { name: 'Import units: From a spreadsheet' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add a unit: One at a time' })).toBeTruthy();
+    expect(screen.getByRole('table', { name: 'Unit spreadsheet format' }).textContent).toContain('unit_number');
+  });
+
+  it('keeps Residents blocked, with the reason, until a unit exists (F-1)', async () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    // A resident on file without a unit must not mark the blocked step done.
+    useResidentsListMock.mockReturnValue(ok([resident('No Unit', { unitId: null })]));
+    renderClient();
+    const rail = within(await screen.findByRole('navigation', { name: 'Setup steps' }));
+    const residents = rail.getByRole('button', { name: /Residents/ });
+    expect(residents.getAttribute('aria-disabled')).toBe('true');
+    expect(residents.textContent).toContain('Residents unlock after units');
+    expect(residents.textContent).not.toContain('Completed:');
+    expect(rail.getByRole('button', { name: /Invitations/ }).textContent).not.toContain('Completed:');
+  });
+
+  // The guide is next/dynamic, so "absent" is proven by what renders INSTEAD:
+  // the units tab's own empty state lives inside the tabs, which setup hides.
+  it('a resident who cannot write units sees no setup guide', () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    renderClient({ isAdmin: false, canWrite: false, canSeeBalances: false });
+    expect(screen.getByText('No units yet')).toBeTruthy();
+  });
+
+  it('nor does a non-admin who can write units', () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    renderClient({ isAdmin: false, canWrite: true, canSeeBalances: false });
+    expect(screen.getByText('No units yet')).toBeTruthy();
+  });
+
+  it('an apartment guide offers tenants only: the importer refuses owners there', async () => {
+    useUnitsMock.mockReturnValue(ok([]));
+    useResidentsListMock.mockReturnValue(ok([]));
+    renderClient({ communityType: 'apartment', hasOwnerRole: false });
+    const others = within(await screen.findByRole('list', { name: 'Other steps' }));
+    const residents = others.getByRole('button', { name: /Residents/ });
+    expect(residents.textContent).toContain('Tenants');
+    expect(residents.textContent).not.toContain('Owners');
+  });
+
+  it('with units but nobody invited yet, a Continue setup bar names the next step', () => {
+    useResidentsListMock.mockReturnValue(ok([resident('Nell New', { unitId: 3, portalStatus: 'not_invited' })]));
+    renderClient();
+    const bar = screen.getByRole('region', { name: 'Continue setup' });
+    expect(bar.textContent).toContain('2 of 3');
+    expect(bar.textContent).toContain('Next: Invitations');
+    expect(screen.getByRole('group', { name: 'Directory overview' })).toBeTruthy();
+  });
+
+  it('shows no bar once everyone has been invited, accepted or not', () => {
+    useResidentsListMock.mockReturnValue(ok([resident('Ivy Invited', { unitId: 3, portalStatus: 'invited' })]));
+    renderClient();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+  });
+
+  it('a residents load error is not "no residents": no bar', () => {
+    useResidentsListMock.mockReturnValue({ data: undefined, isLoading: false, isError: true, isSuccess: false, refetch: vi.fn() });
+    renderClient();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+  });
+
+  it('shows no bar once everyone with a login is active', () => {
+    useResidentsListMock.mockReturnValue(ok([resident('Olive Owner', { unitId: 1 })]));
+    renderClient();
+    expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
+  });
+});

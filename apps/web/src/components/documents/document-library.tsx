@@ -34,7 +34,7 @@ import { type CommunityRole, type CommunityType } from '@propertypro/shared';
 import { DocumentsScene } from '@propertypro/ui';
 import type { ChecklistItemData } from '@/components/compliance/compliance-checklist-item';
 import { getTemplateDocumentCategory } from '@/components/compliance/compliance-visibility';
-import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide';
+import { ContinueSetupBar, useSetupDismissed } from '@/components/shared/setup-guide/continue-setup-bar';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
