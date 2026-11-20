@@ -21,6 +21,7 @@ import ComplianceCommandCenter, {
   type BelowPostingThreshold,
 } from '@/components/compliance/compliance-command-center';
 import { getCommunityUnitCount } from '@/lib/services/community-profile-service';
+import { ensureChecklistForManagerPage } from '@/lib/compliance/ensure-checklist-for-page';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -51,6 +52,10 @@ export default async function CompliancePage({ params }: PageProps) {
   if (!checkPermissionV2(membership.role, membership.communityType, 'compliance', 'read', opts)) {
     redirect('/dashboard?reason=insufficient-permissions');
   }
+
+  // Compliance is never empty: make sure the record list exists (manager,
+  // entitled, not a support session; audit F-10).
+  await ensureChecklistForManagerPage(communityId, membership);
 
   const canWrite = checkPermissionV2(
     membership.role, membership.communityType, 'compliance', 'write', opts,

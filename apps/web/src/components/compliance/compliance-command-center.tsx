@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/shared/empty-state';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useComplianceChecklist } from '@/hooks/use-compliance-checklist';
@@ -22,6 +21,9 @@ import { getTemplateDocumentCategory } from './compliance-visibility';
 import { LinkDocumentModal } from './link-document-modal';
 import { hasBoardDesignation, type BoardDesignation } from '@propertypro/shared';
 import type { ChecklistItemData } from './compliance-checklist-item';
+import { ComplianceFirstRun } from './compliance-first-run';
+import { NotApplicableDialog } from '@/components/website-home/records/not-applicable-dialog';
+import { isComplianceFirstRun } from '@/lib/compliance/first-run';
 
 // 'manager' = operational (CAM) audience view; 'board' = board audience view.
 // The label stays "CAM view" (Community Association Manager is the Florida term);
@@ -87,6 +89,7 @@ export function ComplianceCommandCenter({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [uploadItem, setUploadItem] = useState<ChecklistItemData | null>(null);
   const [linkItem, setLinkItem] = useState<ChecklistItemData | null>(null);
+  const [notApplicableItem, setNotApplicableItem] = useState<ChecklistItemData | null>(null);
   const { data: items = [], isLoading, error, refetch } = useComplianceChecklist(communityId);
   const mutations = useComplianceMutations(communityId);
 
@@ -101,6 +104,9 @@ export function ComplianceCommandCenter({
   }
 
   const summary = useMemo(() => buildComplianceSummary(items, new Date()), [items]);
+  // Day one: nothing posted, nothing overdue. A calm countdown, not the
+  // dashboard's 0% and "requirements are now in effect" (audit F-6).
+  const firstRun = useMemo(() => isComplianceFirstRun(items as ChecklistItemData[]), [items]);
 
   // Ref tracks which selectedId we already scrolled to, so we only trigger
   // the scrollIntoView behavior when the selection actually changes (not on
@@ -208,7 +214,9 @@ export function ComplianceCommandCenter({
         />
       )}
 
-      {!belowPostingThreshold && summary.attentionCount > 0 && (
+      {/* The alarm is for real urgency: something overdue or due within 7 days
+          (audit F-6). A board-action record alone is listed, not alarmed. */}
+      {!belowPostingThreshold && !firstRun && (summary.overdueCount > 0 || summary.postingWindowsDueSoonCount > 0) && (
         <section
           aria-labelledby="compliance-banner-title"
           className="flex items-center justify-between gap-4 rounded-[var(--radius-md)] border-l-4 border-[var(--status-warning)] bg-[var(--status-warning-bg)] px-4 py-3"
@@ -245,18 +253,28 @@ export function ComplianceCommandCenter({
           </div>
         </div>
       ) : items.length === 0 ? (
-        <EmptyState
-          preset="compliance_empty"
+        // The record list is created with the community and the page fills
+        // any gap for a manager, so an empty list means it isn't ready yet.
+        <AlertBanner
+          status="info"
+          variant="subtle"
+          title="Your record list isn't ready yet"
+          description="It's created with your community. Try again in a moment."
           action={
-            canWrite ? (
-              <Link
-                href={`/communities/${communityId}/documents`}
-                className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover"
-              >
-                Upload First Document
-              </Link>
-            ) : undefined
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Try again
+            </Button>
           }
+        />
+      ) : firstRun ? (
+        <ComplianceFirstRun
+          communityId={communityId}
+          items={items as ChecklistItemData[]}
+          canWrite={canWrite}
+          clockOff={belowPostingThreshold !== null}
+          timeZone={timeZone}
+          onUpload={(item) => setUploadItem(item)}
+          onNotApplicable={(item) => setNotApplicableItem(item)}
         />
       ) : (
         <>
@@ -300,6 +318,7 @@ export function ComplianceCommandCenter({
                 }
               }}
               onMarkApplicable={(item) => mutations.markApplicable.mutate({ itemId: item.id })}
+              onMarkNotApplicable={(item) => setNotApplicableItem(item)}
               isSelectedHidden={isSelectedHidden}
               onClearFilter={() => setFilter('all')}
             />
@@ -320,6 +339,13 @@ export function ComplianceCommandCenter({
             setUploadItem(null);
           }}
           onClose={() => setUploadItem(null)}
+        />
+      )}
+      {notApplicableItem && (
+        <NotApplicableDialog
+          communityId={communityId}
+          item={{ itemId: notApplicableItem.id, templateKey: notApplicableItem.templateKey, title: notApplicableItem.title }}
+          onDone={() => setNotApplicableItem(null)}
         />
       )}
       {linkItem && (

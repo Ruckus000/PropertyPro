@@ -257,15 +257,54 @@ describe('ComplianceCommandCenter', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
-  it('renders an empty state with an upload CTA when there are no checklist items', () => {
-    mockChecklistReturn = { data: [], isLoading: false, error: null };
+  it('with no checklist rows yet, says the list is not ready and offers Try again (F-10)', () => {
+    const refetch = vi.fn();
+    mockChecklistReturn = { data: [], isLoading: false, error: null, refetch } as typeof mockChecklistReturn;
     renderWithProviders(
       <ComplianceCommandCenter communityId={1} isAdmin={true} designation={null} canWrite={true} />,
     );
-    expect(screen.getByText('Your compliance tracker is ready')).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: 'Upload First Document' }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Your record list isn't ready yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  describe('first run (nothing posted, nothing overdue)', () => {
+    const future = '2099-12-11T12:00:00.000Z';
+    const dayZero = () => [
+      { id: 1, templateKey: '718_declaration', title: 'Declaration', category: 'governing_documents', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isApplicable: true },
+      { id: 2, templateKey: '718_affidavits', title: 'Affidavits', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: future, rollingWindow: null, isApplicable: true },
+      { id: 3, templateKey: '718_minutes_rolling_12m', title: 'Minutes', category: 'meeting_records', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isApplicable: true },
+      { id: 4, templateKey: '718_bids', title: 'Bids', category: 'operations', status: 'unsatisfied', documentId: null, deadline: null, rollingWindow: { months: 12 }, isConditional: true, isApplicable: true },
+    ];
+
+    it('is a calm countdown: no 0% score, no "requirements are now in effect" (F-6)', () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      expect(screen.getByRole('heading', { level: 2, name: 'Your 30-day posting window has started' })).toBeInTheDocument();
+      expect(screen.queryByText('Requirements are now in effect')).not.toBeInTheDocument();
+      expect(screen.queryByText(/readiness/i, { selector: 'p, span, div' })).toBeNull();
+      expect(screen.getByText(/0 of 3/).closest('li')?.textContent).toContain('required posted');
+    });
+
+    it('groups by when records are due, a conditional one only under "if they apply"', () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      const due = screen.getByRole('region', { name: 'Post once, by the deadline' });
+      const rolling = screen.getByRole('region', { name: 'Keep current, rolling 12 months' });
+      const conditional = screen.getByRole('region', { name: 'Only if they apply' });
+      expect(due.textContent).toContain('Declaration');
+      expect(due.textContent).toContain('Board action');
+      expect(rolling.textContent).toContain('Minutes');
+      expect(rolling.textContent).not.toContain('Bids');
+      expect(conditional.textContent).toContain('Bids');
+    });
+
+    it('offers "Doesn\'t apply to us" on a conditional record (F-8)', () => {
+      mockChecklistReturn = { data: dayZero(), isLoading: false, error: null };
+      renderWithProviders(<ComplianceCommandCenter communityId={1} isAdmin designation={null} canWrite />);
+      fireEvent.click(screen.getByRole('button', { name: "Doesn't apply to us: Bids" }));
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
   });
 
   // C.2 smoke tests — selection lifecycle
