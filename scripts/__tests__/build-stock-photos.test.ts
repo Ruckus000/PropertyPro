@@ -24,8 +24,9 @@ describe('stockPhotoEncoding', () => {
   it('gives the two heaviest look defaults a lighter 2400 file, and leaves their smaller files alone', () => {
     // Dense foliage: at quality 72 their 2400 files were ~989 KB and ~844 KB, on
     // the image a look's page paints first.
-    expect(stockPhotoEncoding('palm-walk', 2400)).toEqual({ quality: 55, soften: 0.8, effort: 6, smartSubsample: true });
-    expect(stockPhotoEncoding('oak-avenue', 2400)).toEqual({ quality: 60, soften: 0.8, effort: 6, smartSubsample: true });
+    // Quality only, never a blur: a look's default photo must not look soft.
+    expect(stockPhotoEncoding('palm-walk', 2400)).toEqual({ quality: 50 });
+    expect(stockPhotoEncoding('oak-avenue', 2400)).toEqual({ quality: 55 });
     expect(stockPhotoEncoding('palm-walk', 1200)).toEqual({ quality: 72 });
     expect(stockPhotoEncoding('oak-avenue', 480)).toEqual({ quality: 72 });
   });
