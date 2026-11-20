@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterAll, beforeAll, beforeEach, expect, it } from 'vitest';
 import { eq } from '@propertypro/db/filters';
-import { deriveVisitorStatus } from '../../src/lib/visitors/visitor-logic';
+import { deriveVisitorStatus, type VisitorStatus } from '../../src/lib/visitors/visitor-logic';
+import { listVisitorsForCommunity } from '../../src/lib/services/package-visitor-service';
 import { processComplianceAlerts } from '../../src/lib/services/compliance-alert-service';
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS, type MultiTenantUserKey } from '../fixtures/multi-tenant-users';
@@ -117,6 +118,49 @@ async function loadVisitorRow(
     throw new Error(`Missing visitor row ${visitorId}`);
   }
   return row;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+async function checkIn(communityId: number, visitorId: number): Promise<Response> {
+  return requireRoutes().visitorCheckIn.PATCH(
+    jsonRequest(apiUrl(`/api/v1/visitors/${visitorId}/checkin`), 'PATCH', { communityId }),
+    { params: Promise.resolve({ id: String(visitorId) }) },
+  );
+}
+
+async function checkOut(communityId: number, visitorId: number): Promise<Response> {
+  return requireRoutes().visitorCheckOut.PATCH(
+    jsonRequest(apiUrl(`/api/v1/visitors/${visitorId}/checkout`), 'PATCH', { communityId }),
+    { params: Promise.resolve({ id: String(visitorId) }) },
+  );
+}
+
+async function createPass(
+  communityId: number,
+  body: Record<string, unknown>,
+): Promise<number> {
+  const response = await requireRoutes().visitors.POST(
+    jsonRequest(apiUrl('/api/v1/visitors'), 'POST', {
+      communityId,
+      purpose: 'Visit',
+      hostUnitLabel: unitALabel,
+      ...body,
+    }),
+  );
+  expect(response.status).toBe(200);
+  const json = await parseJson<{ data: Record<string, unknown> }>(response);
+  return readNumberField(json.data, 'id');
+}
+
+function statusOf(row: Record<string, unknown>): VisitorStatus {
+  return deriveVisitorStatus({
+    guestType: row.guestType as string,
+    checkedInAt: row.checkedInAt as Date | null,
+    checkedOutAt: row.checkedOutAt as Date | null,
+    validUntil: row.validUntil as Date | null,
+    revokedAt: row.revokedAt as Date | null,
+  });
 }
 
 async function seedRuntimeResident(
@@ -662,7 +706,26 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const permanentJson = await parseJson<{ data: Record<string, unknown> }>(permanentResponse);
     const permanentId = readNumberField(permanentJson.data, 'id');
 
+    const vendorResponse = await routeModules.visitors.POST(
+      jsonRequest(apiUrl('/api/v1/visitors'), 'POST', {
+        communityId: communityA.id,
+        visitorName: `Cascade Vendor ${kit.runSuffix}`,
+        purpose: 'Renovation crew',
+        hostUnitLabel: runtimeResident.unitLabel,
+        guestType: 'vendor',
+        validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+        validUntil: new Date(Date.now() + 7 * DAY_MS).toISOString(),
+      }),
+    );
+    expect(vendorResponse.status).toBe(200);
+    const vendorJson = await parseJson<{ data: Record<string, unknown> }>(vendorResponse);
+    const vendorId = readNumberField(vendorJson.data, 'id');
+
     setActor(kit, 'actorA');
+    // A used multi-use pass is still a live credential, so it must be revoked too.
+    expect((await checkIn(communityA.id, permanentId)).status).toBe(200);
+    expect((await checkOut(communityA.id, permanentId)).status).toBe(200);
+
     const deleteResponse = await routeModules.residents.DELETE(
       jsonRequest(apiUrl('/api/v1/residents'), 'DELETE', {
         communityId: communityA.id,
@@ -676,8 +739,12 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     expect(recurringRow.revokedByUserId).toBeNull();
 
     const permanentRow = await loadVisitorRow(communityA.id, permanentId);
+    expect(permanentRow.checkedOutAt).toBeTruthy();
     expect(permanentRow.revokedAt).toBeTruthy();
     expect(permanentRow.revokedByUserId).toBeNull();
+
+    const vendorRow = await loadVisitorRow(communityA.id, vendorId);
+    expect(vendorRow.revokedAt).toBeTruthy();
   });
 
   it('derives overstayed status and keeps GET /visitors/my backward compatible by default', async () => {
@@ -695,7 +762,8 @@ describeDb('visitor upgrade (db-backed integration)', () => {
         guestType: 'recurring',
         validFrom: '2026-10-01T09:00:00.000Z',
         validUntil: '2026-12-31T17:00:00.000Z',
-        recurrenceRule: 'weekdays',
+        // `custom` is not day-checked, so this check-in passes on any day the suite runs.
+        recurrenceRule: 'custom',
         expectedDurationMinutes: 60,
       }),
     );
@@ -726,6 +794,7 @@ describeDb('visitor upgrade (db-backed integration)', () => {
     const overstayedRow = await loadVisitorRow(communityA.id, overstayedId);
     expect(
       deriveVisitorStatus({
+        guestType: overstayedRow.guestType as string,
         checkedInAt: overstayedRow.checkedInAt as Date | null,
         checkedOutAt: overstayedRow.checkedOutAt as Date | null,
         validUntil: overstayedRow.validUntil as Date | null,
@@ -796,5 +865,190 @@ describeDb('visitor upgrade (db-backed integration)', () => {
 
     expect(myVisitorsJson.data.some((row) => row.id === activeId)).toBe(true);
     expect(myVisitorsJson.data.some((row) => row.id === checkedOutId)).toBe(false);
+  });
+
+  it('lets a multi-use pass check in again after each visit, and keeps one-time passes final', async () => {
+    const kit = requireState();
+    const communityA = requireCommunity(kit, 'communityA');
+    const name = `Reentry Permanent ${kit.runSuffix}`;
+
+    setActor(kit, 'tenantA');
+    const permanentId = await createPass(communityA.id, {
+      visitorName: name,
+      guestType: 'permanent',
+      validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+    });
+    const oneTimeId = await createPass(communityA.id, {
+      visitorName: `Reentry One Time ${kit.runSuffix}`,
+      expectedArrival: new Date().toISOString(),
+      expectedDurationMinutes: 60,
+    });
+
+    setActor(kit, 'actorA');
+    clearCapturedNotifications();
+    for (const id of [permanentId, oneTimeId]) {
+      expect((await checkIn(communityA.id, id)).status).toBe(200);
+      expect((await checkOut(communityA.id, id)).status).toBe(200);
+    }
+    expect(statusOf(await loadVisitorRow(communityA.id, permanentId))).toBe('expected');
+
+    // Between visits the resident still has the pass (and its QR) in their list.
+    setActor(kit, 'tenantA');
+    const myResponse = await requireRoutes().visitorsMy.GET(
+      new NextRequest(apiUrl(`/api/v1/visitors/my?communityId=${communityA.id}`)),
+    );
+    const myJson = await parseJson<{ data: Array<Record<string, unknown>> }>(myResponse);
+    expect(myJson.data.some((row) => row.id === permanentId)).toBe(true);
+    expect(myJson.data.some((row) => row.id === oneTimeId)).toBe(false);
+
+    setActor(kit, 'actorA');
+    expect((await checkIn(communityA.id, permanentId)).status).toBe(200);
+    const reentered = await loadVisitorRow(communityA.id, permanentId);
+    expect(reentered.checkedOutAt).toBeNull();
+    expect(statusOf(reentered)).toBe('checked_in');
+
+    expect((await checkIn(communityA.id, oneTimeId)).status).toBe(200);
+    const oneTime = await loadVisitorRow(communityA.id, oneTimeId);
+    expect(oneTime.checkedOutAt).toBeTruthy();
+    expect(statusOf(oneTime)).toBe('checked_out');
+
+    // The host hears about both visits: one digest key per visit, not per pass.
+    const notices = getCapturedNotifications().filter(
+      (entry) => entry.event.type === 'resident_notice' && entry.event.title === `${name} has checked in`,
+    );
+    expect(notices).toHaveLength(2);
+    expect(new Set(notices.map((entry) => (entry.event as { sourceId?: string }).sourceId)).size).toBe(2);
+  });
+
+  it('refuses check-in before a pass starts and on a day its schedule leaves out', async () => {
+    const kit = requireState();
+    const communityA = requireCommunity(kit, 'communityA');
+    const timeZone = MULTI_TENANT_COMMUNITIES.find((c) => c.key === 'communityA')!.timezone;
+    const today = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(new Date());
+    const ruleExcludingToday = ['Sat', 'Sun'].includes(today) ? 'weekdays' : 'weekends';
+
+    setActor(kit, 'tenantA');
+    const futureId = await createPass(communityA.id, {
+      visitorName: `Not Yet Valid ${kit.runSuffix}`,
+      guestType: 'permanent',
+      validFrom: new Date(Date.now() + 2 * DAY_MS).toISOString(),
+    });
+    const offDayId = await createPass(communityA.id, {
+      visitorName: `Off Day ${kit.runSuffix}`,
+      guestType: 'recurring',
+      validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+      validUntil: new Date(Date.now() + 30 * DAY_MS).toISOString(),
+      recurrenceRule: ruleExcludingToday,
+      expectedDurationMinutes: 60,
+    });
+
+    setActor(kit, 'actorA');
+    const futureResponse = await checkIn(communityA.id, futureId);
+    expect(futureResponse.status).toBe(400);
+    expect(JSON.stringify(await futureResponse.json())).toContain('This visitor pass starts on');
+
+    const offDayResponse = await checkIn(communityA.id, offDayId);
+    expect(offDayResponse.status).toBe(400);
+    expect(JSON.stringify(await offDayResponse.json())).toContain(`valid on ${ruleExcludingToday} only`);
+
+    expect((await loadVisitorRow(communityA.id, futureId)).checkedInAt).toBeNull();
+    expect((await loadVisitorRow(communityA.id, offDayId)).checkedInAt).toBeNull();
+  });
+
+  it('returns a recurring pass to expected after the auto-checkout cron closes its visit', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+
+    setActor(kit, 'tenantA');
+    const visitorId = await createPass(communityA.id, {
+      visitorName: `Cron Recurring ${kit.runSuffix}`,
+      guestType: 'recurring',
+      validFrom: new Date(Date.now() - DAY_MS).toISOString(),
+      validUntil: new Date(Date.now() + 30 * DAY_MS).toISOString(),
+      recurrenceRule: 'custom',
+      expectedDurationMinutes: 15,
+    });
+
+    setActor(kit, 'actorA');
+    expect((await checkIn(communityA.id, visitorId)).status).toBe(200);
+    const stale = new Date(Date.now() - 45 * 60 * 1000);
+    await kit.dbModule.createScopedClient(communityA.id).update(
+      kit.dbModule.visitorLog,
+      { checkedInAt: stale, updatedAt: stale },
+      eq(kit.dbModule.visitorLog.id, visitorId),
+    );
+
+    process.env.VISITOR_AUTO_CHECKOUT_CRON_SECRET = 'visitor-auto-secret';
+    const cronResponse = await routeModules.visitorAutoCheckout.POST(
+      new NextRequest(apiUrl('/api/v1/internal/visitor-auto-checkout'), {
+        method: 'POST',
+        headers: { authorization: 'Bearer visitor-auto-secret' },
+      }),
+    );
+    expect(cronResponse.status).toBe(200);
+
+    const closed = await loadVisitorRow(communityA.id, visitorId);
+    expect(closed.checkedOutAt).toBeTruthy();
+    expect(statusOf(closed)).toBe('expected');
+
+    expect((await checkIn(communityA.id, visitorId)).status).toBe(200);
+    expect(statusOf(await loadVisitorRow(communityA.id, visitorId))).toBe('checked_in');
+  });
+
+  it('filters by status in SQL exactly as deriveVisitorStatus classifies each pass', async () => {
+    const kit = requireState();
+    const communityA = requireCommunity(kit, 'communityA');
+    const resident = await seedRuntimeResident(communityA.id, 'parity-resident');
+    const scoped = kit.dbModule.createScopedClient(communityA.id);
+
+    const hour = 60 * 60 * 1000;
+    const past = new Date(Date.now() - DAY_MS);
+    const future = new Date(Date.now() + DAY_MS);
+    const inAt = new Date(Date.now() - 2 * hour);
+    const outAt = new Date(Date.now() - hour);
+    const shapes: Array<Record<string, Date | null>> = [
+      {},
+      { checkedInAt: inAt },
+      { checkedInAt: inAt, validUntil: past },
+      { checkedInAt: inAt, checkedOutAt: outAt },
+      { checkedInAt: inAt, checkedOutAt: outAt, validUntil: future },
+      { validUntil: past },
+      { checkedInAt: inAt, checkedOutAt: outAt, validUntil: past },
+      { revokedAt: outAt },
+      { checkedInAt: inAt, revokedAt: outAt },
+      { checkedInAt: inAt, checkedOutAt: outAt, revokedAt: outAt },
+      { checkedOutAt: outAt },
+    ];
+    const ids: number[] = [];
+    for (const guestType of ['one_time', 'recurring', 'permanent', 'vendor']) {
+      for (const shape of shapes) {
+        const [row] = await scoped.insert(kit.dbModule.visitorLog, {
+          visitorName: `Parity ${guestType} ${ids.length}`,
+          purpose: 'Parity',
+          hostUnitId: resident.unitId,
+          expectedArrival: past,
+          passCode: `P-${kit.runSuffix}-${ids.length}`,
+          guestType,
+          ...shape,
+        });
+        ids.push(readNumberField(row as Record<string, unknown>, 'id'));
+      }
+    }
+
+    const all = await listVisitorsForCommunity(communityA.id, { hostUnitId: resident.unitId });
+    expect(all).toHaveLength(ids.length);
+    const statuses: VisitorStatus[] = [
+      'expected', 'checked_in', 'checked_out', 'expired', 'overstayed', 'revoked', 'revoked_on_site',
+    ];
+    let matched = 0;
+    for (const status of statuses) {
+      const fromSql = await listVisitorsForCommunity(communityA.id, { hostUnitId: resident.unitId, status });
+      const derived = all.filter((row) => statusOf(row) === status).map((row) => row.id).sort();
+      expect({ status, ids: fromSql.map((row) => row.id).sort() }).toEqual({ status, ids: derived });
+      matched += fromSql.length;
+    }
+    // Every pass falls in exactly one status.
+    expect(matched).toBe(ids.length);
   });
 });

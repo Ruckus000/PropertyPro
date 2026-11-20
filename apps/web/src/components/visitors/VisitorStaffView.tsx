@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { Plus } from 'lucide-react';
-import { isToday, parseISO } from 'date-fns';
+import { toast } from 'sonner';
 import {
   useVisitors,
   useCheckinVisitor,
@@ -19,6 +19,7 @@ import {
   getVisitorColumns,
   type VisitorColumnActions,
   getVisitorStatus,
+  isOnTodayList,
 } from './visitor-columns';
 import { VisitorRegistrationForm } from './VisitorRegistrationForm';
 import { Button } from '@/components/ui/button';
@@ -52,6 +53,15 @@ const FILTER_TABS = [
   { label: 'All', value: 'all' },
 ];
 
+/** A refused check-in (expired, not yet valid, wrong day) must say why at the gate. */
+function showMutationError(error: unknown) {
+  toast.error(
+    error instanceof Error && error.message
+      ? error.message
+      : "We couldn't update this visitor. Please try again.",
+  );
+}
+
 export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
   const [activeTab, setActiveTab] = useState('visitors');
   const [activeFilter, setActiveFilter] = useState('today');
@@ -75,13 +85,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
     if (!visitors) return [];
     switch (activeFilter) {
       case 'today':
-        return visitors.filter((v) => {
-          try {
-            return isToday(parseISO(v.expectedArrival));
-          } catch {
-            return false;
-          }
-        });
+        return visitors.filter((v) => isOnTodayList(v));
       case 'expected':
         return visitors.filter((visitor) => getVisitorStatus(visitor) === 'expected');
       case 'checked_in':
@@ -114,21 +118,21 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
         return;
       }
 
-      await checkinMutation.mutateAsync(visitor.id);
+      await checkinMutation.mutateAsync(visitor.id).catch(showMutationError);
     },
     [checkinMutation, communityId],
   );
 
   const handleCheckOut = useCallback(
     async (visitor: VisitorListItem) => {
-      await checkoutMutation.mutateAsync(visitor.id);
+      await checkoutMutation.mutateAsync(visitor.id).catch(showMutationError);
     },
     [checkoutMutation],
   );
 
   const handleConfirmDeniedMatch = useCallback(async () => {
     if (!pendingCheckIn) return;
-    await checkinMutation.mutateAsync(pendingCheckIn.id);
+    await checkinMutation.mutateAsync(pendingCheckIn.id).catch(showMutationError);
     setPendingCheckIn(null);
     setPendingMatches([]);
     setMatchWarningOpen(false);

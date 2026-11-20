@@ -56,6 +56,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
   isNull: (col: unknown) => ({ __isNull: col }),
   lt: (col: unknown, val: unknown) => ({ __lt: { col, val } }),
+  notInArray: (col: unknown, vals: unknown[]) => ({ __notInArray: { col, vals } }),
   or: (...clauses: unknown[]) => ({ __or: clauses }),
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ __sql: { strings, values } }),
 }));
@@ -154,23 +155,46 @@ describe('paginateVisitorsForCommunity', () => {
       status: 'checked_in',
     });
 
+    const notPastWindow = {
+      __or: [
+        { __isNull: visitorLogTable.validUntil },
+        { __gte: { col: visitorLogTable.validUntil, val: expect.any(Date) } },
+      ],
+    };
     expect(selectFromMock.mock.calls[0]![2]).toEqual({
       __and: [
         {
           __and: [
             { __eq: { col: visitorLogTable.hostUnitId, val: 10 } },
-            { __isNull: visitorLogTable.checkedOutAt },
-            { __inArray: { col: visitorLogTable.hostUnitId, vals: [10, 11] } },
-            { __eq: { col: visitorLogTable.guestType, val: 'vendor' } },
-            { __isNotNull: visitorLogTable.checkedInAt },
-            { __isNull: visitorLogTable.checkedOutAt },
-            { __isNull: visitorLogTable.revokedAt },
+            // onlyActive: not checked out, or a multi-use pass that can still be used.
             {
               __or: [
-                { __isNull: visitorLogTable.validUntil },
-                { __gte: { col: visitorLogTable.validUntil, val: expect.any(Date) } },
+                { __isNull: visitorLogTable.checkedOutAt },
+                {
+                  __and: [
+                    {
+                      __inArray: {
+                        col: visitorLogTable.guestType,
+                        vals: ['recurring', 'permanent', 'vendor'],
+                      },
+                    },
+                    { __isNull: visitorLogTable.revokedAt },
+                    notPastWindow,
+                  ],
+                },
               ],
             },
+            { __inArray: { col: visitorLogTable.hostUnitId, vals: [10, 11] } },
+            { __eq: { col: visitorLogTable.guestType, val: 'vendor' } },
+            // status=checked_in: not revoked, on site, window not past.
+            { __isNull: visitorLogTable.revokedAt },
+            {
+              __and: [
+                { __isNotNull: visitorLogTable.checkedInAt },
+                { __isNull: visitorLogTable.checkedOutAt },
+              ],
+            },
+            notPastWindow,
           ],
         },
         {
