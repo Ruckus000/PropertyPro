@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useDeferredValue, useEffect, useState } from 'react';
+import { startTransition, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { endOfMonth, format, isSameDay, startOfMonth } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -116,6 +116,17 @@ export function MeetingsPageShell({
   const noticeOwed = nextNoticeOwed(meetings, now);
   // First run is the ALL-TIME count, not the month on screen (audit F-11).
   const firstRun = meetingsQuery.isSuccess && meetings.length === 0;
+  // Until the count is known, neither the guide nor the full page: no flash
+  // of tabs and "Create Meeting" that then vanish.
+  const meetingsPending = meetingsQuery.isLoading;
+  // After the first meeting is created the guide gives way to the page:
+  // start on the calendar, where the new meeting shows, whatever ?view= says.
+  const wasFirstRun = useRef(firstRun);
+  useEffect(() => {
+    if (wasFirstRun.current && !firstRun && meetingsQuery.isSuccess) handleViewChange('calendar');
+    wasFirstRun.current = firstRun;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs on the first-run edge only
+  }, [firstRun]);
 
   const deferredMonth = useDeferredValue(currentMonth);
   const rangeStart = format(startOfMonth(deferredMonth), 'yyyy-MM-dd');
@@ -147,9 +158,9 @@ export function MeetingsPageShell({
     <div className="space-y-6">
       <PageHeader
         title="Meetings & Calendar"
-        actions={canWrite && !firstRun ? <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button> : undefined}
+        actions={canWrite && !firstRun && !meetingsPending ? <Button onClick={() => setShowCreateForm(true)}>Create Meeting</Button> : undefined}
       >
-        {firstRun ? null : (
+        {firstRun || meetingsPending ? null : (
         <Tabs value={view} onValueChange={handleViewChange}>
           <TabsList aria-label="View">
             {VIEWS.map((option) => (
@@ -192,7 +203,11 @@ export function MeetingsPageShell({
         />
       ) : null}
 
-      {view === 'calendar' && !firstRun && (
+      {meetingsPending ? <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> : null}
+
+      {/* During the first run the calendar still shows if this month has
+          other events (assessment due dates come through the same feed). */}
+      {view === 'calendar' && !meetingsPending && (!firstRun || events.length > 0) && (
         <>
           <p className="text-sm text-content-secondary">Calendar timezone: {timezone}.</p>
 
@@ -220,10 +235,10 @@ export function MeetingsPageShell({
             />
           )}
 
-          {!eventsQuery.isError && !eventsQuery.isLoading && events.length === 0 ? (
+          {!eventsQuery.isError && !eventsQuery.isLoading && !eventsQuery.isPlaceholderData && events.length === 0 ? (
             // Meetings exist, just not this month: say so plainly (audit F-11).
             <p className="rounded-md border border-edge-subtle bg-surface-card p-4 text-sm text-content-secondary">
-              Nothing scheduled in {format(currentMonth, 'MMMM yyyy')}.
+              Nothing scheduled in {format(deferredMonth, 'MMMM yyyy')}.
             </p>
           ) : selectedDate ? (
             <DayDetailPanel
@@ -240,7 +255,7 @@ export function MeetingsPageShell({
         </>
       )}
 
-      {view === 'schedule' && !firstRun && (
+      {view === 'schedule' && !firstRun && !meetingsPending && (
         <MeetingSchedule
           meetings={meetings}
           now={now}
@@ -254,7 +269,7 @@ export function MeetingsPageShell({
         />
       )}
 
-      {view === 'minutes' && !firstRun && (
+      {view === 'minutes' && !firstRun && !meetingsPending && (
         <MeetingMinutesList
           communityId={communityId}
           meetings={meetings}

@@ -9,7 +9,7 @@
  * owed.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MeetingListItem } from '@/hooks/use-meetings';
 
@@ -25,13 +25,14 @@ vi.mock('next/navigation', () => ({
 const refetchEvents = vi.fn();
 const refetchMeetings = vi.fn();
 let meetingsData: MeetingListItem[] = [];
+let meetingsLoading = false;
 
 vi.mock('@/hooks/use-meetings', () => ({
   useCalendarEvents: () => ({ data: [], isLoading: false, isError: false, refetch: refetchEvents }),
   useMeetings: () => ({
-    data: meetingsData,
-    isLoading: false,
-    isSuccess: true,
+    data: meetingsLoading ? undefined : meetingsData,
+    isLoading: meetingsLoading,
+    isSuccess: !meetingsLoading,
     isError: false,
     refetch: refetchMeetings,
   }),
@@ -52,7 +53,14 @@ vi.mock('@/components/calendar/meeting-detail-modal', () => ({
   MeetingDetailModal: ({ meetingId }: { meetingId: number }) => <div>Detail {meetingId}</div>,
 }));
 vi.mock('@/components/meetings/meeting-form', () => ({
-  MeetingForm: () => <div>Meeting Form</div>,
+  MeetingForm: (p: { initialMeetingType?: string; onClose: () => void }) => (
+    <div data-testid="meeting-form" data-type={p.initialMeetingType ?? ''}>
+      Meeting Form
+      <button type="button" onClick={p.onClose}>
+        Close form
+      </button>
+    </div>
+  ),
 }));
 
 import { MeetingsPageShell } from '@/components/meetings/meetings-page-shell';
@@ -131,6 +139,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'], now: NOW });
   search = new URLSearchParams();
   meetingsData = [UPCOMING_BOARD, UPCOMING_ANNUAL, PAST_OWED];
+  meetingsLoading = false;
   routerReplace.mockReset();
   monthGridSpy.mockReset();
 });
@@ -309,6 +318,24 @@ describe('MeetingsPageShell — first run and empty months', () => {
     expect(screen.getByRole('button', { name: 'Schedule: Annual meeting' })).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Calendar' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Create Meeting' })).toBeNull();
+  });
+
+  it('while the meeting count is loading, neither the guide nor the full page shows', () => {
+    meetingsLoading = true;
+    renderShell();
+    expect(screen.queryByRole('button', { name: 'Create Meeting' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Calendar' })).toBeNull();
+    expect(screen.queryByText(/^Nothing scheduled in /)).toBeNull();
+  });
+
+  it('a type slot opens the form on that type, and the type resets on close', async () => {
+    meetingsData = [];
+    renderShell();
+    fireEvent.click(await screen.findByRole('button', { name: 'Schedule: Annual meeting' }));
+    expect(screen.getByTestId('meeting-form').getAttribute('data-type')).toBe('annual');
+    fireEvent.click(screen.getByRole('button', { name: 'Close form' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule a meeting' }));
+    expect(screen.getByTestId('meeting-form').getAttribute('data-type')).toBe('board');
   });
 
   it('a reader with no meetings gets the calm waiting state', async () => {

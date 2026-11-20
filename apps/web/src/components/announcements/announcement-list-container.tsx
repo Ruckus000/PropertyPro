@@ -6,7 +6,7 @@
  * Owns:
  *   - Mutation hooks (`useDeleteAnnouncement`, `useRestoreAnnouncement`).
  *   - "Show deleted" toggle href derivation (depends on isAdmin + URL state).
- *   - Empty-state CTA visibility (depends on canWriteAnnouncements).
+ *   - Which empty state shows: the guide for writers, waiting for readers (`canWrite`).
  *   - The `canManageItem` per-item authorization decision (admin-or-author).
  *   - Post-mutation router refresh.
  *
@@ -103,7 +103,6 @@ export function AnnouncementListContainer({
       <Link href={toggleHref}>{showDeleted ? 'Hide deleted' : 'Show deleted'}</Link>
     </Button>
   ) : undefined;
-
 
   const clearSearchAction = searchQuery ? (
     <Button asChild variant="outline">

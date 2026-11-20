@@ -106,7 +106,7 @@ describe('AnnouncementListContainer', () => {
       isAdmin: true,
       canWriteAnnouncements: true,
     });
-    expect(screen.getByRole('link', { name: 'Write the first announcement' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toHaveAttribute(
       'href',
       '/announcements/new?communityId=42',
     );
@@ -124,7 +124,7 @@ describe('AnnouncementListContainer', () => {
         />
       </QueryClientProvider>,
     );
-    expect(screen.queryByRole('link', { name: 'Write the first announcement' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Write an announcement' })).not.toBeInTheDocument();
   });
 
   it('names a search that matched nothing and offers to clear it, instead of "No announcements yet"', () => {
@@ -156,7 +156,7 @@ describe('AnnouncementListContainer', () => {
     });
 
     expect(screen.getByRole('heading', { level: 2, name: 'Keep everyone in the loop' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Write the first announcement' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Write an announcement' })).toHaveAttribute(
       'href',
       '/announcements/new?communityId=42',
     );
@@ -176,7 +176,7 @@ describe('AnnouncementListContainer', () => {
     });
 
     expect(screen.getByRole('heading', { level: 2, name: 'News from your community appears here' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Write the first announcement' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Write an announcement' })).not.toBeInTheDocument();
   });
 
   it('shows Edit + Delete for admins on live announcements', () => {

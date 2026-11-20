@@ -1,7 +1,9 @@
 /**
- * Announcements before the first post (spec docs/design-system/patterns/
+ * Announcements with nothing on the list (spec docs/design-system/patterns/
  * empty-states.md §4.1 "Announcements", §4.4; plan P6).
  *
+ * The list hides expired and archived posts, so "nothing listed" is not
+ * always "nothing ever posted": the copy never claims a first post.
  * A single action, so no step row. Managers see what a post is made of (the
  * composer's real fields), three ideas for a first post (copy only: nothing is
  * prefilled, nothing is sent), and where urgent news goes instead. Residents
@@ -44,7 +46,7 @@ export function AnnouncementsFirstPost({ communityId }: { communityId: number })
       illustration={<DocumentsScene size="hero" />}
       action={
         <Button asChild variant="outline">
-          <Link href={`/announcements/new?communityId=${communityId}`}>Write the first announcement</Link>
+          <Link href={`/announcements/new?communityId=${communityId}`}>Write an announcement</Link>
         </Button>
       }
       aside={
@@ -52,7 +54,7 @@ export function AnnouncementsFirstPost({ communityId }: { communityId: number })
           <ContextSection title="What a post has">
             <ContextRows rows={COMPOSER_FIELDS} />
           </ContextSection>
-          <ContextSection title="Ideas for a first post">
+          <ContextSection title="Ideas for a post">
             <ContextRows rows={FIRST_POST_IDEAS} />
           </ContextSection>
           <ContextSection title="Urgent news?">

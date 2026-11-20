@@ -23,6 +23,7 @@ import { NAV_ITEMS, PM_NAV_ITEMS } from '@/components/layout/nav-config';
 const NAV_LINKED_SEGMENTS: Record<string, string> = {
   dashboard: 'dashboard',
   documents: 'documents',
+  emergency: 'emergency',
   meetings: 'meetings',
   announcements: 'announcements',
   board: 'board',
@@ -54,7 +55,6 @@ const SUB_SEGMENT_LABELS: Record<string, string> = {
   finance: 'Finance',
   assessments: 'Assessments',
   maintenance: 'Maintenance',
-  emergency: 'Emergency',
   notifications: 'Notifications',
   settings: 'Settings',
   account: 'Account',
