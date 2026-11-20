@@ -775,7 +775,7 @@ describe('DirectoryPageClient — setup', () => {
     // Both ways in, the CSV importer no longer hidden in a menu (F-2).
     expect(screen.getByRole('button', { name: 'Import units: From a spreadsheet' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add a unit: One at a time' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Unit spreadsheet format' }).textContent).toContain('unit_number');
+    expect(screen.getByRole('table', { name: 'Unit spreadsheet format' }).textContent).toContain('unit_number');
   });
 
   it('keeps Residents blocked, with the reason, until a unit exists (F-1)', async () => {

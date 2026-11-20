@@ -19,6 +19,7 @@ import { FileSpreadsheet, UserPlus, Building2 } from 'lucide-react';
 import { DirectoryScene } from '@propertypro/ui';
 import type { CommunityType } from '@propertypro/shared';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   ContextLinks,
   ContextSection,
@@ -226,32 +227,33 @@ function CsvFormat({
   return (
     <div className="flex flex-col gap-2">
       <h4 className="text-sm font-semibold text-content">What the spreadsheet needs</h4>
-      {/* Focusable so keyboard users can scroll it sideways. */}
-      <div role="region" aria-label={label} tabIndex={0} className="overflow-x-auto rounded-md border border-edge">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface-muted text-content-secondary">
-            <tr>
+      {/* The house Table: its scroll box takes focus only when it scrolls, so
+          keyboard users can reach the columns off-screen. */}
+      <div className="rounded-md border border-edge">
+        <Table aria-label={label} className="text-xs">
+          <TableHeader className="bg-surface-muted">
+            <TableRow>
               {columns.map((c) => (
-                <th key={c} scope="col" className="whitespace-nowrap px-3 py-2 font-medium">
+                <TableHead key={c} scope="col" className="whitespace-nowrap">
                   {c}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
+            </TableRow>
+          </TableHeader>
           {rows.length > 0 && (
-            <tbody className="text-content">
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.join(',')} className="border-t border-edge">
+                <TableRow key={row.join(',')}>
                   {row.map((cell, i) => (
-                    <td key={columns[i]} className="whitespace-nowrap px-3 py-2 tabular-nums">
+                    <TableCell key={columns[i]} className="whitespace-nowrap">
                       {cell}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
+            </TableBody>
           )}
-        </table>
+        </Table>
       </div>
       <p className="text-xs text-content-secondary">{note}</p>
     </div>
