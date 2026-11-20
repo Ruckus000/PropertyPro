@@ -40,9 +40,11 @@ interface OneTimeChargesProps {
   assessment: Assessment;
   /** YYYY-MM-DD; injected so tests can pin the clock. */
   today?: string;
+  /** Called once the charges exist; this form is about to unmount, so the parent takes focus. */
+  onCharged?: () => void;
 }
 
-export function OneTimeCharges({ communityId, assessment, today = localToday() }: OneTimeChargesProps) {
+export function OneTimeCharges({ communityId, assessment, today = localToday(), onCharged }: OneTimeChargesProps) {
   const [dueDate, setDueDate] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -80,6 +82,7 @@ export function OneTimeCharges({ communityId, assessment, today = localToday() }
     try {
       // On success the line items reload and this panel gives way to them.
       await generate.mutateAsync(dueDate);
+      onCharged?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'We couldn’t create the charges. Please try again.');
     } finally {

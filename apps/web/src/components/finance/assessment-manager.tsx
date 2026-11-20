@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { CommunityType } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -222,6 +222,8 @@ function LineItemsPanel({
   onClose: () => void;
 }) {
   const { data: lineItems, isLoading } = useAssessmentLineItems(communityId, assessment.id);
+  // Focus lands here after Generate charges, whose form unmounts when the charges load.
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   const statusCounts = lineItems?.reduce(
     (acc, li) => {
@@ -235,7 +237,9 @@ function LineItemsPanel({
     <div className="rounded-md border border-edge bg-surface-card">
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-content">{assessment.title} — Line Items</h3>
+          <h3 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-content">
+            {assessment.title} — Line Items
+          </h3>
           {lineItems && (
             <div className="mt-1 flex gap-2">
               {Object.entries(statusCounts).map(([status, count]) => (
@@ -268,7 +272,11 @@ function LineItemsPanel({
           </div>
         ) : lineItems && lineItems.length === 0 ? (
           assessment.frequency === 'one_time' ? (
-            <OneTimeCharges communityId={communityId} assessment={assessment} />
+            <OneTimeCharges
+              communityId={communityId}
+              assessment={assessment}
+              onCharged={() => headingRef.current?.focus()}
+            />
           ) : (
             <p className="py-4 text-center text-sm text-content-tertiary">
               No charges yet. Every unit is charged on the 1st of each month this assessment falls due.

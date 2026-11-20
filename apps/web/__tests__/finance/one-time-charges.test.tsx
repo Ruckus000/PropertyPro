@@ -33,8 +33,10 @@ const ROOF: Assessment = {
   createdAt: '2026-11-20T00:00:00Z',
 };
 
+const onCharged = vi.fn();
+
 function renderCharges(assessment: Assessment = ROOF) {
-  return render(<OneTimeCharges communityId={42} assessment={assessment} today="2026-11-20" />);
+  return render(<OneTimeCharges communityId={42} assessment={assessment} today="2026-11-20" onCharged={onCharged} />);
 }
 
 function pickDate(value: string) {
@@ -76,6 +78,8 @@ describe('<OneTimeCharges>', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Generate charges' }));
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledWith('2026-12-01'));
+    // The form unmounts once the charges load; the parent moves focus.
+    await waitFor(() => expect(onCharged).toHaveBeenCalledTimes(1));
   });
 
   it('charges nothing when the manager goes back', async () => {
@@ -96,6 +100,7 @@ describe('<OneTimeCharges>', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Generate charges' }));
     expect(await screen.findByText('Cannot generate line items: no units found for this community')).toBeInTheDocument();
     expect(screen.getByText('No charges were created')).toBeInTheDocument();
+    expect(onCharged).not.toHaveBeenCalled();
   });
 
   it('an inactive assessment says how to charge it, with no button', () => {
