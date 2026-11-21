@@ -187,4 +187,49 @@ describe('ComplianceDetailPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Clear filter/i }));
     expect(onClearFilter).toHaveBeenCalledOnce();
   });
+
+  // H-4: a meeting-notice row scored from meetings shows the meetings that
+  // decided it, not the document checks that did not.
+  it('shows the per-meeting notice result instead of the document checks', () => {
+    withQuery(
+      <ComplianceDetailPanel
+        item={{
+          ...ITEM,
+          templateKey: '718_meeting_notices',
+          title: 'Meeting Notices and Agendas',
+          status: 'overdue' as const,
+          meetingNotices: {
+            windowMonths: 12,
+            dueCount: 2,
+            onTimeCount: 1,
+            missed: [
+              {
+                meetingId: 8,
+                title: 'sunset-condos Annual Owners Meeting',
+                startsAt: '2026-12-01T23:00:00.000Z',
+                postBy: '2026-11-17T23:00:00.000Z',
+                noticePostedAt: null,
+              },
+            ],
+            nextDue: null,
+          },
+        }}
+        communityId={7}
+        canWrite
+        designation={null}
+        onUpload={vi.fn()}
+        onLink={vi.fn()}
+        onView={vi.fn()}
+        onMarkApplicable={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Notices on time: 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Annual Owners Meeting')).toBeInTheDocument();
+    expect(screen.getByText(/not recorded/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Record notices in Meetings' })).toHaveAttribute(
+      'href',
+      '/communities/7/meetings',
+    );
+    expect(screen.queryByText('Document on file')).toBeNull();
+  });
 });

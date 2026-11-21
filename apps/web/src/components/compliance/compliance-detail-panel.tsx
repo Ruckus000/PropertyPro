@@ -8,6 +8,7 @@ import type { ChecklistItemData } from './compliance-checklist-item';
 import { getTemplateDefaultVisibility } from './compliance-visibility';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant } from './compliance-pill-mapping';
+import { MeetingNoticeChecks } from './meeting-notice-checks';
 
 export interface ComplianceDetailPanelProps {
   item: ChecklistItemData | null;
@@ -102,6 +103,11 @@ export function ComplianceDetailPanel({
         )}
       </div>
 
+      {/* A meeting-notice row scored from meetings: the document checks below
+          did not decide it, so show what did. */}
+      {selectedItem.meetingNotices ? (
+        <MeetingNoticeChecks summary={selectedItem.meetingNotices} communityId={communityId} />
+      ) : (
       <ul className="my-4 flex flex-col gap-3 border-y border-edge-subtle py-4" aria-label="Status checks">
         <Check
           ok={!!selectedItem.documentId}
@@ -115,6 +121,7 @@ export function ComplianceDetailPanel({
         />
         <Check ok title="Audit trail" desc="Every action is recorded." />
       </ul>
+      )}
 
       {cta && (
         <button
