@@ -10,7 +10,11 @@ import { JSON_HEADERS, requestJsonEnvelope } from './request-json';
 import { walkAndSlice } from './walk-paginated';
 
 export interface PhotoEntry {
-  url: string;
+  /**
+   * The detail read (`GET /api/v1/maintenance-requests/[id]`) re-signs this from
+   * `storagePath` on every read, and sends `null` when the object cannot be signed.
+   */
+  url: string | null;
   thumbnailUrl: string | null;
   storagePath: string;
   uploadedAt: string;
@@ -78,6 +82,16 @@ export async function listMyRequests(
   );
 }
 
+/** One request, with its comments (residents never receive internal ones). */
+export async function getRequest(
+  id: number,
+  communityId: number,
+): Promise<{ data: MaintenanceRequestItem }> {
+  return requestJsonEnvelope<MaintenanceRequestItem>(
+    `/api/v1/maintenance-requests/${id}?communityId=${communityId}`,
+  );
+}
+
 export async function createMaintenanceRequest(
   payload: CreateRequestPayload,
 ): Promise<{ data: MaintenanceRequestItem }> {
@@ -85,6 +99,20 @@ export async function createMaintenanceRequest(
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ action: 'create', ...payload }),
+  });
+}
+
+/** The server stores a resident's comment as non-internal whatever is sent. */
+export async function addComment(payload: {
+  communityId: number;
+  requestId: number;
+  text: string;
+  isInternal?: boolean;
+}): Promise<{ data: CommentItem }> {
+  return requestJsonEnvelope<CommentItem>('/api/v1/maintenance-requests', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ action: 'add_comment', ...payload }),
   });
 }
 

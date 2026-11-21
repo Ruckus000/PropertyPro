@@ -45,10 +45,16 @@ export function operationsTabHref(communityId: number, tab: OperationsTab): stri
   return `/communities/${communityId}/operations?tab=${tab}`;
 }
 
+/**
+ * `request` opens that maintenance request's detail panel over the hub. It is
+ * the only way to link to one request: there is no per-request page. A value
+ * that is not a positive integer is left out, so the link still lands on the
+ * list rather than on a panel that can only fail.
+ */
 export function operationsHubHref(
   communityId: number,
   tab?: OperationsTab,
-  extras?: { from?: 'maintenance'; scope?: 'mine' | 'community' },
+  extras?: { from?: 'maintenance'; scope?: 'mine' | 'community'; request?: number },
 ): string {
   assertValidCommunityId(communityId);
 
@@ -56,6 +62,10 @@ export function operationsHubHref(
   if (tab) params.set('tab', tab);
   if (extras?.from) params.set('from', extras.from);
   if (extras?.scope) params.set('scope', extras.scope);
+  const request = extras?.request;
+  if (typeof request === 'number' && Number.isInteger(request) && request > 0) {
+    params.set('request', String(request));
+  }
 
   const query = params.toString();
   return query

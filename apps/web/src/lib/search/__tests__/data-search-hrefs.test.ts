@@ -47,6 +47,8 @@ describe('search result links', () => {
       announcements: '/announcements/5?communityId=42',
       meetings: '/communities/42/meetings',
       violations: '/violations/5?communityId=42',
+      // Opens the request's detail panel in the Operations hub.
+      maintenance: '/communities/42/operations?tab=requests&request=5',
       // The Directory's residents list, filtered to the person found.
       residents: '/dashboard/directory?communityId=42&q=Ana&tab=residents',
     });

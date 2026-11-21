@@ -3,10 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listAllRequests,
+  updateRequestStatus,
   type ListAllRequestsParams,
   type MaintenanceRequestItem,
 } from '@/lib/api/admin-maintenance';
-import { listMyRequests } from '@/lib/api/maintenance-requests';
+import { addComment, getRequest, listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
 import type { BookingRules } from '@/lib/amenities/booking-rules';
 import { walkAndSlice, walkPaginated } from '@/lib/api/walk-paginated';
@@ -157,6 +158,10 @@ export const OPERATIONS_KEYS = {
 } as const;
 
 export const MAINTENANCE_REQUEST_KEYS = {
+  /** Every maintenance-request list and detail. */
+  all: ['maintenance-requests'] as const,
+  detail: (communityId: number, requestId: number) =>
+    ['maintenance-requests', 'detail', communityId, requestId] as const,
   list: (
     communityId: number,
     scope: MaintenanceRequestScope,
@@ -298,6 +303,51 @@ export function useMaintenanceRequests(
     },
     enabled: enabled && communityId > 0,
     staleTime: 45_000,
+  });
+}
+
+/** One request with its comments — the Operations hub's detail panel. */
+export function useMaintenanceRequest(
+  communityId: number,
+  requestId: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: MAINTENANCE_REQUEST_KEYS.detail(communityId, requestId),
+    queryFn: async () => (await getRequest(requestId, communityId)).data,
+    enabled: (options?.enabled ?? true) && communityId > 0 && requestId > 0,
+    staleTime: 30_000,
+  });
+}
+
+export function useAddMaintenanceComment(communityId: number, requestId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (text: string) => (await addComment({ communityId, requestId, text })).data,
+    onSuccess: async () => {
+      // The detail shows the new comment; list rows carry the comments too.
+      await queryClient.invalidateQueries({ queryKey: MAINTENANCE_REQUEST_KEYS.all });
+    },
+  });
+}
+
+export interface UpdateMaintenanceStatusInput {
+  status: string;
+  internalNotes?: string | null;
+  resolutionDescription?: string | null;
+  resolutionDate?: string | null;
+}
+
+export function useUpdateMaintenanceRequestStatus(communityId: number, requestId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: UpdateMaintenanceStatusInput) =>
+      (await updateRequestStatus(requestId, communityId, input)).data,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: MAINTENANCE_REQUEST_KEYS.all });
+      // The All tab lists requests with their status.
+      await queryClient.invalidateQueries({ queryKey: OPERATIONS_KEYS.listRoot(communityId) });
+    },
   });
 }
 

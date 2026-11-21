@@ -383,7 +383,7 @@ function buildDigestPayload(
       eventType: event.type,
       eventTitle: event.requestTitle,
       eventSummary: `${event.previousStatus} -> ${event.newStatus}`,
-      actionUrl: `${baseUrl}${operationsHubHref(communityId, 'requests')}`,
+      actionUrl: `${baseUrl}${operationsHubHref(communityId, 'requests', { request: Number(event.requestId) })}`,
     };
   }
 
@@ -605,7 +605,7 @@ function renderEmailForEvent(
           previousStatus: event.previousStatus,
           newStatus: event.newStatus,
           notes: event.notes,
-          portalUrl: `${baseUrl}${operationsHubHref(communityId, 'requests')}`,
+          portalUrl: `${baseUrl}${operationsHubHref(communityId, 'requests', { request: Number(event.requestId) })}`,
         }),
       };
     }

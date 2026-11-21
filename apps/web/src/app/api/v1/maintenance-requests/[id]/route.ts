@@ -21,6 +21,7 @@ import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-g
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import { operationsHubHref } from '@/lib/operations/routes';
+import { allowedNextStatuses } from '@/lib/maintenance/status-transitions';
 import { formatRequest } from '../_formatRequest';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import {
@@ -37,15 +38,6 @@ import {
   maintenanceRequestGetContract,
   maintenanceRequestPatchContract,
 } from './contract';
-
-const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-  open:         ['submitted', 'acknowledged', 'in_progress'],
-  submitted:    ['acknowledged', 'in_progress'],
-  acknowledged: ['submitted', 'in_progress'],
-  in_progress:  ['submitted', 'resolved'],
-  resolved:     ['closed'],
-  closed:       [],
-};
 
 /**
  * Replace each stored photo's `url` with a fresh presigned download URL.
@@ -146,11 +138,11 @@ export const PATCH = withErrorHandler(
     if (fields.status !== undefined) {
       oldStatus = existing['status'] as string;
       newStatus = fields.status;
-      const allowed = ALLOWED_TRANSITIONS[oldStatus] ?? [];
+      const allowed = allowedNextStatuses(oldStatus);
       if (!allowed.includes(newStatus)) {
         throw new UnprocessableEntityError(
           `Invalid status transition: '${oldStatus}' → '${newStatus}'`,
-          { allowedTransitions: allowed },
+          { allowedTransitions: [...allowed] },
         );
       }
       updateData['status'] = newStatus;
@@ -231,7 +223,7 @@ export const PATCH = withErrorHandler(
           category: 'maintenance',
           title: `Maintenance Update: ${existing['title'] as string}`,
           body: `Status changed to ${newStatus}`,
-          actionUrl: operationsHubHref(communityId, 'requests'),
+          actionUrl: operationsHubHref(communityId, 'requests', { request: params.id }),
           sourceType: 'maintenance',
           sourceId: `maintenance:${params.id}:status:${newStatus}`,
         },

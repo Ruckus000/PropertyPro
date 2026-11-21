@@ -444,13 +444,13 @@ describe('notification-service', () => {
         }),
       );
 
-      // Deep-link must target the Operations hub — the legacy /maintenance/[id]
-      // detail route no longer exists.
+      // Deep-link opens this request's panel in the Operations hub — there is
+      // no per-request page.
       const emailArgs = sendEmailMock.mock.calls[0]![0] as {
         react: { props: { portalUrl: string } };
       };
-      expect(emailArgs.react.props.portalUrl).toContain(
-        `/communities/${COMMUNITY_ID}/operations?tab=requests`,
+      expect(emailArgs.react.props.portalUrl).toMatch(
+        new RegExp(`/communities/${COMMUNITY_ID}/operations\\?tab=requests&request=42$`),
       );
     });
 

@@ -6,6 +6,7 @@
  * requested `page` window. Same pattern as #228 violations, #236 work-orders.
  */
 import type { MaintenanceRequestItem } from './maintenance-requests';
+import { JSON_HEADERS, requestJsonEnvelope } from './request-json';
 import { walkAndSlice } from './walk-paginated';
 
 export type { MaintenanceRequestItem };
@@ -41,4 +42,35 @@ export async function listAllRequests(
     baseParams,
     { page: params?.page, limit: params?.limit },
   );
+}
+
+/**
+ * PATCH answers with the updated database row, not the formatted request the
+ * reads return (no comments, the stored status name), so only the fields every
+ * row carries are typed. Re-read the request to show it.
+ */
+export interface MaintenanceRequestUpdateResult {
+  id: number;
+  status: string;
+}
+
+/** Staff only: the server refuses residents and any status move outside the shared transition table. */
+export async function updateRequestStatus(
+  id: number,
+  communityId: number,
+  updates: {
+    status?: string;
+    internalNotes?: string | null;
+    resolutionDescription?: string | null;
+    resolutionDate?: string | null;
+    assignedToId?: string | null;
+    category?: string;
+    priority?: string;
+  },
+): Promise<{ data: MaintenanceRequestUpdateResult }> {
+  return requestJsonEnvelope<MaintenanceRequestUpdateResult>(`/api/v1/maintenance-requests/${id}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ communityId, ...updates }),
+  });
 }

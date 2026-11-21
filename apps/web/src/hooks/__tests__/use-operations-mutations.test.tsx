@@ -6,6 +6,9 @@ const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
 import {
+  MAINTENANCE_REQUEST_KEYS,
+  useAddMaintenanceComment,
+  useMaintenanceRequest,
   useCreateMaintenanceRequest,
   useCreateWorkOrder,
   useCreateReservation,
@@ -186,5 +189,38 @@ describe('useAmenities — response roundtrip', () => {
     expect(result.current.data?.map((amenity) => amenity.name)).toEqual(['Clubhouse', 'Pool']);
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/amenities?communityId=42&pageSize=100');
     expect(fetchMock.mock.calls[1]![0]).toBe('/api/v1/amenities?communityId=42&pageSize=100&cursor=cursor-2');
+  });
+});
+
+describe('maintenance request detail', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('reads one request for the community', async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 7, title: 'Leak', comments: [] } }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useMaintenanceRequest(42, 7), { wrapper: wrapper(qc) });
+
+    await waitFor(() => expect(result.current.data).toMatchObject({ id: 7, title: 'Leak' }));
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/maintenance-requests/7?communityId=42');
+  });
+
+  it('posts a comment with add_comment and refetches every request list and detail', async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 3, requestId: 7, text: 'Thanks' } }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
+    const { result } = renderHook(() => useAddMaintenanceComment(42, 7), { wrapper: wrapper(qc) });
+
+    await result.current.mutateAsync('Thanks');
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/v1/maintenance-requests');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      action: 'add_comment',
+      communityId: 42,
+      requestId: 7,
+      text: 'Thanks',
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: MAINTENANCE_REQUEST_KEYS.all });
   });
 });
