@@ -1,20 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { drizzle } from 'drizzle-orm/postgres-js';
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
 import * as schema from '../src/schema';
 import {
   announcements,
+  assessmentLineItems,
   billingGroups,
   communities,
   demoSeedRegistry,
   documentCategories,
   documents,
   leases,
+  ledgerEntries,
   maintenanceRequests,
   meetings,
   complianceChecklistItems,
   units,
+  userRoles,
+  users,
 } from '../src/schema';
 import { runDemoSeed } from '../../../scripts/seed-demo';
 import { startSupabaseDouble, type SupabaseHttpDouble } from './helpers/supabase-http-double';
@@ -47,7 +51,9 @@ function assertLoopbackDatabaseOrCI(label: string): void {
 
 describeDb('demo seed integration', () => {
   let sql: ReturnType<typeof postgres>;
-  let db: ReturnType<typeof drizzle>;
+  // Schema-typed: `ReturnType<typeof drizzle>` erases the schema generic, and
+  // createScopedClient's `dbInstance` parameter requires it.
+  let db: PostgresJsDatabase<typeof schema> & { $client: postgres.Sql };
   // The seed uploads document PDFs through Supabase Storage (seedEsignData and
   // the document seeders call createAdminClient()). Integration tests may not
   // mock a module, so the real supabase-js client talks to an in-process double.
@@ -327,6 +333,81 @@ describeDb('demo seed integration', () => {
     expect(within30).toBeGreaterThanOrEqual(1);
     expect(within60).toBeGreaterThanOrEqual(1);
     expect(within90).toBeGreaterThanOrEqual(1);
+  }, 30_000);
+
+  it("gives each seeded charge its ledger row, so the owner's balance is their open items", async () => {
+    const [sunset] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(eq(communities.slug, 'sunset-condos'));
+    expect(sunset).toBeDefined();
+
+    const lineItems = await db
+      .select()
+      .from(assessmentLineItems)
+      .where(eq(assessmentLineItems.communityId, sunset!.id));
+    const ledger = await db
+      .select()
+      .from(ledgerEntries)
+      .where(and(eq(ledgerEntries.communityId, sunset!.id), isNull(ledgerEntries.deletedAt)));
+    expect(lineItems.length).toBeGreaterThan(0);
+    const lateFeeItems = lineItems.filter((item) => item.lateFeeCents > 0);
+    expect(lateFeeItems.length).toBeGreaterThan(0);
+
+    // One charge row per line item and one fee row per late fee, after TWO
+    // seed runs: the re-seed replaced the first run's rows, it did not add to them.
+    const charges = ledger.filter((row) => row.entryType === 'assessment');
+    const fees = ledger.filter((row) => row.entryType === 'fee');
+    expect(ledger).toHaveLength(lineItems.length + lateFeeItems.length);
+    expect(charges.map((row) => row.sourceId).sort()).toEqual(lineItems.map((item) => String(item.id)).sort());
+    expect(fees.map((row) => row.sourceId).sort()).toEqual(lateFeeItems.map((item) => String(item.id)).sort());
+
+    // Shaped like the app's own posts (generateAssessmentLineItems, the late-fee cron).
+    for (const item of lineItems) {
+      const charge = charges.find((row) => row.sourceId === String(item.id));
+      expect(charge).toMatchObject({
+        sourceType: 'assessment',
+        unitId: item.unitId,
+        amountCents: item.amountCents,
+        metadata: { assessmentId: item.assessmentId, lineItemId: item.id },
+      });
+      expect(charge!.createdByUserId).not.toBeNull();
+    }
+    for (const item of lateFeeItems) {
+      const fee = fees.find((row) => row.sourceId === String(item.id));
+      expect(fee).toMatchObject({
+        sourceType: 'assessment',
+        unitId: item.unitId,
+        amountCents: item.lateFeeCents,
+        createdByUserId: null,
+        metadata: { assessmentId: item.assessmentId, lineItemId: item.id },
+      });
+    }
+
+    // Nothing dated in the future: a statement window ending today must show every row.
+    const [dbToday] = await sql<{ today: string }[]>`select current_date::text as today`;
+    expect(dbToday?.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(ledger.filter((row) => row.effectiveDate > dbToday!.today)).toEqual([]);
+
+    // The owner's balance, read the way the payment portal reads it.
+    const [owner] = await db
+      .select({ unitId: userRoles.unitId })
+      .from(userRoles)
+      .innerJoin(users, eq(users.id, userRoles.userId))
+      .where(and(eq(userRoles.communityId, sunset!.id), eq(users.email, 'owner.one@sunset.local')));
+    expect(owner?.unitId).toBeTypeOf('number');
+
+    const openItems = lineItems.filter(
+      (item) => item.unitId === owner!.unitId && (item.status === 'pending' || item.status === 'overdue'),
+    );
+    expect(openItems.some((item) => item.status === 'overdue')).toBe(true);
+    const openCents = openItems.reduce((sum, item) => sum + item.amountCents + item.lateFeeCents, 0);
+    expect(openCents).toBeGreaterThan(0);
+
+    const { createScopedClient } = await import('../src/scoped-client');
+    const { getUnitLedgerBalance } = await import('../src/queries/ledger');
+    const balanceCents = await getUnitLedgerBalance(createScopedClient(sunset!.id, db), owner!.unitId!);
+    expect(balanceCents).toBe(openCents);
   }, 30_000);
 
   itWithStripe('seeds PM portfolio billing with shared Stripe linkage and a synced tier_10 group', async () => {

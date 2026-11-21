@@ -12,6 +12,7 @@ import {
   esignSigners,
   esignSubmissions,
   esignTemplates,
+  ledgerEntries,
   stripePrices,
   meetings,
   notificationPreferences,
@@ -2090,12 +2091,41 @@ export async function runDemoSeed(options: DemoSeedOptions = {}): Promise<void> 
   debugSeed('runDemoSeed complete');
 }
 
+const MONTHLY_ASSESSMENT_TITLE = 'Monthly Maintenance Assessment';
+const MONTHLY_LATE_FEE_DAYS_GRACE = 15;
+const SPECIAL_ASSESSMENT_TITLE = 'Special Assessment — Roof Repair';
+const SPECIAL_LATE_FEE_DAYS_GRACE = 30;
+
+/** A local calendar date as `YYYY-MM-DD`, the same clock the due dates below use. */
+function toLocalDateOnly(value: Date): string {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+}
+
 /**
  * Seeds assessment and line item data for a demo community.
  * Creates two assessments (monthly maintenance + one-time special) with
- * line items for all units in the community.
+ * line items for all units in the community, and the ledger rows the app
+ * would have posted for them.
+ *
+ * The ledger is what a resident's balance reads (`getUnitLedgerBalance` sums
+ * `ledger_entries.amount_cents` per unit), so line items without ledger rows
+ * showed an owner "Current balance $0.00" beside an overdue charge. This
+ * function owns the community's whole finance state: it deletes every
+ * assessment and line item before re-inserting them, so it deletes every
+ * ledger row too. A payment or adjustment row left behind would name a line
+ * item that no longer exists and pull the balance off the open items. The
+ * community is a demo: seedCommunity refuses to turn a real one into a demo.
+ *
+ * Inserted directly rather than through `postLedgerEntry`, which also writes a
+ * `compliance_audit_log` row per entry: that table is append-only and this runs
+ * nightly against production, so it would grow by three rows per unit a night.
+ * The seeded line items are not audited either.
  */
 async function seedAssessmentData(communityId: number, createdByUserId: string): Promise<void> {
+  await db
+    .delete(ledgerEntries)
+    .where(eq(ledgerEntries.communityId, communityId));
+
   await db
     .delete(assessmentLineItems)
     .where(eq(assessmentLineItems.communityId, communityId));
@@ -2125,13 +2155,13 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
     .insert(assessments)
     .values({
       communityId,
-      title: 'Monthly Maintenance Assessment',
+      title: MONTHLY_ASSESSMENT_TITLE,
       description: 'Regular monthly assessment for common area maintenance, insurance, and reserves.',
       amountCents: 35000, // $350.00
       frequency: 'monthly',
       dueDay: 1,
       lateFeeAmountCents: 2500, // $25.00
-      lateFeeDaysGrace: 15,
+      lateFeeDaysGrace: MONTHLY_LATE_FEE_DAYS_GRACE,
       startDate: `${lastMonthStr}-01`,
       isActive: true,
       createdByUserId,
@@ -2143,13 +2173,13 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
     .insert(assessments)
     .values({
       communityId,
-      title: 'Special Assessment — Roof Repair',
+      title: SPECIAL_ASSESSMENT_TITLE,
       description: 'One-time special assessment for emergency roof repairs approved at March board meeting.',
       amountCents: 150000, // $1,500.00
       frequency: 'one_time',
       dueDay: 15,
       lateFeeAmountCents: 5000, // $50.00
-      lateFeeDaysGrace: 30,
+      lateFeeDaysGrace: SPECIAL_LATE_FEE_DAYS_GRACE,
       startDate: `${thisMonth}-15`,
       isActive: true,
       createdByUserId,
@@ -2202,9 +2232,83 @@ async function seedAssessmentData(communityId: number, createdByUserId: string):
     });
   }
 
-  await db.insert(assessmentLineItems).values(lineItemValues);
+  const insertedLineItems = await db
+    .insert(assessmentLineItems)
+    .values(lineItemValues)
+    .returning({
+      id: assessmentLineItems.id,
+      assessmentId: assessmentLineItems.assessmentId,
+      unitId: assessmentLineItems.unitId,
+      amountCents: assessmentLineItems.amountCents,
+      dueDate: assessmentLineItems.dueDate,
+      lateFeeCents: assessmentLineItems.lateFeeCents,
+    });
 
-  debugSeed(`seeded 2 assessments with ${lineItemValues.length} line items for community ${communityId}`);
+  // Shaped like the app's own posts, so the demo ledger reads like a real one:
+  // the charge like generateAssessmentLineItems (finance-service), the late fee
+  // like the late-fee cron (assessment-automation-service). Charges are
+  // positive; a payment would be negative. Dated when the app would have posted
+  // them, never in the future: a charge on its due date (or today, for one not
+  // yet due, since the app posts at generation), a late fee on the first day
+  // past its grace period.
+  const today = toLocalDateOnly(now);
+  const earlier = (a: string, b: string): string => (a < b ? a : b);
+  const assessmentById = new Map([
+    [monthlyAssessment.id, { title: MONTHLY_ASSESSMENT_TITLE, lateFeeDaysGrace: MONTHLY_LATE_FEE_DAYS_GRACE }],
+    [specialAssessment.id, { title: SPECIAL_ASSESSMENT_TITLE, lateFeeDaysGrace: SPECIAL_LATE_FEE_DAYS_GRACE }],
+  ]);
+
+  const ledgerValues: Array<typeof ledgerEntries.$inferInsert> = [];
+  for (const lineItem of insertedLineItems) {
+    const { assessmentId } = lineItem;
+    const assessment = assessmentId === null ? undefined : assessmentById.get(assessmentId);
+    if (assessmentId === null || !assessment) {
+      throw new Error(`Seeded line item ${lineItem.id} has no seeded assessment`);
+    }
+
+    ledgerValues.push({
+      communityId,
+      entryType: 'assessment',
+      amountCents: lineItem.amountCents,
+      description: `${assessment.title} (${lineItem.dueDate})`,
+      sourceType: 'assessment',
+      sourceId: String(lineItem.id),
+      unitId: lineItem.unitId,
+      userId: null,
+      effectiveDate: earlier(lineItem.dueDate, today),
+      metadata: { assessmentId, lineItemId: lineItem.id },
+      createdByUserId,
+    });
+
+    if (lineItem.lateFeeCents > 0) {
+      const daysOverdue = assessment.lateFeeDaysGrace + 1;
+      const [year, month, day] = lineItem.dueDate.split('-').map(Number);
+      const appliedOn = toLocalDateOnly(new Date(year!, month! - 1, day! + daysOverdue));
+      ledgerValues.push({
+        communityId,
+        entryType: 'fee',
+        amountCents: lineItem.lateFeeCents,
+        description: `Late fee applied for overdue assessment (line item #${lineItem.id})`,
+        sourceType: 'assessment',
+        sourceId: String(lineItem.id),
+        unitId: lineItem.unitId,
+        userId: null,
+        effectiveDate: earlier(appliedOn, today),
+        metadata: {
+          lineItemId: lineItem.id,
+          assessmentId,
+          notes: `Late fee: ${daysOverdue} days overdue, grace period: ${assessment.lateFeeDaysGrace} days`,
+        },
+        createdByUserId: null,
+      });
+    }
+  }
+
+  await db.insert(ledgerEntries).values(ledgerValues);
+
+  debugSeed(
+    `seeded 2 assessments with ${lineItemValues.length} line items and ${ledgerValues.length} ledger entries for community ${communityId}`,
+  );
 }
 
 async function main(): Promise<void> {
