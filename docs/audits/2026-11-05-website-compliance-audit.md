@@ -326,15 +326,18 @@ Missing or partial:
   notice missed in the past 12 months makes the row overdue, an unrecorded
   notice due within 7 days makes it "due soon", and the linked-document rule
   applies only while no notice has come due. The Compliance page, dashboard,
-  welcome page and PM portfolio all read this; the admin console's score and
-  the compliance-alert cron still count linked documents (M-3).
+  welcome page, PM portfolio and the daily overdue alert all read this; the
+  admin console's score still counts linked documents (M-3). In production on
+  2026-11-21 no condo or HOA had a meeting whose notice had come due in the
+  past 12 months, so no score changed on deploy.
 - Lead times still warn rather than block: there is no emergency meeting type
   to escape to.
 
 Not done: agenda *files* on the public site (attachments may be owners-only
 records), the special-assessment and use-rule 14-day flags with the
 purpose/cost prompt, the 7-day check for documents to be voted on, and a
-special *board* meeting still gets 14 days.
+special *board* meeting still gets 14 days. Rescheduling a meeting keeps its
+notice stamp, which then reads against the new date.
 
 ---
 
