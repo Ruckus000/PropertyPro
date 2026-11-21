@@ -931,6 +931,9 @@ describe('PaymentPortal', () => {
         await screen.findByText(/online payments aren't available for this community/i),
       ).toBeInTheDocument();
       expect(screen.getByText(/contact sunset management llc to arrange payment/i)).toBeInTheDocument();
+      // This resident owes money (possibly overdue), so the banner must not read
+      // as "you're paid up" — it said "Your balance is current" until 2026-11-21.
+      expect(screen.queryByText(/balance is current/i)).not.toBeInTheDocument();
 
       // The contact details are actionable, not decorative.
       expect(screen.getByRole('link', { name: CONTACT.contactEmail })).toHaveAttribute(
