@@ -60,7 +60,7 @@ import { AdminPaymentsTabs } from '@/app/(authenticated)/communities/[id]/paymen
 const BODIES = ['Assessments Content', 'Delinquency Content', 'Ledger Content'];
 
 function renderTabs() {
-  return render(<AdminPaymentsTabs communityId={3} communityType="condo_718" userId="user-1" userRole="property_manager" />);
+  return render(<AdminPaymentsTabs communityId={3} communityType="condo_718" userId="user-1" userRole="property_manager" timeZone="America/New_York" />);
 }
 // Tab switches write the URL with history.replaceState, which Next syncs into
 // useSearchParams without a server render. Asserting router.replace is NOT

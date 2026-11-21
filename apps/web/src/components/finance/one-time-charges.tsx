@@ -9,6 +9,9 @@
  * (POST /api/v1/assessments/[id]/generate). The service charges each unit at
  * most once per One-Time assessment, whatever date a later run picks, and the
  * line-items panel only mounts this while the assessment has no charges.
+ *
+ * "Today" is the community's, not the browser's: the server refuses a due date
+ * before it, and the overdue cron judges late by the same clock.
  */
 
 import { useId, useRef, useState, type FormEvent } from 'react';
@@ -18,7 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useGenerateAssessmentLineItems, type Assessment } from '@/hooks/use-finance';
+import { ApiRequestError } from '@/lib/api/request-json';
 import { formatDateOnly } from '@/lib/utils/format-date';
+import { dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
 
 // Mounted only once Generate charges is pressed.
 const ConfirmDialog = dynamic(
@@ -30,30 +35,46 @@ function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
 }
 
-/** The viewer's calendar date as YYYY-MM-DD. */
-function localToday(): string {
-  return new Date().toLocaleDateString('en-CA');
+/**
+ * A refusal (4xx) happens before anything is written, so its reason can be
+ * shown as is. Anything else may have failed after the charges were saved.
+ */
+function describeFailure(err: unknown): { title: string; description: string } {
+  if (err instanceof ApiRequestError && err.status === 401) {
+    return {
+      title: 'No charges were created',
+      description: 'Your session has ended. Sign in again, then generate the charges.',
+    };
+  }
+  if (err instanceof ApiRequestError && err.status < 500) {
+    return { title: 'No charges were created', description: err.message };
+  }
+  return {
+    title: 'We couldn’t confirm the charges',
+    description: 'Check your connection, then try again. A unit that already has this charge isn’t charged twice.',
+  };
 }
 
 interface OneTimeChargesProps {
   communityId: number;
   assessment: Assessment;
-  /** YYYY-MM-DD; injected so tests can pin the clock. */
-  today?: string;
+  /** The community's IANA time zone. */
+  timeZone: string;
   /** Called once the charges exist; this form is about to unmount, so the parent takes focus. */
   onCharged?: () => void;
 }
 
-export function OneTimeCharges({ communityId, assessment, today = localToday(), onCharged }: OneTimeChargesProps) {
+export function OneTimeCharges({ communityId, assessment, timeZone, onCharged }: OneTimeChargesProps) {
   const [dueDate, setDueDate] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ title: string; description: string } | null>(null);
   const submitButton = useRef<HTMLButtonElement | null>(null);
   const generate = useGenerateAssessmentLineItems(communityId, assessment.id);
   const id = useId();
   const dateId = `${id}-due`;
   const errorId = `${id}-due-error`;
+  const today = dateOnlyInTimeZone(new Date(), timeZone);
 
   if (!assessment.isActive) {
     return (
@@ -84,7 +105,7 @@ export function OneTimeCharges({ communityId, assessment, today = localToday(), 
       await generate.mutateAsync(dueDate);
       onCharged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'We couldn’t create the charges. Please try again.');
+      setError(describeFailure(err));
     } finally {
       setConfirming(false);
     }
@@ -92,7 +113,7 @@ export function OneTimeCharges({ communityId, assessment, today = localToday(), 
 
   return (
     <div className="space-y-4">
-      {error && <AlertBanner status="danger" title="No charges were created" description={error} />}
+      {error && <AlertBanner status="danger" title={error.title} description={error.description} />}
       <p className="text-sm text-content-secondary">
         One-Time assessments are not charged automatically. Choose when it is due, and every unit in your
         Directory is charged {formatCents(assessment.amountCents)} once.

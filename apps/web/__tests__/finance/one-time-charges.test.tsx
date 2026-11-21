@@ -4,9 +4,10 @@
  * manager picks a due date and confirms.
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import type { Assessment } from '@/hooks/use-finance';
+import { ApiRequestError } from '@/lib/api/request-json';
 
 const { mutateAsync } = vi.hoisted(() => ({ mutateAsync: vi.fn() }));
 
@@ -36,7 +37,9 @@ const ROOF: Assessment = {
 const onCharged = vi.fn();
 
 function renderCharges(assessment: Assessment = ROOF) {
-  return render(<OneTimeCharges communityId={42} assessment={assessment} today="2026-11-20" onCharged={onCharged} />);
+  return render(
+    <OneTimeCharges communityId={42} assessment={assessment} timeZone="Pacific/Honolulu" onCharged={onCharged} />,
+  );
 }
 
 function pickDate(value: string) {
@@ -46,7 +49,15 @@ function pickDate(value: string) {
 describe('<OneTimeCharges>', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 10pm on Nov 20 at the community, already Nov 21 in UTC and on the US
+    // mainland. Honolulu so the test machine's own zone can never agree with it.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-21T08:00:00.000Z'));
     mutateAsync.mockResolvedValue({ insertedCount: 12, skippedCount: 0, dueDate: '2026-12-01' });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('asks for a due date before anything else', () => {
@@ -56,6 +67,14 @@ describe('<OneTimeCharges>', () => {
     expect(screen.getByLabelText('Due date')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('takes today from the community, not the viewer’s clock', async () => {
+    renderCharges();
+    expect(screen.getByLabelText('Due date')).toHaveAttribute('min', '2026-11-20');
+    pickDate('2026-11-20');
+    fireEvent.click(screen.getByRole('button', { name: 'Generate charges' }));
+    expect(await screen.findByRole('alertdialog')).toHaveTextContent('due Nov 20, 2026');
   });
 
   it('refuses a date before today', () => {
@@ -91,16 +110,37 @@ describe('<OneTimeCharges>', () => {
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
-  it('says so when the server refuses', async () => {
-    mutateAsync.mockRejectedValueOnce(new Error('Cannot generate line items: no units found for this community'));
+  async function confirmWith(failure: unknown) {
+    mutateAsync.mockRejectedValueOnce(failure);
     renderCharges();
     pickDate('2026-12-01');
     fireEvent.click(screen.getByRole('button', { name: 'Generate charges' }));
     const dialog = await screen.findByRole('alertdialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Generate charges' }));
-    expect(await screen.findByText('Cannot generate line items: no units found for this community')).toBeInTheDocument();
+  }
+
+  it('gives the server’s reason when it refuses', async () => {
+    const reason = 'Your Directory has no units yet. Add units, then generate charges.';
+    await confirmWith(new ApiRequestError(reason, { status: 422, code: 'UNPROCESSABLE_ENTITY' }));
+    expect(await screen.findByText(reason)).toBeInTheDocument();
     expect(screen.getByText('No charges were created')).toBeInTheDocument();
     expect(onCharged).not.toHaveBeenCalled();
+  });
+
+  it('asks a signed-out manager to sign in, not "Request failed"', async () => {
+    await confirmWith(new ApiRequestError('Request failed', { status: 401 }));
+    expect(await screen.findByText('Your session has ended. Sign in again, then generate the charges.')).toBeInTheDocument();
+    expect(screen.queryByText('Request failed')).toBeNull();
+  });
+
+  it.each([
+    ['a dropped connection', new TypeError('Load failed')],
+    ['a server error', new ApiRequestError('An unexpected error occurred', { status: 500, code: 'INTERNAL_ERROR' })],
+  ])('does not claim nothing was charged after %s', async (_label, failure) => {
+    await confirmWith(failure);
+    expect(await screen.findByText('We couldn’t confirm the charges')).toBeInTheDocument();
+    expect(screen.queryByText('No charges were created')).toBeNull();
+    expect(screen.queryByText((failure as Error).message)).toBeNull();
   });
 
   it('an inactive assessment says how to charge it, with no button', () => {

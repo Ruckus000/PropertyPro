@@ -71,6 +71,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps) 
           communityType={membership.communityType}
           userId={userId}
           userRole={membership.role}
+          timeZone={membership.timezone}
         />
       </FeatureGate>
     );

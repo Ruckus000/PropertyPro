@@ -110,7 +110,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -133,7 +133,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -151,7 +151,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -180,7 +180,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="apartment" userId="user-1" userRole="property_manager" />
+        <AssessmentManager communityId={42} communityType="apartment" userId="user-1" userRole="property_manager" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -200,7 +200,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -216,7 +216,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -236,7 +236,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -266,7 +266,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -304,7 +304,7 @@ describe('AssessmentManager', () => {
 
     render(
       <Wrapper>
-        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+        <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
       </Wrapper>,
     );
 
@@ -322,7 +322,7 @@ describe('AssessmentManager', () => {
       const { Wrapper } = createWrapper();
       render(
         <Wrapper>
-          <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" />
+          <AssessmentManager communityId={42} communityType="condo_718" userId="user-1" userRole="board_president" timeZone="America/New_York" />
         </Wrapper>,
       );
       fireEvent.click(await screen.findByText(assessment.title, {}, { timeout: 10000 }));

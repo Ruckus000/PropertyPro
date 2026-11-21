@@ -50,6 +50,7 @@ import {
 import { getBaseUrl } from '@/lib/utils/url';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { calendarDaysBetween, dateOnlyInTimeZone } from '@/lib/utils/zoned-datetime';
+import { formatDateOnly } from '@/lib/utils/format-date';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 export type AssessmentFrequency = 'monthly' | 'quarterly' | 'annual' | 'one_time';
@@ -356,6 +357,20 @@ function toLegacyMetadata(payable: PayableRecord): Record<string, string> {
   return {};
 }
 
+/**
+ * Today as 'yyyy-MM-dd' in the community's time zone: the clock the overdue
+ * cron judges "late" by. The server's own clock is UTC, a day ahead of Florida
+ * every evening.
+ */
+async function communityToday(scoped: ScopedClient, communityId: number): Promise<string> {
+  const [community] = await scoped.selectFrom<{ timezone: string | null }>(
+    communities,
+    { timezone: communities.timezone },
+    eq(communities.id, communityId),
+  );
+  return dateOnlyInTimeZone(new Date(), resolveTimezone(community?.timezone));
+}
+
 function computeDueDate(
   assessment: Pick<AssessmentRecord, 'frequency' | 'dueDay' | 'startDate'>,
   dueDateOverride?: string | null,
@@ -551,9 +566,9 @@ export async function createAssessmentForCommunity(
   input: CreateAssessmentInput,
   requestId?: string | null,
 ): Promise<AssessmentRecord> {
-  const startDate = input.startDate ?? format(new Date(), 'yyyy-MM-dd');
-  assertAssessmentDateOrder(startDate, input.endDate ?? null);
   const scoped = createScopedClient(communityId);
+  const startDate = input.startDate ?? (await communityToday(scoped, communityId));
+  assertAssessmentDateOrder(startDate, input.endDate ?? null);
   const [inserted] = await scoped.insert(assessments, {
     title: input.title.trim(),
     description: input.description ?? null,
@@ -713,17 +728,29 @@ export async function generateAssessmentLineItemsForCommunity(
   }
 
   const dueDate = computeDueDate(assessment, dueDateOverride);
+  // A one-time charge due before today is overdue on the next cron run, and
+  // past its grace days it takes a late fee on every unit at once. Recurring
+  // overrides may still back-date a missed period.
+  if (assessment.frequency === 'one_time') {
+    const today = await communityToday(scoped, communityId);
+    if (dueDate < today) {
+      throw new UnprocessableEntityError(
+        `The due date can’t be before today, ${formatDateOnly(today)}. Choose today or a later date.`,
+      );
+    }
+  }
+  // These messages reach the manager word for word.
   const outOfRange = assessmentMonthOutOfRange(assessment, dueDate);
   if (outOfRange) {
     throw new UnprocessableEntityError(
       outOfRange === 'before_start'
-        ? `Cannot generate line items: ${dueDate} is before the assessment's start month (${assessment.startDate})`
-        : `Cannot generate line items: ${dueDate} is after the assessment's end month (${assessment.endDate})`,
+        ? `This assessment starts on ${formatDateOnly(assessment.startDate)}. Choose a due date in that month or later.`
+        : `This assessment ends on ${formatDateOnly(assessment.endDate ?? dueDate)}. Choose a due date in that month or earlier.`,
     );
   }
   const unitRows = await scoped.selectFrom<{ id: number }>(units, { id: units.id });
   if (unitRows.length === 0) {
-    throw new UnprocessableEntityError('Cannot generate line items: no units found for this community');
+    throw new UnprocessableEntityError('Your Directory has no units yet. Add units, then generate charges.');
   }
 
   // "Already generated" = any item for this assessment in the same billing
@@ -1700,13 +1727,7 @@ export async function listDelinquentUnits(
   lienEligible: boolean;
 }>> {
   const scoped = createScopedClient(communityId);
-  // "Today" in the community's time zone — the same clock the overdue cron uses.
-  const [community] = await scoped.selectFrom<{ timezone: string | null }>(
-    communities,
-    { timezone: communities.timezone },
-    eq(communities.id, communityId),
-  );
-  const today = dateOnlyInTimeZone(new Date(), resolveTimezone(community?.timezone));
+  const today = await communityToday(scoped, communityId);
   // Strictly before today — the same predicate processOverdueTransitions uses.
   // An installment due today is not late yet, so it is not delinquent.
   // `pending` stays in the set so an item the daily cron has not yet flipped to

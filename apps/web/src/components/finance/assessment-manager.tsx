@@ -33,6 +33,8 @@ interface AssessmentManagerProps {
   communityType: CommunityType;
   userId: string;
   userRole: string;
+  /** The community's IANA time zone; one-time charges are dated by it. */
+  timeZone: string;
 }
 
 /* ─────── Helpers ─────── */
@@ -57,7 +59,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 /* ─────── Main Component ─────── */
 
-export function AssessmentManager({ communityId, communityType, userId, userRole }: AssessmentManagerProps) {
+export function AssessmentManager({ communityId, communityType, userId, userRole, timeZone }: AssessmentManagerProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [editingAssessment, setEditingAssessment] = useState<Assessment | null>(null);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
@@ -125,6 +127,7 @@ export function AssessmentManager({ communityId, communityType, userId, userRole
         <LineItemsPanel
           communityId={communityId}
           assessment={selectedAssessment}
+          timeZone={timeZone}
           onClose={() => setSelectedAssessment(null)}
         />
       )}
@@ -215,10 +218,12 @@ function AssessmentCard({
 function LineItemsPanel({
   communityId,
   assessment,
+  timeZone,
   onClose,
 }: {
   communityId: number;
   assessment: Assessment;
+  timeZone: string;
   onClose: () => void;
 }) {
   const { data: lineItems, isLoading } = useAssessmentLineItems(communityId, assessment.id);
@@ -275,6 +280,7 @@ function LineItemsPanel({
             <OneTimeCharges
               communityId={communityId}
               assessment={assessment}
+              timeZone={timeZone}
               onCharged={() => headingRef.current?.focus()}
             />
           ) : (
