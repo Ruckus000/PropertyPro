@@ -1,7 +1,7 @@
 import React, { type ReactNode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CommunityPickerDialog } from '@/components/layout/community-picker-dialog';
 
 const useUserCommunitiesMock = vi.fn();
@@ -158,5 +158,50 @@ describe('community avatars', () => {
     const palm = screen.getByRole('link', { name: /Palm Shores HOA/ });
     expect(palm.querySelector('img')).toBeNull();
     expect(palm.querySelector('span[aria-hidden="true"]')).toHaveTextContent('P');
+  });
+});
+
+// D10: on a community's own subdomain the host wins over ?communityId=, so a
+// relative href would open the HOST's community. The flag is computed
+// server-side (isCommunitySubdomainHost) and passed down from the layout.
+describe('on a community subdomain (onTenantHost)', () => {
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'getpropertypro.com');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function renderOnHost(onTenantHost: boolean) {
+    return render(
+      wrap(
+        <CommunityPickerDialog
+          open
+          onOpenChange={() => {}}
+          itemLabel="Documents"
+          buildDestination={(id) => `/communities/${id}/documents`}
+          onTenantHost={onTenantHost}
+        />,
+      ),
+    );
+  }
+
+  it("links each row to the picked community's own subdomain, keeping the destination", () => {
+    renderOnHost(true);
+
+    expect(screen.getByRole('link', { name: 'Open Documents for Palm Shores HOA' })).toHaveAttribute(
+      'href',
+      'https://palm-shores-hoa.getpropertypro.com/communities/12/documents?communityId=12',
+    );
+  });
+
+  it('control: off a community subdomain the same row stays relative', () => {
+    renderOnHost(false);
+
+    expect(screen.getByRole('link', { name: 'Open Documents for Palm Shores HOA' })).toHaveAttribute(
+      'href',
+      '/communities/12/documents?communityId=12',
+    );
   });
 });

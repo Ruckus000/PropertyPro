@@ -248,6 +248,29 @@ function safeReturnTo(value: string | null, fallback: string): string {
   return value;
 }
 
+/**
+ * Parse a returnTo into the pathname + search to redirect to, or null when it
+ * is unsafe. `safeReturnTo` screens the raw string; resolving it against the
+ * request origin and requiring the SAME origin back is the second check, so a
+ * spelling the regex misses but the URL parser reads as another host still
+ * cannot leave the site.
+ */
+function resolveSameOriginReturnTo(
+  value: string | null,
+  origin: string,
+): { pathname: string; search: string } | null {
+  const safe = safeReturnTo(value, '');
+  if (!safe) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(safe, origin);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== origin) return null;
+  return { pathname: parsed.pathname, search: parsed.search };
+}
+
 function attachResponseCookies(source: NextResponse, target: NextResponse): void {
   for (const { name, value, ...options } of source.cookies.getAll()) {
     target.cookies.set(name, value, options);
@@ -1187,8 +1210,20 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       const destination = request.nextUrl.clone();
       const hasTenantContext = forwardedHeaders.has(COMMUNITY_ID_HEADER);
       const fallback = hasTenantContext ? '/dashboard' : '/select-community';
-      destination.pathname = safeReturnTo(request.nextUrl.searchParams.get('returnTo'), fallback);
-      destination.searchParams.delete('returnTo');
+      const returnTarget = resolveSameOriginReturnTo(
+        request.nextUrl.searchParams.get('returnTo'),
+        request.nextUrl.origin,
+      );
+      if (returnTarget) {
+        // The returnTo's own query (`/documents?communityId=5`) is part of the
+        // destination. Assigning the whole string to `pathname` encoded its `?`
+        // as `%3F`, so the query was lost and the path 404'd.
+        destination.pathname = returnTarget.pathname;
+        destination.search = returnTarget.search;
+      } else {
+        destination.pathname = fallback;
+        destination.searchParams.delete('returnTo');
+      }
       return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.redirect(destination),

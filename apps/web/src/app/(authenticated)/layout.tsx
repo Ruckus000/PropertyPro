@@ -9,6 +9,7 @@ import { detectDemoInfo } from '@/lib/demo/detect-demo-info';
 import { AppQueryProvider } from '@/components/providers/query-provider';
 import { SupportBanner } from '@/components/support/SupportBanner';
 import { getPageShellBranding, getPageShellContext } from '@/lib/request/page-shell-context';
+import { isCommunitySubdomainHost } from '@/lib/tenant/tenant-host';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,7 +68,7 @@ export default async function AuthenticatedLayout({
               a TanStack mutation hook; a React Query hook outside its provider
               throws at render. */}
           <SupportBanner active={requestHeaders.get('x-support-session') === '1'} />
-          <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo}>
+          <AppShell user={user} community={community} role={role} isUnitOwner={isUnitOwner} designation={designation} features={features} resourceAccess={resourceAccess} subscriptionStatus={subscriptionStatus} subscriptionCanceledAt={subscriptionCanceledAt} subscriptionCurrentPeriodEndAt={subscriptionCurrentPeriodEndAt} isDemo={shellContext.isDemo} freeAccessExpiresAt={freeAccessExpiresAt} demoInfo={demoInfo} onTenantHost={isCommunitySubdomainHost(requestHeaders.get('host'))}>
             {children}
           </AppShell>
         </AppQueryProvider>

@@ -155,7 +155,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <SettingsSection id="account" title="Account" description="Your sign-in details.">
             <SettingsCard>
               <SettingsLinkRow
-                href="/settings/account"
+                href={`/settings/account?communityId=${context.communityId}`}
                 title="Account details"
                 description="Update your name, phone number, and password."
               />

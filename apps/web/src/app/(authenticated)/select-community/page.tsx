@@ -1,5 +1,6 @@
 // page-header:exempt — orientation page rendered without the rail or breadcrumb trail (shell-breadcrumbs HIDE_PATHS); its title is the only wayfinding on screen.
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -11,6 +12,8 @@ import { listCommunitiesForUser } from '@/lib/api/user-communities';
 import { getPageSupportScope, narrowToSupportScope } from '@/lib/support/support-scope';
 import { CommunityPickerGrid } from '@/components/community-picker/community-picker-grid';
 import { resolveSafeReturnTo, applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
+import { isCommunitySubdomainHost } from '@/lib/tenant/tenant-host';
 
 export const metadata = {
   title: 'Select Community | PropertyPro',
@@ -30,10 +33,18 @@ interface SelectCommunityPageProps {
  * If the URL carries a `?returnTo=…` (set by middleware when redirecting an
  * authenticated user with no tenant context), the auto-redirect honors it
  * and the picker cards forward it. Unsafe values are silently dropped.
+ *
+ * On a community's own subdomain the host wins over `?communityId=`, so every
+ * way out of this page (the auto-redirects and the cards) goes to the picked
+ * community's subdomain. A relative hop there would reopen the host's
+ * community — and for a non-member, the layout's no-membership redirect sends
+ * them straight back here, forever. Elsewhere (apex, `www`, localhost,
+ * `*.vercel.app` previews) navigation stays relative.
  */
 export default async function SelectCommunityPage({ searchParams }: SelectCommunityPageProps) {
   const userId = await requireAuthenticatedUserId();
   const params = await searchParams;
+  const onTenantHost = isCommunitySubdomainHost((await headers()).get('host'));
   const rawReturnTo = typeof params.returnTo === 'string' ? params.returnTo : null;
   const safeReturnTo = resolveSafeReturnTo(rawReturnTo);
   const rawReason = params.reason;
@@ -51,9 +62,14 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
     (c) => c.communityId,
   );
 
+  const destinationFor = (community: { communityId: number; slug: string }): string => {
+    const path = applyCommunityIdToReturnTo(safeReturnTo ?? '/dashboard', community.communityId);
+    return onTenantHost ? buildCommunityUrl(community.slug, path) : path;
+  };
+
   // Single community — auto-redirect regardless of role.
   if (communities.length === 1) {
-    redirect(applyCommunityIdToReturnTo(safeReturnTo ?? '/dashboard', communities[0]!.communityId));
+    redirect(destinationFor(communities[0]!));
   }
 
   // Tenants belong to exactly one community. If a tenant somehow has
@@ -61,7 +77,7 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
   // rather than showing the picker.
   const allTenant = communities.length > 0 && communities.every((c) => c.role === 'resident' && !c.isUnitOwner);
   if (allTenant) {
-    redirect(applyCommunityIdToReturnTo(safeReturnTo ?? '/dashboard', communities[0]!.communityId));
+    redirect(destinationFor(communities[0]!));
   }
 
   return (
@@ -112,7 +128,11 @@ export default async function SelectCommunityPage({ searchParams }: SelectCommun
           />
         </div>
       ) : (
-        <CommunityPickerGrid communities={communities} returnTo={safeReturnTo} />
+        <CommunityPickerGrid
+          communities={communities}
+          returnTo={safeReturnTo}
+          onTenantHost={onTenantHost}
+        />
       )}
     </PageBody>
   );

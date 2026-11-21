@@ -80,6 +80,13 @@ interface AppSidebarProps {
   /** When false, hides the collapse toggle button independently of collapsible. */
   showCollapseToggle?: boolean;
   onNavigate?: () => void;
+  /**
+   * Served on a community's own subdomain (`isCommunitySubdomainHost`,
+   * computed server-side in the authenticated layout). The community picker
+   * dialog then links cross-host, because there the host wins over
+   * `?communityId=`.
+   */
+  onTenantHost?: boolean;
 }
 
 export function AppSidebar({
@@ -97,6 +104,7 @@ export function AppSidebar({
   expandedOverride,
   showCollapseToggle,
   onNavigate,
+  onTenantHost = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -357,6 +365,7 @@ export function AppSidebar({
           }}
           itemLabel={pickerFor?.label ?? null}
           buildDestination={pickerFor?.href ?? null}
+          onTenantHost={onTenantHost}
         />
       )}
     </>
