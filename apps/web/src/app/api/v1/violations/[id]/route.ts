@@ -15,8 +15,10 @@ import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromBody, parseCommunityIdFromQuery } from '@/lib/finance/request';
 import {
   getViolationReadUnitIds,
+  redactViolationReporter,
   requireViolationAdminWrite,
   requireViolationsEnabled,
+  residentVisibleViolationsWhere,
 } from '@/lib/violations/common';
 import { getViolationForCommunity, updateViolationForCommunity } from '@/lib/services/violations-service';
 import { buildHearingNoticeWarning } from '@/lib/violations/hearing-notice-warning';
@@ -43,8 +45,15 @@ export const GET = withErrorHandler(
     const scoped = createScopedClient(communityId);
     const residentUnitIds = await getViolationReadUnitIds(scoped, membership, actorUserId);
 
-    const violation = await getViolationForCommunity(communityId, params.id, residentUnitIds);
-    return withUnitLabel(scoped, violation);
+    // D1a: a neighbour's still-`reported` case is a 404 to the cited household;
+    // D1b: the reporter is named only to the filer and board viewers.
+    const violation = await getViolationForCommunity(
+      communityId,
+      params.id,
+      residentUnitIds,
+      residentVisibleViolationsWhere(membership, actorUserId),
+    );
+    return withUnitLabel(scoped, redactViolationReporter(violation, membership, actorUserId));
   }),
 );
 

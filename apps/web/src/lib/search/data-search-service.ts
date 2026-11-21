@@ -9,7 +9,7 @@ import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import type { CommunityFeatures } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { formatAnnouncementAudienceLabel, searchVisibleAnnouncements } from '@/lib/announcements/read-visibility';
-import { getMembershipResourceAccess } from '@/lib/db/access-control';
+import { canActAsBoard, getMembershipResourceAccess } from '@/lib/db/access-control';
 import { escapeLikePattern } from '@/lib/utils/escape-like';
 import { operationsHubHref } from '@/lib/operations/routes';
 import { SEARCH_GROUPS, type SearchGroupConfig } from './group-config';
@@ -137,8 +137,11 @@ async function executeSearchGroup(
         break;
       }
       case 'violations': {
+        // Board seats read every unit's violations, as everywhere else
+        // (getViolationReadUnitIds); other residents get the D1a-filtered
+        // own-unit search.
         const response = await searchViolationsByTrigram(communityId, query, limit, {
-          isAdmin: membership.isAdmin,
+          isAdmin: canActAsBoard(membership),
           userId: membership.userId,
         });
         totalCount = response.totalCount;

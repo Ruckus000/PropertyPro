@@ -3,7 +3,8 @@ import { getFeaturesForCommunity } from '@propertypro/shared';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { ForbiddenError } from '@/lib/api/errors';
 import { requirePlanFeature } from '@/lib/middleware/plan-guard';
-import type { ScopedClient } from '@propertypro/db';
+import { userRoles, violations, type ScopedClient } from '@propertypro/db';
+import { eq, ne, or, sql, type SQL } from '@propertypro/db/filters';
 import { canActAsBoard, requireBoardDesignation } from '@/lib/db/access-control';
 import { getActorUnitIds } from '@/lib/units/actor-units';
 
@@ -49,6 +50,65 @@ export async function getViolationReadUnitIds(
   userId: string,
 ): Promise<number[] | undefined> {
   return canActAsBoard(membership) ? undefined : getActorUnitIds(scoped, userId);
+}
+
+type ViolationViewer = Pick<CommunityMembership, 'isAdmin' | 'designation'>;
+
+/**
+ * D1a — the second half of a resident's violations read scope (the first is
+ * the unit list above). A case a RESIDENT filed stays hidden from the cited
+ * household while it is still `reported`, i.e. before the board has looked at
+ * it: a neighbour's complaint should not reach the household, or name a
+ * neighbour by implication, until the association decides to act on it.
+ *
+ * Visible to a non-board viewer when ANY of:
+ * - the case has moved past `reported`;
+ * - the viewer filed it (the filer always sees their own report);
+ * - the reporter holds no `resident` role in this community — a manager's
+ *   filing shows as it always has, and so does a case whose reporter has left
+ *   (nothing is left to protect, and hiding it would lose the record).
+ *
+ * "Reporter is a resident" is the same rule `hydrateReportedByRole` uses
+ * (`role === 'resident'` in THIS community; a board seat is a resident), so
+ * the badge and the visibility cannot disagree. Staff file through the same
+ * `createViolationForCommunity`, which also starts every case at `reported`,
+ * so "hide every reported row the viewer did not file" would have hidden staff
+ * filings too — hence the subquery rather than that shortcut.
+ *
+ * `undefined` for managers and board seats (`canActAsBoard`): they see every
+ * case. Every resident read ANDs this onto its unit scope: the list API, the
+ * detail API and page, the report page and the dashboard card.
+ */
+export function residentVisibleViolationsWhere(
+  membership: ViolationViewer,
+  userId: string,
+): SQL | undefined {
+  if (canActAsBoard(membership)) return undefined;
+  return or(
+    ne(violations.status, 'reported'),
+    eq(violations.reportedByUserId, userId),
+    sql`NOT EXISTS (SELECT 1 FROM ${userRoles} WHERE ${userRoles.userId} = ${violations.reportedByUserId} AND ${userRoles.communityId} = ${violations.communityId} AND ${userRoles.role} = 'resident')`,
+  );
+}
+
+/**
+ * D1b — who filed a case is shown only to the filer and to board viewers.
+ * Any member can turn a user id into a name (`/api/v1/users/names`), and even
+ * `reportedByRole: 'resident'` tells a cited household that a neighbour
+ * complained. Everyone else gets both fields as `null`. Every resident read
+ * passes its rows through this: list API, detail API, detail page, report page.
+ */
+export function redactViolationReporter<T extends { reportedByUserId: string | null }>(
+  row: T,
+  membership: ViolationViewer,
+  userId: string,
+): T {
+  if (canActAsBoard(membership) || row.reportedByUserId === userId) return row;
+  return {
+    ...row,
+    reportedByUserId: null,
+    ...('reportedByRole' in row ? { reportedByRole: null } : {}),
+  };
 }
 
 // ── Legal gates ─────────────────────────────────────────────────────────────

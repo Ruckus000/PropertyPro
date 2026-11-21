@@ -45,6 +45,8 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
 
 vi.mock('@/lib/db/access-control', () => ({
   getMembershipResourceAccess: getMembershipResourceAccessMock,
+  canActAsBoard: (m: { isAdmin: boolean; designation?: string | null }) =>
+    m.isAdmin || m.designation === 'board_member' || m.designation === 'board_president',
 }));
 
 import { searchAccessibleGroups } from '@/lib/search/data-search-service';
@@ -105,6 +107,17 @@ describe('searchAccessibleGroups — per-group gates', () => {
     searchMaintenanceByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchViolationsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
     searchResidentsByTrigramMock.mockResolvedValue({ results: [], totalCount: 0 });
+  });
+
+  // Board seats read every unit's violations (getViolationReadUnitIds); every
+  // other resident gets the own-unit search that applies the D1a rule.
+  it('searches violations community-wide for a board seat, own-unit for other residents', async () => {
+    await searchedKeys(membership({ designation: 'board_member' } as Partial<CommunityMembership>));
+    expect(searchViolationsByTrigramMock.mock.calls[0]![3]).toMatchObject({ isAdmin: true });
+
+    searchViolationsByTrigramMock.mockClear();
+    await searchedKeys(membership());
+    expect(searchViolationsByTrigramMock.mock.calls[0]![3]).toMatchObject({ isAdmin: false, userId: 'user-1' });
   });
 
   it('control: a reader on a professional condo searches all five non-admin groups', async () => {

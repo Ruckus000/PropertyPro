@@ -74,7 +74,7 @@ export default async function ArcRequestsPage({ searchParams }: PageProps) {
       {isReviewer ? (
         <ArcSubmissionsTab communityId={communityId} />
       ) : (
-        <ResidentArcRequests communityId={communityId} />
+        <ResidentArcRequests communityId={communityId} userId={userId} />
       )}
     </FeatureGate>
   );

@@ -37,6 +37,8 @@ import {
   paginateStormDamageReports,
   updateStormDamageReportById,
 } from '@/lib/services/storm-damage-service';
+import { unitExistsInCommunity } from '@/lib/services/violations-service';
+import { listActorUnitIds } from '@/lib/units/actor-units';
 import {
   stormDamageCreateContract,
   stormDamageListContract,
@@ -130,6 +132,20 @@ export const POST = withErrorHandler(
     }
 
     const scoped = createScopedClient(communityId);
+
+    // The unit is optional (damage is often in a common area), but when one is
+    // named it must exist here, and a resident may only name their own home —
+    // a report records damage TO a unit, which is that household's matter.
+    if (body.unitId !== undefined && body.unitId !== null) {
+      if (membership.role === 'resident') {
+        const ownUnitIds = await listActorUnitIds(scoped, actorUserId);
+        if (!ownUnitIds.includes(body.unitId)) {
+          throw new ForbiddenError('You can only report damage to your own unit');
+        }
+      } else if (!(await unitExistsInCommunity(communityId, body.unitId))) {
+        throw new NotFoundError(`Unit ${body.unitId} not found in this community`);
+      }
+    }
 
     const photoDocumentIds = body.photoDocumentIds ?? [];
     if (photoDocumentIds.length > 0) {

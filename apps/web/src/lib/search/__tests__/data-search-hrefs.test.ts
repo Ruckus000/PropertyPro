@@ -21,6 +21,7 @@ vi.mock('@/lib/announcements/read-visibility', () => ({
 vi.mock('@/lib/db/access-control', () => ({
   getMembershipResourceAccess: () =>
     new Proxy({}, { get: () => ({ read: true, write: true }) }),
+  canActAsBoard: (m: { isAdmin: boolean }) => m.isAdmin,
 }));
 
 import { searchAccessibleGroups } from '../data-search-service';

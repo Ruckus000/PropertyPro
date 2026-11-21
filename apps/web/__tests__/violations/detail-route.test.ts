@@ -65,6 +65,15 @@ vi.mock('@/lib/violations/common', () => ({
   // in lib/violations/__tests__/read-scope.test.ts.
   getViolationReadUnitIds: async (scoped: unknown, m: { role: string }, userId: string) =>
     isResidentRoleMock(m.role) ? getActorUnitIdsMock(scoped, userId) : undefined,
+  // D1a/D1b rules for a mock membership; pinned for real in
+  // lib/violations/__tests__/read-scope.test.ts.
+  residentVisibleViolationsWhere: (m: { isAdmin: boolean }, userId: string) =>
+    m.isAdmin ? undefined : { __residentVisible: userId },
+  redactViolationReporter: (
+    row: Record<string, unknown>,
+    m: { isAdmin: boolean },
+    userId: string,
+  ) => (m.isAdmin || row['reportedByUserId'] === userId ? row : { ...row, reportedByUserId: null }),
 }));
 
 vi.mock('@/lib/db/access-control', () => ({
@@ -138,7 +147,7 @@ describe('GET /api/v1/violations/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ data: VIOLATION });
-    expect(getViolationForCommunityMock).toHaveBeenCalledWith(42, 12, undefined);
+    expect(getViolationForCommunityMock).toHaveBeenCalledWith(42, 12, undefined, undefined);
   });
 
   it('passes resident unit ids to the service for resident callers', async () => {
@@ -152,7 +161,40 @@ describe('GET /api/v1/violations/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(createScopedClientMock).toHaveBeenCalledWith(42);
-    expect(getViolationForCommunityMock).toHaveBeenCalledWith(42, 12, [101, 102]);
+    expect(getViolationForCommunityMock).toHaveBeenCalledWith(42, 12, [101, 102], {
+      __residentVisible: 'user-admin-1',
+    });
+  });
+
+  it('strips the reporter for a resident who did not file the case (D1b)', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
+    requireAuthenticatedUserIdMock.mockResolvedValueOnce('household-1');
+    isResidentRoleMock.mockReturnValueOnce(true);
+    getActorUnitIdsMock.mockResolvedValueOnce([101]);
+    getViolationForCommunityMock.mockResolvedValueOnce({ ...VIOLATION, reportedByUserId: 'neighbour-1' });
+
+    const res = await GET(new NextRequest('http://localhost:3000/api/v1/violations/12?communityId=42'), routeCtx('12'));
+    const json = await res.json();
+
+    expect(json.data.reportedByUserId).toBeNull();
+  });
+
+  it('keeps the reporter for the filer and for staff', async () => {
+    requireCommunityMembershipMock.mockResolvedValueOnce(RESIDENT_MEMBERSHIP);
+    requireAuthenticatedUserIdMock.mockResolvedValueOnce('neighbour-1');
+    isResidentRoleMock.mockReturnValueOnce(true);
+    getActorUnitIdsMock.mockResolvedValueOnce([101]);
+    getViolationForCommunityMock.mockResolvedValueOnce({ ...VIOLATION, reportedByUserId: 'neighbour-1' });
+    const filer = await (
+      await GET(new NextRequest('http://localhost:3000/api/v1/violations/12?communityId=42'), routeCtx('12'))
+    ).json();
+    expect(filer.data.reportedByUserId).toBe('neighbour-1');
+
+    getViolationForCommunityMock.mockResolvedValueOnce({ ...VIOLATION, reportedByUserId: 'neighbour-1' });
+    const staff = await (
+      await GET(new NextRequest('http://localhost:3000/api/v1/violations/12?communityId=42'), routeCtx('12'))
+    ).json();
+    expect(staff.data.reportedByUserId).toBe('neighbour-1');
   });
 
   it('returns 401 for unauthenticated requests', async () => {

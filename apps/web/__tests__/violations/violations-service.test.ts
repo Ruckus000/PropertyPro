@@ -22,7 +22,11 @@ const {
       status: Symbol('arc_submissions.status'),
     },
     assessmentLineItems: { id: Symbol('assessment_line_items.id') },
-    documents: { id: Symbol('documents.id') },
+    documents: {
+      id: Symbol('documents.id'),
+      uploadedBy: Symbol('documents.uploaded_by'),
+      sourceType: Symbol('documents.source_type'),
+    },
     ledgerEntries: { id: Symbol('ledger_entries.id') },
     violationFines: { id: Symbol('violation_fines.id') },
     userRoles: {
@@ -35,6 +39,7 @@ const {
       id: Symbol('violations.id'),
       status: Symbol('violations.status'),
       unitId: Symbol('violations.unit_id'),
+      reportedByUserId: Symbol('violations.reported_by_user_id'),
       createdAt: Symbol('violations.created_at'),
     },
   },
@@ -77,8 +82,11 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 import {
+  createViolationForCommunity,
   decideArcSubmissionForCommunity,
+  getViolationForCommunity,
   imposeViolationFineForCommunity,
+  listViolationsForCommunity,
   reviewArcSubmissionForCommunity,
   updateViolationForCommunity,
   withdrawArcSubmissionForCommunity,
@@ -318,6 +326,43 @@ describe('violations-service', () => {
       expect(residentNoticePath(event.topic, 42, event.recordId)).toBe('/arc-requests?communityId=42');
       expect(createNotificationsForEventMock.mock.calls[0]![1]).toMatchObject({
         actionUrl: '/arc-requests?communityId=42',
+      });
+    });
+
+    // HB 1203: the denial notice must carry the reason itself, not just "denied".
+    it('puts the cited rule and the committee notes in the denial notice', async () => {
+      const row = createArcSubmissionRow({ status: 'under_review' });
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn().mockResolvedValue([row]),
+        update: vi.fn().mockResolvedValue([
+          {
+            ...row,
+            status: 'denied',
+            reviewNotes: 'Exceeds the 4 ft height limit.',
+            ruleReference: 'Declaration Art. VII §3',
+          },
+        ]),
+        insert: vi.fn(),
+      });
+      createNotificationsForEventMock.mockResolvedValue(undefined);
+
+      await decideArcSubmissionForCommunity(42, 7, 'reviewer-1', {
+        decision: 'denied',
+        reviewNotes: 'Exceeds the 4 ft height limit.',
+        ruleReference: 'Declaration Art. VII §3',
+      });
+
+      expect(sendNotificationMock.mock.calls[0]![1]).toMatchObject({
+        title: 'ARC Application Decision',
+        description:
+          'Your ARC application #7 was denied. Rule or covenant relied on: Declaration Art. VII §3 ' +
+          'Committee notes: Exceeds the 4 ft height limit.',
+      });
+      // The in-app entry carries the same reason, not a bare "denied".
+      expect(createNotificationsForEventMock.mock.calls[0]![1]).toMatchObject({
+        body:
+          'Your ARC application #7 was denied. Rule or covenant relied on: Declaration Art. VII §3 ' +
+          'Committee notes: Exceeds the 4 ft height limit.',
       });
     });
 
@@ -840,6 +885,77 @@ describe('violations-service', () => {
       expect(logAuditEventMock).not.toHaveBeenCalledWith(
         expect.objectContaining({ action: 'fining_committee_disclaimer_accepted' }),
       );
+    });
+  });
+
+  describe('violation reads and filing (D1, D1a, D1b)', () => {
+    function captureWheres(rows: unknown[] = []) {
+      const wheres: unknown[] = [];
+      const orderBy = vi.fn().mockResolvedValue(rows);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn((_t: unknown, _c: unknown, where: unknown) => {
+          wheres.push(where);
+          return Object.assign(Promise.resolve(rows), { orderBy });
+        }),
+        insert: vi.fn().mockResolvedValue([createViolationRow()]),
+      });
+      return wheres;
+    }
+
+    it('lists the cases a resident filed, on any unit ("Your reports")', async () => {
+      const wheres = captureWheres();
+
+      await listViolationsForCommunity(42, { reportedByUserId: 'resident-1' });
+
+      expect(wheres[0]).toEqual({ eq: [tables.violations.reportedByUserId, 'resident-1'] });
+    });
+
+    it('ANDs the D1a predicate onto the own-unit list and the detail read', async () => {
+      const visibleWhere = { __residentVisible: true };
+      const wheres = captureWheres([createViolationRow()]);
+
+      await listViolationsForCommunity(42, { allowedUnitIds: [9], visibleWhere: visibleWhere as never });
+      await getViolationForCommunity(42, 10, [9], visibleWhere as never);
+
+      expect(wheres[0]).toEqual({ and: [{ inArray: [tables.violations.unitId, [9]] }, visibleWhere] });
+      expect(wheres[1]).toEqual({
+        and: [{ eq: [tables.violations.id, 10] }, { inArray: [tables.violations.unitId, [9]] }, visibleWhere],
+      });
+    });
+
+    it('accepts only the filer\'s own violation_evidence uploads when evidenceUploadedBy is set', async () => {
+      const wheres = captureWheres([]);
+
+      await expect(
+        createViolationForCommunity(42, 'resident-1', {
+          unitId: 9,
+          category: 'noise',
+          description: 'x',
+          evidenceDocumentIds: [5],
+          evidenceUploadedBy: 'resident-1',
+        }),
+      ).rejects.toMatchObject({ statusCode: 400 });
+
+      expect(wheres[0]).toEqual({
+        and: [
+          { inArray: [tables.documents.id, [5]] },
+          { eq: [tables.documents.uploadedBy, 'resident-1'] },
+          { eq: [tables.documents.sourceType, 'violation_evidence'] },
+        ],
+      });
+    });
+
+    it('checks only community membership of evidence without evidenceUploadedBy (staff)', async () => {
+      const wheres = captureWheres([{ id: 5 }]);
+
+      await createViolationForCommunity(42, 'manager-1', {
+        unitId: 9,
+        category: 'noise',
+        description: 'x',
+        evidenceDocumentIds: [5],
+      });
+
+      expect(wheres[0]).toEqual({ inArray: [tables.documents.id, [5]] });
     });
   });
 });

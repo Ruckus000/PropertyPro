@@ -35,6 +35,8 @@ const {
   getStormDamageReportByIdMock,
   getStormDamageDocumentByIdMock,
   updateStormDamageReportByIdMock,
+  unitExistsInCommunityMock,
+  listActorUnitIdsMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -50,7 +52,14 @@ const {
   getStormDamageReportByIdMock: vi.fn(),
   getStormDamageDocumentByIdMock: vi.fn(),
   updateStormDamageReportByIdMock: vi.fn(),
+  unitExistsInCommunityMock: vi.fn(),
+  listActorUnitIdsMock: vi.fn(),
 }));
+
+vi.mock('@/lib/services/violations-service', () => ({
+  unitExistsInCommunity: unitExistsInCommunityMock,
+}));
+vi.mock('@/lib/units/actor-units', () => ({ listActorUnitIds: listActorUnitIdsMock }));
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
@@ -125,6 +134,8 @@ beforeEach(() => {
   getStormDamageReportByIdMock.mockResolvedValue({ id: 10, status: 'submitted' });
   getStormDamageDocumentByIdMock.mockResolvedValue({ id: 5 });
   updateStormDamageReportByIdMock.mockResolvedValue({ id: 10, status: 'acknowledged' });
+  unitExistsInCommunityMock.mockResolvedValue(true);
+  listActorUnitIdsMock.mockResolvedValue([7]);
 });
 
 describe('GET /api/v1/storm-damage', () => {
@@ -163,6 +174,43 @@ describe('GET /api/v1/storm-damage', () => {
 });
 
 describe('POST /api/v1/storm-damage', () => {
+  it('lets a resident name their own unit', async () => {
+    const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', { ...VALID_CREATE, unitId: 7 }));
+    expect(res.status).toBe(200);
+    expect(createStormDamageReportMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ unitId: 7 }),
+    );
+  });
+
+  it('refuses a resident naming a unit that is not theirs (403, nothing written)', async () => {
+    const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', { ...VALID_CREATE, unitId: 8 }));
+    expect(res.status).toBe(403);
+    expect(createStormDamageReportMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a manager naming a unit not in the community (404)', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(MANAGER);
+    unitExistsInCommunityMock.mockResolvedValueOnce(false);
+    const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', { ...VALID_CREATE, unitId: 999 }));
+    expect(res.status).toBe(404);
+    expect(unitExistsInCommunityMock).toHaveBeenCalledWith(42, 999);
+    expect(createStormDamageReportMock).not.toHaveBeenCalled();
+  });
+
+  it('lets a manager name any unit that exists', async () => {
+    requireCommunityMembershipMock.mockResolvedValue(MANAGER);
+    const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', { ...VALID_CREATE, unitId: 8 }));
+    expect(res.status).toBe(200);
+  });
+
+  it('checks no unit when none is sent (a common-area report)', async () => {
+    const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', VALID_CREATE));
+    expect(res.status).toBe(200);
+    expect(listActorUnitIdsMock).not.toHaveBeenCalled();
+    expect(unitExistsInCommunityMock).not.toHaveBeenCalled();
+  });
+
   it('lets an owner file a report and records an audit event', async () => {
     const res = await POST(jsonReq('POST', 'http://localhost/api/v1/storm-damage', VALID_CREATE));
     expect(res.status).toBe(200);

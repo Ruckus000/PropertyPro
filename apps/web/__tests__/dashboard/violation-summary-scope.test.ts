@@ -14,6 +14,7 @@ vi.mock('@propertypro/db', () => ({
   units: { id: 'units.id', unitNumber: 'unit_number', building: 'building' },
 }));
 vi.mock('@propertypro/db/filters', () => ({
+  and: (...clauses: unknown[]) => ({ and: clauses }),
   asc: vi.fn(),
   desc: vi.fn(),
   eq: vi.fn(),
@@ -51,6 +52,15 @@ describe('getDashboardViolationSummary scope', () => {
       { inArray: ['violations.unit_id', [3, 4]] },
       { inArray: ['violations.unit_id', [3, 4]] },
     ]);
+  });
+
+  // D1a: a neighbour's report still awaiting review is neither counted nor listed.
+  it('ANDs the resident visibility predicate onto both reads', async () => {
+    const { scoped, wheres } = fakeScoped();
+    const visible = { __residentVisible: true };
+    await getDashboardViolationSummary(scoped, [3], visible as never);
+    const expected = { and: [{ inArray: ['violations.unit_id', [3]] }, visible] };
+    expect(wheres).toEqual([expected, expected]);
   });
 
   it('a resident with no unit sees nothing and costs no query', async () => {
