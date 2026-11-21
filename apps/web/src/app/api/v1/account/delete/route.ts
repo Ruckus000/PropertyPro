@@ -22,6 +22,10 @@ import {
 import { AppError } from '@/lib/api/errors/AppError';
 import { recordSupportAction } from '@/lib/support/support-audit';
 import {
+  sendDeletionCancelledEmail,
+  sendDeletionInitiatedEmail,
+} from '@/lib/account-lifecycle/deletion-emails';
+import {
   accountDeleteDeleteContract,
   accountDeleteGetContract,
   accountDeletePostContract,
@@ -51,8 +55,9 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     await requireFreshReauth(userId);
 
+    let request: Awaited<ReturnType<typeof requestUserDeletion>>;
     try {
-      return await requestUserDeletion(userId, body?.acknowledgeRootOffboarding ?? false);
+      request = await requestUserDeletion(userId, body?.acknowledgeRootOffboarding ?? false);
     } catch (err) {
       // R3-03b: the caller is root somewhere and has not acknowledged it yet.
       // 409 (not 403) — this is a confirmable state, not a refusal; the client
@@ -69,6 +74,15 @@ export const POST = withErrorHandler(
       }
       throw err;
     }
+
+    // Best effort: never throws, so a mail failure cannot turn a committed
+    // request into an error the user retries.
+    await sendDeletionInitiatedEmail({
+      requestId: request.id,
+      userId,
+      coolingEndsAt: request.coolingEndsAt,
+    });
+    return request;
   }),
 );
 
@@ -101,6 +115,8 @@ export const DELETE = withErrorHandler(
     });
 
     await cancelUserDeletion(activeRequestId, userId);
+    // Best effort, never throws (see POST).
+    await sendDeletionCancelledEmail({ requestId: activeRequestId, userId });
     return { cancelled: true as const };
   }),
 );

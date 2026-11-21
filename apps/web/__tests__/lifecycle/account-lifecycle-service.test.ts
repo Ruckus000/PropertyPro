@@ -539,7 +539,11 @@ describe('executeUserSoftDelete', () => {
   it('sets users.deletedAt and calls auth ban', async () => {
     const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      updateReturning: [[request], [{}]], // request update + user update
+      // request update + user update (which returns the address it stamped)
+      updateReturning: [
+        [request],
+        [{ id: 'user-uuid-001', email: 'marisol@example.com', fullName: 'Marisol' }],
+      ],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -550,7 +554,13 @@ describe('executeUserSoftDelete', () => {
 
     const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual([request]);
+    // The "account deleted" email goes to the address captured by the same
+    // statement that soft-deleted the user (D13), not one re-read later.
+    expect(result).toEqual([
+      { ...request, recipient: { email: 'marisol@example.com', fullName: 'Marisol' } },
+    ]);
+    const userUpdate = dbMock._calls.filter((c) => c.op === 'update')[1]!;
+    expect(userUpdate.values).toEqual({ deletedAt: expect.any(Date) });
     // 'none' LIFTS a ban in GoTrue; 876600h (~100y) is the repo's permanent
     // ban, as in demo-conversion. Pinning 'none' here kept a deleted user able
     // to sign in with every role they held.
@@ -575,7 +585,7 @@ describe('executeUserSoftDelete', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual([request]);
+    expect(result).toEqual([{ ...request, recipient: null }]);
     expect(consoleWarnSpy).toHaveBeenCalled();
     consoleWarnSpy.mockRestore();
   });
@@ -593,7 +603,7 @@ describe('executeUserSoftDelete', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual([request]);
+    expect(result).toEqual([{ ...request, recipient: null }]);
     expect(consoleWarnSpy).toHaveBeenCalled();
     consoleWarnSpy.mockRestore();
   });
@@ -648,7 +658,7 @@ describe('executeUserSoftDelete', () => {
 
     const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual([request]);
+    expect(result).toEqual([{ ...request, recipient: null }]);
     expect(revokeVisitorPassesForUserMock).toHaveBeenCalledTimes(2);
     expect(updateUserByIdMock).toHaveBeenCalled();
     consoleWarnSpy.mockRestore();
@@ -668,7 +678,7 @@ describe('executeUserSoftDelete', () => {
 
     const result = await executeUserSoftDelete([1]);
 
-    expect(result).toEqual([request]);
+    expect(result).toEqual([{ ...request, recipient: null }]);
     expect(revokeVisitorPassesForUserMock).not.toHaveBeenCalled();
     consoleWarnSpy.mockRestore();
   });

@@ -44,6 +44,7 @@ import {
   cleanupSoftDeletedSiteBlocks,
   pruneSitePublishSnapshots,
 } from '@/lib/services/site-blocks-service';
+import { sendDeletionExecutedEmails } from '@/lib/account-lifecycle/deletion-emails';
 import { captureMessage } from '@sentry/nextjs';
 import { withCronJob } from '@/lib/cron/with-cron-job';
 
@@ -65,6 +66,11 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     // block is what tells the reader which of the two they are looking at.
     purge: { dryRun: purgeDryRun, candidates: 0, cap: PURGE_SAFETY_CAP },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
+    // "Account deleted" emails to soft-deleted users. `notSent` counts both
+    // failures and rows with no deliverable address; failures are logged by
+    // the sender and deliberately kept out of `errors`, because a mail outage
+    // is not a reason to retry destructive work.
+    deletionEmails: { sent: 0, notSent: 0 },
     siteBlocksCleaned: 0,
     sitePublishSnapshotsPruned: 0,
     errors: [] as string[],
@@ -85,6 +91,11 @@ const handler = withErrorHandler(async (req: NextRequest) => {
       // Any requested id not returned raced out of 'cooling' and was skipped
       // by the state guard rather than force-deleted.
       summary.skipped.users += userDeletionIds.length - results.length;
+      // To the address captured in the soft-delete statement. Never rejects,
+      // so it cannot reach the catch below or stop phases 2-5.
+      const emails = await sendDeletionExecutedEmails(results);
+      summary.deletionEmails.sent += emails.sent;
+      summary.deletionEmails.notSent += emails.notSent;
     } catch (err) {
       summary.errors.push(`batch soft-delete user: ${String(err)}`);
     }

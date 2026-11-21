@@ -357,19 +357,19 @@ export const FIXTURES: Record<string, TemplateFixture> = {
   'account-deletion-initiated-email': {
     accent: 'neutral',
     sender: 'platform',
-    minimal: () => <E.AccountDeletionInitiatedEmail branding={association} recipientName="Marisol" coolingEndDate="September 24, 2026" purgeDate="October 17, 2026" cancelUrl={url('account/cancel-deletion')} />,
-    rich: () => <E.AccountDeletionInitiatedEmail branding={association} recipientName="Marisol" coolingEndDate="September 24, 2026" purgeDate="October 17, 2026" cancelUrl={url('account/cancel-deletion')} />,
+    minimal: () => <E.AccountDeletionInitiatedEmail branding={association} recipientName="Marisol" coolingEndDate="September 24, 2026" purgeDate="March 24, 2027" cancelUrl={url('account/cancel-deletion')} />,
+    rich: () => <E.AccountDeletionInitiatedEmail branding={association} recipientName="Marisol" coolingEndDate="September 24, 2026" purgeDate="March 24, 2027" cancelUrl={url('account/cancel-deletion')} />,
   },
   'account-deletion-executed-email': {
     accent: 'neutral',
     sender: 'platform',
-    minimal: () => <E.AccountDeletionExecutedEmail branding={association} recipientName="Marisol" purgeDate="October 17, 2026" />,
-    rich: () => <E.AccountDeletionExecutedEmail branding={association} recipientName="Marisol" purgeDate="October 17, 2026" />,
+    minimal: () => <E.AccountDeletionExecutedEmail branding={association} recipientName="Marisol" purgeDate="March 24, 2027" />,
+    rich: () => <E.AccountDeletionExecutedEmail branding={association} recipientName="Marisol" purgeDate="March 24, 2027" />,
   },
   'account-recovered-email': {
     accent: 'green',
     sender: 'platform',
-    minimal: () => <E.AccountRecoveredEmail branding={association} recipientName="Marisol" />,
+    minimal: () => <E.AccountRecoveredEmail branding={association} recipientName="Marisol" wasDeactivated={false} />,
     rich: () => <E.AccountRecoveredEmail branding={association} recipientName="Marisol" portalUrl={url('dashboard')} />,
   },
   'community-export-ready-email': {

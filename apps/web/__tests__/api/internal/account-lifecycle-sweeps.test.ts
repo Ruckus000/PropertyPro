@@ -19,10 +19,20 @@ const {
   requireCronSecretMock,
   cleanupSoftDeletedSiteBlocksMock,
   pruneSitePublishSnapshotsMock,
+  findCoolingExpiredDeletionRequestsMock,
+  executeUserSoftDeleteMock,
+  findPurgeReadyDeletionRequestsMock,
+  purgeUserPIIMock,
+  sendEmailMock,
 } = vi.hoisted(() => ({
   requireCronSecretMock: vi.fn(),
   cleanupSoftDeletedSiteBlocksMock: vi.fn(),
   pruneSitePublishSnapshotsMock: vi.fn(),
+  findCoolingExpiredDeletionRequestsMock: vi.fn(),
+  executeUserSoftDeleteMock: vi.fn(),
+  findPurgeReadyDeletionRequestsMock: vi.fn(),
+  purgeUserPIIMock: vi.fn(),
+  sendEmailMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/cron-auth', () => ({ requireCronSecret: requireCronSecretMock }));
@@ -35,26 +45,37 @@ vi.mock('@/lib/services/site-blocks-service', () => ({
   pruneSitePublishSnapshots: pruneSitePublishSnapshotsMock,
 }));
 
-// The lifecycle phases 1-3 are not under test here; stub them to no-ops so the
-// route reaches the sweeps without a database.
+// The lifecycle phases 1-3 are stubbed to no-ops (set per test in beforeEach)
+// so the route reaches the sweeps without a database. The deletion-email
+// helper is NOT mocked: it runs for real against the mocked `sendEmail`.
 vi.mock('@/lib/services/account-lifecycle-service', () => ({
   computeAccessPlanStatus: vi.fn(() => ({ status: 'active', daysRemaining: 30 })),
   executeCommunitySoftDelete: vi.fn(async () => []),
-  executeUserSoftDelete: vi.fn(async () => []),
-  findCoolingExpiredDeletionRequests: vi.fn(async () => []),
-  findPurgeReadyDeletionRequests: vi.fn(async () => []),
+  executeUserSoftDelete: executeUserSoftDeleteMock,
+  findCoolingExpiredDeletionRequests: findCoolingExpiredDeletionRequestsMock,
+  findPurgeReadyDeletionRequests: findPurgeReadyDeletionRequestsMock,
   getCommunityNameForLifecycleEmail: vi.fn(async () => 'Test Community'),
   listActiveAccessPlansForLifecycleCron: vi.fn(async () => []),
   lookupLifecycleAdminRecipients: vi.fn(async () => []),
   markAccessPlanNotificationSent: vi.fn(async () => undefined),
   purgeCommunityData: vi.fn(async () => undefined),
-  purgeUserPII: vi.fn(async () => undefined),
+  purgeUserPII: purgeUserPIIMock,
+}));
+
+// Only the initiated/cancelled emails read it; the executed email must not.
+vi.mock('@/lib/services/user-profile-service', () => ({
+  getUserProfileSnapshot: vi.fn(async () => {
+    throw new Error('the executed email must use the captured address, not re-read users');
+  }),
 }));
 
 vi.mock('@propertypro/email', () => ({
-  sendEmail: vi.fn(async () => undefined),
+  sendEmail: sendEmailMock,
   FreeAccessExpiringEmail: () => null,
   FreeAccessExpiredEmail: () => null,
+  AccountDeletionExecutedEmail: () => null,
+  AccountDeletionInitiatedEmail: () => null,
+  AccountRecoveredEmail: () => null,
 }));
 
 import { POST } from '@/app/api/v1/internal/account-lifecycle/route';
@@ -67,6 +88,9 @@ function cronRequest(): NextRequest {
 }
 
 interface LifecycleSummary {
+  softDeleted: { users: number; communities: number };
+  purged: { users: number; communities: number };
+  deletionEmails: { sent: number; notSent: number };
   siteBlocksCleaned: number;
   sitePublishSnapshotsPruned: number;
   errors: string[];
@@ -83,6 +107,11 @@ beforeEach(() => {
   requireCronSecretMock.mockReturnValue(undefined);
   cleanupSoftDeletedSiteBlocksMock.mockResolvedValue({ deleted: 0 });
   pruneSitePublishSnapshotsMock.mockResolvedValue({ pruned: 0 });
+  findCoolingExpiredDeletionRequestsMock.mockResolvedValue([]);
+  executeUserSoftDeleteMock.mockResolvedValue([]);
+  findPurgeReadyDeletionRequestsMock.mockResolvedValue([]);
+  purgeUserPIIMock.mockResolvedValue(undefined);
+  sendEmailMock.mockResolvedValue({ id: 'test_1' });
 });
 
 describe('account-lifecycle cron — site-editor retention sweeps', () => {
@@ -159,5 +188,106 @@ describe('account-lifecycle cron — site-editor retention sweeps', () => {
     expect(res.status).toBe(401);
     expect(cleanupSoftDeletedSiteBlocksMock).not.toHaveBeenCalled();
     expect(pruneSitePublishSnapshotsMock).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 1 — the "account deleted" email (D13)
+// ---------------------------------------------------------------------------
+
+/** A row as `executeUserSoftDelete` returns it: the request plus the captured recipient. */
+function softDeleted(
+  id: number,
+  recipient: { email: string; fullName: string | null } | null,
+): Record<string, unknown> {
+  return {
+    id,
+    userId: `user-${id}`,
+    requestType: 'user',
+    status: 'soft_deleted',
+    // Noon UTC so the Florida-time date is unambiguous.
+    scheduledPurgeAt: new Date('2027-05-21T12:00:00.000Z'),
+    recipient,
+  };
+}
+
+function coolingExpired(...ids: number[]) {
+  findCoolingExpiredDeletionRequestsMock.mockResolvedValue(
+    ids.map((id) => ({ id, requestType: 'user' })),
+  );
+}
+
+describe('account-lifecycle cron — deletion emails at soft delete', () => {
+  it('emails the address captured by the soft delete, dated with its scheduled purge', async () => {
+    coolingExpired(5);
+    executeUserSoftDeleteMock.mockResolvedValue([
+      softDeleted(5, { email: 'marisol@example.com', fullName: 'Marisol Reyes' }),
+    ]);
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect(executeUserSoftDeleteMock).toHaveBeenCalledWith([5]);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const sent = sendEmailMock.mock.calls[0]![0] as {
+      to: string;
+      category: string;
+      idempotencyKey: string;
+      react: { props: Record<string, unknown> };
+    };
+    expect(sent.to).toBe('marisol@example.com');
+    expect(sent.category).toBe('transactional');
+    // One key per deletion request: a re-run cron cannot mail twice.
+    expect(sent.idempotencyKey).toBe('account-deletion/executed/5');
+    expect(sent.react.props).toMatchObject({
+      recipientName: 'Marisol Reyes',
+      purgeDate: 'May 21, 2027',
+    });
+    expect(summary.deletionEmails).toEqual({ sent: 1, notSent: 0 });
+  });
+
+  it('a failed send stops neither the other sends nor any later phase', async () => {
+    coolingExpired(5, 6);
+    executeUserSoftDeleteMock.mockResolvedValue([
+      softDeleted(5, { email: 'first@example.com', fullName: null }),
+      softDeleted(6, { email: 'second@example.com', fullName: 'Dana' }),
+    ]);
+    sendEmailMock.mockRejectedValueOnce(new Error('Resend API error: 500'));
+    findPurgeReadyDeletionRequestsMock.mockResolvedValue([{ id: 77, requestType: 'user' }]);
+    pruneSitePublishSnapshotsMock.mockResolvedValue({ pruned: 2 });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { status, summary } = await runCron();
+    consoleErrorSpy.mockRestore();
+
+    expect(status).toBe(200);
+    expect(sendEmailMock.mock.calls.map((c) => (c[0] as { to: string }).to)).toEqual([
+      'first@example.com',
+      'second@example.com',
+    ]);
+    expect(summary.softDeleted.users).toBe(2);
+    expect(summary.deletionEmails).toEqual({ sent: 1, notSent: 1 });
+    // Phase 2 (purge) and phase 5 (sweeps) still ran.
+    expect(purgeUserPIIMock).toHaveBeenCalledWith(77);
+    expect(summary.purged.users).toBe(1);
+    expect(summary.sitePublishSnapshotsPruned).toBe(2);
+    // A mail failure is not a lifecycle failure: no soft-delete error recorded.
+    expect(summary.errors).toEqual([]);
+  });
+
+  it('never sends to a purged (@redacted) address or a row with no captured recipient', async () => {
+    coolingExpired(5, 6, 7);
+    executeUserSoftDeleteMock.mockResolvedValue([
+      softDeleted(5, { email: 'deleted-user-5@redacted', fullName: 'Deleted User' }),
+      softDeleted(6, { email: 'deleted-user-6@redacted.invalid', fullName: null }),
+      softDeleted(7, null),
+    ]);
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(summary.softDeleted.users).toBe(3);
+    expect(summary.deletionEmails).toEqual({ sent: 0, notSent: 3 });
   });
 });

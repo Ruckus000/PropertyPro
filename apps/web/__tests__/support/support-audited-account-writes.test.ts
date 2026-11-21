@@ -661,7 +661,8 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
     const res = await accountDELETE(request('/api/v1/account/delete', 'DELETE', undefined, true));
 
     expect(res.status).toBe(200);
-    expect(h.callOrder).toEqual(['audit', 'cancelDeletion']);
+    // 'snapshot' is the cancellation email's address lookup, after the write.
+    expect(h.callOrder).toEqual(['audit', 'cancelDeletion', 'snapshot']);
     const [row] = auditRows();
     expectAuditEnvelope(row!, 'support_deletion_cancelled');
     expect(row!.metadata).toEqual({
@@ -705,6 +706,6 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
 
     expect(res.status).toBe(200);
     expect(h.fromMock).not.toHaveBeenCalled();
-    expect(h.callOrder).toEqual(['cancelDeletion']);
+    expect(h.callOrder).toEqual(['cancelDeletion', 'snapshot']);
   });
 });

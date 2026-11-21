@@ -12,6 +12,8 @@ const {
   requestUserDeletionMock,
   findCoolingDeletionRequestForUserMock,
   cancelUserDeletionMock,
+  getUserProfileSnapshotMock,
+  sendEmailMock,
   MockRootOffboardingAckRequiredError,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
@@ -20,6 +22,8 @@ const {
   requestUserDeletionMock: vi.fn(),
   findCoolingDeletionRequestForUserMock: vi.fn(),
   cancelUserDeletionMock: vi.fn(),
+  getUserProfileSnapshotMock: vi.fn(),
+  sendEmailMock: vi.fn(),
   // The route does `err instanceof RootOffboardingAckRequiredError`, so the
   // class the test throws must be the SAME identity the route imports. Declared
   // here (not at top level) because vi.mock factories are hoisted above module
@@ -49,6 +53,32 @@ vi.mock('@/lib/services/account-lifecycle-service', () => ({
   cancelUserDeletion: cancelUserDeletionMock,
   RootOffboardingAckRequiredError: MockRootOffboardingAckRequiredError,
 }));
+
+// The address comes from the caller's own users row.
+vi.mock('@/lib/services/user-profile-service', () => ({
+  getUserProfileSnapshot: (userId: string) => getUserProfileSnapshotMock(userId),
+}));
+
+// The deletion-email helper runs for real; only the transport is mocked. The
+// template stubs return null — the assertions read the props off `react`.
+vi.mock('@propertypro/email', () => ({
+  sendEmail: sendEmailMock,
+  AccountDeletionInitiatedEmail: () => null,
+  AccountDeletionExecutedEmail: () => null,
+  AccountRecoveredEmail: () => null,
+}));
+
+interface SentEmail {
+  to: string;
+  subject: string;
+  category: string;
+  idempotencyKey: string;
+  react: { props: Record<string, unknown> };
+}
+
+function lastSentEmail(): SentEmail {
+  return sendEmailMock.mock.calls.at(-1)![0] as SentEmail;
+}
 
 import { DELETE, GET, POST } from '../../src/app/api/v1/account/delete/route';
 
@@ -118,6 +148,72 @@ describe('POST /api/v1/account/delete', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     requireFreshReauthMock.mockResolvedValue(undefined);
     requestUserDeletionMock.mockResolvedValue(activeRequest);
+    getUserProfileSnapshotMock.mockResolvedValue({ email: 'marisol@example.com', fullName: 'Marisol' });
+    sendEmailMock.mockResolvedValue({ id: 'test_1' });
+  });
+
+  function post() {
+    return POST(new NextRequest(URL, { method: 'POST', headers: { 'content-type': 'application/json' } }));
+  }
+
+  it('emails the account holder that deletion was requested, with the real timeline', async () => {
+    const res = await post();
+
+    expect(res.status).toBe(200);
+    expect(getUserProfileSnapshotMock).toHaveBeenCalledWith('user-1');
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const sent = lastSentEmail();
+    expect(sent.to).toBe('marisol@example.com');
+    expect(sent.category).toBe('transactional');
+    expect(sent.idempotencyKey).toBe('account-deletion/initiated/9');
+    // coolingEndsAt is 2026-06-15T00:00Z, which is the evening of June 14 in
+    // Florida; the purge is 6 months after the account is turned off.
+    expect(sent.react.props).toMatchObject({
+      recipientName: 'Marisol',
+      coolingEndDate: 'June 14, 2026',
+      purgeDate: 'December 14, 2026',
+      cancelUrl: expect.stringMatching(/\/settings\/account$/),
+    });
+  });
+
+  it('still succeeds when the email cannot be sent', async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error('Resend API error: 500'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await post();
+    consoleErrorSpy.mockRestore();
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toMatchObject({ id: 9, status: 'cooling' });
+  });
+
+  it('still succeeds when the recipient lookup fails, and sends nothing', async () => {
+    getUserProfileSnapshotMock.mockRejectedValueOnce(new Error('db down'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await post();
+    consoleErrorSpy.mockRestore();
+
+    expect(res.status).toBe(200);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('never emails a purged @redacted address', async () => {
+    getUserProfileSnapshotMock.mockResolvedValueOnce({ email: 'deleted-user-1@redacted', fullName: 'Deleted User' });
+
+    const res = await post();
+
+    expect(res.status).toBe(200);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('sends nothing when the request is refused for a root acknowledgement', async () => {
+    requestUserDeletionMock.mockRejectedValueOnce(new MockRootOffboardingAckRequiredError([]));
+
+    const res = await post();
+
+    expect(res.status).toBe(409);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('requests deletion after fresh reauth', async () => {
@@ -212,6 +308,33 @@ describe('DELETE /api/v1/account/delete', () => {
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     findCoolingDeletionRequestForUserMock.mockResolvedValue(9);
     cancelUserDeletionMock.mockResolvedValue(undefined);
+    getUserProfileSnapshotMock.mockResolvedValue({ email: 'marisol@example.com', fullName: 'Marisol' });
+    sendEmailMock.mockResolvedValue({ id: 'test_1' });
+  });
+
+  it('emails that the deletion was cancelled, without saying who cancelled it', async () => {
+    const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
+
+    expect(res.status).toBe(200);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const sent = lastSentEmail();
+    expect(sent.to).toBe('marisol@example.com');
+    expect(sent.idempotencyKey).toBe('account-deletion/cancelled/9');
+    // The account was never turned off, so this is the "not deleted" variant.
+    // A support session can make this same call, so the copy is passive.
+    expect(sent.react.props).toMatchObject({ recipientName: 'Marisol', wasDeactivated: false });
+  });
+
+  it('still cancels when the email cannot be sent', async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error('Resend API error: 500'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
+    consoleErrorSpy.mockRestore();
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { cancelled: true } });
+    expect(cancelUserDeletionMock).toHaveBeenCalledWith(9, 'user-1');
   });
 
   it('cancels the active deletion request', async () => {
@@ -236,6 +359,7 @@ describe('DELETE /api/v1/account/delete', () => {
     );
     expect(res.status).toBe(404);
     expect(cancelUserDeletionMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it('returns 401 when unauthenticated and does not cancel', async () => {

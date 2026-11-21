@@ -50,6 +50,11 @@ vi.mock('@/lib/services/site-blocks-service', () => ({
 // Mock the service module COMPLETELY — a partial factory throws at module load
 // for whichever export the route reaches first, which reads as an unrelated
 // failure rather than a short mock.
+// Imported by the deletion-email helper; loading the real one needs a database.
+vi.mock('@/lib/services/user-profile-service', () => ({
+  getUserProfileSnapshot: vi.fn(async () => ({ email: null, fullName: null, phone: null, phoneVerifiedAt: null })),
+}));
+
 vi.mock('@/lib/services/account-lifecycle-service', () => ({
   computeAccessPlanStatus: vi.fn(() => ({ status: 'active', daysRemaining: 30 })),
   executeCommunitySoftDelete: vi.fn(async () => []),
