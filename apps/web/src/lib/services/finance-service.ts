@@ -727,9 +727,12 @@ export async function generateAssessmentLineItemsForCommunity(
   }
 
   // "Already generated" = any item for this assessment in the same billing
-  // period (see billingPeriodFor). App-level only: assessment_line_items has
-  // no unique index, so two concurrent generations can still both read an
-  // empty set — a DB backstop is a separate migration decision (roadmap 3.T2).
+  // period (see billingPeriodFor); a one-time assessment has a single period,
+  // so any item for it at all, whatever its due date — the manager picks the
+  // due date (Generate charges), and a second pick must not charge again.
+  // App-level only: assessment_line_items has no unique index, so two
+  // concurrent generations can still both read an empty set — a DB backstop
+  // is a separate migration decision (roadmap 3.T2).
   const period = billingPeriodFor(assessment, dueDate);
   const existingRows = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
@@ -740,10 +743,7 @@ export async function generateAssessmentLineItemsForCommunity(
         gte(assessmentLineItems.dueDate, period.start),
         lt(assessmentLineItems.dueDate, period.endExclusive),
       )
-      : and(
-        eq(assessmentLineItems.assessmentId, assessmentId),
-        eq(assessmentLineItems.dueDate, dueDate),
-      ),
+      : eq(assessmentLineItems.assessmentId, assessmentId),
   );
   const existingUnitIds = new Set(existingRows.map((row) => row.unitId));
 

@@ -56,7 +56,8 @@ export function AssessmentsFirstRun({
               each month they fall due, so the first charge comes on the next such 1st, not on the day you create one.
             </p>
             <p className="text-sm text-content-secondary">
-              One-Time assessments are not charged automatically. To charge one, contact PropertyPro support.
+              One-Time assessments are not charged automatically. Select one and choose Generate charges, with
+              the date it is due.
             </p>
             <ContextLinks links={[{ href: `/dashboard/directory?communityId=${communityId}`, label: 'Directory' }]} />
           </ContextSection>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { CommunityType } from '@propertypro/shared';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -18,6 +18,12 @@ import { formatDateOnly } from '@/lib/utils/format-date';
 const AssessmentsFirstRun = dynamic(
   () => import('./assessments-empty').then((m) => m.AssessmentsFirstRun),
   { loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
+);
+
+// Only an uncharged One-Time assessment renders it.
+const OneTimeCharges = dynamic(
+  () => import('./one-time-charges').then((m) => m.OneTimeCharges),
+  { loading: () => <div className="h-24 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" /> },
 );
 
 /* ─────── Types ─────── */
@@ -216,6 +222,8 @@ function LineItemsPanel({
   onClose: () => void;
 }) {
   const { data: lineItems, isLoading } = useAssessmentLineItems(communityId, assessment.id);
+  // Focus lands here after Generate charges, whose form unmounts when the charges load.
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
   const statusCounts = lineItems?.reduce(
     (acc, li) => {
@@ -229,7 +237,9 @@ function LineItemsPanel({
     <div className="rounded-md border border-edge bg-surface-card">
       <div className="flex items-center justify-between border-b border-edge px-4 py-3">
         <div>
-          <h3 className="text-sm font-semibold text-content">{assessment.title} — Line Items</h3>
+          <h3 ref={headingRef} tabIndex={-1} className="text-sm font-semibold text-content">
+            {assessment.title} — Line Items
+          </h3>
           {lineItems && (
             <div className="mt-1 flex gap-2">
               {Object.entries(statusCounts).map(([status, count]) => (
@@ -261,10 +271,17 @@ function LineItemsPanel({
             <div className="h-8 rounded bg-surface-muted" />
           </div>
         ) : lineItems && lineItems.length === 0 ? (
-          <p className="py-4 text-center text-sm text-content-tertiary">
-            No line items generated yet. Line items are created automatically on the 1st of each month,
-            or when manually triggered.
-          </p>
+          assessment.frequency === 'one_time' ? (
+            <OneTimeCharges
+              communityId={communityId}
+              assessment={assessment}
+              onCharged={() => headingRef.current?.focus()}
+            />
+          ) : (
+            <p className="py-4 text-center text-sm text-content-tertiary">
+              No charges yet. Every unit is charged on the 1st of each month this assessment falls due.
+            </p>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-edge">
