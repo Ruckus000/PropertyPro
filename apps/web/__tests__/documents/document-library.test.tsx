@@ -13,6 +13,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+// jsdom has no scrollIntoView; a linked document scrolls its inspector into view.
+Element.prototype.scrollIntoView = () => {};
+
 const { useComplianceChecklistMock, useDocumentsMock, fetchAccessibleDocumentMock, categoriesMock } = vi.hoisted(() => ({
   categoriesMock: { current: [] as Array<{ id: number; name: string; slug: string; description: string | null }> },
   fetchAccessibleDocumentMock: vi.fn(async (): Promise<unknown> => null),
@@ -469,6 +472,30 @@ describe('opening a linked document (?doc=)', () => {
 
     expect(await screen.findByText(MISSING)).toBeDefined();
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
+  });
+
+  it('brings the opened document into view, since a search result can sit far above it', () => {
+    // Search results render above the library, so the inspector opened by a
+    // result's `?doc=` link was ~1,800px below the click and looked like nothing
+    // happened (found in the sandbox 2026-11-21).
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      listReturns([linked]);
+      const { rerender } = render(libraryTree());
+      // Control: rendering the library with no link moves nothing.
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      searchParams = new URLSearchParams('doc=77');
+      rerender(libraryTree());
+
+      expect(screen.getByTestId('viewer-mime')).toHaveTextContent('text/plain');
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 
   it('waits for the list rather than reporting a miss while it loads', () => {
