@@ -26,7 +26,8 @@
  *
  * A due date outside the assessment's start/end months (month-inclusive) is a
  * 422 from the service, with a message naming the bound — the same rule the
- * recurring cron applies.
+ * recurring cron applies. A One-Time due date (the override, or startDate when
+ * none is sent) before the community's today is also a 422.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';

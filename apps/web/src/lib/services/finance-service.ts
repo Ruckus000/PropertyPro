@@ -790,25 +790,28 @@ export async function generateAssessmentLineItemsForCommunity(
     return { insertedCount: 0, skippedCount: unitRows.length, dueDate };
   }
 
-  const insertedRows = await scoped.insert(assessmentLineItems, toInsert);
-  const typedInsertedRows = insertedRows as unknown as AssessmentLineItemRecord[];
-
-  for (const lineItem of typedInsertedRows) {
-    await postLedgerEntry(scoped, {
-      entryType: 'assessment',
-      amountCents: lineItem.amountCents,
-      description: toLineItemDescription(assessment, lineItem.dueDate),
-      sourceType: 'assessment',
-      sourceId: String(lineItem.id),
-      unitId: lineItem.unitId,
-      metadata: {
-        assessmentId,
-        lineItemId: lineItem.id,
-      },
-      createdByUserId: actorUserId,
-      requestId: requestId ?? undefined,
-    });
-  }
+  // One transaction: a charge without its ledger entry would read as charged,
+  // so a retry would skip it and the unit's balance would stay short.
+  const typedInsertedRows = await scoped.transaction(async (tx) => {
+    const rows = (await tx.insert(assessmentLineItems, toInsert)) as unknown as AssessmentLineItemRecord[];
+    for (const lineItem of rows) {
+      await postLedgerEntry(tx, {
+        entryType: 'assessment',
+        amountCents: lineItem.amountCents,
+        description: toLineItemDescription(assessment, lineItem.dueDate),
+        sourceType: 'assessment',
+        sourceId: String(lineItem.id),
+        unitId: lineItem.unitId,
+        metadata: {
+          assessmentId,
+          lineItemId: lineItem.id,
+        },
+        createdByUserId: actorUserId,
+        requestId: requestId ?? undefined,
+      });
+    }
+    return rows;
+  });
 
   await logAuditEvent({
     userId: actorUserId,

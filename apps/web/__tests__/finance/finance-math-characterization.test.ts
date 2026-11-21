@@ -360,11 +360,22 @@ function makeQuery(table: object, where: Predicate | undefined, projection?: Rec
   return query;
 }
 
-function makeScopedClient() {
+function makeScopedClient(): Record<string, unknown> {
   return {
     selectFrom: selectFromMock,
     insert: insertMock,
     update: updateMock,
+    // Rolls the in-memory store back on a throw, as Postgres would.
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot = new Map([...store].map(([table, rows]) => [table, rows.map((row) => ({ ...row }))]));
+      try {
+        return await fn(makeScopedClient());
+      } catch (err) {
+        store.clear();
+        for (const [table, rows] of snapshot) store.set(table, rows);
+        throw err;
+      }
+    },
   };
 }
 
@@ -1667,6 +1678,18 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
       const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-03-01');
       expect(result).toMatchObject({ insertedCount: 3, dueDate: '2026-03-01' });
     });
+  });
+
+  it('a ledger failure leaves no charges behind, so a retry charges every unit', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate: '2026-01-01' })]);
+    seed(assessmentLineItemsTable, []);
+    postLedgerEntryMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('ledger write failed'));
+    await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1')).rejects.toThrow('ledger write failed');
+    expect(rowsOf(assessmentLineItemsTable)).toEqual([]);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+
+    const retry = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(retry).toMatchObject({ insertedCount: 3, skippedCount: 0 });
   });
 
   it('a community with no units is a 422', async () => {
