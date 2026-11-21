@@ -456,6 +456,19 @@ describe('assessment mutation hooks', () => {
       body: JSON.stringify({ communityId: 42, dueDate: '2026-06-01' }),
     });
   });
+
+  it('refetches the line items after a failed generate too, since it may have saved first', async () => {
+    const { queryClient, wrapper } = createWrapper();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    mockFetch.mockRejectedValueOnce(new TypeError('Load failed'));
+
+    const { result } = renderHook(() => useGenerateAssessmentLineItems(42, 7), { wrapper });
+    await expect(result.current.mutateAsync('2026-06-01')).rejects.toThrow('Load failed');
+
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: FINANCE_KEYS.assessmentLineItems(42, 7) }),
+    );
+  });
 });
 
 // =============================================================================
