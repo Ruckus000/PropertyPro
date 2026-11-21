@@ -536,18 +536,22 @@ export function DocumentLibrary({
             {' · '}
             <b className="font-semibold text-content">{facts.publicCount}</b> on the public site
           </p>
-          <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
-            <QuickFilterTabs
-              className="w-max"
-              active={quickFilter}
-              onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
-              tabs={[
-                { label: 'All records', value: 'all' },
-                { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
-                { label: 'Drafts', value: 'drafts', count: draftCount },
-              ]}
-            />
-          </div>
+          {/* Unlinked and Drafts are the uploader's to-do lists; a viewer who
+              cannot upload keeps the statutory facts above but not these. */}
+          {canUpload && (
+            <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
+              <QuickFilterTabs
+                className="w-max"
+                active={quickFilter}
+                onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
+                tabs={[
+                  { label: 'All records', value: 'all' },
+                  { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
+                  { label: 'Drafts', value: 'drafts', count: draftCount },
+                ]}
+              />
+            </div>
+          )}
         </div>
       )}
 

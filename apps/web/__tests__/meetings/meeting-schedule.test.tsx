@@ -125,6 +125,24 @@ describe('MeetingSchedule', () => {
     expect(second.getByText('Noticed Aug 20')).toBeInTheDocument();
   });
 
+  it('shows a reader the meeting and when, without the notice window or status (D4)', async () => {
+    const user = userEvent.setup();
+    renderSchedule({ canWrite: false });
+
+    expect(screen.queryByRole('columnheader', { name: 'Notice window' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'When' })).toBeInTheDocument();
+
+    const [first] = screen.getAllByRole('row').slice(1);
+    expect(within(first!).getByRole('button', { name: 'September Board Meeting' })).toBeInTheDocument();
+    expect(screen.queryByText(/post by/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Notice posts Sep 1')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Past 2' }));
+    expect(screen.queryByText('Minutes due Sep 11')).not.toBeInTheDocument();
+    expect(screen.queryByText(/late/)).not.toBeInTheDocument();
+  });
+
   it('Past lists most recent first', async () => {
     const user = userEvent.setup();
     renderSchedule();

@@ -241,6 +241,23 @@ describe('DocumentLibrary', () => {
     expect(screen.getByTestId('statutory-columns')).toHaveTextContent('true');
   });
 
+  it('gives an uploader the Unlinked and Drafts tabs', () => {
+    renderLibrary();
+
+    expect(screen.getByRole('button', { name: /Unlinked/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Drafts/ })).toBeDefined();
+  });
+
+  it('keeps the statutory facts for an owner but not the uploader-only tabs', () => {
+    renderLibrary({ userRole: 'resident', isUnitOwner: true, canReadCompliance: true });
+
+    expect(screen.getByText(/statutory records/i)).toBeDefined();
+    expect(screen.getByTestId('statutory-columns')).toHaveTextContent('true');
+    expect(screen.queryByRole('button', { name: /Unlinked/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Drafts/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /All records/i })).toBeNull();
+  });
+
   it('never asks for the checklist a tenant is not permitted to read', () => {
     // A tenant has documents:read but compliance:read is FALSE. The request
     // would 403, so it must not be made at all.

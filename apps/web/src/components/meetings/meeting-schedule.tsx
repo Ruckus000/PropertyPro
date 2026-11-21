@@ -78,6 +78,10 @@ function RangeButton({
  * only the Meeting column carries a hint, and it is the one that absorbs
  * slack. Narrow screens fold When into the title cell and drop the notice
  * window; the status stays, because it is the column that says what is owed.
+ *
+ * The notice window and status columns are the manager's deadline tracking
+ * ("post by…", "late", "Notice was due…"), so only a viewer who can write
+ * sees them (D4). A reader gets the meeting and when it is.
  */
 export function MeetingSchedule({
   meetings,
@@ -145,8 +149,12 @@ export function MeetingSchedule({
           <TableRow>
             <TableHead className="w-2/5">Meeting</TableHead>
             <TableHead className="hidden md:table-cell">When</TableHead>
-            <TableHead className="hidden lg:table-cell">Notice window</TableHead>
-            <TableHead>Status</TableHead>
+            {canWrite ? (
+              <>
+                <TableHead className="hidden lg:table-cell">Notice window</TableHead>
+                <TableHead>Status</TableHead>
+              </>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -177,17 +185,21 @@ export function MeetingSchedule({
                     {formatTime(meeting.startsAt, timeZone)} – {formatTime(endsAt, timeZone)}
                   </div>
                 </TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  {noticeWindowLabel(meeting)}
-                  <div className="text-xs text-content-tertiary">
-                    {meeting.noticePostedAt
-                      ? `posted ${formatShortDate(meeting.noticePostedAt, timeZone)} · ${formatTime(meeting.noticePostedAt, timeZone)}`
-                      : `post by ${formatShortDate(noticePostBy, timeZone)} · ${formatTime(noticePostBy, timeZone)}`}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge status={status.badge} label={status.label} subtle />
-                </TableCell>
+                {canWrite ? (
+                  <>
+                    <TableCell className="hidden lg:table-cell">
+                      {noticeWindowLabel(meeting)}
+                      <div className="text-xs text-content-tertiary">
+                        {meeting.noticePostedAt
+                          ? `posted ${formatShortDate(meeting.noticePostedAt, timeZone)} · ${formatTime(meeting.noticePostedAt, timeZone)}`
+                          : `post by ${formatShortDate(noticePostBy, timeZone)} · ${formatTime(noticePostBy, timeZone)}`}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={status.badge} label={status.label} subtle />
+                    </TableCell>
+                  </>
+                ) : null}
               </TableRow>
             );
           })}

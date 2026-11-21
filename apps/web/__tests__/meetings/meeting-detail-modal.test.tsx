@@ -22,13 +22,13 @@ vi.mock('@/components/documents/DocumentViewerModal', () => ({
 
 import { MeetingDetailModal } from '@/components/calendar/meeting-detail-modal';
 
-function renderModal() {
+function renderModal(canWrite = false) {
   return render(
     <MeetingDetailModal
       communityId={3}
       communityTimezone="America/New_York"
       meetingId={42}
-      canWrite={false}
+      canWrite={canWrite}
       onClose={vi.fn()}
       onEdit={vi.fn()}
     />,
@@ -53,5 +53,44 @@ describe('MeetingDetailModal', () => {
 
     expect(screen.getByText('Loading meeting details...')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // D4: the compliance deadlines and their escalation badges are the
+  // manager's tracking; a reader sees the meeting, not "post by" dates.
+  const MEETING = {
+    id: 42,
+    title: 'September Board Meeting',
+    meetingType: 'board',
+    startsAt: '2026-09-17T22:30:00.000Z',
+    endsAt: null,
+    location: 'Clubhouse',
+    noticePostedAt: null,
+    minutesApprovedAt: null,
+    deadlines: {
+      noticePostBy: '2026-09-15T22:30:00.000Z',
+      ownerVoteDocsBy: '2026-09-10T22:30:00.000Z',
+      minutesPostBy: '2026-10-17T22:30:00.000Z',
+    },
+    documents: [],
+  };
+
+  it('shows the compliance deadlines to a writer', () => {
+    detail.current = { data: MEETING, isLoading: false, isError: false };
+
+    renderModal(true);
+
+    expect(screen.getByText('Compliance deadlines')).toBeInTheDocument();
+    expect(screen.getByText('Notice post by')).toBeInTheDocument();
+  });
+
+  it('hides the compliance deadlines from a reader, keeping time, location and documents', () => {
+    detail.current = { data: MEETING, isLoading: false, isError: false };
+
+    renderModal(false);
+
+    expect(screen.queryByText('Compliance deadlines')).not.toBeInTheDocument();
+    expect(screen.queryByText('Notice post by')).not.toBeInTheDocument();
+    expect(screen.getByText('Clubhouse')).toBeInTheDocument();
+    expect(screen.getByText('Attached documents')).toBeInTheDocument();
   });
 });

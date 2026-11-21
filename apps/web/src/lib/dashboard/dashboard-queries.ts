@@ -23,6 +23,7 @@ import {
 } from '@propertypro/db/filters';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 import { canReadAnnouncementAudience, type AnnouncementAudience } from '@/lib/announcements/read-visibility';
+import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
 import { withUnitLabels } from '@/lib/units/unit-labels';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { HEARING_NOTICE_DAYS } from '@/lib/violations/hearing-notice-warning';
@@ -168,7 +169,9 @@ export async function listDashboardAnnouncements(
           archivedAt: announcements.archivedAt,
           publishedAt: announcements.publishedAt,
         },
-        isNull(announcements.archivedAt),
+        // Same default feed as the announcements page: neither archived nor
+        // expired (expiry.ts is the one definition of "expired").
+        and(isNull(announcements.archivedAt), announcementNotExpiredWhere()),
       )
       .orderBy(
         desc(announcements.isPinned),

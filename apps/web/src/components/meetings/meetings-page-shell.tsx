@@ -112,8 +112,10 @@ export function MeetingsPageShell({
   // notice strip — none of which is bounded by the month on screen.
   const meetingsQuery = useMeetings(communityId);
   const meetings = meetingsQuery.data ?? [];
-  const owedMinutes = minutesOwedCount(meetings, now);
-  const noticeOwed = nextNoticeOwed(meetings, now);
+  // Deadline tracking — the owed-minutes count and the next notice owed — is
+  // the manager's to-do list, so only a viewer who can write sees it (D4).
+  const owedMinutes = canWrite ? minutesOwedCount(meetings, now) : 0;
+  const noticeOwed = canWrite ? nextNoticeOwed(meetings, now) : null;
   // First run is the ALL-TIME count, not the month on screen (audit F-11).
   const firstRun = meetingsQuery.isSuccess && meetings.length === 0;
   // Until the count is known, neither the guide nor the full page: no flash
