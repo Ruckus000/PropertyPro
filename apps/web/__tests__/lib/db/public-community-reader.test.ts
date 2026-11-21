@@ -66,6 +66,7 @@ vi.mock('@propertypro/db', () => ({
     startsAt: 'meetings.startsAt',
     endsAt: 'meetings.endsAt',
     location: 'meetings.location',
+    agenda: 'meetings.agenda',
     deletedAt: 'meetings.deletedAt',
   },
   communities: {
@@ -879,6 +880,24 @@ describe('getPublicCommunityScopedReader', () => {
       .filter((c: unknown) => (c as { __isNull?: string }).__isNull !== undefined)
       .map((c: unknown) => (c as { __isNull: string }).__isNull);
     expect(isNullCols).toContain('meetings.deletedAt');
+  });
+
+  // H-4: the front page is where the notice and agenda go, so the section
+  // never looks fewer than 14 days ahead and returns the agenda.
+  it('listMeetings floors a short window at 14 days and selects the agenda', async () => {
+    mockSelectChain.then.mockImplementation((resolve) => Promise.resolve([]).then(resolve));
+    const before = Date.now();
+    const reader = getPublicCommunityScopedReader(42);
+    await reader.listMeetings({ limit: 1, timeWindowDays: 3 });
+
+    const whereCall = mockSelectChain.where.mock.calls[0]![0];
+    const lteClause = whereCall.__and.find(
+      (c: unknown) => (c as { __lte?: { col: string } }).__lte?.col === 'meetings.startsAt',
+    ) as { __lte: { val: Date } };
+    expect(lteClause.__lte.val.getTime()).toBeGreaterThanOrEqual(before + 14 * 24 * 60 * 60 * 1000);
+    expect(mockDb.select.mock.calls[0]![0]).toMatchObject({ agenda: 'meetings.agenda' });
+    // Fetches past a limit of 1, so a notice-window meeting is never cut off.
+    expect(mockSelectChain.limit).toHaveBeenCalledWith(20);
   });
 
   // ---------------------------------------------------------------------------

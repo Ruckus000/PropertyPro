@@ -60,6 +60,7 @@ function row(over: Partial<DashboardCommunityRow> & { communityId: number }): Da
 function item(communityId: number, over: Partial<PortfolioChecklistRow> = {}): PortfolioChecklistRow {
   return {
     communityId,
+    templateKey: '718_declaration',
     isApplicable: true,
     documentId: null,
     documentPostedAt: null,
@@ -70,7 +71,7 @@ function item(communityId: number, over: Partial<PortfolioChecklistRow> = {}): P
 }
 
 function inputs(over: Partial<PortfolioStatusInputs> = {}): PortfolioStatusInputs {
-  return { facts: new Map(), checklistRows: [], documentStates: new Map(), ...over };
+  return { facts: new Map(), checklistRows: [], documentStates: new Map(), noticeMeetings: new Map(), ...over };
 }
 
 describe('classifyStatus', () => {
@@ -175,6 +176,36 @@ describe('enrichRows', () => {
     });
   });
 
+  // H-4: the meeting-notice row is scored from meetings here exactly as on the
+  // Compliance page, or the two scores would disagree.
+  it('scores the meeting-notice row from meetings: a linked document does not hide a missed notice', () => {
+    const facts = new Map([[5, { subscriptionPlan: 'professional', unitCount: 60, branding: null }]]);
+    const noticeRow = item(5, {
+      templateKey: '718_meeting_notices',
+      documentId: 8,
+      documentPostedAt: new Date(),
+      deadline: null,
+    });
+    const documentStates = new Map([[8, { deletedAt: null, isDraft: false }]]);
+    const missedMeeting = {
+      id: 1,
+      title: 'Annual Meeting',
+      meetingType: 'annual',
+      startsAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      noticePostedAt: null,
+    };
+
+    const [withoutMeetings] = enrichRows([row({ communityId: 5 })], inputs({ facts, checklistRows: [noticeRow], documentStates }));
+    expect(withoutMeetings!.pastDeadlineCount).toBe(0);
+
+    const [withMissed] = enrichRows(
+      [row({ communityId: 5 })],
+      inputs({ facts, checklistRows: [noticeRow], documentStates, noticeMeetings: new Map([[5, [missedMeeting]]]) }),
+    );
+    expect(withMissed!.pastDeadlineCount).toBe(1);
+    expect(withMissed!.status).toBe('needs_attention');
+  });
+
   it('uses the website size threshold: a 10-unit condo is never past a deadline', () => {
     const [small] = enrichRows(
       [row({ communityId: 4 })],
@@ -271,7 +302,10 @@ describe('buildPortfolioSummary', () => {
   it('reads every row unpaginated and only condo/HOA checklists', async () => {
     await buildPortfolioSummary('pm-1');
     expect(getPortfolioDashboardMock).toHaveBeenCalledWith('pm-1', { unpaginated: true });
-    expect(findPortfolioStatusInputsMock).toHaveBeenCalledWith([1, 2, 3], [1, 2]);
+    expect(findPortfolioStatusInputsMock).toHaveBeenCalledWith([1, 2, 3], [1, 2], expect.any(Date));
+    // The meetings that score the notice row: the past 12 months onward.
+    const since = findPortfolioStatusInputsMock.mock.calls[0]![2] as Date;
+    expect(Date.now() - since.getTime()).toBeGreaterThan(360 * 24 * 60 * 60 * 1000);
   });
 
   it('keeps the portfolio count and view counts unfiltered while a search narrows the rows', async () => {

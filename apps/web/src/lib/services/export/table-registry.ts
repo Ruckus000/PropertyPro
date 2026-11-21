@@ -203,6 +203,7 @@ export const EXPORT_TABLES: ExportTableSpec[] = [
       col('startsAt', 'Starts At', meetings.startsAt),
       col('location', 'Location', meetings.location),
       col('endsAt', 'Ends At', meetings.endsAt),
+      col('agenda', 'Agenda', meetings.agenda),
       col('noticePostedAt', 'Notice Posted At', meetings.noticePostedAt),
       col('minutesApprovedAt', 'Minutes Approved At', meetings.minutesApprovedAt),
       ...auditColumns(meetings as unknown as Record<string, unknown>),

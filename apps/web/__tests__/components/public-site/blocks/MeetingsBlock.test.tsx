@@ -67,6 +67,44 @@ describe('<MeetingsBlock>', () => {
     expect(screen.getByText('123 Main St, Miami FL')).toBeInTheDocument();
   });
 
+  it('shows the agenda with its line breaks under the meeting (H-4)', async () => {
+    listMeetingsMock.mockResolvedValueOnce([
+      {
+        id: 3,
+        title: 'Annual Meeting',
+        meetingType: 'annual',
+        startsAt: new Date('2026-03-10T18:00:00Z'),
+        endsAt: null,
+        location: 'Clubhouse',
+        agenda: '1. Call to order\n2. Election of directors',
+      },
+    ]);
+    const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 30 }));
+    render(ui as React.ReactElement);
+    expect(screen.getByRole('heading', { level: 4, name: 'Agenda' })).toBeInTheDocument();
+    const agenda = screen.getByText(/1\. Call to order/);
+    expect(agenda.textContent).toBe('1. Call to order\n2. Election of directors');
+    expect(agenda).toHaveClass('whitespace-pre-line');
+  });
+
+  it('shows no agenda heading when a meeting has none', async () => {
+    listMeetingsMock.mockResolvedValueOnce([
+      {
+        id: 4,
+        title: 'Board Meeting',
+        meetingType: 'board',
+        startsAt: new Date('2026-03-10T18:00:00Z'),
+        endsAt: null,
+        location: 'Clubhouse',
+        agenda: null,
+      },
+    ]);
+    const ui = await MeetingsBlock(makeProps({ limit: 10, timeWindowDays: 30 }));
+    render(ui as React.ReactElement);
+    expect(screen.getByText('Board Meeting')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Agenda' })).toBeNull();
+  });
+
   it('calls listMeetings with parsed limit + timeWindowDays', async () => {
     listMeetingsMock.mockResolvedValueOnce([]);
     await MeetingsBlock(makeProps({ limit: 5, timeWindowDays: 60 }));

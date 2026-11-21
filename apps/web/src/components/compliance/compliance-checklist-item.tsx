@@ -4,6 +4,7 @@ import React, { useState, type ReactNode } from "react";
 import { Badge } from "@propertypro/ui";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import type { MeetingNoticeSummary } from "@/lib/compliance/meeting-notice-status";
 
 export interface ChecklistItemData {
   id: number;
@@ -33,6 +34,12 @@ export interface ChecklistItemData {
    * first, because two nulls are equal.
    */
   autoLinkedDocumentId?: number | null;
+  /**
+   * Meeting-notice rows only: the per-meeting result that decided `status`
+   * (see `meeting-notice-status.ts`). Absent when the meetings said nothing
+   * yet and the row kept its document-based status.
+   */
+  meetingNotices?: MeetingNoticeSummary | null;
   status: ComplianceStatus;
 }
 
@@ -63,6 +70,12 @@ function statusDotColor(status: ComplianceStatus): string {
 function deadlineLabel(item: ChecklistItemData): string | null {
   if (item.status === "satisfied") return "Satisfied";
   if (item.status === "not_applicable") return "N/A";
+  // A missed meeting notice cannot be cured, so "N days overdue" would mislead:
+  // the count is the fact.
+  if (item.status === "overdue" && item.meetingNotices && item.meetingNotices.missed.length > 0) {
+    const n = item.meetingNotices.missed.length;
+    return `${n} ${n === 1 ? "notice" : "notices"} missed`;
+  }
   if (!item.deadline) return null;
   const days = daysUntil(item.deadline);
   if (days < 0) return `${Math.abs(days)}d overdue`;
@@ -98,7 +111,49 @@ const HELP_TEXT: Record<string, string> = {
   "720_bylaws": "Upload the current bylaws and all adopted amendments governing the HOA's operations.",
   "720_articles": "Upload the Articles of Incorporation filed with the Florida Division of Corporations.",
   "720_budget": "Upload the current or most recently approved annual budget for the association.",
+  "718_meeting_notices": "Scored from your meetings once a notice comes due. Each owner meeting needs its notice and agenda posted 14 days before it, and each board meeting 48 hours before. Add the agenda to the meeting and use Post notice when it goes up.",
+  "720_meeting_notices": "Scored from your meetings once a notice comes due. Each member meeting needs its notice and agenda posted 14 days before it, and each board meeting 48 hours before. Add the agenda to the meeting and use Post notice when it goes up.",
 };
+
+// ── Meeting notices ──────────────────────────────────
+
+/** How many missed notices to name before summarising the rest. */
+const MISSED_NOTICES_SHOWN = 5;
+
+/**
+ * Which meetings decided a meeting-notice row. States what was recorded and
+ * when it was due; it does not judge whether a meeting was valid.
+ */
+function MeetingNoticeDetail({ summary }: { summary: MeetingNoticeSummary }) {
+  const shown = summary.missed.slice(0, MISSED_NOTICES_SHOWN);
+  const more = summary.missed.length - shown.length;
+  return (
+    <div className="mb-3 space-y-2 text-sm text-content-secondary">
+      <p>
+        Scored from your meetings over the past {summary.windowMonths} months: each notice
+        counts as on time when it was recorded as posted by its deadline.
+      </p>
+      {shown.length > 0 ? (
+        <ul className="space-y-1">
+          {shown.map((miss) => (
+            <li key={miss.meetingId}>
+              <span className="font-medium text-content">{miss.title}</span>
+              {` (${formatDate(miss.startsAt)}): due ${formatDate(miss.postBy)}, `}
+              {miss.noticePostedAt ? `posted ${formatDate(miss.noticePostedAt)}` : "not recorded"}
+            </li>
+          ))}
+          {more > 0 ? <li>and {more} more</li> : null}
+        </ul>
+      ) : null}
+      {summary.nextDue ? (
+        <p>
+          Next notice due: <span className="font-medium text-content">{summary.nextDue.title}</span>
+          {`, by ${formatDate(summary.nextDue.postBy)}.`}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 // ── Component ────────────────────────────────────────
 
@@ -181,7 +236,12 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
                 Deadline: {deadlineFormatted}
               </Badge>
             )}
-            {posted ? (
+            {item.meetingNotices ? (
+              <Badge variant={item.meetingNotices.missed.length > 0 ? "danger" : "success"}>
+                On time: {item.meetingNotices.onTimeCount} of {item.meetingNotices.dueCount}{" "}
+                {item.meetingNotices.dueCount === 1 ? "meeting" : "meetings"}
+              </Badge>
+            ) : posted ? (
               <Badge variant="success">Posted: {posted}</Badge>
             ) : (
               <Badge variant="neutral">Not posted</Badge>
@@ -193,6 +253,8 @@ export function ComplianceChecklistItem({ item, actions }: ComplianceChecklistIt
               <Badge variant="neutral">Conditional</Badge>
             )}
           </div>
+
+          {item.meetingNotices ? <MeetingNoticeDetail summary={item.meetingNotices} /> : null}
 
           {/* Contextual help */}
           {HELP_TEXT[item.templateKey] && (

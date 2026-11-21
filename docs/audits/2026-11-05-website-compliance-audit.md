@@ -310,6 +310,32 @@ Missing or partial:
 - Add a 7-day check for documents attached as "to be voted on".
 - Either build `/notices` or drop the route and rely on the front page.
 
+**Status (2026-11-21):** partly addressed (fix-order step 4); migration
+`0099_meetings_agenda` is an expand migration applied ahead of the code.
+
+- Meetings carry a plain-text agenda (`meetings.agenda`, capped at 10,000
+  characters). It is set in the meeting form and shown in the meeting detail
+  and, in full, in the public Meetings block.
+- The Meetings block never looks fewer than 14 days ahead, and its `limit`
+  never hides a meeting inside those 14 days (`selectPublicMeetings`, shared by
+  the live site and the editor canvas). Hiding or removing the block is still
+  possible.
+- `/notices` 307s to the front page's Meetings section (`/#meetings`) instead
+  of 404ing.
+- The meeting-notice rows are scored per meeting from `notice_posted_at`: a
+  notice missed in the past 12 months makes the row overdue, an unrecorded
+  notice due within 7 days makes it "due soon", and the linked-document rule
+  applies only while no notice has come due. The Compliance page, dashboard,
+  welcome page and PM portfolio all read this; the admin console's score and
+  the compliance-alert cron still count linked documents (M-3).
+- Lead times still warn rather than block: there is no emergency meeting type
+  to escape to.
+
+Not done: agenda *files* on the public site (attachments may be owners-only
+records), the special-assessment and use-rule 14-day flags with the
+purpose/cost prompt, the 7-day check for documents to be voted on, and a
+special *board* meeting still gets 14 days.
+
 ---
 
 ### H-5 · Minutes: one document satisfies a year

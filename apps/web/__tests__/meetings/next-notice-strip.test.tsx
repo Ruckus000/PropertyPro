@@ -41,6 +41,7 @@ const MEETING: MeetingListItem = {
   startsAt: '2026-09-17T22:30:00.000Z',
   endsAt: null,
   location: 'Clubhouse',
+  agenda: null,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {

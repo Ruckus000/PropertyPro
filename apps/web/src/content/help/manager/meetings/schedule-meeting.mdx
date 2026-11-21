@@ -11,7 +11,7 @@ relatedArticles: ["post-minutes","meeting-notices","compliance-dashboard"]
 statutes: ["§718.112","§720.303"]
 featureGates: [hasMeetings]
 contextPaths: ["/communities/*/meetings"]
-updatedAt: "2026-09-30"
+updatedAt: "2026-11-21"
 ---
 
 <StepByStep>
@@ -32,6 +32,8 @@ In **Meeting Type**, **Board** and **Committee** meetings get a 48-hour notice d
 
 Fill in **Title**, **Start** and **Location**. **End** is optional and defaults to one hour after the start. Times are in the community’s time zone. For a video meeting, put the link and call-in number in **Location** and label it clearly.
 
+Type the agenda in **Agenda**, one item per line. It is optional, and you can add or change it later with **Edit**.
+
 </Step>
 
 <Step title="Select Create Meeting" shot="mt-save">
@@ -48,9 +50,19 @@ Open the meeting to see its **Compliance deadlines**: **Notice post by**, **Vote
 
 </Figure>
 
+## Where the agenda appears
+
+The agenda shows with the meeting in the portal and in the **Upcoming Meetings** section of your website’s home page. That section always lists every meeting in the next 14 days, whatever its settings, so a notice inside its window is never left off. Visitors who go to `/notices` on your website are sent to that section.
+
 ## Record that the notice is posted
 
 When an upcoming meeting’s notice is not yet recorded, a strip at the top of **Meetings** names it and its post-by time. After you post the notice and agenda, select **Post notice**, then **Record it as posted**. PropertyPro saves the date and who recorded it; it cannot check the posting itself.
+
+<OnlyFor types="condo_718 hoa_720">
+
+The **Meeting Notices and Agendas** item on **Compliance** is scored from these dates. A meeting counts as on time when its notice was recorded by the post-by time. A notice recorded late, or never recorded, counts as missed for 12 months after the meeting.
+
+</OnlyFor>
 
 <OnlyFor types="condo_718 hoa_720">
 

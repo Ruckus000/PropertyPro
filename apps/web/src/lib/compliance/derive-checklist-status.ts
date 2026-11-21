@@ -6,6 +6,11 @@
  */
 import { calculateComplianceStatus } from '@/lib/utils/compliance-calculator';
 import type { LinkedDocumentState } from '@/lib/services/documents-service';
+import {
+  MEETING_NOTICE_TEMPLATE_KEYS,
+  meetingNoticeStatus,
+  type MeetingNoticeSummary,
+} from './meeting-notice-status';
 
 /**
  * Decorate a checklist row with its derived compliance status.
@@ -17,11 +22,19 @@ import type { LinkedDocumentState } from '@/lib/services/documents-service';
  * Below the website rule's size threshold (`postingClockApplies` false) the row
  * goes out without its posting clock — no deadline, no rolling window — so it
  * can be posted or not, but never overdue or "due soon" anywhere it is shown.
+ *
+ * `meetingNotices` is the community's per-meeting notice summary. On a
+ * meeting-notice row it decides the status (`meetingNoticeStatus`) and rides
+ * along as `meetingNotices`, so the UI can name the meeting. When the meetings
+ * say nothing yet, the row keeps its document-based status. Ignored on every
+ * other row, on a row marked "doesn't apply", and below the size threshold.
  */
 export function withDerivedStatus(
   storedRow: Record<string, unknown>,
   documentStateById: Map<number, LinkedDocumentState> = new Map(),
   clockApplies = true,
+  meetingNotices: MeetingNoticeSummary | null = null,
+  now: Date = new Date(),
 ): Record<string, unknown> {
   const row = clockApplies ? storedRow : { ...storedRow, deadline: null, rollingWindow: null };
   const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
@@ -36,6 +49,24 @@ export function withDerivedStatus(
   const documentId = (row['documentId'] as number | null) ?? null;
   const linked = documentId != null ? documentStateById.get(documentId) : undefined;
 
+  const documentStatus = calculateComplianceStatus({
+    isApplicable: row['isApplicable'] as boolean | undefined,
+    documentId,
+    documentPostedAt,
+    documentDeletedAt: linked?.deletedAt ?? null,
+    documentIsDraft: linked?.isDraft ?? false,
+    deadline,
+    rollingWindowMonths,
+    now,
+  });
+
+  const scoresMeetings =
+    meetingNotices !== null &&
+    clockApplies &&
+    documentStatus !== 'not_applicable' &&
+    MEETING_NOTICE_TEMPLATE_KEYS.has(row['templateKey'] as string);
+  const fromMeetings = scoresMeetings && meetingNotices ? meetingNoticeStatus(meetingNotices, now) : null;
+
   return {
     ...row,
     // What the linked file is now, for callers that must tell a saved draft
@@ -43,14 +74,8 @@ export function withDerivedStatus(
     // reads both as "not linked". `null` = nothing linked, or the row is gone.
     documentState:
       linked === undefined ? null : linked.deletedAt != null ? 'deleted' : linked.isDraft ? 'draft' : 'posted',
-    status: calculateComplianceStatus({
-      isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId,
-      documentPostedAt,
-      documentDeletedAt: linked?.deletedAt ?? null,
-      documentIsDraft: linked?.isDraft ?? false,
-      deadline,
-      rollingWindowMonths,
-    }),
+    ...(scoresMeetings ? { meetingNotices } : {}),
+    ...(fromMeetings ? { deadline: fromMeetings.deadline } : {}),
+    status: fromMeetings?.status ?? documentStatus,
   };
 }
