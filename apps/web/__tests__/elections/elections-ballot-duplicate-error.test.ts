@@ -79,8 +79,7 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 vi.mock('@/lib/units/actor-units', () => ({
-  listActorUnitIds: queryMock,
-  requireActorUnitId: vi.fn(async () => 11),
+  listActorOwnedUnitIds: queryMock,
 }));
 
 import { AppError } from '@/lib/api/errors';

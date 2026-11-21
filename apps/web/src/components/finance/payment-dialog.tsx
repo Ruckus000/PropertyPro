@@ -264,7 +264,10 @@ function CheckoutForm({
       const { error: submitError } = await stripe.confirmPayment({
         elements,
         confirmParams: {
-          return_url: `${window.location.origin}/payments/success`,
+          // The success page reads the PI from this community's connected
+          // account and checks the viewer's membership in it (Stripe appends
+          // `payment_intent` to this URL).
+          return_url: `${window.location.origin}/payments/success?communityId=${communityId}`,
         },
         redirect: 'if_required',
       });
@@ -276,7 +279,7 @@ function CheckoutForm({
         onSuccess();
       }
     },
-    [stripe, elements, onSuccess],
+    [stripe, elements, onSuccess, communityId],
   );
 
   const displayFee = confirmedFee ?? (feePolicy === 'owner_pays'

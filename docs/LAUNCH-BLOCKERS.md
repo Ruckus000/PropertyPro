@@ -140,6 +140,15 @@ line says where.
 - **E-voting** is gated off per community (`electionsAttorneyReviewed`), and migration
   `0062_secret_ballot` is merged but **deliberately unapplied** pending attorney sign-off.
   It is irreversible; see [`DEPLOYMENT.md`](DEPLOYMENT.md) §7.3.
+  Before turning `electionsAttorneyReviewed` on for any community, also build (decision
+  D5, 2026-11-21 — the API already enforces the rules; the UI cannot yet use them):
+  - **Multi-unit voter picker.** The vote API accepts `unitId`, but the vote form never
+    sends one, so an owner of several units always votes the first unit
+    (`resolveVotingUnit` in `apps/web/src/lib/services/elections-service.ts`) and cannot
+    vote the others.
+  - **Proxy-voting UI.** A proxy holder votes by sending `proxyId`; no screen lets them
+    pick an approved proxy and cast the grantor unit's ballot. The vote form should also
+    hide itself from tenants, who the API now refuses (only owners or proxy holders vote).
 - **Reserve transparency** and **storm tools** ship dark by design.
 - **Resident payments** are gated per community (`assessmentPaymentsEnabled`) and are not
   launching. Associations connect through Stripe-hosted onboarding (account links), not

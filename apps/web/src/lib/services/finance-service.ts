@@ -1025,14 +1025,20 @@ async function getPayableById(
 }
 
 /**
- * Pre-flight guard: verify that the given actor is the user who created the PI.
- * Used by the update-intent route to prevent cross-owner PI manipulation.
+ * Read a PaymentIntent the actor created in this community, or refuse.
+ *
+ * Used before updating a PI (update-intent route) and before showing a PI's
+ * status (the `/payments/success` return page). Both matches are EXACT: the
+ * PI's `userId` metadata must equal the actor and its `communityId` metadata
+ * must equal the community. A PI missing either key belongs to no one and is
+ * refused — the earlier `if (piUserId && …)` form let a PI with no `userId`
+ * through to anyone.
  */
 export async function requireActorOwnsPi(
   paymentIntentId: string,
   actorUserId: string,
   communityId: number,
-): Promise<void> {
+): Promise<Stripe.PaymentIntent> {
   const stripe = getStripeClient();
   // Direct charges live on the connected account, so a bare retrieve against
   // the platform account raises `No such payment_intent` (F-15).
@@ -1040,10 +1046,14 @@ export async function requireActorOwnsPi(
   const intent = await stripe.paymentIntents.retrieve(paymentIntentId, undefined, {
     stripeAccount,
   });
-  const piUserId = parseMetadataString(intent.metadata ?? {}, 'userId');
-  if (piUserId && piUserId !== actorUserId) {
-    throw new ForbiddenError('You can only update your own payment intent');
+  const metadata = intent.metadata ?? {};
+  if (
+    parseMetadataString(metadata, 'userId') !== actorUserId ||
+    parseMetadataInt(metadata, 'communityId') !== communityId
+  ) {
+    throw new ForbiddenError('You can only access your own payments');
   }
+  return intent;
 }
 
 export interface UpdatePaymentIntentFeeResult {
