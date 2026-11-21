@@ -333,10 +333,11 @@ describe('OperationsHub', () => {
       />,
     );
 
+    // `page=2` means two steps of rows from the top, not the second slice.
     expect(useMaintenanceRequestsMock).toHaveBeenCalledWith(
       42,
       expect.objectContaining({
-        params: expect.objectContaining({ status: 'new', priority: 'urgent', page: 2 }),
+        params: expect.objectContaining({ status: 'new', priority: 'urgent', page: 1, limit: 40 }),
       }),
     );
   });
@@ -382,6 +383,165 @@ describe('OperationsHub', () => {
       />,
     );
     expect(screen.getByRole('button', { name: /load more/i })).toBeInTheDocument();
+  });
+
+  describe('Load more', () => {
+    function requestRow(id: number) {
+      return {
+        id,
+        communityId: 42,
+        unitId: null,
+        submittedById: 'u-1',
+        title: `Request ${id}`,
+        description: 'Test',
+        status: 'submitted',
+        priority: 'normal',
+        category: 'general',
+        assignedToId: null,
+        resolutionDescription: null,
+        resolutionDate: null,
+        photos: null,
+        createdAt: '2026-03-27T14:00:00.000Z',
+        updatedAt: '2026-03-27T14:00:00.000Z',
+        comments: [],
+      };
+    }
+
+    function renderHub() {
+      return render(
+        <OperationsHub
+          communityId={42}
+          requestsEnabled={true}
+          workOrdersEnabled={true}
+          reservationsEnabled={true}
+          requestScope="community"
+          isAdmin={true}
+          userId="u-1"
+          communityTimezone="America/New_York"
+        />,
+      );
+    }
+
+    it('grows the request list from the top: page 1 with limit 40, earlier rows kept', () => {
+      const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+      searchParamsMock.mockReturnValue('tab=requests');
+      useMaintenanceRequestsMock.mockReturnValue({
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        data: { data: [requestRow(1)], meta: { total: 40, page: 1, limit: 20 } },
+      });
+      const { rerender } = renderHub();
+
+      fireEvent.click(screen.getByRole('button', { name: /load more/i }));
+      expect(historyReplace).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=requests&page=2');
+
+      // Next syncs the new URL into useSearchParams. While the longer list loads
+      // the hook keeps the earlier rows (placeholder), so they stay on screen.
+      searchParamsMock.mockReturnValue('tab=requests&page=2');
+      useMaintenanceRequestsMock.mockReturnValue({
+        isLoading: false,
+        isFetching: true,
+        error: null,
+        data: { data: [requestRow(1)], meta: { total: 40, page: 1, limit: 20 } },
+      });
+      rerender(
+        <OperationsHub
+          communityId={42}
+          requestsEnabled={true}
+          workOrdersEnabled={true}
+          reservationsEnabled={true}
+          requestScope="community"
+          isAdmin={true}
+          userId="u-1"
+          communityTimezone="America/New_York"
+        />,
+      );
+
+      expect(useMaintenanceRequestsMock).toHaveBeenLastCalledWith(
+        42,
+        expect.objectContaining({
+          keepRowsWhileLoadingMore: true,
+          params: expect.objectContaining({ page: 1, limit: 40 }),
+        }),
+      );
+      expect(useWorkOrdersMock).toHaveBeenLastCalledWith(
+        42,
+        expect.objectContaining({ page: 1, limit: 40 }),
+        expect.objectContaining({ keepRowsWhileLoadingMore: true }),
+      );
+      expect(screen.getByText('Request 1')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled();
+      historyReplace.mockRestore();
+    });
+
+    it.each(['abc', '0', '-3', '1.5', ''])('reads ?page=%s as page 1', (raw) => {
+      searchParamsMock.mockReturnValue(`tab=requests&page=${raw}`);
+      renderHub();
+
+      expect(useMaintenanceRequestsMock).toHaveBeenLastCalledWith(
+        42,
+        expect.objectContaining({ params: expect.objectContaining({ page: 1, limit: 20 }) }),
+      );
+      expect(useWorkOrdersMock).toHaveBeenLastCalledWith(
+        42,
+        expect.objectContaining({ page: 1, limit: 20 }),
+        expect.anything(),
+      );
+      expect(useReservationsMock).toHaveBeenLastCalledWith(
+        42,
+        { page: 1, limit: 20 },
+        expect.objectContaining({ keepRowsWhileLoadingMore: true }),
+      );
+    });
+
+    function reservationsWithTotal(total: number, limit: number) {
+      useReservationsMock.mockReturnValue({
+        isLoading: false,
+        isFetching: false,
+        error: null,
+        data: {
+          data: [{
+            id: 17,
+            amenityId: 9,
+            unitId: 12,
+            status: 'confirmed',
+            startTime: '2026-03-28T14:00:00.000Z',
+            endTime: '2026-03-28T15:00:00.000Z',
+            notes: null,
+            createdAt: '2026-03-27T14:00:00.000Z',
+            updatedAt: '2026-03-27T14:00:00.000Z',
+          }],
+          meta: { page: 1, limit, total },
+        },
+      });
+    }
+
+    it('offers Load more on reservations below the server cap', async () => {
+      searchParamsMock.mockReturnValue('tab=reservations&page=4');
+      reservationsWithTotal(150, 80);
+      renderHub();
+
+      expect(useReservationsMock).toHaveBeenLastCalledWith(42, { page: 1, limit: 80 }, expect.anything());
+      expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /load more/i })).toBeInTheDocument();
+    });
+
+    it('hides Load more on reservations once the limit reaches the server cap of 100', async () => {
+      searchParamsMock.mockReturnValue('tab=reservations&page=5');
+      reservationsWithTotal(150, 100);
+      const { unmount } = renderHub();
+
+      expect(useReservationsMock).toHaveBeenLastCalledWith(42, { page: 1, limit: 100 }, expect.anything());
+      expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+      unmount();
+
+      // A hand-typed page past the cap never asks for more than the route honours.
+      searchParamsMock.mockReturnValue('tab=reservations&page=9');
+      renderHub();
+      expect(useReservationsMock).toHaveBeenLastCalledWith(42, { page: 1, limit: 100 }, expect.anything());
+    });
   });
 
   it('still renders the legacy-redirect banner when legacyNotice is set', () => {

@@ -48,6 +48,21 @@ const ReservationsEmpty = dynamic(() => import('./amenities-empty').then((m) => 
 
 type CreateValue = 'request' | 'work-order' | 'reservation' | 'amenity';
 
+/** Rows each "Load more" adds. */
+const LIST_STEP = 20;
+// The reservations route clamps `limit` to 100 and the list is not walked like the others.
+// ponytail: reservations stop at 100 in view. Trigger: a community shows >100 reservations
+const RESERVATIONS_MAX_LIMIT = 100;
+
+/**
+ * `?page=` counts how many steps of rows are shown. Anything that is not a whole number of
+ * at least 1 (`abc`, `0`, `-2`, `1.5`) is page 1.
+ */
+function parsePage(raw: string | null): number {
+  const page = Number(raw);
+  return Number.isInteger(page) && page >= 1 ? page : 1;
+}
+
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations' | 'amenities';
 
 const TABS: ReadonlyArray<{ id: OperationsTab; label: string }> = [
@@ -136,8 +151,12 @@ export function OperationsHub({
     unitId: searchParams.get('unitId') ? Number(searchParams.get('unitId')) : undefined,
     _q: searchParams.get('q') ?? undefined,
     cursor: searchParams.get('cursor') ?? undefined,
-    page: searchParams.get('page') ? Math.max(1, Number(searchParams.get('page'))) : 1,
+    page: parsePage(searchParams.get('page')),
   };
+  // "Load more" grows one list from the top (page 1, a longer limit) rather than
+  // swapping in the next page, so earlier rows stay on screen.
+  const listLimit = filters.page * LIST_STEP;
+  const reservationsLimit = Math.min(listLimit, RESERVATIONS_MAX_LIMIT);
 
   const summaryEnabled = requestsEnabled && workOrdersEnabled && requestScope === 'community';
   const availableTabs = TABS.filter((candidate) => {
@@ -182,15 +201,15 @@ export function OperationsHub({
       // instead of sending a bogus value to the API.
       status: parseWorkOrderStatus(filters.status),
       unitId: filters.unitId,
-      page: filters.page,
-      limit: 20,
+      page: 1,
+      limit: listLimit,
     },
-    { enabled: workOrdersEnabled },
+    { enabled: workOrdersEnabled, keepRowsWhileLoadingMore: true },
   );
   const reservationsQuery = useReservations(
     communityId,
-    { page: filters.page, limit: 20 },
-    { enabled: reservationsEnabled },
+    { page: 1, limit: reservationsLimit },
+    { enabled: reservationsEnabled, keepRowsWhileLoadingMore: true },
   );
   // Both amenity tabs need the list: Reservations to know whether anything can be booked.
   const amenitiesQuery = useAmenities(communityId, {
@@ -210,11 +229,12 @@ export function OperationsHub({
   const requestsQuery = useMaintenanceRequests(communityId, {
     scope: requestScope,
     enabled: requestsEnabled,
+    keepRowsWhileLoadingMore: true,
     params: {
       status: filters.status,
       priority: filters.priority,
-      page: filters.page,
-      limit: 20,
+      page: 1,
+      limit: listLimit,
     },
   });
 
@@ -578,9 +598,8 @@ export function OperationsHub({
             />
             <LoadMoreButton
               visible={
-                reservationsQuery.data
-                  ? reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total
-                  : false
+                reservationsLimit < RESERVATIONS_MAX_LIMIT
+                && reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total
               }
               isLoading={reservationsQuery.isFetching}
               onClick={() => {
