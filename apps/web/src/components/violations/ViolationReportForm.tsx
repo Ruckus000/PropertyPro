@@ -43,7 +43,9 @@ const SEVERITY_OPTIONS: { value: ViolationSeverity; label: string }[] = [
 ];
 
 const formSchema = z.object({
-  unitId: z.number().int().positive({ message: 'Please select the unit the report is about' }),
+  // `error` covers the empty picker too: zod 4 reports undefined as an
+  // invalid_type issue, which `.positive({ message })` never reaches.
+  unitId: z.number({ error: 'Please select the unit the report is about' }).int().positive({ error: 'Please select the unit the report is about' }),
   category: z.string().min(1, 'Category is required'),
   description: z.string().min(1, 'Description is required').max(4000, 'Description must be 4000 characters or less'),
   severity: z.enum(['minor', 'moderate', 'major']).optional(),

@@ -156,4 +156,15 @@ describe('StaffViolationReportForm', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Failed to load units');
     expect(screen.getByRole('button', { name: /file violation report/i })).toBeDisabled();
   });
+
+  // zod 4 reports an empty picker as invalid_type, which a `.positive()`
+  // message never reached — the user saw "Invalid input: expected number".
+  it('names the missing unit in plain words when none is picked', async () => {
+    render(<StaffViolationReportForm communityId={42} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /file violation report/i }));
+
+    expect(await screen.findByText('Please select a unit')).toBeVisible();
+    expect(createViolationMock).not.toHaveBeenCalled();
+  });
 });

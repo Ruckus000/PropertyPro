@@ -37,7 +37,9 @@ const SEVERITY_OPTIONS: { value: ViolationSeverity; label: string }[] = [
 ];
 
 const formSchema = z.object({
-  unitId: z.number().int().positive({ message: 'Please select a unit' }),
+  // `error` covers the empty picker too: zod 4 reports undefined as an
+  // invalid_type issue, which `.positive({ message })` never reaches.
+  unitId: z.number({ error: 'Please select a unit' }).int().positive({ error: 'Please select a unit' }),
   category: z.string().min(1, 'Category is required'),
   description: z
     .string()

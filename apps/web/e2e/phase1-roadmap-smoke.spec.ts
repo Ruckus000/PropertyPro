@@ -268,15 +268,23 @@ test.describe('phase 1 roadmap smoke', () => {
     await expect(page.getByLabel('Category')).toBeVisible();
     await expect(page.getByLabel('Description')).toBeVisible();
 
+    // Residents pick the unit the report is about (any unit in the community),
+    // and Submit stays disabled until that list has loaded — so wait for it to
+    // enable rather than reading a loading state as "no unit". A resident with
+    // no unit never reaches this form: the page shows a guard state instead.
+    //
+    // A plain click is safe here, and `clickWhenHydrated` would be wrong: the
+    // button has no onClick (the form's onSubmit handles it), so that probe
+    // could never resolve. Hydration is proved instead by `toBeEnabled()` —
+    // Submit renders disabled from the server and enables only once the client
+    // has fetched the unit list.
+    await expect(page.getByLabel(/Unit the report is about/)).toBeVisible();
     const submit = page.getByRole('button', { name: 'Submit Violation Report' });
-    await expect(submit).toBeVisible();
+    await expect(submit).toBeEnabled();
 
-    if (await submit.isDisabled()) {
-      await expect(page.getByText(/not associated with a unit/i)).toBeVisible();
-    } else {
-      await submit.click();
-      await expect(page.getByText('Category is required')).toBeVisible();
-      await expect(page.getByText('Description is required')).toBeVisible();
-    }
+    await submit.click();
+    await expect(page.getByText('Please select the unit the report is about')).toBeVisible();
+    await expect(page.getByText('Category is required')).toBeVisible();
+    await expect(page.getByText('Description is required')).toBeVisible();
   });
 });
