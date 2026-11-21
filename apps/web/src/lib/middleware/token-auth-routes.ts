@@ -23,8 +23,10 @@ export const TOKEN_AUTH_ROUTES: ReadonlyArray<{ path: string; method: string }> 
   { path: '/api/v1/auth/signup', method: 'GET' },
   // Email-first signup step 1: takes an email, sends a sign-in link; no session yet
   { path: '/api/v1/auth/signup/start', method: 'POST' },
-  // Snowbird digest one-click unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM)
+  // Snowbird digest unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);
+  // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
   { path: '/api/v1/snowbird-digest/unsubscribe', method: 'GET' },
+  { path: '/api/v1/snowbird-digest/unsubscribe', method: 'POST' },
   // Insurance alerts unsubscribe: HMAC-token-authenticated, no session (CAN-SPAM);
   // GET backs the human-clicked link, POST is the RFC 8058 one-click target.
   { path: '/api/v1/insurance-alerts/unsubscribe', method: 'GET' },
