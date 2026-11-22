@@ -75,6 +75,7 @@ const UPCOMING_BOARD: MeetingListItem = {
   startsAt: '2026-09-03T22:30:00.000Z',
   endsAt: null,
   location: 'Clubhouse',
+  agenda: null,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -91,6 +92,7 @@ const UPCOMING_ANNUAL: MeetingListItem = {
   startsAt: '2026-10-20T23:00:00.000Z',
   endsAt: '2026-10-21T01:00:00.000Z',
   location: 'Ballroom',
+  agenda: null,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -107,6 +109,7 @@ const PAST_OWED: MeetingListItem = {
   startsAt: '2026-08-12T22:30:00.000Z',
   endsAt: null,
   location: 'Clubhouse',
+  agenda: null,
   noticePostedAt: '2026-08-10T14:00:00.000Z',
   minutesApprovedAt: null,
   deadlines: {

@@ -21,6 +21,12 @@ export interface MeetingResponseRecord {
   startsAt: Date;
   endsAt: Date | null;
   location: string;
+  /**
+   * Plain-text agenda. Optional on the record so a projection that predates
+   * the column still type-checks; the serializer always emits it (null when
+   * absent).
+   */
+  agenda?: string | null;
   noticePostedAt: Date | null;
   minutesApprovedAt: Date | null;
 }
@@ -48,6 +54,7 @@ export function serializeMeetingResponse(
     startsAt: meeting.startsAt.toISOString(),
     endsAt: meeting.endsAt?.toISOString() ?? null,
     location: meeting.location,
+    agenda: meeting.agenda ?? null,
     noticePostedAt: meeting.noticePostedAt?.toISOString() ?? null,
     minutesApprovedAt: meeting.minutesApprovedAt?.toISOString() ?? null,
     deadlines: buildMeetingDeadlines(

@@ -24,6 +24,7 @@ import { requireActiveSubscriptionForMutation } from '@/lib/middleware/subscript
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import { serializeMeetingResponse } from '@/lib/meetings/meeting-response';
 import { buildMeetingNoticeWarning } from '@/lib/meetings/notice-warning';
+import { MEETING_AGENDA_MAX_LENGTH } from '@/lib/meetings/agenda';
 import type { NoticeWarning } from '@/lib/compliance/notice-window';
 import { createNotificationsForEvent, queueNotification } from '@/lib/services/notification-service';
 import {
@@ -52,6 +53,22 @@ const meetingTypeSchema = z.enum([
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
+/**
+ * The plain-text agenda posted with the notice (§718.111(12)(g)2.m–n,
+ * §720.303(4)(b)1.l–m). Line breaks are kept — an agenda is a list — and only
+ * the ends are trimmed. Blank becomes null, so clearing the field removes the
+ * agenda rather than storing whitespace.
+ */
+const agendaSchema = z
+  .string()
+  .max(MEETING_AGENDA_MAX_LENGTH)
+  .nullish()
+  .transform((value) => {
+    if (value === undefined) return undefined;
+    const trimmed = value?.trim() ?? '';
+    return trimmed.length > 0 ? trimmed : null;
+  });
+
 const createMeetingSchema = z
   .object({
     communityId: z.number().int().positive(),
@@ -60,6 +77,7 @@ const createMeetingSchema = z
     startsAt: isoDateTimeSchema,
     endsAt: isoDateTimeSchema.nullish(),
     location: z.string().trim().min(1).max(200),
+    agenda: agendaSchema,
   })
   .superRefine((value, ctx) => {
     if (value.endsAt && new Date(value.endsAt).getTime() <= new Date(value.startsAt).getTime()) {
@@ -80,6 +98,7 @@ const updateMeetingSchema = z.object({
   startsAt: isoDateTimeSchema.optional(),
   endsAt: isoDateTimeSchema.nullish().optional(),
   location: z.string().trim().min(1).max(200).optional(),
+  agenda: agendaSchema,
 });
 
 const deleteMeetingSchema = z.object({
@@ -278,12 +297,14 @@ async function handleCreate(
   }
 
   const { communityId, title, meetingType, startsAt, endsAt, location } = parsed.data;
+  const agenda = parsed.data.agenda ?? null;
   const createdMeetingId = await createMeetingForCommunity(communityId, {
     title,
     meetingType,
     startsAt: new Date(startsAt),
     endsAt: endsAt ? new Date(endsAt) : null,
     location,
+    agenda,
   });
 
   const [createdMeeting, rawCommunityTimezone] = await Promise.all([
@@ -307,6 +328,7 @@ async function handleCreate(
       startsAt,
       endsAt: endsAt ?? null,
       location,
+      agenda,
     },
   });
 
@@ -383,7 +405,7 @@ async function handleUpdate(
     });
   }
 
-  const { id, communityId, title, meetingType, startsAt, endsAt, location } = parsed.data;
+  const { id, communityId, title, meetingType, startsAt, endsAt, location, agenda } = parsed.data;
   const existing = await getMeetingDetail(communityId, id);
   if (!existing) {
     throw new NotFoundError('Meeting not found');
@@ -423,6 +445,11 @@ async function handleUpdate(
     updateData.location = location;
     oldValues.location = existing.location;
     newValues.location = location;
+  }
+  if (agenda !== undefined) {
+    updateData.agenda = agenda;
+    oldValues.agenda = existing.agenda ?? null;
+    newValues.agenda = agenda;
   }
 
   if (Object.keys(updateData).length > 0) {

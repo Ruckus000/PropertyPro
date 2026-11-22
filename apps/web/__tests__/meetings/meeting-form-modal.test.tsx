@@ -71,6 +71,35 @@ describe('MeetingForm modal', () => {
     expect(location).toHaveValue('Room A B');
   });
 
+  it('sends the agenda with the meeting, and null when it is left blank (H-4)', async () => {
+    renderWithClient(
+      <MeetingForm
+        communityId={1}
+        communityTimezone="America/New_York"
+        communityType="condo_718"
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Annual Meeting' } });
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'Clubhouse' } });
+    const agenda = screen.getByLabelText('Agenda');
+    expect(agenda).toHaveAttribute('maxLength', '10000');
+    fireEvent.change(agenda, { target: { value: '1. Call to order\n2. Budget\n' } });
+    fireEvent.submit(agenda.closest('form')!);
+    await waitFor(() =>
+      expect(mutateAsyncMock).toHaveBeenCalledWith(
+        expect.objectContaining({ agenda: '1. Call to order\n2. Budget' }),
+      ),
+    );
+
+    mutateAsyncMock.mockClear();
+    fireEvent.change(agenda, { target: { value: '   ' } });
+    fireEvent.submit(agenda.closest('form')!);
+    await waitFor(() =>
+      expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ agenda: null })),
+    );
+  });
+
   /**
    * #932 — the live half of the notice-window warning.
    *

@@ -12,7 +12,14 @@ import {
   type LinkedDocumentState,
 } from '@/lib/services/documents-service';
 import { listComplianceChecklistItems } from '@/lib/services/compliance-service';
+import { listMeetingsForNoticeScoring } from '@/lib/services/meeting-service';
+import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 import { withDerivedStatus } from './derive-checklist-status';
+import {
+  MEETING_NOTICE_TEMPLATE_KEYS,
+  MEETING_NOTICE_WINDOW_MONTHS,
+  summarizeMeetingNotices,
+} from './meeting-notice-status';
 
 export { withDerivedStatus };
 
@@ -36,10 +43,24 @@ export async function loadChecklistWithStatus(
         .filter((v): v is number => typeof v === 'number'),
     ),
   ];
-  const documentStateById = await getLinkedDocumentStatesByIds(communityId, linkedDocumentIds);
-  const clockApplies = postingClockApplies({
-    communityType,
-    unitCount: await getCommunityUnitCount(communityId),
-  });
-  return rows.map((row) => withDerivedStatus(row, documentStateById, clockApplies));
+  const now = new Date();
+  // Only a checklist that has a meeting-notice row pays for the meetings read.
+  const scoresMeetings = rows.some((r) => MEETING_NOTICE_TEMPLATE_KEYS.has(r['templateKey'] as string));
+  const [documentStateById, unitCount, noticeMeetings] = await Promise.all([
+    getLinkedDocumentStatesByIds(communityId, linkedDocumentIds),
+    getCommunityUnitCount(communityId),
+    scoresMeetings
+      ? listMeetingsForNoticeScoring(
+        communityId,
+        calculateRollingWindowStart(now, MEETING_NOTICE_WINDOW_MONTHS),
+      )
+      : Promise.resolve(null),
+  ]);
+  const clockApplies = postingClockApplies({ communityType, unitCount });
+  const meetingNotices = noticeMeetings
+    ? summarizeMeetingNotices(noticeMeetings, communityType, now)
+    : null;
+  return rows.map((row) =>
+    withDerivedStatus(row, documentStateById, clockApplies, meetingNotices, now),
+  );
 }

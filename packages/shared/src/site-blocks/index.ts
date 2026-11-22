@@ -61,7 +61,14 @@ export {
 export { textBlockSchema, type TextBlockContent } from './text';
 export { imageBlockSchema, type ImageBlockContent } from './image';
 export { documentsBlockSchema, DOCUMENT_CATEGORIES, documentMatchesSectionCategories, type DocumentsBlockContent, type DocumentCategory } from './documents';
-export { meetingsBlockSchema, type MeetingsBlockContent } from './meetings';
+export {
+  effectiveMeetingsWindowDays,
+  meetingsBlockSchema,
+  MEETINGS_NOTICE_FLOOR_DAYS,
+  MEETINGS_NOTICE_ROW_CAP,
+  selectPublicMeetings,
+  type MeetingsBlockContent,
+} from './meetings';
 export { announcementsBlockSchema, type AnnouncementsBlockContent } from './announcements';
 export { contactBlockSchema, type ContactBlockContent } from './contact';
 export { faqBlockSchema, faqItemSchema, type FaqBlockContent, type FaqItem } from './faq';

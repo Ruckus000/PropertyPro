@@ -118,6 +118,11 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
 }));
 
+// load-checklist-with-status reads meetings for the meeting-notice row (H-4).
+vi.mock('@/lib/services/meeting-service', () => ({
+  listMeetingsForNoticeScoring: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@/lib/services/community-profile-service', () => ({
   getCommunityUnitCount: getCommunityUnitCountMock,
 }));

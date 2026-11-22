@@ -1,6 +1,9 @@
 /**
  * MeetingsBlockView — presentational half of the meetings block.
  *
+ * Each meeting carries its agenda when one was entered: the front page is
+ * where §718.111(12)(g)2.m / §720.303(4)(b)1.l put the notice and agenda.
+ *
  * Pure, synchronous, prop-driven. See `BlockViewProps` in ./types.
  */
 import type { MeetingsBlockContent } from '@propertypro/shared';
@@ -69,6 +72,17 @@ export function MeetingsBlockView({
                       {formatMeetingType(meeting.meetingType)}
                     </li>
                   </ul>
+                  {/* Shown in full, not collapsed: the statute asks for the
+                      agenda in plain view with the notice. Plain text, so its
+                      line breaks are its structure. */}
+                  {meeting.agenda ? (
+                    <div className="mt-4">
+                      <h4 className="text-base font-semibold text-content">Agenda</h4>
+                      <p className="mt-1 whitespace-pre-line break-words text-base text-content-secondary">
+                        {meeting.agenda}
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </li>
             );

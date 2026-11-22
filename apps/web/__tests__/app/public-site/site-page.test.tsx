@@ -47,6 +47,9 @@ vi.mock('next/navigation', () => ({
   permanentRedirect: (url: string) => {
     throw new Error(`NEXT_PERMANENT_REDIRECT:${url}`);
   },
+  redirect: (url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`);
+  },
 }));
 
 vi.mock('@/lib/api/branding', () => ({
@@ -298,6 +301,14 @@ describe('PublicSitePage — slug resolution [11b-2]', () => {
     await expect(
       PublicSitePage({ params: Promise.resolve({ slug: ['nope'] }) }),
     ).rejects.toThrow('NEXT_NOT_FOUND');
+  });
+
+  // H-4: `/notices` used to render the branded 404. The notices and agendas
+  // live in the front page's Meetings section, so it now sends visitors there.
+  it('307s /notices to the front page Meetings section', async () => {
+    await expect(
+      PublicSitePage({ params: Promise.resolve({ slug: ['notices'] }) }),
+    ).rejects.toThrow('NEXT_REDIRECT:/#meetings');
   });
 
   it('308s a retired slug to the target page current slug', async () => {
