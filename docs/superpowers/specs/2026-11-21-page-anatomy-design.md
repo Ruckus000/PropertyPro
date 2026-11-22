@@ -531,7 +531,7 @@ Rules for every overlay:
 | Overlay | Form | Notes |
 |---|---|---|
 | Notifications | Popover from the bell | Header with "Mark all read", rows, "View all notifications" footer; "You're all caught up" when empty |
-| Help panel / help modal | Sheet from the help button; dialog when the docs-modal flag is on | Search, "Relevant to this page", link to the help center. Two surfaces exist behind a flag today; **(call)** keep the modal and retire the panel when the flag is settled |
+| Help | Dialog, opened from the top bar and from each page header | Opens on the article for the current page; search and "Help for this page". **(owner)** "Let's retire the panel": the side panel (`help-widget.tsx`) and the `NEXT_PUBLIC_HELP_DOCS_MODAL_ENABLED` flag are removed, and this modal is the only in-app help surface |
 | Profile menu | Menu | Settings, Help Center, Switch Community, Add Community, Data Export, Log out. Log out is not styled destructive, as in the code |
 | Command palette | Palette | Large search row, grouped results with a kind label, keyboard hints in the footer |
 | Community switcher | Popover from the sidebar | Current community marked with a check and the word "Current" |
@@ -545,6 +545,36 @@ the lease unit panel, the create sheets under Operations, the help media
 lightbox, the support banner, and the site editor's publish sheet. They follow
 the rules above. On phones a popover, menu, dialog or palette spans the width
 with 12px margins, and a sheet is full width.
+
+### 5.21 Pages outside the app shell
+
+**(owner)** "I want to have maximum design consistency." Thirty-two more
+routes are drawn (groups "Sign in and sign up", "E-signing", "Website
+editor", "Public pages", "Print", "Demo", "Phone app"). They share the
+direction's type, rules, colour meaning, glyphs and time-left chip; only the
+frame differs.
+
+| Frame | Routes | Shape |
+|---|---|---|
+| Auth | `/auth/login`, `/signup` (seven steps), forgot and reset password, verify email, accept invite, checkout return | No app chrome. A 420px column: wordmark, display-face title, one sentence, fields at 40px, one full-width primary, text links, legal line. Where the page has a side column it becomes a margin of plain lines behind a hairline, not a photo panel. Errors are a left rule in the danger colour with the server's wording. Multi-step flows use the standard step strip. |
+| Signing | `/sign/[submissionExternalId]/[slug]` | A slim bar, then the document as a white page with its fields marked (dashed ink outline to do, green solid when done) beside a margin: who asked, progress, the field list with status glyphs, the consent text in full, then Finish and Decline. |
+| Editor | `/pm/website-editor` | Its own top bar: back, site name, Simple and Advanced, the saved stamp in mono, Preview and the one primary, Publish. Three panes: section list, canvas, properties. The selected section uses the place mark. |
+| Bare | The public transparency page, the branded not-found that notices and unavailable resolve to, demo pages | A brand bar with the community name in the display face, then the ordinary header and sections in a 920px column. |
+| Print | `/audit-trail/print` | White paper, a mono running head and stamp over an ink rule, the title, tables with an ink rule under the header and hairlines between rows. No buttons, no colour except status glyphs. |
+| Phone app | `/mobile/**` (11 screens; three help routes only redirect) | The code has no tab bar: it is a home list with back buttons, and it is drawn that way. Display-face screen title, sections as on the phone layout of any page, 44px controls. The earlier owner rules hold: no emojis, no greeting header. |
+
+Still out of scope: the themed association home page (`(public)/[subdomain]`),
+which carries each community's own branding, and the marketing site.
+
+Not drawn: signup steps two to seven, the signature dialog (draw, type,
+upload) and the signing page's eight result states, the editor's Simple mode
+and its publish sheet, and the other states of the invite, reset and demo
+pages. The phone app is outside the earlier design-token migration, so
+bringing it into this direction is its own piece of work.
+
+**(call)** The login page's photo-and-brand side panel becomes a text margin.
+That is the one place this section removes something visible from a page the
+owner did not single out; say if the photo should stay.
 
 ## 6. Visual language
 
@@ -768,6 +798,13 @@ Each phase is its own PR or small set of PRs with disjoint files.
 | 1 | Pilot: Emergency Alerts (list, detail, new), Packages (staff and resident), and one tabbed page (Visitors, two tabs) so tabs are proven before phase 3. `PageHeader` paints title and description app-wide; breadcrumb leaf rule. | Owner reviews the four pages in the running app and approves the look |
 | 2 | The community dashboard on the canvas template (it is the first screen people see), then Settings moved onto the shared kit | Settings pages unchanged in behaviour; private kit deleted |
 | 3+ | Remaining pages in batches by navigation group, list pages first | Baseline reaches only the named exemptions |
+
+**(owner)** set a final task, to start only when the last phase above has
+merged: update the example content, and rewrite every help article under
+`apps/web/src/content/help/` (31 files) against the redesigned screens, with
+fresh screenshots and GIFs throughout. It is not part of the build and must
+not be started during it, because every screenshot taken before the last
+phase would be stale.
 
 Phase 1 is a real checkpoint. Nothing in phase 3 starts until the owner has
 seen the pilot live, because a mockup cannot settle laptop-width behaviour.
