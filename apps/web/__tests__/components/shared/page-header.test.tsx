@@ -18,6 +18,7 @@ vi.mock('@/components/help/help-widget-provider', () => ({
 }));
 
 import { PageHeader } from '@/components/shared/page-header';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 
 describe('PageHeader', () => {
   it('keeps the title as an h1 for the breadcrumb leaf and screen readers, but does not paint it', () => {
@@ -59,5 +60,35 @@ describe('PageHeader', () => {
     // Only the hidden h1 — no toolbar row, so no band above the content.
     expect(header!.children).toHaveLength(1);
     expect(header!.firstElementChild?.tagName).toBe('H1');
+  });
+
+  it('paints the title, description and place mark inside a PageLayout', () => {
+    const { container } = render(
+      <PageLayout
+        template="list"
+        header={<PageHeader title="Packages" description="Log deliveries as they arrive." navId="packages" />}
+      >
+        x
+      </PageLayout>,
+    );
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Packages' });
+    expect(h1).not.toHaveClass('sr-only');
+    expect(screen.getByText('Log deliveries as they arrive.')).toBeVisible();
+    expect(container.querySelector('[data-page-header] svg')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('draws no place mark for an id the navigation does not know', () => {
+    const { container } = render(
+      <PageLayout template="list" header={<PageHeader title="X" navId="nope" hideHelpButton />}>
+        x
+      </PageLayout>,
+    );
+    expect(container.querySelector('[data-page-header] svg')).toBeNull();
+  });
+
+  it('still hides the title and drops the description outside a PageLayout', () => {
+    render(<PageHeader title="Packages" description="Log deliveries as they arrive." />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Packages' })).toHaveClass('sr-only');
+    expect(screen.queryByText('Log deliveries as they arrive.')).toBeNull();
   });
 });

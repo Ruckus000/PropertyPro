@@ -212,12 +212,16 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   the trail can resolve a real leaf label — via `<PageHeader title="...">` (the
   canonical header, which renders the `<h1>`) or a literal `<h1>`. The current
   page label is that `<h1>` title.
-- **`PageHeader` does not paint its title or description.** Decision transferred
-  from the PropertyPro design prototype (2026-09-02): the `<h1>` is rendered
+- **`PageHeader` paints its title and description only inside a `PageLayout`.**
+  Outside one (every page not yet moved) the decision transferred from the
+  PropertyPro design prototype (2026-09-02) still holds: the `<h1>` is rendered
   `sr-only` — it still names the page for the breadcrumb leaf, assistive tech and
   `guard:breadcrumbs` — and `description` is accepted but not rendered. What
   paints is a toolbar: left-slot `children`, then `actions` and Help at the right
-  edge; when none of those exist, nothing paints (no empty band).
+  edge; when none of those exist, nothing paints (no empty band). Inside a
+  `PageLayout` it paints the `<h1>` in the display face, the `description`, a
+  place mark for `navId` (an id in `NAV_ITEMS`, so the sidebar and the title
+  share one icon) and `status`, over a bottom rule.
   `pnpm guard:page-header` fails on any literal `<h1>` in the authenticated app
   (every `(authenticated)/**/*.tsx` plus the page-shell components it lists), so
   a page cannot quietly paint a title the rest of the app no longer has. Escape
