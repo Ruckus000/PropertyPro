@@ -16,6 +16,7 @@ import { PackageStaffView } from '@/components/packages/PackageStaffView';
 import { PackageResidentView } from '@/components/packages/PackageResidentView';
 import { PageHeader } from '@/components/shared/page-header';
 import { PackagesStaffPage } from '@/components/packages/packages-staff-page';
+import { PackagesResidentPage } from '@/components/packages/packages-resident-page';
 import { describeAccess } from '@/lib/access/describe-access';
 import { isDesignPreviewOn } from '@/lib/design-preview';
 
@@ -60,6 +61,14 @@ export default async function PackagesPage({ searchParams }: PageProps) {
           communityId={communityId}
           about={describeAccess(membership.communityType, 'packages', 'own')}
         />
+      </FeatureGate>
+    );
+  }
+
+  if (preview && !isStaff) {
+    return (
+      <FeatureGate feature="hasPackageLogging" communityId={communityId}>
+        <PackagesResidentPage communityId={communityId} />
       </FeatureGate>
     );
   }
