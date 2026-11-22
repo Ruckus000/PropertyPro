@@ -27,6 +27,13 @@ export interface MeetingResponseRecord {
    * absent).
    */
   agenda?: string | null;
+  /**
+   * Whether the agenda shows on the public website. REQUIRED, with no default
+   * anywhere downstream: a projection that forgot this column would otherwise
+   * read every meeting as published, and the edit form's next save would
+   * re-publish a withheld agenda.
+   */
+  agendaPublished: boolean;
   noticePostedAt: Date | null;
   minutesApprovedAt: Date | null;
 }
@@ -55,6 +62,7 @@ export function serializeMeetingResponse(
     endsAt: meeting.endsAt?.toISOString() ?? null,
     location: meeting.location,
     agenda: meeting.agenda ?? null,
+    agendaPublished: meeting.agendaPublished,
     noticePostedAt: meeting.noticePostedAt?.toISOString() ?? null,
     minutesApprovedAt: meeting.minutesApprovedAt?.toISOString() ?? null,
     deadlines: buildMeetingDeadlines(

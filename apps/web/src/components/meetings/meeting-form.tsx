@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MEETING_AGENDA_MAX_LENGTH } from '@/lib/meetings/agenda';
 import { Card, CardHeader, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,8 @@ interface FormState {
   endsAt: string;
   location: string;
   agenda: string;
+  /** Show the agenda on the public website (the portal always shows it). */
+  agendaPublished: boolean;
 }
 
 interface MeetingFormProps {
@@ -47,6 +50,7 @@ const EMPTY_FORM: FormState = {
   endsAt: '',
   location: '',
   agenda: '',
+  agendaPublished: true,
 };
 
 function buildDefaultStart(): string {
@@ -185,6 +189,7 @@ export function MeetingForm({
       endsAt,
       location: detailQuery.data.location,
       agenda: detailQuery.data.agenda ?? '',
+      agendaPublished: detailQuery.data.agendaPublished,
     });
     setLoadedMeetingId(detailQuery.data.id);
   }, [communityTimezone, detailQuery.data, isEditing, loadedMeetingId]);
@@ -227,6 +232,7 @@ export function MeetingForm({
       location: formState.location.trim(),
       // Blank sends null, which clears a saved agenda on edit.
       agenda: formState.agenda.trim() || null,
+      agendaPublished: formState.agendaPublished,
     };
 
     try {
@@ -464,10 +470,31 @@ export function MeetingForm({
                   placeholder={'1. Call to order\n2. Approve prior minutes\n3. ...'}
                 />
                 <span id="meeting-agenda-hint" className="text-xs text-content-tertiary">
-                  Optional. Shown with this meeting on your website and in the portal.
+                  Optional. Shown with this meeting in the portal, and on your website unless you turn that
+                  off below.
                   {communityType === 'apartment'
                     ? null
                     : ' Florida law requires the agenda to be posted with the notice.'}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label
+                  htmlFor="meeting-agenda-published"
+                  className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-medium text-content md:min-h-0"
+                >
+                  <Checkbox
+                    id="meeting-agenda-published"
+                    aria-describedby="meeting-agenda-published-hint"
+                    checked={formState.agendaPublished}
+                    onCheckedChange={(checked) => updateField('agendaPublished', checked === true)}
+                  />
+                  Show the agenda on the public website
+                </label>
+                <span id="meeting-agenda-published-hint" className="text-xs text-content-tertiary">
+                  {formState.agendaPublished
+                    ? 'Anyone can read it, and search engines can find it.'
+                    : 'Only people signed in to the portal, owners and tenants, see this agenda. The meeting itself is still listed on the website.'}
                 </span>
               </div>
 

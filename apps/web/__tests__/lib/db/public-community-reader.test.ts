@@ -67,6 +67,7 @@ vi.mock('@propertypro/db', () => ({
     endsAt: 'meetings.endsAt',
     location: 'meetings.location',
     agenda: 'meetings.agenda',
+    agendaPublished: 'meetings.agendaPublished',
     deletedAt: 'meetings.deletedAt',
   },
   communities: {
@@ -999,6 +1000,60 @@ describe('getPublicCommunityScopedReader', () => {
       location: '123 Main St',
     });
     expect(results[0]!.startsAt).toBeInstanceOf(Date);
+  });
+
+  // A manager can keep a closed session's agenda off the public website. The
+  // reader is the one place every public renderer gets meetings from, so the
+  // text must be gone by the time it returns, not hidden by a renderer.
+  describe('listMeetings and a withheld agenda', () => {
+    const row = (agendaPublished: boolean) => ({
+      id: 6,
+      title: 'Closed session',
+      meetingType: 'board',
+      startsAt: new Date('2026-03-12T18:00:00Z'),
+      endsAt: null,
+      location: 'Clubhouse',
+      agenda: '1. Collection action vs. Unit 402',
+      agendaPublished,
+    });
+
+    async function list(rows: unknown[]) {
+      mockSelectChain.then.mockImplementation((resolve) => Promise.resolve(rows).then(resolve));
+      return getPublicCommunityScopedReader(42).listMeetings({ limit: 10, timeWindowDays: 30 });
+    }
+
+    it('selects the flag with the agenda', async () => {
+      await list([]);
+      expect(mockDb.select.mock.calls[0]![0]).toMatchObject({
+        agenda: 'meetings.agenda',
+        agendaPublished: 'meetings.agendaPublished',
+      });
+    });
+
+    it('returns the agenda of a meeting whose agenda is published', async () => {
+      const [meeting] = await list([row(true)]);
+      expect(meeting!.agenda).toBe('1. Collection action vs. Unit 402');
+    });
+
+    it('returns no agenda text for a withheld one, and does not pass the flag on', async () => {
+      const [meeting] = await list([row(false)]);
+      expect(meeting).toEqual({
+        id: 6,
+        title: 'Closed session',
+        meetingType: 'board',
+        startsAt: new Date('2026-03-12T18:00:00Z'),
+        endsAt: null,
+        location: 'Clubhouse',
+        agenda: null,
+      });
+      expect(JSON.stringify(meeting)).not.toContain('Unit 402');
+    });
+
+    it('still lists the meeting itself', async () => {
+      const meetings = await list([row(false), { ...row(true), id: 7, title: 'Annual Meeting' }]);
+      expect(meetings.map((m) => m.title)).toEqual(['Closed session', 'Annual Meeting']);
+      expect(meetings.map((m) => m.agenda === null)).toEqual([true, false]);
+    });
   });
 
   it('listMeetings returns [] when no upcoming meetings are in the window', async () => {

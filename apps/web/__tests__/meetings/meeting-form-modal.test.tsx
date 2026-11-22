@@ -4,15 +4,25 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mutateAsyncMock } = vi.hoisted(() => ({
+const { mutateAsyncMock, updateMutateAsyncMock, meetingDetail } = vi.hoisted(() => ({
   mutateAsyncMock: vi.fn().mockResolvedValue({ data: {}, warnings: [] }),
+  updateMutateAsyncMock: vi.fn().mockResolvedValue({ data: {}, warnings: [] }),
+  meetingDetail: { current: undefined as Record<string, unknown> | undefined },
 }));
 
 vi.mock('@/hooks/use-meetings', () => ({
   useCreateMeeting: () => ({ mutateAsync: mutateAsyncMock, isPending: false }),
-  useUpdateMeeting: () => ({ mutateAsync: vi.fn(), isPending: false }),
-  useMeeting: () => ({ data: undefined, isLoading: false }),
+  useUpdateMeeting: () => ({ mutateAsync: updateMutateAsyncMock, isPending: false }),
+  useMeeting: () => ({ data: meetingDetail.current, isLoading: false }),
 }));
+
+// The Radix Checkbox measures its hidden form input with ResizeObserver,
+// which jsdom does not provide.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 import { MeetingForm } from '@/components/meetings/meeting-form';
 
@@ -27,6 +37,8 @@ describe('MeetingForm modal', () => {
   beforeEach(() => {
     mutateAsyncMock.mockClear();
     mutateAsyncMock.mockResolvedValue({ data: {}, warnings: [] });
+    updateMutateAsyncMock.mockClear();
+    meetingDetail.current = undefined;
   });
 
   it('starts a new meeting on the type the setup guide picked', () => {
@@ -98,6 +110,81 @@ describe('MeetingForm modal', () => {
     await waitFor(() =>
       expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ agenda: null })),
     );
+  });
+
+  // A closed session's agenda (attorney-client, personnel) must be keepable off
+  // the public website; #1501 published every agenda with no way to opt out.
+  describe('show the agenda on the public website', () => {
+    function renderNew() {
+      return renderWithClient(
+        <MeetingForm communityId={1} communityTimezone="America/New_York" communityType="condo_718" onClose={vi.fn()} />,
+      );
+    }
+
+    function fillRequired() {
+      fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Closed session' } });
+      fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'Clubhouse' } });
+    }
+
+    it('is on by default, and a new meeting is sent with agendaPublished: true', async () => {
+      renderNew();
+      const box = screen.getByRole('checkbox', { name: 'Show the agenda on the public website' });
+      expect(box).toBeChecked();
+      expect(box).toHaveAccessibleDescription('Anyone can read it, and search engines can find it.');
+
+      fillRequired();
+      fireEvent.submit(box.closest('form')!);
+      await waitFor(() =>
+        expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ agendaPublished: true })),
+      );
+    });
+
+    it('turned off, says who still sees it and sends agendaPublished: false', async () => {
+      renderNew();
+      const box = screen.getByRole('checkbox', { name: 'Show the agenda on the public website' });
+      fireEvent.click(box);
+      expect(box).not.toBeChecked();
+      expect(box).toHaveAccessibleDescription(
+        'Only people signed in to the portal, owners and tenants, see this agenda. The meeting itself is still listed on the website.',
+      );
+
+      fillRequired();
+      fireEvent.submit(box.closest('form')!);
+      await waitFor(() =>
+        expect(mutateAsyncMock).toHaveBeenCalledWith(expect.objectContaining({ agendaPublished: false })),
+      );
+    });
+
+    it('editing loads the saved choice and sends it back unchanged', async () => {
+      meetingDetail.current = {
+        id: 9,
+        title: 'Closed session',
+        meetingType: 'board',
+        startsAt: '2030-05-01T14:00:00.000Z',
+        endsAt: null,
+        location: 'Clubhouse',
+        agenda: '1. Litigation update',
+        agendaPublished: false,
+      };
+      renderWithClient(
+        <MeetingForm
+          communityId={1}
+          communityTimezone="America/New_York"
+          communityType="condo_718"
+          meetingId={9}
+          onClose={vi.fn()}
+        />,
+      );
+      const box = await screen.findByRole('checkbox', { name: 'Show the agenda on the public website' });
+      await waitFor(() => expect(box).not.toBeChecked());
+
+      fireEvent.submit(box.closest('form')!);
+      await waitFor(() =>
+        expect(updateMutateAsyncMock).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 9, agendaPublished: false }),
+        ),
+      );
+    });
   });
 
   /**

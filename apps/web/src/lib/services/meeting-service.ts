@@ -28,6 +28,7 @@ const meetingColumns = {
   endsAt: meetings.endsAt,
   location: meetings.location,
   agenda: meetings.agenda,
+  agendaPublished: meetings.agendaPublished,
   noticePostedAt: meetings.noticePostedAt,
   minutesApprovedAt: meetings.minutesApprovedAt,
 } as const;
@@ -46,6 +47,8 @@ export interface CreateMeetingInput {
   location: string;
   /** Plain text; null when no agenda was entered. */
   agenda: string | null;
+  /** Show the agenda on the public website. Omitted: the column default (true). */
+  agendaPublished?: boolean;
 }
 
 /**

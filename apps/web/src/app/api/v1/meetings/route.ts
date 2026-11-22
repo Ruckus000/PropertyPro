@@ -78,6 +78,7 @@ const createMeetingSchema = z
     endsAt: isoDateTimeSchema.nullish(),
     location: z.string().trim().min(1).max(200),
     agenda: agendaSchema,
+    agendaPublished: z.boolean().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.endsAt && new Date(value.endsAt).getTime() <= new Date(value.startsAt).getTime()) {
@@ -99,6 +100,7 @@ const updateMeetingSchema = z.object({
   endsAt: isoDateTimeSchema.nullish().optional(),
   location: z.string().trim().min(1).max(200).optional(),
   agenda: agendaSchema,
+  agendaPublished: z.boolean().optional(),
 });
 
 const deleteMeetingSchema = z.object({
@@ -298,6 +300,8 @@ async function handleCreate(
 
   const { communityId, title, meetingType, startsAt, endsAt, location } = parsed.data;
   const agenda = parsed.data.agenda ?? null;
+  // Default on: the statute posts the agenda with the notice.
+  const agendaPublished = parsed.data.agendaPublished ?? true;
   const createdMeetingId = await createMeetingForCommunity(communityId, {
     title,
     meetingType,
@@ -305,6 +309,7 @@ async function handleCreate(
     endsAt: endsAt ? new Date(endsAt) : null,
     location,
     agenda,
+    agendaPublished,
   });
 
   const [createdMeeting, rawCommunityTimezone] = await Promise.all([
@@ -329,6 +334,7 @@ async function handleCreate(
       endsAt: endsAt ?? null,
       location,
       agenda,
+      agendaPublished,
     },
   });
 
@@ -405,7 +411,7 @@ async function handleUpdate(
     });
   }
 
-  const { id, communityId, title, meetingType, startsAt, endsAt, location, agenda } = parsed.data;
+  const { id, communityId, title, meetingType, startsAt, endsAt, location, agenda, agendaPublished } = parsed.data;
   const existing = await getMeetingDetail(communityId, id);
   if (!existing) {
     throw new NotFoundError('Meeting not found');
@@ -450,6 +456,11 @@ async function handleUpdate(
     updateData.agenda = agenda;
     oldValues.agenda = existing.agenda ?? null;
     newValues.agenda = agenda;
+  }
+  if (agendaPublished !== undefined) {
+    updateData.agendaPublished = agendaPublished;
+    oldValues.agendaPublished = existing.agendaPublished;
+    newValues.agendaPublished = agendaPublished;
   }
 
   if (Object.keys(updateData).length > 0) {

@@ -15,6 +15,8 @@ export interface MeetingListItem {
   location: string;
   /** Plain-text agenda posted with the notice; null when none was entered. */
   agenda: string | null;
+  /** Whether the agenda shows on the public website. */
+  agendaPublished: boolean;
   noticePostedAt: string | null;
   minutesApprovedAt: string | null;
   deadlines: MeetingDeadlines;
@@ -124,6 +126,7 @@ export function useCreateMeeting(communityId: number) {
       endsAt?: string | null;
       location: string;
       agenda?: string | null;
+      agendaPublished?: boolean;
     }): Promise<MeetingMutationResult> =>
       requestJsonEnvelope<MeetingListItem>('/api/v1/meetings', {
         method: 'POST',
@@ -148,6 +151,7 @@ export function useUpdateMeeting(communityId: number) {
       endsAt?: string | null;
       location?: string;
       agenda?: string | null;
+      agendaPublished?: boolean;
     }): Promise<MeetingMutationResult> =>
       requestJsonEnvelope<MeetingListItem>('/api/v1/meetings', {
         method: 'POST',

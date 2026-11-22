@@ -147,7 +147,10 @@ export interface PublicMeeting {
   startsAt: Date;
   endsAt: Date | null;
   location: string;
-  /** Plain-text agenda posted with the notice; null when none was entered. */
+  /**
+   * Plain-text agenda posted with the notice. Null when none was entered, or
+   * when a manager kept this meeting's agenda off the website.
+   */
   agenda: string | null;
 }
 
@@ -787,6 +790,7 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           endsAt: meetings.endsAt,
           location: meetings.location,
           agenda: meetings.agenda,
+          agendaPublished: meetings.agendaPublished,
         })
         .from(meetings)
         .where(
@@ -799,7 +803,13 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
         )
         .orderBy(asc(meetings.startsAt), asc(meetings.id))
         .limit(Math.max(opts.limit, MEETINGS_NOTICE_ROW_CAP));
-      return selectPublicMeetings(rows, opts, now);
+      // A withheld agenda never leaves this function: the flag is dropped and the
+      // text nulled, so no public renderer can show it by mistake.
+      const publicRows: PublicMeeting[] = rows.map(({ agendaPublished, agenda, ...meeting }) => ({
+        ...meeting,
+        agenda: agendaPublished ? agenda : null,
+      }));
+      return selectPublicMeetings(publicRows, opts, now);
     },
 
     async getContactInfo(opts) {

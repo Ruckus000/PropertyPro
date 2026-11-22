@@ -30,6 +30,7 @@ const {
     endsAt: Symbol('meetings.endsAt'),
     location: Symbol('meetings.location'),
     agenda: Symbol('meetings.agenda'),
+    agendaPublished: Symbol('meetings.agendaPublished'),
     noticePostedAt: Symbol('meetings.noticePostedAt'),
     minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
   },
@@ -521,6 +522,132 @@ describe('meetings route', () => {
       const { updateMock } = mockClient('Old agenda');
       await post({ action: 'update', id: 99, location: 'Clubhouse' });
       expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { location: 'Clubhouse' }, expect.anything());
+    });
+  });
+
+  // A closed session's agenda can be kept off the PUBLIC website. Default on,
+  // because the statute posts the agenda with the notice.
+  describe('agenda on the public website', () => {
+    function mockClient(agendaPublished: boolean) {
+      const insertMock = vi.fn().mockResolvedValue([{ id: 99 }]);
+      const updateMock = vi.fn().mockResolvedValue(undefined);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn((table: unknown) => {
+          if (table === meetingsTableMock) {
+            return makeSelectResult([
+              {
+                id: 99,
+                title: 'Closed session',
+                meetingType: 'board',
+                startsAt: new Date('2027-04-18T14:00:00.000Z'),
+                endsAt: null,
+                location: 'Main Hall',
+                agenda: '1. Litigation update',
+                agendaPublished,
+                noticePostedAt: null,
+                minutesApprovedAt: null,
+              },
+            ]);
+          }
+          if (table === communitiesTableMock) return makeSelectResult([{ timezone: 'America/New_York' }]);
+          return makeSelectResult([]);
+        }),
+        insert: insertMock,
+        update: updateMock,
+        softDelete: vi.fn(),
+        hardDelete: vi.fn(),
+      });
+      return { insertMock, updateMock };
+    }
+
+    function post(body: Record<string, unknown>) {
+      return POST(
+        new NextRequest('http://localhost:3000/api/v1/meetings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, ...body }),
+        }),
+      );
+    }
+
+    const createBody = {
+      title: 'Closed session',
+      meetingType: 'board',
+      startsAt: '2027-04-18T14:00:00.000Z',
+      location: 'Main Hall',
+      agenda: '1. Litigation update',
+    };
+
+    it('create publishes the agenda unless told otherwise, and audits the choice', async () => {
+      const { insertMock } = mockClient(true);
+      const response = await post(createBody);
+
+      expect(response.status).toBe(200);
+      expect(insertMock).toHaveBeenCalledWith(meetingsTableMock, expect.objectContaining({ agendaPublished: true }));
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'create', newValues: expect.objectContaining({ agendaPublished: true }) }),
+      );
+    });
+
+    it('create keeps the agenda off the website when agendaPublished is false', async () => {
+      const { insertMock } = mockClient(false);
+      const response = await post({ ...createBody, agendaPublished: false });
+      const json = (await response.json()) as { data: { agendaPublished: boolean } };
+
+      expect(response.status).toBe(200);
+      expect(insertMock).toHaveBeenCalledWith(meetingsTableMock, expect.objectContaining({ agendaPublished: false }));
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'create', newValues: expect.objectContaining({ agendaPublished: false }) }),
+      );
+      expect(json.data.agendaPublished).toBe(false);
+    });
+
+    it('refuses a value that is not a boolean with a 422', async () => {
+      const { insertMock } = mockClient(true);
+      const response = await post({ ...createBody, agendaPublished: 'no' });
+      expect(response.status).toBe(422);
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    // The service must READ the stored value. If its projection dropped the
+    // column, every meeting would read as published and the edit form's next
+    // save would re-publish a withheld agenda, with an audit of true -> true.
+    it('reads the stored setting from the database', async () => {
+      mockClient(false);
+      await post({ action: 'update', id: 99, location: 'Clubhouse' });
+      const selectFrom = createScopedClientMock.mock.results[0]!.value.selectFrom as ReturnType<typeof vi.fn>;
+      const projection = selectFrom.mock.calls.find(([table]) => table === meetingsTableMock)?.[1];
+      expect(projection).toMatchObject({ agendaPublished: meetingsTableMock.agendaPublished });
+    });
+
+    it('update re-publishes a withheld agenda only when asked, and audits the real old value', async () => {
+      const { updateMock } = mockClient(false);
+      const response = await post({ action: 'update', id: 99, agendaPublished: true });
+
+      expect(response.status).toBe(200);
+      expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { agendaPublished: true }, expect.anything());
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          oldValues: { agendaPublished: false },
+          newValues: { agendaPublished: true },
+        }),
+      );
+    });
+
+    it('update turns publishing off and audits old and new', async () => {
+      const { updateMock } = mockClient(true);
+      const response = await post({ action: 'update', id: 99, agendaPublished: false });
+
+      expect(response.status).toBe(200);
+      expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { agendaPublished: false }, expect.anything());
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          oldValues: { agendaPublished: true },
+          newValues: { agendaPublished: false },
+        }),
+      );
     });
   });
 
