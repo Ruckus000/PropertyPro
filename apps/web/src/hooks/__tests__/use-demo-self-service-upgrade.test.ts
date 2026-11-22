@@ -2,9 +2,9 @@
  * Unit tests for useDemoSelfServiceUpgrade (B5 batch 4C drain; canonicalized in B1 Slice 3).
  *
  * Post-Slice-3: the route returns the canonical `{ data: { checkoutUrl } }`
- * envelope. The error body is still the bespoke `{ error: string }` shape
- * (NOT `{ error: { message } }`), and the bespoke `Request failed (<status>)`
- * fallback literal is preserved verbatim.
+ * envelope. Errors arrive as `{ error: string }` or `{ error: { message } }`
+ * (the middleware's 401 and the route's AppErrors); the bespoke
+ * `Request failed (<status>)` fallback literal is preserved verbatim.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -105,6 +105,27 @@ describe('useDemoSelfServiceUpgrade', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe('This demo has expired');
+  });
+
+  it('shows the message of a structured error, such as the expired-session 401', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({
+          error: { code: 'UNAUTHORIZED', message: 'Your session has ended. Sign in again to continue.' },
+        }),
+      }),
+    );
+
+    const { result } = renderHook(() => useDemoSelfServiceUpgrade(), {
+      wrapper,
+    });
+    result.current.mutate(input);
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error?.message).toBe('Your session has ended. Sign in again to continue.');
   });
 
   it('falls back to the status literal when error body is non-JSON', async () => {

@@ -55,6 +55,14 @@ function mockAuthState(user: MockMiddlewareUser | null) {
   }));
 }
 
+
+const SESSION_ENDED_BODY = {
+  error: {
+    code: 'UNAUTHORIZED',
+    message: 'Your session has ended. Sign in again to continue.',
+  },
+};
+
 describe('p1-22 session middleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,12 +113,13 @@ describe('p1-22 session middleware', () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/documents?communityId=8'),
     );
-    const json = (await response.json()) as { error: string };
+    const json = (await response.json()) as unknown;
 
     expect(response.status).toBe(401);
     expect(response.headers.get('content-type')).toContain('application/json');
     expect(response.headers.get('location')).toBeNull();
-    expect(json.error).toBe('Unauthorized');
+    // The route envelope, so requestJson surfaces the message instead of "Request failed".
+    expect(json).toEqual(SESSION_ENDED_BODY);
   });
 
   it('allows unauthenticated invitation token acceptance route', async () => {
@@ -167,10 +176,8 @@ describe('p1-22 session middleware', () => {
     const response = await middleware(
       request('http://localhost:3000/api/v1/invitations', {}, 'POST'),
     );
-    const json = (await response.json()) as { error: string };
-
     expect(response.status).toBe(401);
-    expect(json.error).toBe('Unauthorized');
+    expect(await response.json()).toEqual(SESSION_ENDED_BODY);
   });
 
   it('allows unauthenticated POST /api/v1/internal/notification-digests/process', async () => {
@@ -253,11 +260,9 @@ describe('p1-22 session middleware', () => {
         host: 'admin.getpropertypro.com',
       }),
     );
-    const json = (await response.json()) as { error: string };
-
     // Reserved subdomains proceed without community context; auth check returns 401
     expect(response.status).toBe(401);
-    expect(json.error).toBe('Unauthorized');
+    expect(await response.json()).toEqual(SESSION_ENDED_BODY);
   });
 
   it('returns 404 for unknown tenant subdomains', async () => {

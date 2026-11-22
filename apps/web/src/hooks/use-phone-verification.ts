@@ -9,9 +9,8 @@
  *
  * Documented exception to the requestJson rule: the SMS consent form renders
  * the thrown error `.message` verbatim, and these endpoints return a
- * non-standard error body `{ error: '<string>' }` (NOT `{ error: { message } }`).
- * Each mutation replicates the original component's error-parse byte-for-byte
- * so the surfaced literal is identical.
+ * non-standard error body `{ error: '<string>' }`. The middleware's 401 and the
+ * routes' thrown AppErrors use `{ error: { message } }`, so both are read.
  */
 import { useMutation } from '@tanstack/react-query';
 
@@ -24,15 +23,10 @@ export function useSendPhoneVerification() {
         body: JSON.stringify({ phone }),
       });
 
-      // Documented exception to the requestJson rule: non-standard
-      // { error: '<string>' } body. Guard the parse so a non-JSON error
-      // body (proxy/LB HTML) still surfaces the intended literal rather
-      // than a raw SyntaxError.
+      // Guard the parse so a non-JSON error body (proxy/LB HTML) still
+      // surfaces the intended literal rather than a raw SyntaxError.
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(data.error ?? 'Failed to send verification code');
+        throw new Error(await readErrorMessage(res, 'Failed to send verification code'));
       }
     },
   });
@@ -47,17 +41,20 @@ export function useConfirmPhoneVerification() {
         body: JSON.stringify({ phone, code }),
       });
 
-      // Documented exception to the requestJson rule: non-standard
-      // { error: '<string>' } body. Guard the parse so a non-JSON error
-      // body still surfaces the intended literal, not a raw SyntaxError.
+      // Guard the parse so a non-JSON error body still surfaces the
+      // intended literal, not a raw SyntaxError.
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(data.error ?? 'Invalid verification code');
+        throw new Error(await readErrorMessage(res, 'Invalid verification code'));
       }
     },
   });
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string | { message?: string };
+  };
+  return (typeof data.error === 'string' ? data.error : data.error?.message) ?? fallback;
 }
 
 export function useSetSmsConsent() {
