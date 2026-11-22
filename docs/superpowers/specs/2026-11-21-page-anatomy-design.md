@@ -33,8 +33,9 @@ Six rules decide the rest.
    never a bare date.
 2. **Quiet until it matters.** Coral means one thing: the action to take
    (the primary button and links). Other colour is for status and time only.
-3. **One page, one shape.** Header, main column, context. Every page uses a
-   template. There are no exceptions.
+3. **One page, one shape.** Header, main column, context. Every page uses one
+   of the six templates, or one of the five named frames for pages outside
+   the app shell (section 10). Nothing else.
 4. **Say something true first.** Every page opens with a figure or fact that is
    useful before the first record exists.
 5. **Fewer boxes.** Type and rules carry the hierarchy. Never a card inside a
@@ -130,7 +131,7 @@ Anti-goals
 | 6 | After the build: refresh example content and all help articles with new screenshots and GIFs | owner |
 | 7 | The action colour is fixed coral in the signed-in app; brand colour lives on the public site | owner |
 | 8 | The time-left chip distinguishes four kinds of date | owner |
-| 9 | "Next deadline" in the top bar is for managers and board only | owner |
+| 9 | "Next deadline" in the top bar is shown only to people who can open Compliance (the option chosen was labelled "managers and board only"; the rule is the permission, see section 6) | owner |
 | 10 | The navigation as drawn replaces the 2026-11-11 shell decisions (#1458, #1460) | owner |
 | 11 | Page titles and descriptions are painted (reverses the 2026-09-02 decision) | owner, by approving B |
 | 12 | Login photo panel: kept or replaced by a text margin | **open, owner** |
@@ -165,6 +166,8 @@ Running head: breadcrumb trail ..................... As of <date, time>
   `PageHeader`'s `description` prop is deprecated and unrendered today and 93
   call sites carry unreviewed text.
 - The place mark (section 11.1) sits beside the title.
+- The dashboard keeps its status sentence (`buildStatusSentence`) as its
+  description. No greeting in a title.
 - At most one filled primary and one outline secondary. Where the primary
   sits depends on the template (section 5.6).
 - A status badge on a detail page sits beside the title.
@@ -273,7 +276,11 @@ line, last value labelled), month calendar, editor surface, checklist,
 picker cards, outcome, preview frame. A section on a canvas carries an icon
 beside its title because canvas sections are different kinds of thing.
 
-The only routes outside a template are routes that redirect.
+A page that uses neither a template nor a named frame from section 10 must be a route that only redirects.
+
+Step flows use the Form template with a step strip: the header has Cancel only, and Back and Next sit in the footer on every step, including a canvas step. A first-run setup page is a List page in its first-run state, so its primary action (the open step's action) is in the header.
+
+A canvas page may carry a side panel. It then follows the row-page rule in 5.4 for the panel, and its sections drop from two columns to one whenever the content box is under 1280px.
 
 ### 5.7 States
 
@@ -333,7 +340,8 @@ a problem" directly. Each audience's page picks its own template.
   agree.
 - **Running head.** The breadcrumb line carries an "As of" stamp at the right,
   supplied by the page through context. If a page cannot supply one, the
-  stamp is absent.
+  stamp is absent. The stamp, every date and "today" use the community's time
+  zone, labelled when the viewer's differs.
 
 ## 7. First-run screens
 
@@ -422,7 +430,7 @@ differs.
 
 | Frame | Routes | Shape |
 |---|---|---|
-| Auth | `/auth/login`, `/signup`, forgot and reset password, verify email, accept invite, checkout return | A narrow column: wordmark, display-face title, one sentence, fields, one full-width primary, text links, legal line. Errors carry an icon, the word and the server's wording. Multi-step flows use the step strip |
+| Auth | `/auth/login`, `/signup`, forgot and reset password, verify email, accept invite, checkout return | A narrow column: wordmark, display-face title, one sentence, fields, one full-width primary, text links, legal line. Errors carry an icon, the word and the server's wording. Multi-step flows use the step strip. Whether the login page keeps its photo panel is decision 12 |
 | Signing | `/sign/[submissionExternalId]/[slug]` | The document as a white page with its fields marked, beside a margin: who asked, progress, the field list with glyph and word, the consent text in full, Finish and Decline |
 | Editor | `/pm/website-editor` | Its own top bar (back, site name, Simple and Advanced, saved stamp, Preview, Publish). Section list, canvas, properties |
 | Bare | Public transparency page, the branded not-found, demo pages | A brand bar with the community name, then ordinary sections in a centred column |
@@ -464,10 +472,15 @@ these stay recognisable.
 - **(owner)** Coral is fixed in the signed-in app and means only the action
   to take: the one primary button and links. `--interactive-primary` and
   `--status-brand` stop reading `--theme-primary` inside the signed-in app.
-  The per-community theme keeps applying to the public site. Communities with
+  The per-community theme keeps applying to the public site, and
+  `--theme-primary` is still set on the signed-in layout for anything else
+  that reads it (logo and name treatments); only those two tokens stop
+  reading it. Communities with
   a custom colour will see their in-app buttons become coral.
 - Selected tabs, filters and navigation use ink.
-- Status colours are for status only, always with a glyph and a word.
+- Status colours are for status only, always with a glyph and a word. A
+  critical item is not made louder across the page: a statutory deadline that
+  is overdue uses the danger glyph and the word, nothing more.
 - No new colours except decision 13. Ink is `--text-primary`. The chip's
   levels use the three existing status colours. `compliance.ts` maps "aware"
   to the brand colour today; that mapping changes.
@@ -668,7 +681,7 @@ Expected size 45 to 70 pull requests.
 | # | Workstream | Done when |
 |---|---|---|
 | 1 | **Kit, `Icon` and guards, additive only.** New files. No shared primitive changes, so nothing reaches admin. Bundle delta measured in CI | Guards green with seeded baselines; kit unit and axe tests pass; `perf-check` green |
-| 2 | **Preview gate.** A per-user preference (`user_preferences`, no migration) turns the new look on for the owner only, in production. Titles paint only inside `PageLayout` | The owner can switch it on and off |
+| 2 | **Preview gate.** A per-user preference, key `design_direction_preview` in `user_preferences` (no migration), read through `user-preferences-service`, turns the new look on for the owner only, in production. Titles paint only inside `PageLayout`. The pilot pages and, later, the shell both sit behind it | The owner can switch it on and off |
 | 3 | **Pilot** on Sunset Condos: Emergency Alerts (list, detail, new), Packages (staff and resident), Visitors (two tabs). The review path pins that community, because most demo personas land on a plan where these pages are locked | The owner reviews in the real app and approves, including the two thresholds in 5.4 |
 | 4 | **Shell.** Delete the second shell; sidebar, rail, drawer, top bar, "Next deadline", running head | One shell; no flicker on load; `perf-check` green |
 | 5 | **Dashboard, then Settings** | Settings' private kit deleted |
@@ -678,7 +691,9 @@ Expected size 45 to 70 pull requests.
 | 9 | **(owner) After the last merge:** refresh example content and all 103 help articles and 95 capture manifests with new screenshots and GIFs | Not part of the build; not started during it |
 
 Nothing after the pilot starts until the owner has approved it in the real
-app.
+app, including the two thresholds in 5.4. Opening the gate to everyone is a
+pull request the owner asks for; for the pilot pages it follows that
+approval, and for the shell it follows the owner's review of the shell.
 
 Proof for every page: a "direction" manifest set in `scripts/help-capture`
 shoots it at 1280 and 1440 in default large text and the contact sheet is
