@@ -1,4 +1,5 @@
 // breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx (with the design preview on, the title comes from components/emergency/emergency-detail-page.tsx)
+// page-template: delegated to apps/web/src/components/emergency/emergency-detail-page.tsx
 /**
  * Emergency Broadcast detail page.
  *

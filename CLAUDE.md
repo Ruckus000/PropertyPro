@@ -102,8 +102,8 @@ docs/                   # Specs, ADRs, audits, design system
 > the defect lives in the relationship between two sibling files. And
 > `verify-admin-semantic-css` was converted `.cjs` → `.ts` and registered as
 > `pnpm guard:admin-semantic-css`; it now scans `apps/admin/src` **and**
-> `packages/ui/src`. There are **35** guards in `scripts/run-lint-guards.mjs`
-> (measured 2026-11-20, when `guard:console-error-redaction` joined);
+> `packages/ui/src`. There are **36** guards in `scripts/run-lint-guards.mjs`
+> (measured 2026-11-22, when `guard:page-template` joined);
 > `guard:admin-semantic-css` is deliberately not one of them, because it reads
 > `apps/admin/.next/static/css` and so needs a build first.
 
@@ -322,6 +322,7 @@ pnpm guard:tenant-scope         # tenantScope contract well-formedness
 pnpm guard:legacy-roles         # Legacy-role vocabulary: quoted literals AND comment prose
 pnpm guard:design-tokens        # Ban raw colors/arbitrary values (shrink-only baseline)
 pnpm guard:page-padding         # Page gutter single-sourced in the shell; no per-page px / nested <main>
+pnpm guard:page-template        # Every signed-in page is on PageLayout, redirect-only, exempt, or in a shrink-only baseline
 pnpm guard:token-coverage       # Every referenced var(--*) must be defined
 pnpm guard:class-resolution     # Every colour utility class in apps/web/src must emit CSS
 pnpm guard:service-dead-exports # Unreferenced exported service functions (shrink-only baseline)

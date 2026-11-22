@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/packages/packages-staff-page.tsx, apps/web/src/components/packages/packages-resident-page.tsx
 /**
  * Package Logging Page — Wave 4 Apartment Features
  *
