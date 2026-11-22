@@ -28,7 +28,7 @@ import * as React from "react";
 import { PageHeaderHelpButton, useHelpButtonAvailable } from "./page-header-help-button";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/components/layout/nav-config";
-import { useInPageLayout } from "@propertypro/ui/components/shared/page-layout";
+import { useInPageLayout } from "@propertypro/ui/components/shared/page-layout-context";
 
 interface PageHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Page title — the page <h1>; visually hidden outside a PageLayout. */

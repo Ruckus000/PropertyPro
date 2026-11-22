@@ -33,7 +33,7 @@ export function RecordRow({
     <li className="cq flex items-start gap-3 px-4 py-3">
       {/* The meta line carries the status word, so the glyph is not announced twice. */}
       {lead ? (
-        <div className="mt-0.5 shrink-0" aria-hidden="true">
+        <div className="mt-0.5 shrink-0" aria-hidden="true" inert>
           {lead}
         </div>
       ) : null}

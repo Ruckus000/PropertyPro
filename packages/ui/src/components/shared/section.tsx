@@ -100,7 +100,7 @@ export function SectionFirstRun({
       {example ? (
         <div className="w-full space-y-2">
           {exampleLabel ? <p className="text-xs text-content-secondary">{exampleLabel}</p> : null}
-          <div aria-hidden="true">{example}</div>
+          <div aria-hidden="true" inert>{example}</div>
         </div>
       ) : null}
     </div>

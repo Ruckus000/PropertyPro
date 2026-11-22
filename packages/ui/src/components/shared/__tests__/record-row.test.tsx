@@ -16,6 +16,10 @@ describe('RecordRow', () => {
     expect(hidden).toHaveLength(1);
     expect(announced).toHaveLength(1);
   });
+  it('makes the lead inert so a focusable child cannot be tabbed to while hidden', () => {
+    render(<RecordList><RecordRow lead={<button type="button">Act</button>} title="T" statusWord="Info" /></RecordList>);
+    expect(screen.getByText('Act', { selector: 'button' }).closest('[aria-hidden="true"]')).toHaveAttribute('inert');
+  });
   it('drops empty meta entries so no stray separator appears', () => {
     render(<RecordList><RecordRow lead={null} title="T" statusWord="Info" meta={['', 'Nov 12', '']} /></RecordList>);
     expect(screen.getByText('Info · Nov 12')).toBeVisible();

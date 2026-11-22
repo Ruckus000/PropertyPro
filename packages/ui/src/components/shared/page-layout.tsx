@@ -9,6 +9,7 @@
  */
 import * as React from "react";
 import { cn } from "../../utils/cn";
+import { InPageLayout, useInPageLayout } from "./page-layout-context";
 import {
   isPanelWorthDrawing,
   PanelRegions,
@@ -29,12 +30,7 @@ export interface PageLayoutProps {
   children: React.ReactNode;
 }
 
-const InPageLayout = React.createContext(false);
-
-/** True under a PageLayout. */
-export function useInPageLayout(): boolean {
-  return React.useContext(InPageLayout);
-}
+export { useInPageLayout };
 
 // Each alternative is a complete literal so Tailwind's scanner sees it.
 const GRID_ROWS = "cq-lg:grid-cols-[minmax(0,1fr)_17.5rem] cq-lg:grid-rows-[auto_1fr]";

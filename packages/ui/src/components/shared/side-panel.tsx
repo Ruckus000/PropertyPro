@@ -6,7 +6,6 @@
  */
 import * as React from "react";
 import { TriangleAlert } from "lucide-react";
-import { cn } from "../../utils/cn";
 
 type Slot = React.ReactNode;
 
@@ -131,7 +130,7 @@ export function PanelAttention(
     return <p className="text-sm text-content-secondary">{props.none}</p>;
   }
   return (
-    <div className={cn("flex flex-col gap-2 border-l-2 border-status-warning pl-3")}>
+    <div className={"flex flex-col gap-2 border-l-2 border-status-warning pl-3"}>
       <p className="flex items-start gap-2 text-sm text-content">
         <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-status-warning" aria-hidden="true" />
         <span>

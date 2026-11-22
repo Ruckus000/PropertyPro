@@ -30,6 +30,10 @@ describe('Section kit', () => {
     expect(screen.getByText('Showing 4')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
   });
+  it('makes a first-run example inert so a focusable child cannot be tabbed to while hidden', () => {
+    render(<SectionFirstRun title="T" description="D" example={<button type="button">Act</button>} />);
+    expect(screen.getByText('Act').closest('[aria-hidden="true"]')).toHaveAttribute('inert');
+  });
   it('labels a first-run example and hides it from assistive tech', () => {
     render(<SectionFirstRun title="No packages logged yet" description="Log the first delivery." example={<p>FedEx box</p>} exampleLabel="Example of a logged package" />);
     expect(screen.getByRole('heading', { level: 3, name: 'No packages logged yet' })).toBeVisible();
