@@ -128,6 +128,10 @@ describe('checkAndAlertOverdueItems', () => {
       expect(sendNotificationMock.mock.calls[0]![1].items).toEqual([
         { label: 'Meeting Notices and Agendas', status: 'overdue' },
       ]);
+      // The date the notice was due (14 days before 2026-03-10T18:00Z), not
+      // the next meeting's deadline — there is none, which used to print
+      // "No deadline" on an overdue item.
+      expect(sendNotificationMock.mock.calls[0]![1].dueDate).toBe('February 24, 2026');
     });
 
     it('keeps the document rule, and reads no meetings, when the community type is not given', async () => {

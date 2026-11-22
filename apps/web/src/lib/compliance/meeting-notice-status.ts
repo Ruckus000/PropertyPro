@@ -139,8 +139,9 @@ export function summarizeMeetingNotices(
 /**
  * The row's status from its meetings, in precedence order:
  *
- * 1. A missed notice in the last 12 months → `overdue`. It cannot be cured
- *    afterwards, so it counts until the meeting ages out of the window.
+ * 1. A missed notice in the last 12 months → `overdue`, with the latest
+ *    deadline that was missed. It cannot be cured afterwards, so it counts
+ *    until the meeting ages out of the window.
  * 2. An upcoming notice due within 7 days and not yet recorded → `unsatisfied`,
  *    with that deadline, so it surfaces in "Action needed" like any other
  *    posting due soon. Further out, it does not lower the score: scheduling
@@ -156,7 +157,13 @@ export function meetingNoticeStatus(
 ): { status: ComplianceStatus; deadline: string | null } | null {
   const nextDeadline = summary.nextDue?.postBy ?? null;
   if (summary.missed.length > 0) {
-    return { status: 'overdue', deadline: nextDeadline };
+    // The deadline that was missed, never the next one: callers render it as
+    // "Nd overdue" and put it in the daily alert, so an overdue row carrying a
+    // future post-by (or none) read as "due in 6d" / "No deadline".
+    const lastMissed = summary.missed.reduce((latest, miss) =>
+      Date.parse(miss.postBy) > Date.parse(latest.postBy) ? miss : latest,
+    );
+    return { status: 'overdue', deadline: lastMissed.postBy };
   }
   if (nextDeadline !== null && Date.parse(nextDeadline) - now.getTime() <= SEVEN_DAYS_MS) {
     return { status: 'unsatisfied', deadline: nextDeadline };
