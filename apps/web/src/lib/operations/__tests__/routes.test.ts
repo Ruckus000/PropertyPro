@@ -57,6 +57,12 @@ describe('operationsHubHref', () => {
     );
   });
 
+  it('opens the new-request sheet with create=request', () => {
+    expect(operationsHubHref(42, 'requests', { create: 'request' })).toBe(
+      '/communities/42/operations?tab=requests&create=request'
+    );
+  });
+
   it('leaves out a request that is not a positive integer', () => {
     for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(operationsHubHref(42, 'requests', { request: bad })).toBe(
