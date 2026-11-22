@@ -2,8 +2,15 @@
  * Recover a soft-deleted account/community.
  *
  * POST /api/admin/deletion-requests/[id]/recover
+ *
+ * A recovered USER account also gets the "account restored" email. A community
+ * recovery sends nothing: the request row names who asked for the deletion, not
+ * who should hear that the association is back.
  */
+import { createElement } from 'react';
 import { NextRequest, NextResponse } from 'next/server';
+import { AccountRecoveredEmail, sendEmail } from '@propertypro/email';
+import { formatErrorForLog } from '@propertypro/shared/observability';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
@@ -12,6 +19,66 @@ import { logAdminAction } from '@/lib/audit/log-admin-action';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+/** The web app's sign-in page, or undefined when WEB_APP_ORIGIN is unusable. */
+function resolveSignInUrl(): string | undefined {
+  const raw = process.env.WEB_APP_ORIGIN;
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    return `${url.origin}/auth/login`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** False for an empty address and for any address the purge wrote. */
+function isDeliverableAddress(email: string | null | undefined): email is string {
+  if (!email || !email.includes('@')) return false;
+  const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase();
+  return domain !== 'redacted' && !domain.startsWith('redacted.');
+}
+
+/**
+ * Best effort: the recovery has committed and is audited by the time this
+ * runs, so a lookup or delivery failure is logged and swallowed rather than
+ * turning a successful recovery into a 500 the operator would retry. The
+ * idempotency key makes a retried request harmless anyway.
+ */
+async function sendRecoveredEmail(
+  db: ReturnType<typeof createAdminTypedClient>,
+  requestId: number,
+  userId: string,
+): Promise<void> {
+  try {
+    const { data: user, error } = await db
+      .from('users')
+      .select('email, full_name')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const row = user as { email: string | null; full_name: string | null } | null;
+    if (!row || !isDeliverableAddress(row.email)) return;
+
+    await sendEmail({
+      to: row.email,
+      subject: 'Your PropertyPro account has been restored',
+      category: 'transactional',
+      react: createElement(AccountRecoveredEmail, {
+        branding: { communityName: 'PropertyPro' },
+        recipientName: row.full_name?.trim() || 'there',
+        portalUrl: resolveSignInUrl(),
+        wasDeactivated: true,
+      }),
+      idempotencyKey: `account-deletion/recovered/${requestId}`,
+    });
+  } catch (err) {
+    console.error(`[deletion-requests] recovered email for request ${requestId} failed`, {
+      err: formatErrorForLog(err),
+    });
+  }
 }
 
 export const POST = withAdminErrorHandler(async (_request: NextRequest, { params }: RouteParams) => {
@@ -133,6 +200,10 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
       restored_community_id: requestRow.community_id,
     },
   });
+
+  if (requestRow.request_type === 'user' && requestRow.user_id) {
+    await sendRecoveredEmail(db, requestId, requestRow.user_id);
+  }
 
   return NextResponse.json({ request: data });
 });

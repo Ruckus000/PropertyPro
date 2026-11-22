@@ -5,6 +5,8 @@ const requestUpdate = vi.fn();
 const usersUpdate = vi.fn();
 const communitiesUpdate = vi.fn();
 const updateUserById = vi.fn();
+const usersSelect = vi.fn();
+const sendEmail = vi.fn();
 
 function makeFromMock(table: string) {
   switch (table) {
@@ -24,6 +26,11 @@ function makeFromMock(table: string) {
       return {
         update: (payload: unknown) => ({
           eq: (_col: string, val: unknown) => usersUpdate(payload, val),
+        }),
+        select: (cols: string) => ({
+          eq: (_col: string, val: unknown) => ({
+            maybeSingle: () => usersSelect(cols, val),
+          }),
         }),
       };
     case 'communities':
@@ -61,6 +68,20 @@ vi.mock('@/lib/audit/log-admin-action', () => ({
   AdminAuditLogError: class AdminAuditLogError extends Error {},
 }));
 
+// Transport only; the template stub returns null and the assertions read the
+// props off `react`.
+vi.mock('@propertypro/email', () => ({
+  sendEmail: (...args: unknown[]) => sendEmail(...args),
+  AccountRecoveredEmail: () => null,
+}));
+
+interface SentEmail {
+  to: string;
+  category: string;
+  idempotencyKey: string;
+  react: { props: Record<string, unknown> };
+}
+
 async function callRecover(id: string) {
   const mod = await import('@/app/api/admin/deletion-requests/[id]/recover/route');
   return mod.POST(new Request(`http://localhost/${id}`, { method: 'POST' }) as never, {
@@ -75,7 +96,11 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     usersUpdate.mockReset();
     communitiesUpdate.mockReset();
     updateUserById.mockReset();
+    usersSelect.mockReset();
+    sendEmail.mockReset();
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
+    usersSelect.mockResolvedValue({ data: { email: 'marisol@example.com', full_name: 'Marisol' }, error: null });
+    sendEmail.mockResolvedValue({ id: 'test_1' });
     updateUserById.mockResolvedValue({ data: {}, error: null });
     usersUpdate.mockResolvedValue({ error: null });
     communitiesUpdate.mockResolvedValue({ error: null });
@@ -153,5 +178,85 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error.code).toBe('USER_UNBAN_FAILED');
+  });
+
+  describe('account restored email', () => {
+    const userRequest = {
+      data: { request_type: 'user', user_id: 'user-uuid', community_id: null },
+      error: null,
+    };
+
+    it('emails the restored user, without claiming they cancelled anything', async () => {
+      requestUpdate.mockResolvedValue(userRequest);
+
+      const response = await callRecover('42');
+
+      expect(response.status).toBe(200);
+      expect(usersSelect).toHaveBeenCalledWith('email, full_name', 'user-uuid');
+      expect(sendEmail).toHaveBeenCalledTimes(1);
+      const sent = sendEmail.mock.calls[0]![0] as SentEmail;
+      expect(sent.to).toBe('marisol@example.com');
+      expect(sent.category).toBe('transactional');
+      expect(sent.idempotencyKey).toBe('account-deletion/recovered/42');
+      expect(sent.react.props).toMatchObject({ recipientName: 'Marisol', wasDeactivated: true });
+      // Audited before the best-effort send.
+      expect(logAdminAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('still returns 200 when the email cannot be sent', async () => {
+      requestUpdate.mockResolvedValue(userRequest);
+      sendEmail.mockRejectedValueOnce(new Error('Resend API error: 500'));
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const response = await callRecover('42');
+      consoleErrorSpy.mockRestore();
+
+      expect(response.status).toBe(200);
+      expect(logAdminAction).toHaveBeenCalledTimes(1);
+    });
+
+    it('still returns 200 when the address lookup fails, and sends nothing', async () => {
+      requestUpdate.mockResolvedValue(userRequest);
+      usersSelect.mockResolvedValue({ data: null, error: { message: 'boom' } });
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const response = await callRecover('42');
+      consoleErrorSpy.mockRestore();
+
+      expect(response.status).toBe(200);
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('never emails a purged @redacted address', async () => {
+      requestUpdate.mockResolvedValue(userRequest);
+      usersSelect.mockResolvedValue({ data: { email: 'deleted-user-uuid@redacted', full_name: 'Deleted User' }, error: null });
+
+      const response = await callRecover('42');
+
+      expect(response.status).toBe(200);
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing for a community recovery', async () => {
+      requestUpdate.mockResolvedValue({
+        data: { request_type: 'community', user_id: 'requester-uuid', community_id: 99 },
+        error: null,
+      });
+
+      const response = await callRecover('42');
+
+      expect(response.status).toBe(200);
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing when the user could not be restored', async () => {
+      requestUpdate.mockResolvedValue(userRequest);
+      updateUserById.mockResolvedValue({ data: null, error: { message: 'GoTrue down' } });
+
+      const response = await callRecover('42');
+
+      expect(response.status).toBe(500);
+      expect(sendEmail).not.toHaveBeenCalled();
+    });
   });
 });

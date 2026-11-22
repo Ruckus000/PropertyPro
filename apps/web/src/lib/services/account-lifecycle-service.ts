@@ -17,7 +17,6 @@
  *   cooling -> cancelled
  *   soft_deleted -> recovered
  */
-import { addDays, addMonths } from 'date-fns';
 import { eq, and, desc, inArray, isNull, isNotNull, lt } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
@@ -42,6 +41,7 @@ import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
 } from '@/lib/account-lifecycle/root-offboarding';
+import { deletionCoolingEndsAt, deletionPurgeAt } from '@/lib/account-lifecycle/deletion-timeline';
 
 /** GoTrue ban duration for a deleted account (~100 years). 'none' lifts a ban. */
 const PERMANENT_BAN = '876600h';
@@ -234,7 +234,7 @@ export async function requestUserDeletion(
   acknowledgeRootOffboarding = false,
 ) {
   const now = new Date();
-  const coolingEndsAt = addDays(now, 30);
+  const coolingEndsAt = deletionCoolingEndsAt(now);
 
   // Ack gate BEFORE any write. Unlike the flagging below, a failure here must
   // propagate: if we cannot determine the impact we must not silently proceed
@@ -362,16 +362,28 @@ async function revokeDeletedUsersVisitorPasses(
   }
 }
 
+/** Where a deletion email goes. */
+export interface DeletionEmailRecipient {
+  email: string;
+  fullName: string | null;
+}
+
 /**
  * Soft-deletes a user: sets users.deletedAt and bans in Supabase auth.
  * The auth ban is non-fatal — if Supabase is unreachable the DB state
  * is still committed.
+ *
+ * Each returned row carries `recipient`: the user's email and name as they
+ * stood in the same statement that soft-deleted them. The "account deleted"
+ * email is sent to that address, captured at soft delete — not re-read later,
+ * when the purge may already have replaced it with `@redacted`. `null` when no
+ * users row was updated for the request.
  */
 export async function executeUserSoftDelete(requestIds: number[]) {
   if (requestIds.length === 0) return [];
 
   const now = new Date();
-  const scheduledPurgeAt = addMonths(now, 6);
+  const scheduledPurgeAt = deletionPurgeAt(now);
   const db = createUnscopedClient();
 
   const results = await db.transaction(async (tx) => {
@@ -394,14 +406,19 @@ export async function executeUserSoftDelete(requestIds: number[]) {
 
     const userIds = requests.map(r => r.userId);
 
+    const recipients = new Map<string, DeletionEmailRecipient>();
     if (userIds.length > 0) {
-      await tx
+      const deletedUsers = await tx
         .update(users)
         .set({ deletedAt: now })
-        .where(inArray(users.id, userIds));
+        .where(inArray(users.id, userIds))
+        .returning({ id: users.id, email: users.email, fullName: users.fullName });
+      for (const u of deletedUsers) {
+        if (u.id) recipients.set(u.id, { email: u.email, fullName: u.fullName });
+      }
     }
 
-    return requests;
+    return requests.map((r) => ({ ...r, recipient: recipients.get(r.userId) ?? null }));
   });
 
   await revokeDeletedUsersVisitorPasses(db, results.map((r) => r.userId));
@@ -495,7 +512,7 @@ export async function purgeUserPII(requestId: number) {
 /** Creates a community deletion request with a 30-day cooling period. */
 export async function requestCommunityDeletion(communityId: number, requestedBy: string) {
   const now = new Date();
-  const coolingEndsAt = addDays(now, 30);
+  const coolingEndsAt = deletionCoolingEndsAt(now);
 
   const db = createUnscopedClient();
   const [request] = await db
@@ -573,7 +590,7 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
   if (requestIds.length === 0) return [];
 
   const now = new Date();
-  const scheduledPurgeAt = addMonths(now, 6);
+  const scheduledPurgeAt = deletionPurgeAt(now);
   const db = createUnscopedClient();
 
   const results = await db.transaction(async (tx) => {

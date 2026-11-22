@@ -11,6 +11,9 @@ import {
   DocumentPostedEmail,
   NotificationDigestEmail,
   SignupVerificationEmail,
+  AccountDeletionInitiatedEmail,
+  AccountDeletionExecutedEmail,
+  AccountRecoveredEmail,
 } from "../src/index";
 import type { CommunityBranding } from "../src/index";
 
@@ -977,5 +980,76 @@ describe("SignupVerificationEmail", () => {
     expect(copy).not.toMatch(new RegExp(`\\b(${count})\\s+(hours?|minutes?|days?)\\b`, "i"));
     expect(copy).not.toMatch(/\bexpires?\s+(in|after|within)\b/i);
     expect(copy).not.toMatch(/\bvalid\s+(for|until)\b/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Account deletion lifecycle (D13): the copy must match what the cron does —
+// 30 days in which the account works and can be cancelled, then turned off
+// with support able to restore it, then personal details erased 6 months later.
+// ---------------------------------------------------------------------------
+
+/** Rendered HTML reduced to visible text, so assertions are not split by markup. */
+async function renderText(element: React.ReactElement): Promise<string> {
+  const html = await render(element);
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/\s+/g, " ");
+}
+
+describe("AccountDeletionInitiatedEmail", () => {
+  it("states the real timeline with both dates", async () => {
+    const text = await renderText(
+      <AccountDeletionInitiatedEmail
+        branding={brandingMinimal}
+        recipientName="Marisol"
+        coolingEndDate="September 24, 2026"
+        purgeDate="March 24, 2027"
+        cancelUrl="https://example.com/settings/account"
+      />,
+    );
+    expect(text).toContain("Until September 24, 2026 · you can cancel");
+    expect(text).toContain("September 24, 2026 · account turned off");
+    expect(text).toContain("March 24, 2027 · personal details erased");
+    // The old copy invented a 7-day cooling-off and a day-30 purge.
+    expect(text).not.toMatch(/Days 1|Days 8|After day 30|All personal data/);
+  });
+});
+
+describe("AccountDeletionExecutedEmail", () => {
+  it("dates the recovery window and does not claim the record is already anonymised", async () => {
+    const text = await renderText(
+      <AccountDeletionExecutedEmail branding={brandingMinimal} recipientName="Marisol" purgeDate="March 24, 2027" />,
+    );
+    expect(text).toContain("Recovery window: until March 24, 2027");
+    expect(text).toContain("March 24, 2027 · personal details erased");
+    expect(text).not.toMatch(/anonymi[sz]ed/i);
+  });
+});
+
+describe("AccountRecoveredEmail", () => {
+  it("never claims the reader cancelled or requested anything", async () => {
+    for (const wasDeactivated of [true, false]) {
+      const text = await renderText(
+        <AccountRecoveredEmail branding={brandingMinimal} recipientName="Marisol" wasDeactivated={wasDeactivated} />,
+      );
+      expect(text).not.toMatch(/you (cancel|request)|you did not request account recovery/i);
+    }
+  });
+
+  it("says 'restored' only when the account had been turned off", async () => {
+    const stopped = await renderText(
+      <AccountRecoveredEmail branding={brandingMinimal} recipientName="Marisol" wasDeactivated={false} />,
+    );
+    expect(stopped).toContain("Account deletion cancelled");
+    expect(stopped).not.toContain("Account restored");
+
+    const restored = await renderText(
+      <AccountRecoveredEmail branding={brandingMinimal} recipientName="Marisol" wasDeactivated />,
+    );
+    expect(restored).toContain("Account restored");
+    expect(restored).toContain("sign in again");
   });
 });

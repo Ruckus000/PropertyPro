@@ -33,6 +33,8 @@ export interface UpdatedUserProfile {
 }
 
 export interface UserProfileSnapshot {
+  /** The current sign-in address; the account-deletion emails go here. */
+  email: string | null;
   fullName: string | null;
   phone: string | null;
   phoneVerifiedAt: Date | null;
@@ -42,6 +44,8 @@ export interface UserProfileSnapshot {
  * Read the user's current name/phone state from the `users` row — the only
  * place a phone number and its verification live (the Supabase auth user's
  * `phone` is always empty). Callers:
+ *   - the account-deletion emails (`lib/account-lifecycle/deletion-emails.ts`),
+ *     for the address and greeting;
  *   - the mobile Settings page, to pre-fill the form it resends on save;
  *   - the profile PATCH and phone-verify confirm routes, to record the
  *     "before" values of a change an operator makes during a support session
@@ -54,6 +58,7 @@ export async function getUserProfileSnapshot(userId: string): Promise<UserProfil
   const db = createUnscopedClient();
   const [row] = await db
     .select({
+      email: users.email,
       fullName: users.fullName,
       phone: users.phone,
       phoneVerifiedAt: users.phoneVerifiedAt,
@@ -62,6 +67,7 @@ export async function getUserProfileSnapshot(userId: string): Promise<UserProfil
     .where(eq(users.id, userId))
     .limit(1);
   return {
+    email: row?.email ?? null,
     fullName: row?.fullName ?? null,
     phone: row?.phone ?? null,
     phoneVerifiedAt: row?.phoneVerifiedAt ?? null,
