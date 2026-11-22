@@ -33,7 +33,10 @@ import {
   BOARD_DESIGNATIONS,
   TOMBSTONE_BLOCK_TYPE,
   documentMatchesSectionCategories,
+  effectiveMeetingsWindowDays,
   isBoardPresident,
+  MEETINGS_NOTICE_ROW_CAP,
+  selectPublicMeetings,
   type DocumentCategory,
 } from '@propertypro/shared';
 import { announcementNotExpiredWhere } from '@/lib/announcements/expiry';
@@ -144,6 +147,8 @@ export interface PublicMeeting {
   startsAt: Date;
   endsAt: Date | null;
   location: string;
+  /** Plain-text agenda posted with the notice; null when none was entered. */
+  agenda: string | null;
 }
 
 export interface PublicContactInfo {
@@ -767,8 +772,12 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
       return rows;
     },
 
+    // The window is floored at 14 days and `limit` never hides a meeting whose
+    // notice window is open (`selectPublicMeetings`): the front page is where
+    // §718.111(12)(g)2.m / §720.303(4)(b)1.l put the notice and agenda.
     async listMeetings(opts) {
-      const cutoff = new Date(Date.now() + opts.timeWindowDays * 24 * 60 * 60 * 1000);
+      const now = Date.now();
+      const cutoff = new Date(now + effectiveMeetingsWindowDays(opts.timeWindowDays) * 24 * 60 * 60 * 1000);
       const rows = await db
         .select({
           id: meetings.id,
@@ -777,19 +786,20 @@ function _getPublicCommunityScopedReader(communityId: number): PublicScopedReade
           startsAt: meetings.startsAt,
           endsAt: meetings.endsAt,
           location: meetings.location,
+          agenda: meetings.agenda,
         })
         .from(meetings)
         .where(
           and(
             eq(meetings.communityId, communityId),
             isNull(meetings.deletedAt),
-            gte(meetings.startsAt, new Date()),
+            gte(meetings.startsAt, new Date(now)),
             lte(meetings.startsAt, cutoff),
           ),
         )
-        .orderBy(asc(meetings.startsAt))
-        .limit(opts.limit);
-      return rows;
+        .orderBy(asc(meetings.startsAt), asc(meetings.id))
+        .limit(Math.max(opts.limit, MEETINGS_NOTICE_ROW_CAP));
+      return selectPublicMeetings(rows, opts, now);
     },
 
     async getContactInfo(opts) {

@@ -5,6 +5,8 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { MEETING_AGENDA_MAX_LENGTH } from '@/lib/meetings/agenda';
 import { Card, CardHeader, CardDescription, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useCreateMeeting, useMeeting, useUpdateMeeting } from '@/hooks/use-meetings';
@@ -23,6 +25,7 @@ interface FormState {
   startsAt: string;
   endsAt: string;
   location: string;
+  agenda: string;
 }
 
 interface MeetingFormProps {
@@ -43,6 +46,7 @@ const EMPTY_FORM: FormState = {
   startsAt: '',
   endsAt: '',
   location: '',
+  agenda: '',
 };
 
 function buildDefaultStart(): string {
@@ -180,6 +184,7 @@ export function MeetingForm({
       startsAt,
       endsAt,
       location: detailQuery.data.location,
+      agenda: detailQuery.data.agenda ?? '',
     });
     setLoadedMeetingId(detailQuery.data.id);
   }, [communityTimezone, detailQuery.data, isEditing, loadedMeetingId]);
@@ -220,6 +225,8 @@ export function MeetingForm({
         ? wallClockValueToUtcIso(formState.endsAt, communityTimezone)
         : null,
       location: formState.location.trim(),
+      // Blank sends null, which clears a saved agenda on edit.
+      agenda: formState.agenda.trim() || null,
     };
 
     try {
@@ -442,6 +449,27 @@ export function MeetingForm({
                   <span className="text-xs text-[var(--status-danger)]">{fieldErrors.location}</span>
                 ) : null}
               </label>
+
+              <div className="flex flex-col gap-2">
+                <label htmlFor="meeting-agenda" className="text-sm font-medium text-content">
+                  Agenda
+                </label>
+                <Textarea
+                  id="meeting-agenda"
+                  aria-describedby="meeting-agenda-hint"
+                  value={formState.agenda}
+                  onChange={(event) => updateField('agenda', event.target.value)}
+                  maxLength={MEETING_AGENDA_MAX_LENGTH}
+                  rows={5}
+                  placeholder={'1. Call to order\n2. Approve prior minutes\n3. ...'}
+                />
+                <span id="meeting-agenda-hint" className="text-xs text-content-tertiary">
+                  Optional. Shown with this meeting on your website and in the portal.
+                  {communityType === 'apartment'
+                    ? null
+                    : ' Florida law requires the agenda to be posted with the notice.'}
+                </span>
+              </div>
 
               {formError ? (
                 <div className="rounded-[var(--radius-md)] border border-[var(--status-danger-border)] bg-[var(--status-danger-bg)] px-3 py-2 text-sm text-[var(--status-danger)]">

@@ -22,6 +22,12 @@ export const meetings = pgTable('meetings', {
   endsAt: timestamp('ends_at', { withTimezone: true }),
   /** Location string (address or virtual link text) */
   location: text('location').notNull(),
+  /**
+   * The agenda, as plain text. §718.111(12)(g)2.m–n / §720.303(4)(b)1.l–m
+   * require a meeting's agenda to be posted with its notice; the public
+   * Meetings block shows it beside the meeting. Null when none was entered.
+   */
+  agenda: text('agenda'),
 
   /** Optional metadata for operational workflows */
   noticePostedAt: timestamp('notice_posted_at', { withTimezone: true }),

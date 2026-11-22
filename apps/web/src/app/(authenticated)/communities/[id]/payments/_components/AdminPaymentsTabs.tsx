@@ -50,9 +50,11 @@ interface AdminPaymentsTabsProps {
   communityType: CommunityType;
   userId: string;
   userRole: string;
+  /** The community's IANA time zone; one-time charges are dated by it. */
+  timeZone: string;
 }
 
-export function AdminPaymentsTabs({ communityId, communityType, userId, userRole }: AdminPaymentsTabsProps) {
+export function AdminPaymentsTabs({ communityId, communityType, userId, userRole, timeZone }: AdminPaymentsTabsProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeTab = coercePaymentsTab(searchParams.get('tab'));
@@ -100,6 +102,7 @@ export function AdminPaymentsTabs({ communityId, communityType, userId, userRole
           communityType={communityType}
           userId={userId}
           userRole={userRole}
+          timeZone={timeZone}
         />
       )}
       {activeTab === 'delinquency' && <DelinquencyTable communityId={communityId} />}

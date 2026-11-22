@@ -60,6 +60,7 @@ const MEETING = {
   startsAt: new Date('2026-11-17T23:30:00Z'),
   endsAt: null,
   location: 'Clubhouse',
+  agenda: null,
 };
 const ANNOUNCEMENT = {
   id: 2,

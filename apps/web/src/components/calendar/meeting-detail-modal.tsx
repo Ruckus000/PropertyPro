@@ -153,6 +153,16 @@ export function MeetingDetailModal({
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <div className="text-sm font-semibold text-content">Agenda</div>
+                {meeting.agenda ? (
+                  // Plain text: line breaks are the agenda's structure, so keep them.
+                  <p className="whitespace-pre-line break-words text-sm text-content">{meeting.agenda}</p>
+                ) : (
+                  <p className="text-sm text-content-secondary">No agenda has been added.</p>
+                )}
+              </div>
+
               {/* The deadlines and their escalation badges are the manager's
                   tracking (D4); a reader sees the meeting itself. */}
               {canWrite ? (

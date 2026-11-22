@@ -4,6 +4,7 @@ import React, { useState, type ReactNode } from "react";
 import { Badge } from "@propertypro/ui";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
 import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import type { MeetingNoticeSummary } from "@/lib/compliance/meeting-notice-status";
 
 export interface ChecklistItemData {
   id: number;
@@ -33,6 +34,12 @@ export interface ChecklistItemData {
    * first, because two nulls are equal.
    */
   autoLinkedDocumentId?: number | null;
+  /**
+   * Meeting-notice rows only: the per-meeting result that decided `status`
+   * (see `meeting-notice-status.ts`). Absent when the meetings said nothing
+   * yet and the row kept its document-based status.
+   */
+  meetingNotices?: MeetingNoticeSummary | null;
   status: ComplianceStatus;
 }
 

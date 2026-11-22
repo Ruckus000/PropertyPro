@@ -28,6 +28,7 @@
  */
 import {
   documentMatchesSectionCategories,
+  selectPublicMeetings,
   type AnnouncementsBlockContent,
   type ContactBlockContent,
   type DocumentsBlockContent,
@@ -108,14 +109,17 @@ export function selectDocuments(
     .slice(0, content.limit);
 }
 
-/** Meetings starting within the window, soonest-first order preserved. */
+/**
+ * Meetings starting within the window, soonest-first order preserved — the
+ * live renderer's own rule (`selectPublicMeetings`: a 14-day floor, and every
+ * meeting inside it kept whatever the limit).
+ */
 export function selectMeetings(
   content: Pick<MeetingsBlockContent, 'limit' | 'timeWindowDays'>,
   all: readonly PublicMeeting[],
   now: number,
 ): PublicMeeting[] {
-  const cutoff = now + content.timeWindowDays * DAY_MS;
-  return all.filter((m) => m.startsAt.getTime() <= cutoff).slice(0, content.limit);
+  return selectPublicMeetings(all, content, now);
 }
 
 /**

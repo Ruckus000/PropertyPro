@@ -360,11 +360,22 @@ function makeQuery(table: object, where: Predicate | undefined, projection?: Rec
   return query;
 }
 
-function makeScopedClient() {
+function makeScopedClient(): Record<string, unknown> {
   return {
     selectFrom: selectFromMock,
     insert: insertMock,
     update: updateMock,
+    // Rolls the in-memory store back on a throw, as Postgres would.
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const snapshot = new Map([...store].map(([table, rows]) => [table, rows.map((row) => ({ ...row }))]));
+      try {
+        return await fn(makeScopedClient());
+      } catch (err) {
+        store.clear();
+        for (const [table, rows] of snapshot) store.set(table, rows);
+        throw err;
+      }
+    },
   };
 }
 
@@ -796,10 +807,12 @@ describe('3. due date computation (via generateAssessmentLineItemsForCommunity)'
     expect(await dueDateFor({ frequency: 'monthly', dueDay: 5 }, '2026-04-28T12:00:00.000Z')).toBe('2026-04-05');
   });
 
-  it('one_time uses the assessment startDate verbatim, ignoring dueDay and the clock', async () => {
+  it('one_time with no override uses the assessment startDate, ignoring dueDay', async () => {
+    // Changed 2026-11-21: was "ignoring the clock" with a past startDate, which
+    // now refuses (a one-time charge cannot fall due before today; see §9).
     expect(
-      await dueDateFor({ frequency: 'one_time', dueDay: 31, startDate: '2025-12-25' }, '2026-04-15T12:00:00.000Z'),
-    ).toBe('2025-12-25');
+      await dueDateFor({ frequency: 'one_time', dueDay: 31, startDate: '2026-04-20' }, '2026-04-15T12:00:00.000Z'),
+    ).toBe('2026-04-20');
   });
 
   it('an explicit override wins over frequency, dueDay and the clock', async () => {
@@ -1599,7 +1612,7 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     seed(assessmentLineItemsTable, []);
     await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override)).rejects.toMatchObject({
       statusCode: 422,
-      message: expect.stringMatching(/^Cannot generate line items: 2026-04-\d\d is (before|after) the assessment's (start|end) month \(\d{4}-\d\d-\d\d\)$/),
+      message: expect.stringMatching(/^This assessment (starts|ends) on [A-Z][a-z]{2} \d{1,2}, \d{4}\. Choose a due date in that month or (later|earlier)\.$/),
     });
     expect(insertMock).not.toHaveBeenCalled();
     expect(postLedgerEntryMock).not.toHaveBeenCalled();
@@ -1633,11 +1646,57 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     ]);
   });
 
+  describe('a one-time charge cannot fall due before the community\'s today', () => {
+    // 10pm on Apr 14 in Florida is already Apr 15 in UTC, the server's clock.
+    beforeEach(() => {
+      seed(communitiesTable, [{ id: 11, timezone: 'America/New_York' }]);
+      seed(assessmentLineItemsTable, []);
+      setNow('2026-04-15T02:00:00.000Z');
+    });
+
+    it('today in the community is accepted, though UTC is already tomorrow', async () => {
+      seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate: '2026-04-01' })]);
+      const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-04-14');
+      expect(result).toMatchObject({ insertedCount: 3, dueDate: '2026-04-14' });
+    });
+
+    it.each([
+      ['an override the day before', '2026-04-01', '2026-04-13'],
+      ['no override, with a start date already past', '2026-03-01', null],
+    ])('%s is a 422 and writes nothing', async (_label, startDate, override) => {
+      seed(assessmentsTable, [assessment({ id: 7, frequency: 'one_time', startDate })]);
+      await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', override)).rejects.toMatchObject({
+        statusCode: 422,
+        message: 'The due date can’t be before today, Apr 14, 2026. Choose today or a later date.',
+      });
+      expect(insertMock).not.toHaveBeenCalled();
+      expect(postLedgerEntryMock).not.toHaveBeenCalled();
+    });
+
+    it('a recurring override may still back-date a missed period (control)', async () => {
+      seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate: '2026-01-01' })]);
+      const result = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1', '2026-03-01');
+      expect(result).toMatchObject({ insertedCount: 3, dueDate: '2026-03-01' });
+    });
+  });
+
+  it('a ledger failure leaves no charges behind, so a retry charges every unit', async () => {
+    seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 1, startDate: '2026-01-01' })]);
+    seed(assessmentLineItemsTable, []);
+    postLedgerEntryMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('ledger write failed'));
+    await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1')).rejects.toThrow('ledger write failed');
+    expect(rowsOf(assessmentLineItemsTable)).toEqual([]);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+
+    const retry = await generateAssessmentLineItemsForCommunity(11, 7, 'actor-1');
+    expect(retry).toMatchObject({ insertedCount: 3, skippedCount: 0 });
+  });
+
   it('a community with no units is a 422', async () => {
     seed(unitsTable, []);
     await expect(generateAssessmentLineItemsForCommunity(11, 7, 'actor-1')).rejects.toMatchObject({
       statusCode: 422,
-      message: 'Cannot generate line items: no units found for this community',
+      message: 'Your Directory has no units yet. Add units, then generate charges.',
     });
     expect(insertMock).not.toHaveBeenCalled();
   });
@@ -1661,6 +1720,21 @@ describe('10. assessment date order is checked against the dates the row will ho
       } as never),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('create: the defaulted startDate is today in the community, not in UTC', async () => {
+    // 9:30pm on Apr 30 in Florida is May 1 in UTC. A UTC default made a new
+    // one-time assessment start next month, so charging it today was a 422.
+    seed(communitiesTable, [{ id: 11, timezone: 'America/New_York' }]);
+    setNow('2026-05-01T01:30:00.000Z');
+    // The shared fake insert takes arrays; create inserts one row.
+    insertMock.mockImplementationOnce(async (_table: object, value: Row) => [{ id: 1, ...value }]);
+    await createAssessmentForCommunity(11, 'u-1', {
+      title: 'Roof',
+      amountCents: 100,
+      frequency: 'one_time',
+    } as never);
+    expect(insertMock).toHaveBeenCalledWith(assessmentsTable, expect.objectContaining({ startDate: '2026-04-30' }));
   });
 
   it('update: a lone endDate before the STORED startDate is a 400, nothing written', async () => {

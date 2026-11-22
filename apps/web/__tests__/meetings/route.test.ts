@@ -29,6 +29,7 @@ const {
     startsAt: Symbol('meetings.startsAt'),
     endsAt: Symbol('meetings.endsAt'),
     location: Symbol('meetings.location'),
+    agenda: Symbol('meetings.agenda'),
     noticePostedAt: Symbol('meetings.noticePostedAt'),
     minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
   },
@@ -414,6 +415,115 @@ describe('meetings route', () => {
    * `now` these assertions would flip meaning on an arbitrary date and read as
    * a regression in the route.
    */
+  describe('agenda (audit 2026-11-05, H-4)', () => {
+    const storedMeeting = (agenda: string | null) => ({
+      id: 99,
+      title: 'Annual Meeting',
+      meetingType: 'annual',
+      startsAt: new Date('2027-04-18T14:00:00.000Z'),
+      endsAt: null,
+      location: 'Main Hall',
+      agenda,
+      noticePostedAt: null,
+      minutesApprovedAt: null,
+    });
+
+    function mockClient(agenda: string | null) {
+      const insertMock = vi.fn().mockResolvedValue([{ id: 99 }]);
+      const updateMock = vi.fn().mockResolvedValue(undefined);
+      createScopedClientMock.mockReturnValue({
+        selectFrom: vi.fn((table: unknown) => {
+          if (table === meetingsTableMock) return makeSelectResult([storedMeeting(agenda)]);
+          if (table === communitiesTableMock) return makeSelectResult([{ timezone: 'America/New_York' }]);
+          return makeSelectResult([]);
+        }),
+        insert: insertMock,
+        update: updateMock,
+        softDelete: vi.fn(),
+        hardDelete: vi.fn(),
+      });
+      return { insertMock, updateMock };
+    }
+
+    function post(body: Record<string, unknown>) {
+      return POST(
+        new NextRequest('http://localhost:3000/api/v1/meetings', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId: 42, ...body }),
+        }),
+      );
+    }
+
+    const createBody = {
+      title: 'Annual Meeting',
+      meetingType: 'annual',
+      startsAt: '2027-04-18T14:00:00.000Z',
+      location: 'Main Hall',
+    };
+
+    it('create stores the agenda with its line breaks, trimmed at the ends, and audits it', async () => {
+      const { insertMock } = mockClient('1. Call to order\n2. Budget');
+      const response = await post({ ...createBody, agenda: '  1. Call to order\n2. Budget \n' });
+      const json = (await response.json()) as { data: { agenda: string | null } };
+
+      expect(response.status).toBe(200);
+      expect(insertMock).toHaveBeenCalledWith(
+        meetingsTableMock,
+        expect.objectContaining({ agenda: '1. Call to order\n2. Budget' }),
+      );
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'create',
+          newValues: expect.objectContaining({ agenda: '1. Call to order\n2. Budget' }),
+        }),
+      );
+      expect(json.data.agenda).toBe('1. Call to order\n2. Budget');
+    });
+
+    it('create stores null for a missing or blank agenda', async () => {
+      const { insertMock } = mockClient(null);
+      await post(createBody);
+      await post({ ...createBody, agenda: '   \n ' });
+      expect(insertMock).toHaveBeenNthCalledWith(1, meetingsTableMock, expect.objectContaining({ agenda: null }));
+      expect(insertMock).toHaveBeenNthCalledWith(2, meetingsTableMock, expect.objectContaining({ agenda: null }));
+    });
+
+    it('create refuses an agenda over 10,000 characters with a 422', async () => {
+      const { insertMock } = mockClient(null);
+      const response = await post({ ...createBody, agenda: 'x'.repeat(10_001) });
+      expect(response.status).toBe(422);
+      expect(insertMock).not.toHaveBeenCalled();
+    });
+
+    it('update changes the agenda and audits old and new', async () => {
+      const { updateMock } = mockClient('Old agenda');
+      const response = await post({ action: 'update', id: 99, agenda: 'New agenda' });
+
+      expect(response.status).toBe(200);
+      expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { agenda: 'New agenda' }, expect.anything());
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          oldValues: { agenda: 'Old agenda' },
+          newValues: { agenda: 'New agenda' },
+        }),
+      );
+    });
+
+    it('update with a blank agenda clears it', async () => {
+      const { updateMock } = mockClient('Old agenda');
+      await post({ action: 'update', id: 99, agenda: '' });
+      expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { agenda: null }, expect.anything());
+    });
+
+    it('update without an agenda leaves it untouched', async () => {
+      const { updateMock } = mockClient('Old agenda');
+      await post({ action: 'update', id: 99, location: 'Clubhouse' });
+      expect(updateMock).toHaveBeenCalledWith(meetingsTableMock, { location: 'Clubhouse' }, expect.anything());
+    });
+  });
+
   describe('notice-window warnings', () => {
     const NOW = new Date('2026-04-01T12:00:00.000Z');
 

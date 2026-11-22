@@ -18,6 +18,7 @@ import {
 } from '@propertypro/db';
 import { and, asc, eq, gte, inArray, isNotNull, lt } from '@propertypro/db/filters';
 import type { MeetingResponseRecord } from '@/lib/meetings/meeting-response';
+import type { MeetingNoticeInput } from '@/lib/compliance/meeting-notice-status';
 
 const meetingColumns = {
   id: meetings.id,
@@ -26,6 +27,7 @@ const meetingColumns = {
   startsAt: meetings.startsAt,
   endsAt: meetings.endsAt,
   location: meetings.location,
+  agenda: meetings.agenda,
   noticePostedAt: meetings.noticePostedAt,
   minutesApprovedAt: meetings.minutesApprovedAt,
 } as const;
@@ -42,6 +44,8 @@ export interface CreateMeetingInput {
   startsAt: Date;
   endsAt: Date | null;
   location: string;
+  /** Plain text; null when no agenda was entered. */
+  agenda: string | null;
 }
 
 /**
@@ -66,6 +70,34 @@ export async function listMeetingsForCommunity(
 
   return scoped
     .selectFrom<MeetingResponseRecord>(meetings, meetingColumns, whereClause)
+    .orderBy(asc(meetings.startsAt), asc(meetings.id));
+}
+
+/**
+ * The meetings that score the meeting-notice checklist row: every live meeting
+ * starting on or after `since`, upcoming ones included (a notice can fall due
+ * before its meeting starts).
+ *
+ * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
+ * community membership; the compliance loaders gate on `compliance:read`.
+ */
+export async function listMeetingsForNoticeScoring(
+  communityId: number,
+  since: Date,
+): Promise<MeetingNoticeInput[]> {
+  const scoped = createScopedClient(communityId);
+  return scoped
+    .selectFrom<MeetingNoticeInput & { [key: string]: unknown }>(
+      meetings,
+      {
+        id: meetings.id,
+        title: meetings.title,
+        meetingType: meetings.meetingType,
+        startsAt: meetings.startsAt,
+        noticePostedAt: meetings.noticePostedAt,
+      },
+      gte(meetings.startsAt, since),
+    )
     .orderBy(asc(meetings.startsAt), asc(meetings.id));
 }
 

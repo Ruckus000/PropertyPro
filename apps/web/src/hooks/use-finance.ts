@@ -208,7 +208,9 @@ export function useGenerateAssessmentLineItems(communityId: number, assessmentId
           body: JSON.stringify({ communityId, dueDate }),
         },
       ),
-    onSuccess: () => {
+    // Settled, not success: a dropped connection or 5xx can follow a commit,
+    // and only a refetch shows whether the charges exist.
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: FINANCE_KEYS.assessmentLineItems(communityId, assessmentId),
       });

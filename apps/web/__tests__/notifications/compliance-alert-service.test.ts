@@ -55,6 +55,13 @@ vi.mock('@/lib/services/notification-service', () => ({
   sendNotification: sendNotificationMock,
 }));
 
+const { listMeetingsForNoticeScoringMock } = vi.hoisted(() => ({
+  listMeetingsForNoticeScoringMock: vi.fn(),
+}));
+vi.mock('@/lib/services/meeting-service', () => ({
+  listMeetingsForNoticeScoring: listMeetingsForNoticeScoringMock,
+}));
+
 import {
   checkAndAlertOverdueItems,
   processComplianceAlerts,
@@ -86,6 +93,51 @@ describe('checkAndAlertOverdueItems', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sendNotificationMock.mockResolvedValue(1);
+    listMeetingsForNoticeScoringMock.mockResolvedValue([]);
+  });
+
+  // H-4: the email must agree with the Compliance page, which scores the
+  // meeting-notice row from the meetings, not from a linked document.
+  describe('the meeting-notice row', () => {
+    const noticeRow = {
+      templateKey: '718_meeting_notices',
+      title: 'Meeting Notices and Agendas',
+      description: '',
+      deadline: null,
+      documentId: 9,
+      documentPostedAt: new Date('2026-03-01T00:00:00.000Z').toISOString(),
+      rollingWindow: { months: 12 },
+      isApplicable: true,
+      statuteReference: '§718.111(12)(g)(2)(m)-(n)',
+    };
+    const missedMeeting = {
+      id: 1,
+      title: 'Annual Meeting',
+      meetingType: 'annual',
+      startsAt: new Date('2026-03-10T18:00:00.000Z'),
+      noticePostedAt: null,
+    };
+
+    it('alerts on a missed notice even though a document is linked', async () => {
+      setupChecklistMock([noticeRow], [{ id: 9, deletedAt: null, postedAt: new Date('2026-03-01') }]);
+      listMeetingsForNoticeScoringMock.mockResolvedValue([missedMeeting]);
+
+      const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW, 'condo_718');
+
+      expect(result.overdueCount).toBe(1);
+      expect(sendNotificationMock.mock.calls[0]![1].items).toEqual([
+        { label: 'Meeting Notices and Agendas', status: 'overdue' },
+      ]);
+    });
+
+    it('keeps the document rule, and reads no meetings, when the community type is not given', async () => {
+      setupChecklistMock([noticeRow], [{ id: 9, deletedAt: null, postedAt: new Date('2026-03-01') }]);
+
+      const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
+
+      expect(result.overdueCount).toBe(0);
+      expect(listMeetingsForNoticeScoringMock).not.toHaveBeenCalled();
+    });
   });
 
   it('detects overdue items (deadline in past, no document linked)', async () => {

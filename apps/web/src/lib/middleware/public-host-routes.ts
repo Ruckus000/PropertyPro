@@ -198,7 +198,8 @@ export const METADATA_FIRST_SEGMENTS = new Set(['sitemap.xml', 'robots.txt']);
  * apex renderer under `app/(public)/[subdomain]/…` cannot serve them. Only
  * `transparency` has a host-native twin today (`app/public-transparency`); the
  * remaining suffixes (`notices`, `unavailable`) have none, so they keep the
- * default public-site handling and render the branded 404.
+ * default public-site handling. That renderer redirects `notices` to the front
+ * page's Meetings section; anything else it does not know is the branded 404.
  *
  * `app/sitemap.ts`'s static entries must stay consistent with this: a suffix
  * with no host-native twin is a 404 and must not be advertised to crawlers.

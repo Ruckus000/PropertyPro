@@ -673,6 +673,13 @@
       "when": 1793232446826,
       "tag": "0097_site_looks_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1795288274413,
+      "tag": "0099_meetings_agenda",
+      "breakpoints": true
     }
   ]
 }

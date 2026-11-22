@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { headers } from 'next/headers';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound, permanentRedirect, redirect } from 'next/navigation';
 import { resolveTheme, toFontLinks } from '@propertypro/theme';
 import { siteThemeCssVars } from '@/lib/public-site/site-theme-css-vars';
 import type { Metadata } from 'next';
@@ -138,8 +138,19 @@ async function resolveRequestedPage(
   if (redirectTarget) {
     permanentRedirect(redirectTarget.toSlug === '' ? '/' : `/${redirectTarget.toSlug}`);
   }
+  // `/notices` → the front page's Meetings section, where every meeting inside
+  // its notice window is listed with its agenda (§718.111(12)(g)2.m allows the
+  // front page OR a linked Notices subpage). It used to 404. `notices` is a
+  // reserved slug, so no page can ever claim it before this line. Temporary
+  // (307), not permanent: a dedicated Notices page may replace this later.
+  if (slug === NOTICES_PATH_SEGMENT) {
+    redirect('/#meetings');
+  }
   notFound();
 }
+
+/** The path-public `notices` suffix (`PATH_PUBLIC_SUFFIXES`). */
+const NOTICES_PATH_SEGMENT = 'notices';
 
 export async function generateMetadata(props?: PublicSitePageProps): Promise<Metadata> {
   const communityId = await resolveCommunityId();

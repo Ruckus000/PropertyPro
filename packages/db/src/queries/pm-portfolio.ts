@@ -10,6 +10,7 @@ import { documents } from '../schema/documents';
 import { leases } from '../schema/leases';
 import { leaseCurrentOnSql, leaseExpiringBetweenSql } from './lease-current';
 import { maintenanceRequests } from '../schema/maintenance-requests';
+import { meetings } from '../schema/meetings';
 import { pendingSignups } from '../schema/pending-signups';
 import { siteBlocks } from '../schema/site-blocks';
 import { units } from '../schema/units';
@@ -644,6 +645,8 @@ export interface PortfolioCommunityStatusFacts {
 
 export interface PortfolioChecklistRow {
   communityId: number;
+  /** Which checklist item; the meeting-notice rows are scored from meetings. */
+  templateKey: string;
   isApplicable: boolean;
   documentId: number | null;
   documentPostedAt: Date | null;
@@ -663,13 +666,28 @@ export interface PortfolioStatusInputs {
   checklistRows: PortfolioChecklistRow[];
   /** Every document linked from those rows, soft-deleted ones included. */
   documentStates: Map<number, PortfolioLinkedDocumentState>;
+  /**
+   * Per checklist community, its live meetings starting on or after
+   * `noticeMeetingsSince` — what scores the meeting-notice row. Empty when the
+   * caller passed no `noticeMeetingsSince`.
+   */
+  noticeMeetings: Map<number, PortfolioNoticeMeeting[]>;
+}
+
+export interface PortfolioNoticeMeeting {
+  id: number;
+  title: string;
+  meetingType: string;
+  startsAt: Date;
+  noticePostedAt: Date | null;
 }
 
 /**
  * Everything the Communities page needs to derive each community's status,
  * read in a fixed number of queries however many communities there are:
  * one for the community facts, one for the checklist rows, one for the
- * documents those rows link.
+ * documents those rows link, and one for the meetings that score the
+ * meeting-notice row.
  *
  * The rows are returned raw on purpose. The status rule (`withDerivedStatus`
  * in apps/web) is the one the Compliance page uses; deriving it here in SQL
@@ -681,13 +699,15 @@ export interface PortfolioStatusInputs {
 export async function findPortfolioStatusInputsUnscoped(
   communityIds: readonly number[],
   checklistCommunityIds: readonly number[],
+  noticeMeetingsSince?: Date,
 ): Promise<PortfolioStatusInputs> {
   const facts = new Map<number, PortfolioCommunityStatusFacts>();
+  const noticeMeetings = new Map<number, PortfolioNoticeMeeting[]>();
   if (communityIds.length === 0) {
-    return { facts, checklistRows: [], documentStates: new Map() };
+    return { facts, checklistRows: [], documentStates: new Map(), noticeMeetings };
   }
 
-  const [factRows, checklistRows] = await Promise.all([
+  const [factRows, checklistRows, meetingRows] = await Promise.all([
     db
       .select({
         communityId: communities.id,
@@ -702,6 +722,7 @@ export async function findPortfolioStatusInputsUnscoped(
       : db
           .select({
             communityId: complianceChecklistItems.communityId,
+            templateKey: complianceChecklistItems.templateKey,
             isApplicable: complianceChecklistItems.isApplicable,
             documentId: complianceChecklistItems.documentId,
             documentPostedAt: complianceChecklistItems.documentPostedAt,
@@ -715,7 +736,33 @@ export async function findPortfolioStatusInputsUnscoped(
               isNull(complianceChecklistItems.deletedAt),
             ),
           ),
+    checklistCommunityIds.length === 0 || noticeMeetingsSince === undefined
+      ? Promise.resolve([] as Array<PortfolioNoticeMeeting & { communityId: number }>)
+      : db
+          .select({
+            communityId: meetings.communityId,
+            id: meetings.id,
+            title: meetings.title,
+            meetingType: meetings.meetingType,
+            startsAt: meetings.startsAt,
+            noticePostedAt: meetings.noticePostedAt,
+          })
+          .from(meetings)
+          .where(
+            and(
+              inArray(meetings.communityId, [...checklistCommunityIds]),
+              isNull(meetings.deletedAt),
+              gte(meetings.startsAt, noticeMeetingsSince),
+            ),
+          )
+          .orderBy(asc(meetings.startsAt), asc(meetings.id)),
   ]);
+
+  for (const { communityId, ...meeting } of meetingRows) {
+    const list = noticeMeetings.get(communityId) ?? [];
+    list.push(meeting);
+    noticeMeetings.set(communityId, list);
+  }
 
   for (const row of factRows) {
     facts.set(row.communityId, {
@@ -745,7 +792,7 @@ export async function findPortfolioStatusInputsUnscoped(
     }
   }
 
-  return { facts, checklistRows, documentStates };
+  return { facts, checklistRows, documentStates, noticeMeetings };
 }
 
 // ─── Report Query Types ───

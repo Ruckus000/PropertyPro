@@ -13,13 +13,20 @@ import {
   visitorLog,
 } from '@propertypro/db';
 import { and, gte, inArray, isNull, lte } from '@propertypro/db/filters';
-import { postingClockApplies } from '@propertypro/shared';
+import { postingClockApplies, type CommunityType } from '@propertypro/shared';
 // AUTHZ: Compliance alert cron — cross-community overdue scanning
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { sendNotification } from '@/lib/services/notification-service';
 import type { ComplianceAlertEvent } from '@/lib/services/notification-service';
-import { calculateComplianceStatus } from '@/lib/utils/compliance-calculator';
+import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 import { getLinkedDocumentStatesByIds } from '@/lib/services/documents-service';
+import { listMeetingsForNoticeScoring } from '@/lib/services/meeting-service';
+import { withDerivedStatus } from '@/lib/compliance/derive-checklist-status';
+import {
+  MEETING_NOTICE_TEMPLATE_KEYS,
+  MEETING_NOTICE_WINDOW_MONTHS,
+  summarizeMeetingNotices,
+} from '@/lib/compliance/meeting-notice-status';
 
 export interface ComplianceAlertResult {
   communityId: number;
@@ -117,11 +124,17 @@ async function alertExpiringVisitorsForCommunity(
  *
  * Returns the number of overdue items found and how many admin recipients
  * were notified.
+ *
+ * Each row's status comes from `withDerivedStatus`, the Compliance page's own
+ * rule, so the email and the page agree. Given `communityType`, the
+ * meeting-notice row is scored from the meetings as it is there; without it
+ * that row keeps its document-based status.
  */
 export async function checkAndAlertOverdueItems(
   communityId: number,
   actorUserId?: string,
   now: Date = new Date(),
+  communityType?: CommunityType,
 ): Promise<ComplianceAlertResult> {
   const scoped = createScopedClient(communityId);
   const rows = await scoped.query(complianceChecklistItems);
@@ -142,39 +155,38 @@ export async function checkAndAlertOverdueItems(
     linkedDocumentIds,
   );
 
+  const scoresMeetings =
+    communityType !== undefined &&
+    rows.some((r) => MEETING_NOTICE_TEMPLATE_KEYS.has(r['templateKey'] as string));
+  const meetingNotices = scoresMeetings
+    ? summarizeMeetingNotices(
+      await listMeetingsForNoticeScoring(
+        communityId,
+        calculateRollingWindowStart(now, MEETING_NOTICE_WINDOW_MONTHS),
+      ),
+      communityType,
+      now,
+    )
+    : null;
+
   const overdueItems: OverdueItem[] = [];
 
-  for (const row of rows) {
+  for (const storedRow of rows) {
+    // The caller only reaches here when the posting clock applies.
+    const row = withDerivedStatus(storedRow, documentStateById, true, meetingNotices, now);
     const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
-    const documentPostedAt = row['documentPostedAt']
-      ? new Date(row['documentPostedAt'] as string)
-      : null;
-    const rollingWindowRecord = row['rollingWindow'] as Record<string, unknown> | null;
-    const rollingWindowMonths =
-      typeof rollingWindowRecord?.months === 'number'
-        ? rollingWindowRecord.months
-        : null;
-
     const documentId = (row['documentId'] as number | null) ?? null;
     const linked = documentId != null ? documentStateById.get(documentId) : undefined;
 
-    const status = calculateComplianceStatus({
-      isApplicable: row['isApplicable'] as boolean | undefined,
-      documentId,
-      documentPostedAt,
-      documentDeletedAt: linked?.deletedAt ?? null,
-      documentIsDraft: linked?.isDraft ?? false,
-      deadline,
-      rollingWindowMonths,
-      now,
-    });
-
-    if (status === 'overdue') {
+    if (row['status'] === 'overdue') {
       // A draft is as absent to owners as a deleted file.
       const documentDeleted =
         linked != null && (linked.deletedAt != null || linked.isDraft);
+      // A missed meeting notice is late, not missing: it is the meetings that
+      // were scored, not a document.
+      const scoredFromMeetings = row['meetingNotices'] != null;
       overdueItems.push({
-        hasNoDocument: documentId == null || documentDeleted,
+        hasNoDocument: !scoredFromMeetings && (documentId == null || documentDeleted),
         title: typeof row['title'] === 'string' ? row['title'] : 'Compliance Item',
         description: typeof row['description'] === 'string' ? row['description'] : '',
         deadline: deadline
@@ -322,7 +334,7 @@ export async function processComplianceAlerts(
       // nothing can be overdue — and an overdue digest citing the statute
       // would be false. Visitor expiry below is unrelated and still runs.
       const result = postingClockApplies(community)
-        ? await checkAndAlertOverdueItems(community.id, undefined, now)
+        ? await checkAndAlertOverdueItems(community.id, undefined, now, community.communityType)
         : { communityId: community.id, overdueCount: 0, notifiedCount: 0 };
       const expiryResult = await alertExpiringVisitorsForCommunity(
         community.id,
