@@ -10,6 +10,34 @@ Mockups, both in this folder (open in a browser):
 Lines marked **(owner)** are decisions the product owner made in conversation.
 Lines marked **(call)** are the author's choices and can be overruled.
 
+## 0. The design direction
+
+**(owner)** asked for a specific design direction for the platform, so that
+this problem does not come back, and for no part of the app to sit outside it.
+
+**A calm record book where time is always visible.** The signed-in app is
+mostly quiet: sand, ink and hairlines. Four things are allowed to stand out
+(section 6.2), each with a rule for where it may appear. Six rules decide
+everything else:
+
+1. **Time is the product.** If a record has a deadline, show the time-left
+   chip. Never a bare date.
+2. **Quiet until it matters.** Colour is for the one main action, for status,
+   and for time. Nothing else.
+3. **One page, one shape.** Header, main column, context. Every page picks a
+   template. There are no exceptions.
+4. **Say something true first.** Every page opens with a figure or fact that is
+   useful before the first record exists.
+5. **Fewer boxes.** Type and hairlines carry the hierarchy. Never a card inside
+   a card.
+6. **Icons name, glyphs tell.** An icon says what kind of thing this is. A
+   glyph says what state it is in.
+
+The first page of the every-page mockup ("Design direction") shows these with
+live specimens, the icon registry, and a seven-question check for any new page.
+When built, this section becomes the opening of `DESIGN.md` and
+`.claude/rules/design.md`, replacing guidance it contradicts.
+
 ## 1. Intent
 
 The owner's complaint, in their words: pages "feel weak", Emergency Alerts and
@@ -49,9 +77,10 @@ Non-goals
 - Replacing the existing first-run "guided blueprint" empty states
   (`EmptyState` sizes `hero`/`section`/`compact`, `components/shared/setup-guide`).
   They stay and sit inside the new layout.
-- Redesigning bespoke surfaces: the dashboard, the website editor, the document
-  viewer, the calendar grid. They are exempted by name (section 9), and get their own design pass after
-  this one, dashboard first, because it is the first screen people see.
+- Changing what the bespoke surfaces *do*. **(owner)** No page is exempt from
+  the design: the dashboards, compliance centre, calendar, document editor,
+  reports, website overview, community picker, welcome and outcome pages are
+  all drawn in it (section 5.15). Their behaviour is unchanged.
 
 Anti-goals (a result that technically works but fails)
 
@@ -336,6 +365,32 @@ page for residents than for managers. Each audience's page is designed and
 migrated as its own page, chooses its own template, and may have no side
 panel. The guard checks the file, so both branches must use `PageLayout`.
 
+### 5.15 No exemptions: the canvas and focus templates
+
+**(owner)** "I don't want any sections to detract from the design." The twelve
+pages first set aside as bespoke are now in the system, through two more
+templates and eight section kinds. All twelve are drawn in the mockup.
+
+| Template | For | Shape |
+|---|---|---|
+| Canvas | Dashboards, the compliance centre, reports, the website overview, meetings | Header, optional tabs, a full-width key-figure band, then sections in two balanced columns. Full-width for calendars, charts and wide tables. Side panel optional. |
+| Focus | Community picker, welcome, payment and Stripe outcomes | One centred column, no side panel. An outcome page's headline is its title. |
+
+New section kinds, each one component in the kit: key-figure band, chart
+(bars or line, teal, last value labelled), month calendar, document editor
+surface, checklist (glyph, label, time-left chip, action), picker cards,
+outcome, and preview frame. A section on a canvas carries an icon beside its
+title because canvas sections are different kinds of thing.
+
+The document authoring editor is the detail template with the editor surface
+as its main column. The only pages outside a template are routes that redirect.
+
+What the mockup does not draw, and each page still needs designed when built:
+the compliance centre's Manager/Board switch and record detail panel; the
+other four report tabs; the website overview's Records, Versions and Settings
+tabs; the meetings Schedule and Minutes views and the meeting dialog; the
+dashboard's setup rail.
+
 ## 6. Visual language
 
 **(owner)** found the first refined look "still too bland" and asked for
@@ -367,14 +422,15 @@ Five practices recur, and each maps to a decision here:
 Apple's caution applies throughout: delight is not decoration. Every item
 below has to tell the user something.
 
-### 6.2 The three signatures
+### 6.2 The four signatures
 
-Everything else stays neutral so these stay recognisable.
+**(owner)** "I really like signature." Everything else stays neutral so these
+stay recognisable. The fourth, the icon tile, is defined in 6.7.
 
 1. **Display face.** Fraunces, the brand serif already used on the marketing
    site and in the admin console's page titles. Allowed in exactly three
-   places: the page title, the headline figure in "At a glance", and the title
-   of a first-run empty state. Nowhere else: not section titles, not cards, not
+   places: the page title, headline figures ("At a glance" and the key-figure
+   band on a canvas), and the headline of a first-run or outcome state. Nowhere else: not section titles, not cards, not
    tables. This also brings web and admin titles into line.
 2. **Time-left chip.** The product is about statutory deadlines, so time is
    the one thing only this app shows this way. One component everywhere a
@@ -440,6 +496,48 @@ checks for overflow, over-wide tables and duplicated controls.
 | "About" text described the interface or the plan | About says who can do what, nothing else |
 | Card footer link "Open" beside a status badge "Open" | Card action is "View" |
 
+### 6.7 Icons
+
+**(owner)** asked for an icon library used as a theme, and for research into
+how Uber uses icons.
+
+What Uber does (primary source: Uber Design, "When to evolve a design system";
+Uber's guideline sites did not load, so sizes, grid and label rules are not
+verified): icons are drawn from the typeface so type and icons read as one
+alphabet; one stroke weight; outline and fill are a defined pair; a selected
+state is never colour alone; icons are monochrome and follow the text colour;
+one library with one naming and sizing system, synced to code. The lesson is
+that the theme comes from rules, not from which library is used.
+
+Decisions:
+
+- **Stay on Lucide.** 234 files import it today. Switching library means a
+  name-mapping table and a re-review of every screen for a different outline
+  style. **(call)** Phosphor (MIT) is the fallback only if a needed glyph is
+  missing: Lucide has no elevator or hurricane icon.
+- **One wrapper.** Icons are imported only through a local `Icon` component. A
+  guard bans direct `lucide-react` imports and hand-set `size` or
+  `strokeWidth` (today the app mixes five sizes and four stroke widths).
+- **One weight, three sizes.** 1.6 stroke to sit with Geist. 16 in rows and
+  tables, 20 in controls and navigation, 24 in tiles and empty states.
+- **Monochrome.** Icons take the text colour.
+- **Icons name, glyphs tell.** An icon says what kind of thing something is. A
+  status glyph (6.2) says what state it is in. A row shows one or the other:
+  a kind icon when the list mixes kinds (notifications, audit trail, dashboard
+  feeds), a status glyph when every row is the same kind.
+- **The icon tile, the fourth signature.** A rounded-square tile on the muted
+  surface holding a soft-filled icon. Used only for wayfinding: the page
+  header, navigation, picker cards, empty states, and kind icons in mixed
+  rows. The selected tile turns solid ink with an inverse icon, so selection
+  never depends on colour.
+- **Labels by default.** Icon-only buttons are limited to close, search, more,
+  back and expand.
+- **One concept, one icon.** A registry maps each part of the app to one icon
+  (24 entries in the mockup's Design direction page). It is the only source;
+  navigation, headers and shortcuts read from it. Today `FileText`, `Users`,
+  `Paintbrush`, `ClipboardCheck` and `AlertTriangle` each stand for two or
+  three different nav items.
+
 **(call)** The signatures in 6.2 and the items in 6.3 are the author's
 proposal from the research, for the owner to judge in the mockup. Sizes are at
 a 16px root and are written on the rem scale in code. Fraunces must be added
@@ -450,7 +548,8 @@ font-loading cost on every signed-in page.
 
 A new guard, `pnpm guard:page-template`, added to `scripts/run-lint-guards.mjs`.
 
-1. Every `app/(authenticated)/**/page.tsx` must render `PageLayout` (directly,
+1. Every `app/(authenticated)/**/page.tsx` must render `PageLayout` in one of
+   the six templates (list, detail, form, settings, canvas, focus) (directly,
    or through a client component named in a top-of-file delegation comment, the
    same mechanism `guard:breadcrumbs` uses), or carry
    `// page-template:exempt — <reason>`.
@@ -476,9 +575,9 @@ Each phase is its own PR or small set of PRs with disjoint files.
 
 | Phase | Contents | Done when |
 |---|---|---|
-| 0 | Kit in `packages/ui` (including tabs, steps, card records and the section 6 visual rules), `PageLayout`, guard with seeded baseline, docs. No page changes. | Guard green; kit unit and axe tests pass |
+| 0 | Kit in `packages/ui` (including tabs, steps, card records, the canvas and focus kinds, the `Icon` wrapper and registry, and the section 6 visual rules), `PageLayout`, guard with seeded baseline, docs. No page changes. | Guard green; kit unit and axe tests pass |
 | 1 | Pilot: Emergency Alerts (list, detail, new), Packages (staff and resident), and one tabbed page (Visitors, two tabs) so tabs are proven before phase 3. `PageHeader` paints title and description app-wide; breadcrumb leaf rule. | Owner reviews the four pages in the running app and approves the look |
-| 2 | Settings moved onto the shared kit | Settings pages unchanged in behaviour; private kit deleted |
+| 2 | The community dashboard on the canvas template (it is the first screen people see), then Settings moved onto the shared kit | Settings pages unchanged in behaviour; private kit deleted |
 | 3+ | Remaining pages in batches by navigation group, list pages first | Baseline reaches only the named exemptions |
 
 Phase 1 is a real checkpoint. Nothing in phase 3 starts until the owner has
@@ -492,11 +591,11 @@ Painting titles app-wide in phase 1 touches unmigrated pages too. Each
 checked for a page that already shows its own
 visible heading text, so no page ends up with two.
 
-## 9. Exemptions named now
+## 9. Exemptions
 
-The dashboard, the website editor and overview, the document viewer, the
-calendar grid, `select-community`, `payments/success`, and redirect-only pages.
-Each carries the exemption comment with its reason.
+None. Redirect-only routes carry the redirect comment and draw nothing. The
+`// page-template:exempt` escape hatch exists for a future emergency and needs
+a reason; the baseline starts with zero uses of it.
 
 ## 10. Testing
 
