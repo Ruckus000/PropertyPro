@@ -90,6 +90,39 @@ describe('EmergencyDetailPage', () => {
     expect(screen.getByText('Shelter in place')).toBeVisible();
   });
 
+  it('non-admin: sees the severity word, the sent date and the status word, but no Delivery and no aside', () => {
+    useEmergencyBroadcastMock.mockReturnValue({ data: MESSAGE, isLoading: false, error: null });
+    const { container } = view(false);
+    const message = screen.getByRole('heading', { name: 'Message' }).closest('section')!;
+    expect(message).toHaveTextContent('Emergency');
+    expect(message).toHaveTextContent('Mar 1, 2026, 9:30 PM');
+    expect(screen.getAllByText('Sent').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: 'Delivery' })).toBeNull();
+    expect(container.querySelector('aside')).toBeNull();
+  });
+
+  it('an unsent alert reads "Pending" in the header and the banner, never "Draft"', () => {
+    useEmergencyBroadcastMock.mockReturnValue({
+      data: { ...REPORT, completedAt: null },
+      isLoading: false,
+      error: null,
+    });
+    view(true);
+    expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Draft')).toBeNull();
+    expect(screen.getByText('This broadcast is pending confirmation.')).toBeVisible();
+  });
+
+  it('a canceled alert reads "Canceled"', () => {
+    useEmergencyBroadcastMock.mockReturnValue({
+      data: { ...REPORT, completedAt: null, canceledAt: SENT_AT },
+      isLoading: false,
+      error: null,
+    });
+    view(true);
+    expect(screen.getAllByText('Canceled').length).toBeGreaterThan(0);
+  });
+
   it('resident message shape: message only', () => {
     useEmergencyBroadcastMock.mockReturnValue({ data: MESSAGE, isLoading: false, error: null });
     const { container } = view(false);
@@ -119,6 +152,12 @@ describe('EmergencyDetailPage', () => {
   it('has no axe violations', async () => {
     useEmergencyBroadcastMock.mockReturnValue({ data: REPORT, isLoading: false, error: null });
     const { container } = view(true);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations for a non-admin', async () => {
+    useEmergencyBroadcastMock.mockReturnValue({ data: MESSAGE, isLoading: false, error: null });
+    const { container } = view(false);
     expect(await axe(container)).toHaveNoViolations();
   });
 });

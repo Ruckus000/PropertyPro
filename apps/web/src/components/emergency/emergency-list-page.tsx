@@ -18,7 +18,7 @@ import {
 } from '@propertypro/ui/components/shared/section';
 import { PanelGlance, type AccessSentence } from '@propertypro/ui/components/shared/side-panel';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
-import { broadcastStatus } from '@/components/emergency/broadcast-status';
+import { broadcastStatus, capitalise, formatDate, formatDateTime } from '@/components/emergency/broadcast-status';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 
@@ -44,8 +44,6 @@ type Props =
     }
   | { view: 'recipient'; broadcasts: Row[]; communityId: number; timeZone: string };
 
-const capitalise = (s: string) => (s === '' ? s : s.charAt(0).toUpperCase() + s.slice(1));
-
 function EmergencyRow({
   b,
   communityId,
@@ -58,11 +56,7 @@ function EmergencyRow({
   showCount: boolean;
 }) {
   const status = broadcastStatus(b);
-  const when = new Intl.DateTimeFormat('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone,
-  }).format(new Date(b.initiatedAt));
+  const when = formatDateTime(b.initiatedAt, timeZone);
   return (
     <RecordRow
       lead={<StatusGlyph kind={status.kind} label={status.word} hideLabel />}
@@ -140,9 +134,7 @@ export function EmergencyListPage(props: Props) {
                   lines={[
                     [
                       'Sent',
-                      new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone }).format(
-                        new Date(lastSent.completedAt!),
-                      ),
+                      formatDate(lastSent.completedAt!, timeZone),
                     ],
                   ]}
                   source="emergencyBroadcasts.recipientCount"

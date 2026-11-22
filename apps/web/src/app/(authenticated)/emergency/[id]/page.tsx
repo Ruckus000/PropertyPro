@@ -1,4 +1,4 @@
-// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx
+// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx (with the design preview on, the title comes from components/emergency/emergency-detail-page.tsx)
 /**
  * Emergency Broadcast detail page.
  *
@@ -12,7 +12,6 @@
  * so no membership or permission is resolved here (middleware and the API
  * enforce access, as before).
  */
-import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
@@ -27,12 +26,7 @@ interface PageProps {
 }
 
 export default async function BroadcastDetailPage({ params, searchParams }: PageProps) {
-  let userId: string;
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
+  const userId = await requireAuthenticatedUserId();
 
   // ponytail: two views of this page while the pilot is judged. Trigger: the owner
   // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.

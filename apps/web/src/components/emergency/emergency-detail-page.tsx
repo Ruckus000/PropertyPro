@@ -13,7 +13,7 @@ import { Section, SectionError, SectionHeader } from '@propertypro/ui/components
 import type { AccessSentence } from '@propertypro/ui/components/shared/side-panel';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { PageHeader } from '@/components/shared/page-header';
-import { broadcastStatus } from '@/components/emergency/broadcast-status';
+import { broadcastStatus, capitalise, formatDateTime } from '@/components/emergency/broadcast-status';
 import { DeliveryReport } from '@/components/emergency/DeliveryReport';
 import { useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
 
@@ -24,8 +24,6 @@ interface Props {
   timeZone: string;
   about?: AccessSentence;
 }
-
-const capitalise = (s: string) => (s === '' ? s : s.charAt(0).toUpperCase() + s.slice(1));
 
 export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZone, about }: Props) {
   const { data: report, isLoading, error } = useEmergencyBroadcast(communityId, broadcastId);
@@ -53,8 +51,13 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
 
   // Only a manager's response carries the delivery report; a non-admin never sees it.
   const managerReport = isAdmin && 'recipients' in report ? report : null;
-  const status = managerReport ? broadcastStatus(managerReport) : null;
-  const sentAt = managerReport?.completedAt;
+  // Every viewer gets the status. A resident's response carries only completedAt
+  // (they are sent sent alerts only) and no canceledAt, so that is all it proves.
+  const status = broadcastStatus(
+    { completedAt: report.completedAt, canceledAt: 'canceledAt' in report ? report.canceledAt : null },
+    { unsentWord: 'Pending' },
+  );
+  const sentAt = report.completedAt;
 
   const banner = managerReport?.canceledAt ? (
     <p className="rounded-md border border-edge bg-surface-hover p-3 text-sm text-content-secondary">
@@ -75,7 +78,7 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
         <PageHeader
           title={report.title}
           icon={<Siren />}
-          status={status ? <StatusGlyph kind={status.kind} label={status.word} /> : undefined}
+          status={<StatusGlyph kind={status.kind} label={status.word} />}
         />
       }
       panel={
@@ -92,11 +95,7 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
                     <div className="flex justify-between gap-2">
                       <dt className="text-content-secondary">Sent</dt>
                       <dd className="text-content">
-                        {new Intl.DateTimeFormat('en-US', {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                          timeZone,
-                        }).format(new Date(sentAt))}
+                        {formatDateTime(sentAt, timeZone)}
                       </dd>
                     </div>
                   ) : null}
@@ -111,6 +110,11 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
         <Section>
           <SectionHeader title="Message" />
           <div className="flex flex-col gap-3 px-4 py-4">
+            <p className="text-xs text-content-secondary">
+              {[capitalise(report.severity), sentAt ? formatDateTime(sentAt, timeZone) : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
             <p className="whitespace-pre-wrap text-sm text-content">{report.body}</p>
             {managerReport?.smsBody ? (
               <div className="flex flex-col gap-1">

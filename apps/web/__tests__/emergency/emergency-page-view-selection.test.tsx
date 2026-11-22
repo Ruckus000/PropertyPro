@@ -6,7 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-const { membershipMock, previewMock, receivedMock, queryMock } = vi.hoisted(() => ({
+const { membershipMock, previewMock, receivedMock, queryMock, smsGlobalMock } = vi.hoisted(() => ({
+  smsGlobalMock: vi.fn(),
   membershipMock: vi.fn(),
   previewMock: vi.fn(),
   receivedMock: vi.fn(),
@@ -41,6 +42,16 @@ vi.mock('@/lib/services/emergency-broadcast-service', () => ({
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(() => ({ query: queryMock })),
   emergencyBroadcasts: {},
+  communities: {},
+}));
+vi.mock('@/lib/sms/dispatch-flag', () => ({ isSmsDispatchGloballyEnabled: smsGlobalMock }));
+vi.mock('@/components/emergency/emergency-new-page', () => ({
+  EmergencyNewPage: (props: unknown) => (
+    <div data-testid="pilot-new" data-props={JSON.stringify(props)} />
+  ),
+}));
+vi.mock('@/components/emergency/BroadcastComposer', () => ({
+  BroadcastComposer: () => <div data-testid="old-composer" />,
 }));
 vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/emergency/emergency-list-page', () => ({
@@ -63,6 +74,7 @@ vi.mock('@/app/(authenticated)/emergency/[id]/broadcast-detail-client', () => ({
 }));
 
 import EmergencyPage from '@/app/(authenticated)/emergency/page';
+import NewBroadcastPage from '@/app/(authenticated)/emergency/new/page';
 import BroadcastDetailPage from '@/app/(authenticated)/emergency/[id]/page';
 
 const NOW = new Date('2026-03-02T02:30:00.000Z');
@@ -196,5 +208,67 @@ describe('BroadcastDetailPage view selection', () => {
     await call();
     expect(screen.getByTestId('old-detail')).toBeInTheDocument();
     expect(membershipMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('NewBroadcastPage view selection', () => {
+  beforeEach(() => {
+    membershipMock.mockReset();
+    previewMock.mockReset();
+    smsGlobalMock.mockReset();
+    queryMock.mockReset();
+    queryMock.mockResolvedValue([{ id: 1, name: 'Sunset Condos' }]);
+  });
+
+  const call = async () =>
+    render(await NewBroadcastPage({ searchParams: Promise.resolve({ communityId: '1' }) }));
+
+  function writer(smsDispatchEnabled: boolean) {
+    return { ...member('manager'), smsDispatchEnabled };
+  }
+
+  it('gate on: smsEnabled is false when the global flag is off', async () => {
+    previewMock.mockResolvedValue(true);
+    smsGlobalMock.mockReturnValue(false);
+    membershipMock.mockResolvedValue(writer(true));
+    await call();
+    expect(propsOf('pilot-new')['smsEnabled']).toBe(false);
+  });
+
+  it('gate on: smsEnabled is false when the community flag is off', async () => {
+    previewMock.mockResolvedValue(true);
+    smsGlobalMock.mockReturnValue(true);
+    membershipMock.mockResolvedValue(writer(false));
+    await call();
+    expect(propsOf('pilot-new')['smsEnabled']).toBe(false);
+  });
+
+  it('gate on: smsEnabled is true only when both flags are on', async () => {
+    previewMock.mockResolvedValue(true);
+    smsGlobalMock.mockReturnValue(true);
+    membershipMock.mockResolvedValue(writer(true));
+    await call();
+    expect(propsOf('pilot-new')['smsEnabled']).toBe(true);
+    expect(propsOf('pilot-new')['communityId']).toBe(1);
+  });
+
+  it('refuses a member without write permission before anything renders', async () => {
+    previewMock.mockResolvedValue(true);
+    smsGlobalMock.mockReturnValue(true);
+    membershipMock.mockResolvedValue({ ...member('owner'), smsDispatchEnabled: true });
+    await expect(
+      NewBroadcastPage({ searchParams: Promise.resolve({ communityId: '1' }) }),
+    ).rejects.toThrow(/not permitted/i);
+    expect(queryMock).not.toHaveBeenCalled();
+    expect(previewMock).not.toHaveBeenCalled();
+  });
+
+  it('gate off: renders the old composer directly', async () => {
+    previewMock.mockResolvedValue(false);
+    smsGlobalMock.mockReturnValue(true);
+    membershipMock.mockResolvedValue(writer(true));
+    await call();
+    expect(screen.getByTestId('old-composer')).toBeInTheDocument();
+    expect(screen.queryByTestId('pilot-new')).toBeNull();
   });
 });
