@@ -1079,6 +1079,36 @@ change often, so shell work ships as one short series, rebased daily.
 - **The name "About".** Kept; its content is now generated.
 - **Login photo.** Still the owner's call (5.21).
 
-### 13.4 Owner decisions
+### 13.4 Owner decisions (2026-11-21)
 
-Pending. See the message that accompanies this commit.
+1. **(owner) Fixed action colour.** The signed-in app always uses coral for
+   actions. A community's brand shows in its name, its logo and its public
+   website, not in buttons. In the build, `--interactive-primary` and
+   `--status-brand` stop reading `--theme-primary` inside the signed-in app;
+   the per-community theme keeps applying to the public site. Communities that
+   set a custom colour today will see their in-app buttons change to coral,
+   which is a visible change to announce.
+2. **(owner) Four kinds of date.** The chip takes a required basis:
+   `statute` (citation chip mandatory) and `governing-docs` may say "overdue"
+   and use the critical level; `contract` says "ends in" or "ended"; `event`
+   says "in 12 days" with no pips. Levels come from each feature's own module
+   (wind mitigation, reserves and lease alert windows keep their own bands),
+   never from the chip.
+3. **(owner) "Next deadline" is for managers and board only.** Shown only to
+   people who can open Compliance, for `statute` deadlines only, naming the
+   item. With nothing due it reads "Nothing due this week". Tenants,
+   apartment communities, associations below the statutory size, and
+   portfolio pages with no single community never see it. It is fed by one
+   cached query, not a query per navigation, and must agree with the dashboard
+   and the Compliance page because all three read the same summary function.
+4. **(owner) The navigation as drawn replaces the 2026-11-11 decisions.**
+   Phones get a menu button and a drawer in place of the tab row (#1458), the
+   sidebar collapses to an icon rail automatically on narrower windows, and
+   portfolio pages get the rail (#1460). Constraints from the study that still
+   bind the build: the collapse is CSS-only below the breakpoint and the
+   user's saved choice applies above it, so nothing flickers on load; the rail
+   keeps every name as a tooltip and accessible name; the breakpoint is set at
+   the app's real text size in the pilot, not at the mockup's 1300px; the
+   second desktop shell behind `NEXT_PUBLIC_TOP_NAV_ENABLED` is deleted first
+   so only one shell exists; and the portfolio rail needs its own item list,
+   since those pages have no single community in scope.
