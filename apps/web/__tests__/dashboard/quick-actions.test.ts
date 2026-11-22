@@ -36,7 +36,7 @@ describe('buildQuickActions', () => {
       ['Update my contact info', '/settings/account?communityId=7'],
     ]);
     expect(actions({ audience: 'resident' }).map((a) => [a.label, a.href])).toEqual([
-      ['Ask for a repair', '/maintenance/submit?communityId=7'],
+      ['Ask for a repair', '/communities/7/operations?tab=requests&create=request'],
       ['Find a document', '/documents?communityId=7'],
       ['Report a problem', '/violations/report?communityId=7'],
       ['Update my contact info', '/settings/account?communityId=7'],
