@@ -5,8 +5,9 @@
  *
  * Inside a `PageLayout` (the redesigned pages) it paints: a place mark for
  * `icon`, the `<h1>` title in the display face, `status` after it, the
- * `description` underneath, then the toolbar of `children`, `actions` and Help
- * (the right-edge group), over a bottom rule.
+ * `description` underneath, over a bottom rule. `actions` and Help sit at the
+ * right of the title row (wrapping under the title below `sm`); left-slot
+ * `children` get their own row below the description.
  *
  * Everywhere else (pages not yet moved) it keeps the 2026-09-02 prototype
  * decision: the `<h1>` is `sr-only`, `description` is not rendered, and what
@@ -74,19 +75,27 @@ export function PageHeader({
       {...props}
     >
       {inLayout ? (
-        <div className="flex min-w-0 items-center gap-3">
-          {icon && (
-            <span
-              aria-hidden="true"
-              className="flex size-9 shrink-0 items-center justify-center rounded-md bg-surface-inverse text-content-inverse [&>svg]:size-5 [&>svg]:stroke-[1.6]"
-            >
-              {icon}
-            </span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+          <div className="flex min-w-0 items-center gap-3">
+            {icon && (
+              <span
+                aria-hidden="true"
+                className="flex size-9 shrink-0 items-center justify-center rounded-md bg-surface-inverse text-content-inverse [&>svg]:size-5 [&>svg]:stroke-[1.6]"
+              >
+                {icon}
+              </span>
+            )}
+            <h1 className="min-w-0 font-display text-3xl font-medium tracking-tight text-content">
+              {title}
+            </h1>
+            {status}
+          </div>
+          {showRight && (
+            <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+              {actions}
+              {showHelp && <PageHeaderHelpButton />}
+            </div>
           )}
-          <h1 className="min-w-0 font-display text-3xl font-medium tracking-tight text-content">
-            {title}
-          </h1>
-          {status}
         </div>
       ) : (
         <h1 className="sr-only">{title}</h1>
@@ -95,7 +104,10 @@ export function PageHeader({
         <p className="text-sm text-content-secondary">{description}</p>
       )}
 
-      {showToolbar && (
+      {inLayout && children && (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>
+      )}
+      {!inLayout && showToolbar && (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           {children && (
             <div className="flex min-w-0 flex-wrap items-center gap-2">{children}</div>

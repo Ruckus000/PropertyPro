@@ -73,7 +73,10 @@ const CQ_USER = /(?<![\w-])cq-(sm|md|lg|xl):/;
 const CQ_TOKEN = /(^|[\s"'`])cq(?=[\s"'`]|$)/;
 
 /** Files using `cq-*:` without their own `.cq` element, each with the reason. */
-const NOT_ROOTS: Record<string, string> = {};
+const NOT_ROOTS: Record<string, string> = {
+  'packages/ui/src/components/shared/side-panel.tsx':
+    'PanelRegions is only ever rendered by PageLayout (page-layout.tsx), whose root element carries `cq`',
+};
 
 describe('cq-* variants have a .cq container ancestor', () => {
   const roots = [WEB_SRC, ADMIN_SRC, UI_SRC];

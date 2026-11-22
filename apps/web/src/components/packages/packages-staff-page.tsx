@@ -192,7 +192,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
         }
         panel={{
           template: 'list',
-          glance: loaded ? (
+          glance: loaded && !isEmpty ? (
             <PanelGlance
               figure={String(awaiting)}
               unit="awaiting pickup"
@@ -211,6 +211,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
                   tabs={tabs}
                   active={filter}
                   onChange={(v) => setFilter(v as Filter)}
+                  tone="ink"
                 />
               }
             />

@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/visitors/visitors-staff-page.tsx
 /**
  * Visitor Logging Page — Wave 4 Apartment Features
  *

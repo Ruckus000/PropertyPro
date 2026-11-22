@@ -66,6 +66,16 @@ describe('PackagesStaffPage', () => {
     expect(screen.getByText('Showing 3')).toBeInTheDocument();
   });
 
+  it('marks the active filter in ink, never in the interactive colour', () => {
+    mount();
+    const active = screen
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true');
+    expect(active).toHaveLength(1);
+    expect(active[0]!.className).not.toContain('interactive');
+    expect(active[0]!.className).toContain('bg-surface-inverse');
+  });
+
   it('keeps the figure and the table in agreement', () => {
     usePackagesMock.mockReturnValue(
       result({ data: [1, 2, 3, 4].map((i) => pkg(i, 'received')) }),
@@ -99,8 +109,9 @@ describe('PackagesStaffPage', () => {
     const { container } = mount();
     expect(screen.getByRole('heading', { name: 'No packages logged yet' })).toBeVisible();
     expect(screen.getByText('Example of a logged package')).toBeVisible();
-    const glance = container.querySelector('[data-source="usePackages"]') as HTMLElement;
-    expect(within(glance).getAllByText('0')[0]).toHaveClass('font-display');
+    expect(screen.queryByRole('heading', { name: 'At a glance' })).toBeNull();
+    expect(container.querySelector('[data-source="usePackages"]')).toBeNull();
+    expect(screen.getByText(ABOUT)).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'Log a package' })).toHaveLength(1);
   });
 

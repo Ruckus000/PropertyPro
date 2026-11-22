@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/emergency/emergency-list-page.tsx
 /**
  * Emergency Broadcasts list page.
  *

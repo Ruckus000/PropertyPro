@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/emergency/emergency-new-page.tsx
 /**
  * New Emergency Broadcast composer page.
  *

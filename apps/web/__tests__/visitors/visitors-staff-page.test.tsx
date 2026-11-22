@@ -117,6 +117,31 @@ describe('VisitorsStaffPage', () => {
     expect(selected[0]!.className).toContain('border-content');
   });
 
+  it('marks the active filter in ink, never in the interactive colour', () => {
+    mount();
+    const active = screen
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true');
+    expect(active).toHaveLength(1);
+    expect(active[0]!.className).not.toContain('interactive');
+    expect(active[0]!.className).toContain('bg-surface-inverse');
+  });
+
+  it('draws the tabs as a plain left-aligned row, not a centred pill bar', () => {
+    mount();
+    const list = screen.getByRole('tablist');
+    expect(list).toHaveClass('justify-start', 'bg-transparent', 'border-b');
+    expect(list.className).not.toContain('bg-surface-muted');
+    expect(list.className).not.toContain('justify-center');
+    expect(list.className).not.toContain('rounded-lg');
+    const selected = screen.getByRole('tab', { name: 'Visitors' });
+    expect(selected).toHaveAttribute('aria-selected', 'true');
+    expect(selected.className).not.toContain('interactive');
+    expect(selected.className).not.toContain('bg-surface-card');
+    expect(selected.className.split(/\s+/)).not.toContain('data-[state=active]:shadow');
+    expect(selected).toHaveClass('min-h-11');
+  });
+
   it('starts on the denied list for ?tab=denied and shows its own add action', () => {
     searchParamsRef.current = new URLSearchParams('communityId=1&tab=denied');
     mount();

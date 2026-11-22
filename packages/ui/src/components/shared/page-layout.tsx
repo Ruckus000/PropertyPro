@@ -88,7 +88,7 @@ export function PageLayout({
                   : "cq-lg:col-start-2 cq-lg:row-start-1",
               )}
             >
-              <PanelRegions regions={regions.lead} label="Summary" />
+              <PanelRegions regions={regions.lead} label="Summary" table={table} />
             </div>
           ) : null}
           <div
@@ -114,7 +114,7 @@ export function PageLayout({
                     : "cq-lg:col-start-2 cq-lg:row-start-1",
               )}
             >
-              <PanelRegions regions={regions.trail} label="More about this page" />
+              <PanelRegions regions={regions.trail} label="More about this page" table={table} />
             </div>
           ) : null}
         </div>

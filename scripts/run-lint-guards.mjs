@@ -46,6 +46,7 @@ const GUARDS = [
   'guard:design-tokens',
   'guard:class-resolution',
   'guard:page-padding',
+  'guard:page-template',
   'guard:responsive-geometry',
   'guard:page-state-copy',
   'guard:audit-log-trigger-overrides',
@@ -64,7 +65,7 @@ const GUARDS = [
 ];
 
 // Cap concurrency so the fleet of cold tsx processes (one per guard, a set
-// that grows — 35 as of guard:console-error-redaction) doesn't thrash a small
+// that grows — 36 as of guard:page-template) doesn't thrash a small
 // CI runner.
 const CONCURRENCY = Math.max(2, Math.min(8, (cpus().length || 4)));
 

@@ -32,6 +32,14 @@ describe('SidePanel', () => {
     expect(container.firstChild).toHaveAttribute('data-source', 'usePackages');
     expect(screen.getByText('7')).toBeVisible();
   });
+  it('puts every line value in one grid column', () => {
+    const { container } = render(
+      <PanelGlance figure="7" unit="x" source="s" lines={[['Picked up', '3'], ['Overdue by a long label', '1']]} />,
+    );
+    const dl = container.querySelector('dl')!;
+    expect(dl).toHaveClass('grid', 'grid-cols-[auto_1fr]');
+    expect(Array.from(dl.children).map((c) => c.tagName)).toEqual(['DT', 'DD', 'DT', 'DD']);
+  });
   it('gives attention an icon and a leading word, or a quiet none', () => {
     const { rerender, container } = render(<PanelAttention lead="Deadline" title="2 records are due this week" />);
     expect(screen.getByText('Deadline:')).toBeVisible();

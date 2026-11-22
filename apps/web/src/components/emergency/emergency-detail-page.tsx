@@ -86,18 +86,14 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
           ? {
               template: 'detail',
               details: (
-                <dl className="flex flex-col gap-1 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-content-secondary">Severity</dt>
-                    <dd className="text-content">{capitalise(managerReport.severity)}</dd>
-                  </div>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+                  <dt className="text-content-secondary">Severity</dt>
+                  <dd className="text-content">{capitalise(managerReport.severity)}</dd>
                   {sentAt ? (
-                    <div className="flex justify-between gap-2">
+                    <>
                       <dt className="text-content-secondary">Sent</dt>
-                      <dd className="text-content">
-                        {formatDateTime(sentAt, timeZone)}
-                      </dd>
-                    </div>
+                      <dd className="text-content">{formatDateTime(sentAt, timeZone)}</dd>
+                    </>
                   ) : null}
                 </dl>
               ),
