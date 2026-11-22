@@ -8,6 +8,7 @@ import {
   expectNoBleed,
   expectPaintedTitle,
   open,
+  recordSummaryPlacement,
   rowOrEmpty,
   shoot,
   startPilot,
@@ -74,19 +75,13 @@ test.describe('design direction pilot', () => {
           .map((a) => a.getAttribute('href') ?? '')
           .find((h) => /^\/emergency\/\d+/.test(h)) ?? null,
       );
-    if (!href) {
-      testInfo.annotations.push({
-        type: 'emergency-detail',
-        description: 'skipped: the seed has no alert to open (a test must not send one)',
-      });
-      test.skip(true, 'no emergency alert in the seed');
-      return;
-    }
+    // The seed always has this alert (`open` just waited for it); a seed without it must fail.
+    expect(href, 'the seeded emergency alert has a detail link').toBeTruthy();
     await checkPage(page, testInfo, {
       label: 'emergency detail',
       shot: 'emergency-detail',
       role: 'cam',
-      url: href,
+      url: href!,
       ready: (p) => p.getByText('Delivery', { exact: true }),
     });
   });
@@ -167,17 +162,28 @@ test.describe('design direction pilot', () => {
       // The full string is in the page, inside main (truncation may only be visual).
       await expect(page.locator('main').getByText(longName, { exact: true }).first()).toBeVisible();
       await expectNoBleed(page, where);
+      await recordSummaryPlacement(page, testInfo, 'packages with rows', width);
       await shoot(page, testInfo, `packages-longname-cam-${width}`);
     }
   });
 
+  // The owner may or may not hold a package here (the long-name block logs one
+  // against the first unit, which the seed gives to the owner), so every
+  // assertion holds in both states.
   test('a resident sees the owner views with no manager figures', async ({ page, context, baseURL }, testInfo) => {
     const communityId = await startPilot(page, context, baseURL, 'owner');
 
     await open(page, 1440, `/dashboard/packages?communityId=${communityId}`, (p) =>
-      rowOrEmpty(p, 'No packages waiting for you'),
+      // A resident row (RecordList, not a table) or the first-run heading.
+      p
+        .locator('main ul li')
+        .filter({ hasText: 'Ready to collect' })
+        .or(p.getByRole('heading', { name: 'No packages waiting for you' }))
+        .first(),
     );
     await expectPaintedTitle(page, 'packages (resident)');
+    await expect(page.locator('main aside')).toHaveCount(0);
+    await expect(page.locator('main').getByText(/awaiting pickup|picked up|at a glance/i)).toHaveCount(0);
     await expectNoBleed(page, 'packages (resident) @ 1440px');
     await shoot(page, testInfo, 'packages-owner-1440');
 
@@ -185,6 +191,7 @@ test.describe('design direction pilot', () => {
       p.getByText(/No alerts yet|Hurricane Preparation Advisory/).first(),
     );
     await expectPaintedTitle(page, 'emergency (recipient)');
+    await expect(page.locator('main aside')).toHaveCount(0);
     await expect(page.locator('main').getByText(/recipients/i)).toHaveCount(0);
     await expect(page.getByRole('link', { name: /send alert/i })).toHaveCount(0);
     await expectNoBleed(page, 'emergency (recipient) @ 1440px');

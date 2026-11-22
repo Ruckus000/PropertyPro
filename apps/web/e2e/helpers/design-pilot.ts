@@ -30,9 +30,19 @@ export async function startPilot(
   return login.communityId;
 }
 
-/** A body row, or the empty message a table draws when it has none. */
+/**
+ * A real body row, or the empty message a table draws when it has none.
+ *
+ * Loading skeletons are `tbody tr` too (DataTable draws `Skeleton` cells, which
+ * carry `animate-pulse`), so rows containing one do not count: otherwise a page
+ * still fetching would satisfy "the data rendered".
+ */
 export const rowOrEmpty = (page: Page, emptyText: string | RegExp): Locator =>
-  page.locator('main tbody tr').or(page.getByText(emptyText)).first();
+  page
+    .locator('main tbody tr')
+    .filter({ hasNot: page.locator('.animate-pulse') })
+    .or(page.getByText(emptyText))
+    .first();
 
 /**
  * Navigate, then wait until the client tree has painted what the page loads.
