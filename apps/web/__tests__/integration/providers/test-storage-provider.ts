@@ -1,5 +1,5 @@
 export interface CapturedStorageOp {
-  operation: 'upload' | 'download' | 'delete';
+  operation: 'upload' | 'download' | 'delete' | 'list';
   bucket: string;
   path: string;
   options?: Record<string, unknown>;
@@ -13,6 +13,7 @@ export function getCapturedStorageOps(): readonly CapturedStorageOp[] {
 
 export function clearCapturedStorageOps(): void {
   storageSink.length = 0;
+  listHooks.length = 0;
 }
 
 export async function createPresignedUploadUrlDouble(
@@ -59,4 +60,30 @@ export async function deleteStorageObjectDouble(
     bucket,
     path,
   });
+}
+
+// ---------------------------------------------------------------------------
+// list: an empty bucket, unless a test hooked a list under a prefix. The
+// community purge's sweeps list before they remove, so a hook here runs
+// between the purge's claim and its first deletion, or between two sweeps.
+// ---------------------------------------------------------------------------
+
+const listHooks: Array<{ bucket: string; prefix: string; run: () => Promise<void> }> = [];
+
+/** Run `run` (once) when a `list` of `bucket` under `prefix` is next called. */
+export function beforeNextStorageList(bucket: string, prefix: string, run: () => Promise<void>): void {
+  listHooks.push({ bucket, prefix, run });
+}
+
+export async function listStorageObjectsDouble(
+  bucket: string,
+  prefix: string,
+): Promise<{ data: { name: string }[]; error: null }> {
+  storageSink.push({ operation: 'list', bucket, path: prefix });
+  const index = listHooks.findIndex((h) => h.bucket === bucket && prefix.startsWith(h.prefix));
+  if (index !== -1) {
+    const [hook] = listHooks.splice(index, 1);
+    await hook!.run();
+  }
+  return { data: [], error: null };
 }

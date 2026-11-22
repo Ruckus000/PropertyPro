@@ -63,7 +63,7 @@ const h = vi.hoisted(() => {
     markOtpSentMock: vi.fn(),
     markOtpFailedMock: vi.fn(),
     markPhoneVerifiedMock: vi.fn(),
-    findCoolingDeletionRequestForUserMock: vi.fn(),
+    findCoolingDeletionRequestIdsForUserMock: vi.fn(),
     cancelUserDeletionMock: vi.fn(),
   };
 });
@@ -94,7 +94,7 @@ vi.mock('@/lib/api/reauth-guard', () => ({ requireFreshReauth: vi.fn() }));
 vi.mock('@/lib/services/account-lifecycle-service', () => ({
   getLatestUserDeletionRequest: vi.fn(),
   requestUserDeletion: vi.fn(),
-  findCoolingDeletionRequestForUser: h.findCoolingDeletionRequestForUserMock,
+  findCoolingDeletionRequestIdsForUser: h.findCoolingDeletionRequestIdsForUserMock,
   cancelUserDeletion: h.cancelUserDeletionMock,
   RootOffboardingAckRequiredError: class extends Error {},
 }));
@@ -179,7 +179,7 @@ beforeEach(() => {
   h.markOtpSentMock.mockImplementation(async () => { h.callOrder.push('markOtpSent'); });
   h.markOtpFailedMock.mockImplementation(async () => { h.callOrder.push('markOtpFailed'); });
   h.markPhoneVerifiedMock.mockImplementation(async () => { h.callOrder.push('markPhoneVerified'); });
-  h.findCoolingDeletionRequestForUserMock.mockResolvedValue(91);
+  h.findCoolingDeletionRequestIdsForUserMock.mockResolvedValue([91]);
   h.cancelUserDeletionMock.mockImplementation(async () => { h.callOrder.push('cancelDeletion'); return { outcome: 'cancelled', requests: [{ id: 91 }] }; });
 
   process.env.TWILIO_ACCOUNT_SID = 'AC_test';
@@ -669,7 +669,7 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
       changedFields: ['status', 'cancelledAt', 'cancelledBy'],
       before: { status: 'cooling' },
       after: { status: 'cancelled' },
-      target: { deletionRequestId: 91 },
+      target: { deletionRequestId: 91, deletionRequestIds: [91] },
     });
     expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(TARGET, TARGET, 91);
   });
@@ -693,8 +693,18 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
     expect(h.cancelUserDeletionMock).not.toHaveBeenCalled();
   });
 
+  it('names EVERY cooling request it is about to cancel, not only the first', async () => {
+    h.findCoolingDeletionRequestIdsForUserMock.mockResolvedValueOnce([91, 92]);
+    const res = await accountDELETE(request('/api/v1/account/delete', 'DELETE', undefined, true));
+
+    expect(res.status).toBe(200);
+    const [row] = auditRows();
+    expect(row!.metadata).toMatchObject({ target: { deletionRequestId: 91, deletionRequestIds: [91, 92] } });
+    expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(TARGET, TARGET, 91);
+  });
+
   it('no pending request → 404 and no support row (nothing was going to change)', async () => {
-    h.findCoolingDeletionRequestForUserMock.mockResolvedValueOnce(null);
+    h.findCoolingDeletionRequestIdsForUserMock.mockResolvedValueOnce([]);
     const res = await accountDELETE(request('/api/v1/account/delete', 'DELETE', undefined, true));
 
     expect(res.status).toBe(404);

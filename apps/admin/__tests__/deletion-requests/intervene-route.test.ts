@@ -1,52 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/** Every PostgREST call the route makes, answered by `respond`. */
-interface Op {
-  table: string;
-  payload?: Record<string, unknown>;
-  filters: Array<[string, unknown]>;
-  terminal: 'maybeSingle' | 'many';
-}
-type Result = { data: unknown; error: unknown };
+/**
+ * The intervene route's mapping from `interveneDeletionRequestOp` outcomes to
+ * responses and audit rows. The transaction itself (every cooling request of
+ * the same target cancelled; nothing once the target is deleted) is tested
+ * against a real database in
+ * apps/web/__tests__/integration/deletion-recovery-lifecycle.integration.test.ts.
+ */
 
-const ops: Op[] = [];
-let respond: (op: Op) => Result;
 const requirePlatformAdmin = vi.fn();
-
-function from(table: string) {
-  return {
-    update: (payload: Record<string, unknown>) => {
-      const op: Op = { table, payload, filters: [], terminal: 'many' };
-      const run = () => {
-        ops.push(op);
-        return Promise.resolve(respond(op));
-      };
-      const chain = {
-        eq: (col: string, val: unknown) => (op.filters.push([col, val]), chain),
-        select: () => chain,
-        maybeSingle: () => {
-          op.terminal = 'maybeSingle';
-          return run();
-        },
-        single: () => {
-          // `.single()` over zero rows is a PostgREST error, not a null row.
-          ops.push(op);
-          const r = respond(op);
-          return Promise.resolve(r.data === null ? { data: null, error: { message: 'JSON object requested, multiple (or no) rows returned' } } : r);
-        },
-        then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => run().then(resolve, reject),
-      };
-      return chain;
-    },
-  };
-}
+const interveneDeletionRequestOp = vi.fn();
 
 vi.mock('@/lib/auth/platform-admin', () => ({
   requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
 }));
 
-vi.mock('@propertypro/db/supabase/admin', () => ({
-  createAdminTypedClient: () => ({ from: (table: string) => from(table) }),
+vi.mock('@propertypro/db/unsafe', () => ({
+  interveneDeletionRequestOp: (...args: unknown[]) => interveneDeletionRequestOp(...args),
 }));
 
 const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
@@ -55,32 +25,73 @@ vi.mock('@/lib/audit/log-admin-action', () => ({
   AdminAuditLogError: class AdminAuditLogError extends Error {},
 }));
 
-async function callIntervene(id: string) {
+async function callIntervene(id: string, body?: unknown) {
   const mod = await import('@/app/api/admin/deletion-requests/[id]/intervene/route');
-  return mod.POST(new Request(`http://localhost/${id}`, { method: 'POST' }) as never, {
-    params: Promise.resolve({ id }),
-  });
+  return mod.POST(
+    new Request(`http://localhost/${id}`, {
+      method: 'POST',
+      ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
+    }) as never,
+    { params: Promise.resolve({ id }) },
+  );
 }
 
-const isById = (op: Op) => op.filters.some(([c]) => c === 'id');
-const isByUser = (op: Op) => op.filters.some(([c]) => c === 'user_id');
-const USER_ROW = { id: 42, status: 'cancelled', request_type: 'user', user_id: 'user-uuid', community_id: null };
+const USER_ROW = { id: 42, status: 'cancelled', requestType: 'user', userId: 'user-uuid', communityId: null };
 
 describe('POST /api/admin/deletion-requests/[id]/intervene', () => {
   beforeEach(() => {
-    ops.length = 0;
-    requirePlatformAdmin.mockReset();
+    vi.clearAllMocks();
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1', email: 'ops@example.com' });
-    respond = (op) => (isById(op) ? { data: USER_ROW, error: null } : { data: [], error: null });
+    interveneDeletionRequestOp.mockResolvedValue({ outcome: 'cancelled', request: USER_ROW, cancelledRequestIds: [42, 43] });
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  // `.single()` over zero rows returned a PostgREST error, which became a 500.
-  it('returns 404, not 500, when the request is not found or no longer cooling', async () => {
-    respond = () => ({ data: null, error: null });
+  it('rejects a non-numeric id before touching anything', async () => {
+    expect((await callIntervene('abc')).status).toBe(400);
+    expect(interveneDeletionRequestOp).not.toHaveBeenCalled();
+  });
+
+  it('cancels as the platform admin with a default note, and audits every id it cancelled', async () => {
+    const response = await callIntervene('42');
+
+    expect(response.status).toBe(200);
+    expect(interveneDeletionRequestOp).toHaveBeenCalledWith(42, {
+      cancelledBy: 'admin-1',
+      notes: 'Intervened by platform admin ops@example.com',
+    });
+    expect(logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'deletion_request_intervened',
+        resourceId: 42,
+        communityId: null,
+        newValues: { status: 'cancelled', intervention_notes: null, cancelled_request_ids: [42, 43] },
+      }),
+    );
+  });
+
+  it('passes the operator’s notes through', async () => {
+    await callIntervene('42', { notes: 'Owner called' });
+
+    expect(interveneDeletionRequestOp).toHaveBeenCalledWith(42, { cancelledBy: 'admin-1', notes: 'Owner called' });
+  });
+
+  it('audits a community request against its community', async () => {
+    interveneDeletionRequestOp.mockResolvedValue({
+      outcome: 'cancelled',
+      request: { ...USER_ROW, requestType: 'community', communityId: 99 },
+      cancelledRequestIds: [42],
+    });
+
+    await callIntervene('42');
+
+    expect(logAdminAction).toHaveBeenCalledWith(expect.objectContaining({ communityId: 99 }));
+  });
+
+  it.each([['not_found'], ['not_cooling']])('returns 404, not 500, on %s, and audits nothing', async (outcome) => {
+    interveneDeletionRequestOp.mockResolvedValue({ outcome, request: USER_ROW });
 
     const response = await callIntervene('42');
 
@@ -88,41 +99,17 @@ describe('POST /api/admin/deletion-requests/[id]/intervene', () => {
     expect(logAdminAction).not.toHaveBeenCalled();
   });
 
-  // A duplicate cooling request would otherwise delete the account later.
-  it("cancels every other cooling request of the user, and audits all the ids", async () => {
-    respond = (op) => (isById(op) ? { data: USER_ROW, error: null } : { data: [{ id: 43 }], error: null });
+  // The account is already deleted through another request: cancelling this
+  // one would say the account stays open while it stays deleted and banned.
+  it('returns 409 TARGET_DELETED when the account is already deleted, and audits nothing', async () => {
+    interveneDeletionRequestOp.mockResolvedValue({ outcome: 'target_deleted', request: { ...USER_ROW, status: 'cooling' } });
 
     const response = await callIntervene('42');
 
-    expect(response.status).toBe(200);
-    const others = ops.find(isByUser)!;
-    expect(others.payload).toMatchObject({ status: 'cancelled', cancelled_by: 'admin-1' });
-    expect(others.filters).toEqual([
-      ['user_id', 'user-uuid'],
-      ['request_type', 'user'],
-      ['status', 'cooling'],
-    ]);
-    const audit = logAdminAction.mock.calls[0]![0] as { newValues: Record<string, unknown> };
-    expect(audit.newValues.cancelled_request_ids).toEqual([42, 43]);
-  });
-
-  it('touches no other request for a community deletion', async () => {
-    respond = () => ({ data: { ...USER_ROW, request_type: 'community', user_id: 'requester', community_id: 99 }, error: null });
-
-    const response = await callIntervene('42');
-
-    expect(response.status).toBe(200);
-    expect(ops.some(isByUser)).toBe(false);
-  });
-
-  it('reports a 500, after auditing what it did cancel, when the other requests cannot be cancelled', async () => {
-    respond = (op) => (isById(op) ? { data: USER_ROW, error: null } : { data: null, error: { message: 'boom' } });
-
-    const response = await callIntervene('42');
-
-    expect(response.status).toBe(500);
-    expect((await response.json()).error.code).toBe('OTHER_REQUESTS_CANCEL_FAILED');
-    const audit = logAdminAction.mock.calls[0]![0] as { newValues: Record<string, unknown> };
-    expect(audit.newValues).toMatchObject({ cancelled_request_ids: [42], other_requests_cancel_failed: true });
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.error.code).toBe('TARGET_DELETED');
+    expect(body.error.message).toMatch(/account is already deleted/);
+    expect(logAdminAction).not.toHaveBeenCalled();
   });
 });

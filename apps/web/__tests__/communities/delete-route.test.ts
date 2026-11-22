@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 import { ForbiddenError } from '../../src/lib/api/errors';
+import { ConflictError } from '../../src/lib/api/errors/ConflictError';
 
 // R3-03: community deletion is one of ADR-006's four root-exclusive powers.
 // These tests deliberately do NOT mock the role guard — it is a pure function,
@@ -192,5 +193,16 @@ describe('DELETE /api/v1/communities/delete', () => {
 
     expect(res.status).toBe(403);
     expect(interveneCommunityDeletionMock).not.toHaveBeenCalled();
+  });
+
+  // The cron soft-deleted the request between the lookup and the cancel: a
+  // 409 that says so, not a 500 and not "cancelled".
+  it('returns 409 when the community was deleted before the cancel landed', async () => {
+    interveneCommunityDeletionMock.mockRejectedValueOnce(new ConflictError('already deleted'));
+
+    const req = new NextRequest(DELETE_URL, { method: 'DELETE' });
+    const res = await DELETE(req);
+
+    expect(res.status).toBe(409);
   });
 });

@@ -14,7 +14,7 @@ import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireFreshReauth } from '@/lib/api/reauth-guard';
 import {
   cancelUserDeletion,
-  findCoolingDeletionRequestForUser,
+  findCoolingDeletionRequestIdsForUser,
   getLatestUserDeletionRequest,
   requestUserDeletion,
   RootOffboardingAckRequiredError,
@@ -100,8 +100,10 @@ export const DELETE = withErrorHandler(
   runRoute(accountDeleteDeleteContract, async ({ req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    const activeRequestId = await findCoolingDeletionRequestForUser(userId);
-    if (activeRequestId === null) {
+    // cancelUserDeletion cancels every one of these, not only the first.
+    const coolingRequestIds = await findCoolingDeletionRequestIdsForUser(userId);
+    const activeRequestId = coolingRequestIds[0];
+    if (activeRequestId === undefined) {
       throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
     }
 
@@ -116,7 +118,8 @@ export const DELETE = withErrorHandler(
       before: { status: 'cooling' },
       // cancelledAt/cancelledBy are stamped by cancelUserDeletion at write time.
       after: { status: 'cancelled' },
-      target: { deletionRequestId: activeRequestId },
+      // Every request the cancel below is about to stop, not only the first.
+      target: { deletionRequestId: activeRequestId, deletionRequestIds: coolingRequestIds },
     });
 
     const result = await cancelUserDeletion(userId, userId, activeRequestId);

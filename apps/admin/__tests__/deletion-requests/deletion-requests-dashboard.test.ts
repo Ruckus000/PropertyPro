@@ -26,6 +26,7 @@ describe('deletion requests dashboard', () => {
             requesterEmail: 'owner@example.com',
             requesterName: 'Olivia Owner',
             communityName: 'Seabreeze Condos',
+            targetDeleted: null,
           },
         ],
       }),
@@ -56,6 +57,7 @@ describe('deletion requests dashboard', () => {
             requesterEmail: 'owner@example.com',
             requesterName: 'Olivia Owner',
             communityName: 'Seabreeze Condos',
+            targetDeleted: null,
           },
         ],
       }),
@@ -86,6 +88,7 @@ describe('deletion requests dashboard', () => {
         requesterEmail: 'owner@example.com',
         requesterName: 'Olivia Owner',
         communityName: 'Seabreeze Condos',
+        targetDeleted: null,
       },
       {
         id: 2,
@@ -103,6 +106,7 @@ describe('deletion requests dashboard', () => {
         requesterEmail: 'other@example.com',
         requesterName: 'Other Person',
         communityName: null,
+        targetDeleted: null,
       },
     ];
 
@@ -116,6 +120,61 @@ describe('deletion requests dashboard', () => {
     expect(html).toContain('Seabreeze Condos');
     expect(html).not.toContain('Other Person');
     expect(html).toContain('1 request');
+  });
+
+  describe('in-between states the stored status hides', () => {
+    const base = {
+      id: 1,
+      requestType: 'user' as const,
+      userId: 'user-1',
+      communityId: null,
+      coolingEndsAt: '2026-03-30T00:00:00.000Z',
+      scheduledPurgeAt: '2026-09-30T00:00:00.000Z',
+      purgedAt: null,
+      cancelledAt: null,
+      recoveredAt: null,
+      interventionNotes: null,
+      createdAt: '2026-03-25T00:00:00.000Z',
+      requesterEmail: 'owner@example.com',
+      requesterName: 'Olivia Owner',
+      communityName: null,
+      targetDeleted: true,
+    };
+    const render = (overrides: Record<string, unknown>) =>
+      renderToStaticMarkup(
+        createElement(DeletionRequestsDashboard, { initialRequests: [{ ...base, ...overrides } as never] }),
+      );
+
+    it('offers Recover on a soft-deleted request whose account is deleted', () => {
+      const html = render({ status: 'soft_deleted' });
+      expect(html).toContain('Soft Deleted');
+      expect(html).toContain('Recover</button>');
+    });
+
+    // The route would refuse it (409 NOT_DELETED); the Dashboard does not offer it.
+    it('labels a soft-deleted request on an open account Stale, with no Recover', () => {
+      const html = render({ status: 'soft_deleted', targetDeleted: false });
+      expect(html).toContain('Stale (not deleted)');
+      expect(html).not.toContain('Recover</button>');
+    });
+
+    it('labels a claimed, unfinished purge Purging, not Purged', () => {
+      const html = render({ status: 'purged', purgedAt: null });
+      expect(html).toContain('Purging');
+      // (The status filter's own "Purged" option is in every render.)
+      expect(html).not.toContain('Purged</span>');
+      expect(render({ status: 'purged', purgedAt: '2026-10-01T00:00:00.000Z' })).toContain('Purged</span>');
+    });
+
+    it('labels an unfinished recovery and offers to resume it', () => {
+      const html = render({ status: 'recovered', recoveredAt: null });
+      expect(html).toContain('Recovery Unfinished');
+      expect(html).toContain('Resume Recovery</button>');
+      const done = render({ status: 'recovered', recoveredAt: '2026-10-01T00:00:00.000Z' });
+      expect(done).toContain('Recovered</span>');
+      expect(done).not.toContain('Recover</button>');
+      expect(done).not.toContain('Resume Recovery');
+    });
   });
 
   it('maps rows predictably', () => {
@@ -144,6 +203,7 @@ describe('deletion requests dashboard', () => {
         requesterEmail: 'owner@example.com',
         requesterName: 'Olivia Owner',
         communityName: 'Seabreeze Condos',
+        targetDeleted: null,
       }),
     ]);
   });

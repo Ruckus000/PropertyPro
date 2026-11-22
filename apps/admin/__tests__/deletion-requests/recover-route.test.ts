@@ -1,62 +1,56 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * Every PostgREST call the route makes is recorded as an `Op` and answered by
- * `respond`, so a test can say what each one returns and assert on what was
- * sent and in what order.
+ * The recover route's orchestration: which op it calls, in what order with the
+ * auth unban, what it answers and what it audits. The transactions themselves
+ * (the claim over every request of the target, the stale / purged / too-recent
+ * refusals, the finish, the release) are tested against a real database in
+ * apps/web/__tests__/integration/deletion-recovery-lifecycle.integration.test.ts.
  */
-interface Op {
-  table: string;
-  kind: 'update' | 'select';
-  payload?: Record<string, unknown>;
-  filters: Array<[string, string, unknown]>;
-  terminal: 'maybeSingle' | 'many';
-}
-type Result = { data: unknown; error: unknown };
-
-const ops: Op[] = [];
-let respond: (op: Op) => Result;
 
 const requirePlatformAdmin = vi.fn();
 const updateUserById = vi.fn();
 const sendEmail = vi.fn();
+const claimDeletionRecoveryOp = vi.fn();
+const finishUserRecoveryOp = vi.fn();
+const releaseUserRecoveryOp = vi.fn();
+const emailLookup = vi.fn();
 // The order the account-changing calls happened in.
 const writes: string[] = [];
-
-function from(table: string) {
-  const make = (kind: Op['kind'], payload?: Record<string, unknown>) => {
-    const op: Op = { table, kind, payload, filters: [], terminal: 'many' };
-    const run = () => {
-      ops.push(op);
-      if (kind === 'update') writes.push(`${table}:${String(payload?.status ?? 'deleted_at')}`);
-      return Promise.resolve(respond(op));
-    };
-    const chain = {
-      eq: (col: string, val: unknown) => (op.filters.push(['eq', col, val]), chain),
-      in: (col: string, val: unknown) => (op.filters.push(['in', col, val]), chain),
-      not: (col: string, operator: string, val: unknown) => (op.filters.push(['not', col, `${operator} ${String(val)}`]), chain),
-      select: () => chain,
-      maybeSingle: () => {
-        op.terminal = 'maybeSingle';
-        return run();
-      },
-      then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => run().then(resolve, reject),
-    };
-    return chain;
-  };
-  return {
-    update: (payload: Record<string, unknown>) => make('update', payload),
-    select: () => make('select'),
-  };
-}
 
 vi.mock('@/lib/auth/platform-admin', () => ({
   requirePlatformAdmin: (...args: unknown[]) => requirePlatformAdmin(...args),
 }));
 
+vi.mock('@propertypro/db/unsafe', () => ({
+  claimDeletionRecoveryOp: (...args: unknown[]) => {
+    writes.push('claim');
+    return claimDeletionRecoveryOp(...args);
+  },
+  finishUserRecoveryOp: (...args: unknown[]) => {
+    writes.push('finish');
+    return finishUserRecoveryOp(...args);
+  },
+  releaseUserRecoveryOp: (...args: unknown[]) => {
+    writes.push('release');
+    return releaseUserRecoveryOp(...args);
+  },
+}));
+
 vi.mock('@propertypro/db/supabase/admin', () => ({
   createAdminTypedClient: () => ({
-    from: (table: string) => from(table),
+    from: (table: string) => {
+      if (table !== 'users') throw new Error(`unexpected table ${table}`);
+      const chain = {
+        select: () => chain,
+        eq: (col: string, val: unknown) => {
+          emailLookup(col, val);
+          return chain;
+        },
+        maybeSingle: () => Promise.resolve(emailResult),
+      };
+      return chain;
+    },
     auth: {
       admin: {
         updateUserById: (...args: unknown[]) => {
@@ -68,10 +62,11 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
   }),
 }));
 
-// Audit writes go through logAdminAction, which uses its OWN supabase client
-// (createAdminClient) rather than the one these tests stub. Mock the helper so
-// the route tests stay focused, and so the call itself can be asserted — the
-// helper's own semantics are covered by __tests__/audit/log-admin-action.test.ts.
+let emailResult: { data: unknown; error: unknown };
+
+// Audit writes go through logAdminAction, which uses its OWN supabase client.
+// Mock the helper so the call itself can be asserted — its own semantics are
+// covered by __tests__/audit/log-admin-action.test.ts.
 const logAdminAction = vi.fn(async (..._args: unknown[]) => {});
 vi.mock('@/lib/audit/log-admin-action', () => ({
   logAdminAction: (...args: unknown[]) => logAdminAction(...args),
@@ -94,6 +89,8 @@ interface SentEmail {
 
 interface AuditCall {
   action: string;
+  communityId?: number | null;
+  oldValues?: Record<string, unknown>;
   newValues?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   bestEffort?: boolean;
@@ -108,224 +105,244 @@ async function callRecover(id: string) {
   });
 }
 
-const USER_ROW = { id: 42, status: 'recovered', request_type: 'user', user_id: 'user-uuid', community_id: null };
-const COMMUNITY_ROW = { id: 42, status: 'recovered', request_type: 'community', user_id: null, community_id: 99 };
-
-const has = (op: Op, kind: string, col: string) => op.filters.some(([k, c]) => k === kind && c === col);
-const isClaim = (op: Op) =>
-  op.table === 'account_deletion_requests' && op.kind === 'update' && op.payload?.status === 'recovered' && has(op, 'eq', 'id');
-const isDuplicateClaim = (op: Op) =>
-  op.table === 'account_deletion_requests' && op.kind === 'update' && op.payload?.status === 'recovered' && has(op, 'eq', 'user_id');
-const isCoolingCancel = (op: Op) =>
-  op.table === 'account_deletion_requests' && op.kind === 'update' && op.payload?.status === 'cancelled';
-const isRelease = (op: Op) =>
-  op.table === 'account_deletion_requests' && op.kind === 'update' && op.payload?.status === 'soft_deleted';
-const isReRead = (op: Op) => op.table === 'account_deletion_requests' && op.kind === 'select';
-const isUserRestore = (op: Op) => op.table === 'users' && op.kind === 'update';
-const isEmailLookup = (op: Op) => op.table === 'users' && op.kind === 'select';
-const isCommunityRestore = (op: Op) => op.table === 'communities' && op.kind === 'update';
-
-/** The happy path; a test overrides the calls it is about. */
-function happy(claimRow: unknown = USER_ROW, overrides: (op: Op) => Result | undefined = () => undefined) {
-  respond = (op) => {
-    const o = overrides(op);
-    if (o) return o;
-    if (isClaim(op)) return { data: claimRow, error: null };
-    if (isDuplicateClaim(op) || isCoolingCancel(op)) return { data: [], error: null };
-    if (isUserRestore(op)) return { data: [{ id: 'user-uuid' }], error: null };
-    if (isEmailLookup(op)) return { data: { email: 'marisol@example.com', full_name: 'Marisol' }, error: null };
-    return { data: null, error: null };
-  };
-}
+const REQUEST = { id: 42, requestType: 'user', userId: 'user-uuid', communityId: null, status: 'recovered', recoveredAt: null };
+const USER_CLAIM = {
+  outcome: 'claimed',
+  request: REQUEST,
+  userId: 'user-uuid',
+  claimedRequestIds: [42, 43],
+  cancelledRequestIds: [44],
+  resumed: false,
+};
+const COMMUNITY_RECOVERED = {
+  outcome: 'recovered',
+  request: { ...REQUEST, requestType: 'community', userId: 'requester-uuid', communityId: 99 },
+  communityId: 99,
+  claimedRequestIds: [42],
+  cancelledRequestIds: [],
+  resumed: false,
+};
 
 describe('POST /api/admin/deletion-requests/[id]/recover', () => {
   beforeEach(() => {
-    ops.length = 0;
     writes.length = 0;
-    requirePlatformAdmin.mockReset();
-    updateUserById.mockReset();
-    sendEmail.mockReset();
+    vi.clearAllMocks();
     requirePlatformAdmin.mockResolvedValue({ id: 'admin-1' });
     sendEmail.mockResolvedValue({ id: 'test_1' });
     updateUserById.mockResolvedValue({ data: {}, error: null });
-    happy();
+    claimDeletionRecoveryOp.mockResolvedValue(USER_CLAIM);
+    finishUserRecoveryOp.mockResolvedValue({ outcome: 'recovered', finishedRequestIds: [42, 43] });
+    releaseUserRecoveryOp.mockResolvedValue(2);
+    emailResult = { data: { email: 'marisol@example.com', full_name: 'Marisol' }, error: null };
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  it('claims, then clears users.deleted_at and lifts the ban for a user-type request', async () => {
+  it('rejects a non-numeric id before touching anything', async () => {
+    const response = await callRecover('abc');
+
+    expect(response.status).toBe(400);
+    expect(writes).toEqual([]);
+  });
+
+  it('claims as the platform admin, lifts the ban, then restores: in that order', async () => {
     const response = await callRecover('42');
 
     expect(response.status).toBe(200);
-    const claim = ops.find(isClaim)!;
-    expect(claim.filters).toEqual([['eq', 'id', 42], ['eq', 'status', 'soft_deleted']]);
-    expect(ops.find(isUserRestore)!.payload).toEqual({ deleted_at: null });
-    // The lifecycle cron banned the login at soft delete; recovery must lift it.
+    expect(claimDeletionRecoveryOp).toHaveBeenCalledWith(42, { adminUserId: 'admin-1' });
+    // Unban BEFORE the restore: a failed unban must leave the account deleted
+    // (and its claim given back), never restored but unable to sign in.
+    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
     expect(updateUserById).toHaveBeenCalledWith('user-uuid', {
       ban_duration: 'none',
       user_metadata: { soft_deleted: null },
     });
-    expect(ops.some(isCommunityRestore)).toBe(false);
+    expect(finishUserRecoveryOp).toHaveBeenCalledWith('user-uuid', { now: expect.any(Date) });
   });
 
-  it('clears communities.deleted_at for a community-type request, touching no other request', async () => {
-    happy(COMMUNITY_ROW);
+  it('audits every request it recovered and cancelled, best effort once the recovery has committed', async () => {
+    await callRecover('42');
+
+    expect(audits()).toEqual([
+      expect.objectContaining({
+        action: 'deletion_request_recovered',
+        communityId: null,
+        oldValues: { status: 'soft_deleted' },
+        newValues: expect.objectContaining({
+          status: 'recovered',
+          request_type: 'user',
+          recovered_request_ids: [42, 43],
+          cancelled_request_ids: [44],
+          resumed: false,
+        }),
+        bestEffort: true,
+      }),
+    ]);
+  });
+
+  it('a community is recovered by the claim alone: no unban, no finish', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue(COMMUNITY_RECOVERED);
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(200);
-    expect(ops.find(isCommunityRestore)!.filters).toEqual([['eq', 'id', 99]]);
-    expect(ops.some(isUserRestore)).toBe(false);
-    expect(ops.some(isDuplicateClaim)).toBe(false);
+    expect(writes).toEqual(['claim']);
     expect(updateUserById).not.toHaveBeenCalled();
+    expect(audits()[0]).toMatchObject({
+      action: 'deletion_request_recovered',
+      communityId: 99,
+      newValues: { request_type: 'community', restored_community_id: 99 },
+      bestEffort: true,
+    });
   });
 
-  // The lock: the request's status. Nothing about the account may change
-  // before this route has moved the request out of soft_deleted.
-  it('claims the request BEFORE restoring anything', async () => {
-    await callRecover('42');
+  it('resumes an unfinished recovery, and says so in the audit row', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({ ...USER_CLAIM, resumed: true });
 
-    expect(writes).toEqual([
-      'account_deletion_requests:recovered',
-      'account_deletion_requests:recovered',
-      'account_deletion_requests:cancelled',
-      'users:deleted_at',
-      'auth:unban',
-    ]);
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(200);
+    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
+    expect(audits()[0]).toMatchObject({ oldValues: { status: 'recovered' }, newValues: { resumed: true } });
   });
 
-  it('returns 404, and changes nothing, when the request is not soft_deleted and not purged', async () => {
-    happy(null, (op) => (isReRead(op) ? { data: { status: 'cancelled', community_id: null }, error: null } : undefined));
+  it.each([['not_found'], ['not_recoverable']])('returns 404, and changes nothing, on %s', async (outcome) => {
+    claimDeletionRecoveryOp.mockResolvedValue({ outcome, request: REQUEST });
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(404);
-    expect(ops.some(isUserRestore)).toBe(false);
-    expect(updateUserById).not.toHaveBeenCalled();
+    expect(writes).toEqual(['claim']);
     expect(logAdminAction).not.toHaveBeenCalled();
   });
 
-  // The purge claimed it first: finished, or failing part way and retried
-  // nightly with purged_at still null. Either way it is not recoverable.
-  it('returns 409 with a failure audit row when the purge claimed the request first', async () => {
-    happy(null, (op) => (isReRead(op) ? { data: { status: 'purged', community_id: null }, error: null } : undefined));
+  it('returns 409 with a failure audit row when a purge claimed the target first', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({ outcome: 'purged', request: REQUEST });
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe('ALREADY_PURGED');
-    expect(ops.some(isUserRestore)).toBe(false);
-    expect(updateUserById).not.toHaveBeenCalled();
-    const [audit] = audits();
-    expect(audit!.action).toBe('deletion_request_recover_failed');
-    expect(audit!.metadata).toMatchObject({ stage: 'claim', code: 'ALREADY_PURGED' });
+    expect(writes).toEqual(['claim']);
+    expect(audits()[0]).toMatchObject({
+      action: 'deletion_request_recover_failed',
+      metadata: { stage: 'claim', code: 'ALREADY_PURGED' },
+      bestEffort: true,
+    });
   });
 
-  it("claims the user's other soft_deleted requests and cancels cooling ones, auditing every id", async () => {
-    happy(USER_ROW, (op) => {
-      if (isDuplicateClaim(op)) return { data: [{ id: 43 }], error: null };
-      if (isCoolingCancel(op)) return { data: [{ id: 50 }], error: null };
-      return undefined;
-    });
+  // A stale row's account is open: recovering it must not cancel the user's
+  // newer live request (the op wrote nothing).
+  it('returns 409 NOT_DELETED for a stale request, and unbans nothing', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({ outcome: 'stale', request: { ...REQUEST, status: 'soft_deleted' } });
 
     const response = await callRecover('42');
 
-    expect(response.status).toBe(200);
-    expect(ops.find(isDuplicateClaim)!.filters).toEqual([
-      ['eq', 'user_id', 'user-uuid'],
-      ['eq', 'request_type', 'user'],
-      ['eq', 'status', 'soft_deleted'],
-    ]);
-    const cancel = ops.find(isCoolingCancel)!;
-    expect(cancel.payload).toMatchObject({ status: 'cancelled', cancelled_by: 'admin-1' });
-    expect(cancel.filters).toContainEqual(['eq', 'status', 'cooling']);
-    const [audit] = audits();
-    expect(audit!.action).toBe('deletion_request_recovered');
-    expect(audit!.newValues).toMatchObject({ recovered_request_ids: [42, 43], cancelled_request_ids: [50] });
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('NOT_DELETED');
+    expect(writes).toEqual(['claim']);
   });
 
-  // A purge of ANOTHER request of the same user (a duplicate) already
-  // scrubbed the row: the restore is conditional on the row being unscrubbed.
-  it('refuses to restore a users row that a purge already scrubbed, and gives the claim back', async () => {
-    happy(USER_ROW, (op) => {
-      if (isDuplicateClaim(op)) return { data: [{ id: 43 }], error: null };
-      if (isUserRestore(op)) return { data: [], error: null };
-      return undefined;
+  it('returns 409 RECENTLY_DELETED while the cron ban may still land', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({
+      outcome: 'too_recent',
+      request: REQUEST,
+      retryAfter: new Date('2026-11-22T04:15:00.000Z'),
     });
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(409);
-    expect((await response.json()).error.code).toBe('ALREADY_PURGED');
-    expect(ops.find(isUserRestore)!.filters).toContainEqual(['not', 'email', 'like %@redacted']);
-    expect(updateUserById).not.toHaveBeenCalled();
-    expect(ops.find(isRelease)!.filters).toEqual([['in', 'id', [42, 43]], ['eq', 'status', 'recovered']]);
-  });
-
-  it('gives the claim back and audits it when the restore fails, so a retry works', async () => {
-    happy(USER_ROW, (op) => (isUserRestore(op) ? { data: null, error: { message: 'rls denied' } } : undefined));
-
-    const response = await callRecover('42');
-
-    expect(response.status).toBe(500);
     const body = await response.json();
-    expect(body.error.code).toBe('USER_RESTORE_FAILED');
-    expect(body.error.message).toMatch(/retry the recovery/);
-    const release = ops.find(isRelease)!;
-    expect(release.payload).toEqual({ status: 'soft_deleted', recovered_at: null });
-    expect(release.filters).toEqual([['in', 'id', [42]], ['eq', 'status', 'recovered']]);
-    const [audit] = audits();
-    expect(audit!.action).toBe('deletion_request_recover_failed');
-    expect(audit!.metadata).toMatchObject({
-      stage: 'restore_user',
-      completed: ['claim', 'claim_duplicates', 'cancel_cooling'],
-      claim_released: true,
-    });
-    expect(audit!.bestEffort).toBe(true);
-    expect(sendEmail).not.toHaveBeenCalled();
+    expect(body.error.code).toBe('RECENTLY_DELETED');
+    expect(body.error.message).toContain('2026-11-22T04:15:00.000Z');
+    expect(writes).toEqual(['claim']);
   });
 
-  it('gives the claim back and audits it when lifting the ban fails', async () => {
+  it('returns 409 TARGET_MISSING when the community row is gone', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({ outcome: 'target_missing', request: REQUEST });
+
+    expect((await callRecover('42')).status).toBe(409);
+  });
+
+  it('gives the claim back and audits it when lifting the ban fails, restoring nothing', async () => {
     updateUserById.mockResolvedValue({ data: null, error: { message: 'GoTrue down' } });
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(500);
     expect((await response.json()).error.code).toBe('USER_UNBAN_FAILED');
-    expect(ops.some(isRelease)).toBe(true);
-    expect(audits()[0]!.metadata).toMatchObject({
-      stage: 'unban_user',
-      completed: ['claim', 'claim_duplicates', 'cancel_cooling', 'restore_user'],
+    expect(writes).toEqual(['claim', 'auth:unban', 'release']);
+    expect(releaseUserRecoveryOp).toHaveBeenCalledWith('user-uuid', [42, 43]);
+    expect(audits()[0]).toMatchObject({
+      action: 'deletion_request_recover_failed',
+      metadata: { stage: 'unban_user', code: 'USER_UNBAN_FAILED', claim_released: true, completed: ['claim'] },
+      bestEffort: true,
     });
-    expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('says so loudly when giving the claim back fails too', async () => {
-    happy(USER_ROW, (op) => {
-      if (isUserRestore(op)) return { data: null, error: { message: 'rls denied' } };
-      if (isRelease(op)) return { data: null, error: { message: 'still down' } };
-      return undefined;
-    });
+  it('treats a thrown unban like a failed one', async () => {
+    updateUserById.mockRejectedValue(new Error('fetch failed'));
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(500);
+    expect(writes).toEqual(['claim', 'auth:unban', 'release']);
+  });
+
+  it('says the recovery is unfinished and resumable when giving the claim back fails too', async () => {
+    updateUserById.mockResolvedValue({ data: null, error: { message: 'GoTrue down' } });
+    releaseUserRecoveryOp.mockRejectedValue(new Error('db down'));
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(500);
     const body = await response.json();
-    expect(body.error.code).toBe('RECOVERY_UNDO_FAILED');
-    expect(body.error.message).toMatch(/read "recovered" but the account is still deleted/);
+    expect(body.error.code).toBe('USER_UNBAN_FAILED');
+    expect(body.error.message).toMatch(/unfinished recovery; retry/);
     expect(audits()[0]!.metadata).toMatchObject({ claim_released: false });
   });
 
-  it('gives the claim back when a community restore fails', async () => {
-    happy(COMMUNITY_ROW, (op) => (isCommunityRestore(op) ? { data: null, error: { message: 'boom' } } : undefined));
+  // After the unban the claim is NOT given back: the account would read
+  // deleted and purgeable while its owner can sign in. It stays an unfinished
+  // recovery, which the purge never touches and a retry resumes.
+  it('keeps the claim and reports an unfinished recovery when the restore fails after the unban', async () => {
+    finishUserRecoveryOp.mockRejectedValue(new Error('db down'));
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await callRecover('42');
+    consoleErrorSpy.mockRestore();
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.code).toBe('USER_RESTORE_FAILED');
+    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
+    expect(releaseUserRecoveryOp).not.toHaveBeenCalled();
+    expect(audits()[0]).toMatchObject({
+      action: 'deletion_request_recover_failed',
+      metadata: { stage: 'restore_user', completed: ['claim', 'unban_user'] },
+    });
+  });
+
+  it('returns 409 when the finish finds the row scrubbed', async () => {
+    finishUserRecoveryOp.mockResolvedValue({ outcome: 'purged' });
 
     const response = await callRecover('42');
 
-    expect(response.status).toBe(500);
-    expect((await response.json()).error.code).toBe('COMMUNITY_RESTORE_FAILED');
-    expect(ops.find(isRelease)!.filters).toEqual([['in', 'id', [42]], ['eq', 'status', 'recovered']]);
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('ALREADY_PURGED');
+    expect(audits().map((a) => a.action)).toEqual(['deletion_request_recover_failed']);
+  });
+
+  // The success audit is best effort: the recovery has committed, and a 500
+  // would send the operator to retry a recovery that already happened.
+  it('still returns 200 when the success audit cannot be written', async () => {
+    logAdminAction.mockImplementationOnce(async (...args: unknown[]) => {
+      expect((args[0] as AuditCall).bestEffort).toBe(true);
+    });
+
+    expect((await callRecover('42')).status).toBe(200);
   });
 
   describe('account restored email', () => {
@@ -333,7 +350,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
       const response = await callRecover('42');
 
       expect(response.status).toBe(200);
-      expect(ops.find(isEmailLookup)!.filters).toEqual([['eq', 'id', 'user-uuid']]);
+      expect(emailLookup).toHaveBeenCalledWith('id', 'user-uuid');
       expect(sendEmail).toHaveBeenCalledTimes(1);
       const sent = sendEmail.mock.calls[0]![0] as SentEmail;
       expect(sent.to).toBe('marisol@example.com');
@@ -352,11 +369,10 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
       consoleErrorSpy.mockRestore();
 
       expect(response.status).toBe(200);
-      expect(logAdminAction).toHaveBeenCalledTimes(1);
     });
 
     it('still returns 200 when the address lookup fails, and sends nothing', async () => {
-      happy(USER_ROW, (op) => (isEmailLookup(op) ? { data: null, error: { message: 'boom' } } : undefined));
+      emailResult = { data: null, error: { message: 'boom' } };
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const response = await callRecover('42');
@@ -367,11 +383,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     });
 
     it('never emails a purged @redacted address', async () => {
-      happy(USER_ROW, (op) =>
-        isEmailLookup(op)
-          ? { data: { email: 'deleted-user-uuid@redacted', full_name: 'Deleted User' }, error: null }
-          : undefined,
-      );
+      emailResult = { data: { email: 'deleted-user-uuid@redacted', full_name: 'Deleted User' }, error: null };
 
       const response = await callRecover('42');
 
@@ -380,7 +392,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     });
 
     it('sends nothing for a community recovery', async () => {
-      happy({ ...COMMUNITY_ROW, user_id: 'requester-uuid' });
+      claimDeletionRecoveryOp.mockResolvedValue(COMMUNITY_RECOVERED);
 
       const response = await callRecover('42');
 

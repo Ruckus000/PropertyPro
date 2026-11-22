@@ -161,7 +161,8 @@ describeDb('account deletion SQL guards (integration)', () => {
     );
     const [community] = await db
       .insert(communities)
-      .values({ name: 'Deletion Guards', slug: COMMUNITY_SLUG, communityType: 'condo_718', deletedAt: new Date() })
+      // Deleted long enough ago for its purge to be due.
+      .values({ name: 'Deletion Guards', slug: COMMUNITY_SLUG, communityType: 'condo_718', deletedAt: new Date(Date.now() - 7 * MONTH) })
       .returning({ id: communities.id });
     communityId = community!.id;
   });
@@ -423,6 +424,6 @@ describeDb('account deletion SQL guards (integration)', () => {
     await expect(purgeCommunityData(id)).resolves.toBeNull();
     expect(await statusOf(id)).toBe('soft_deleted');
 
-    await db.update(communities).set({ deletedAt: new Date() }).where(eq(communities.id, communityId));
+    await db.update(communities).set({ deletedAt: new Date(Date.now() - 7 * MONTH) }).where(eq(communities.id, communityId));
   });
 });

@@ -45,6 +45,7 @@ import {
   pruneSitePublishSnapshots,
 } from '@/lib/services/site-blocks-service';
 import { sendDeletionExecutedEmails } from '@/lib/account-lifecycle/deletion-emails';
+import { onePerUser } from '@/lib/account-lifecycle/one-per-user';
 import { captureMessage } from '@sentry/nextjs';
 import { withCronJob } from '@/lib/cron/with-cron-job';
 
@@ -89,13 +90,16 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   if (userDeletionIds.length > 0) {
     try {
       const results = await executeUserSoftDelete(userDeletionIds);
-      summary.softDeleted.users += results.length;
       // Any requested id not returned raced out of 'cooling' and was skipped
       // by the state guard rather than force-deleted.
       summary.skipped.users += userDeletionIds.length - results.length;
+      // A user whose duplicate requests expired together is one deleted
+      // account: counted once and emailed once.
+      const accounts = onePerUser(results);
+      summary.softDeleted.users += accounts.length;
       // To the address captured in the soft-delete statement. Never rejects,
       // so it cannot reach the catch below or stop phases 2-5.
-      const emails = await sendDeletionExecutedEmails(results);
+      const emails = await sendDeletionExecutedEmails(accounts);
       summary.deletionEmails.sent += emails.sent;
       summary.deletionEmails.notSent += emails.notSent;
     } catch (err) {

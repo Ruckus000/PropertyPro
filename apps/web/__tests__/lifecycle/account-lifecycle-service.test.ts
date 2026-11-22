@@ -22,6 +22,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   createUnscopedClientMock,
+  interveneDeletionRequestOpMock,
+  captureMessageMock,
   createAdminClientMock,
   purgeCommunitySiteAssetsMock,
   purgeCommunityAdminAssetsMock,
@@ -46,6 +48,8 @@ const {
 } = vi.hoisted(() => {
   return {
     createUnscopedClientMock: vi.fn(),
+    interveneDeletionRequestOpMock: vi.fn(),
+    captureMessageMock: vi.fn(),
     createAdminClientMock: vi.fn(),
     purgeCommunitySiteAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
     purgeCommunityAdminAssetsMock: vi.fn().mockResolvedValue({ deletedCount: 0 }),
@@ -126,6 +130,11 @@ const {
 
 vi.mock('@propertypro/db/unsafe', () => ({
   createUnscopedClient: createUnscopedClientMock,
+  interveneDeletionRequestOp: interveneDeletionRequestOpMock,
+}));
+
+vi.mock('@sentry/nextjs', () => ({
+  captureMessage: captureMessageMock,
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -177,7 +186,7 @@ import {
   requestUserDeletion,
   RootOffboardingAckRequiredError,
   cancelUserDeletion,
-  findCoolingDeletionRequestForUser,
+  findCoolingDeletionRequestIdsForUser,
   executeUserSoftDelete,
   purgeUserPII,
   requestCommunityDeletion,
@@ -185,6 +194,7 @@ import {
   executeCommunitySoftDelete,
   purgeCommunityData,
 } from '../../src/lib/services/account-lifecycle-service';
+import { onePerUser } from '../../src/lib/account-lifecycle/one-per-user';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -685,32 +695,45 @@ describe('cancelUserDeletion', () => {
 });
 
 // ---------------------------------------------------------------------------
-// findCoolingDeletionRequestForUser
+// findCoolingDeletionRequestIdsForUser
 // ---------------------------------------------------------------------------
 
-describe('findCoolingDeletionRequestForUser', () => {
+describe('findCoolingDeletionRequestIdsForUser', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  // With duplicates, return the request the cron reaches first (earliest
-  // coolingEndsAt, then id); an unordered .limit(1) could return either.
-  it('returns the cooling request the cron reaches first when there are several', async () => {
-    // Unordered, the database may hand back either row; model it as the newer.
-    const orderByMock = vi.fn(() => ({ limit: () => Promise.resolve([{ id: 3 }]) }));
+  // The cancel route cancels the first and names them all; the first must be
+  // the request the cron reaches first (earliest coolingEndsAt, then id).
+  it('lists every cooling request, in the order the cron reaches them', async () => {
+    const orderByMock = vi.fn(() => Promise.resolve([{ id: 3 }, { id: 8 }]));
     createUnscopedClientMock.mockReturnValue({
-      select: () => ({
-        from: () => ({
-          where: () => ({ orderBy: orderByMock, limit: () => Promise.resolve([{ id: 8 }]) }),
-        }),
-      }),
+      select: () => ({ from: () => ({ where: () => ({ orderBy: orderByMock }) }) }),
     });
 
-    await expect(findCoolingDeletionRequestForUser('user-uuid-001')).resolves.toBe(3);
+    await expect(findCoolingDeletionRequestIdsForUser('user-uuid-001')).resolves.toEqual([3, 8]);
     expect(orderByMock).toHaveBeenCalledWith(
       { _asc: accountDeletionRequestsTable.coolingEndsAt },
       { _asc: accountDeletionRequestsTable.id },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onePerUser
+// ---------------------------------------------------------------------------
+
+describe('onePerUser', () => {
+  it('keeps the earliest request per user, so duplicates are one email and one count', () => {
+    const rows = [
+      { id: 9, userId: 'a' },
+      { id: 4, userId: 'b' },
+      { id: 2, userId: 'a' },
+    ];
+    expect(onePerUser(rows)).toEqual([
+      { id: 2, userId: 'a' },
+      { id: 4, userId: 'b' },
+    ]);
   });
 });
 
@@ -988,7 +1011,33 @@ describe('purgeUserPII', () => {
     expect(warn).toHaveBeenCalledWith(
       '[account-lifecycle] auth user user-uuid-001 not found; treating auth as already scrubbed',
     );
+    // Reported, ids only: an account deleted from auth outside the lifecycle.
+    expect(captureMessageMock).toHaveBeenCalledWith('account_purge_auth_user_missing', {
+      level: 'warning',
+      extra: { requestId: 1, userId: 'user-uuid-001' },
+    });
     warn.mockRestore();
+  });
+
+  // A bare 404 can be a proxy or a wrong URL; only GoTrue's own code means the
+  // user is gone. Finishing on it would leave the email and name in auth.users.
+  it('does not treat a 404 without the user_not_found code as already scrubbed', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[request], [{ id: 'user-uuid-001' }], [finished]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          updateUserById: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'Not Found', status: 404 },
+          }),
+        },
+      },
+    });
+
+    await expect(purgeUserPII(1)).rejects.toThrow(/Failed to scrub auth user/);
+    expect(updates(dbMock).filter((c) => c.values?.purgedAt !== undefined)).toHaveLength(0);
+    expect(captureMessageMock).not.toHaveBeenCalled();
   });
 
   it('releases the claim, and leaves auth.users alone, when the account was reopened after the claim', async () => {
@@ -1049,7 +1098,7 @@ describe('requestCommunityDeletion', () => {
       status: 'cooling',
     };
     const dbMock = buildDbMock({ insertReturning: [[fakeRequest]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+    createUnscopedClientMock.mockReturnValue({ ...dbMock, select: existingCommunityRequest([]) });
 
     const result = await requestCommunityDeletion(100, 'admin-001');
 
@@ -1058,7 +1107,24 @@ describe('requestCommunityDeletion', () => {
     expect((insertCall?.values as Record<string, unknown>)?.requestType).toBe('community');
     expect((insertCall?.values as Record<string, unknown>)?.communityId).toBe(100);
   });
+
+  // A second click must not start a second 30-day clock.
+  it('returns the cooling request the community already has, and inserts nothing', async () => {
+    const pending = { id: 4, requestType: 'community', communityId: 100, status: 'cooling' };
+    const dbMock = buildDbMock({});
+    createUnscopedClientMock.mockReturnValue({ ...dbMock, select: existingCommunityRequest([pending]) });
+
+    await expect(requestCommunityDeletion(100, 'admin-001')).resolves.toEqual(pending);
+    expect(dbMock._calls.find((c) => c.op === 'insert')).toBeUndefined();
+  });
 });
+
+/** select().from().where().orderBy().limit() resolving to `rows`. */
+function existingCommunityRequest(rows: unknown[]) {
+  return () => ({
+    from: () => ({ where: () => ({ orderBy: () => ({ limit: () => Promise.resolve(rows) }) }) }),
+  });
+}
 
 // ---------------------------------------------------------------------------
 // interveneCommunityDeletion
@@ -1069,53 +1135,33 @@ describe('interveneCommunityDeletion', () => {
     vi.clearAllMocks();
   });
 
-  it('platform admin cancels community deletion', async () => {
-    const updated = { id: 1, status: 'cancelled', cancelledBy: 'platform-admin-001' };
-    const dbMock = buildDbMock({ updateReturning: [[updated]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+  const cancelledRow = { id: 1, communityId: 100, status: 'cancelled', cancelledBy: 'platform-admin-001' };
+
+  // The transaction (every cooling request of the community, none once it is
+  // deleted) is interveneDeletionRequestOp's, tested against a real database in
+  // deletion-recovery-lifecycle.integration.test.ts.
+  it('cancels through the shared op, passing the notes to store', async () => {
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'cancelled', request: cancelledRow, cancelledRequestIds: [1, 2] });
 
     const result = await interveneCommunityDeletion(1, {
       adminUserId: 'platform-admin-001',
       notes: 'Retained by admin review',
     });
 
-    expect(result).toEqual(updated);
-    const updateCall = dbMock._calls.find((c) => c.op === 'update');
-    expect((updateCall?.values as Record<string, unknown>)?.interventionNotes).toBe(
-      'Retained by admin review',
-    );
-  });
-
-  // Unguarded, a cancel racing the cron overwrote `soft_deleted` with
-  // `cancelled`: a deleted community that could be neither purged nor recovered.
-  it('only cancels a request that is still cooling', async () => {
-    const dbMock = buildDbMock({ updateReturning: [[]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
-
-    await expect(
-      interveneCommunityDeletion(1, { adminUserId: 'platform-admin-001' }),
-    ).rejects.toThrow(/not found or no longer cooling/);
-    expect(dbMock._calls.find((c) => c.op === 'update')?.where).toEqual({
-      _and: [
-        { _eq: [accountDeletionRequestsTable.id, 1] },
-        { _eq: [accountDeletionRequestsTable.status, 'cooling'] },
-      ],
+    expect(result).toEqual(cancelledRow);
+    expect(interveneDeletionRequestOpMock).toHaveBeenCalledWith(1, {
+      cancelledBy: 'platform-admin-001',
+      notes: 'Retained by admin review',
+      now: expect.any(Date),
     });
   });
 
-  it('audits the cancellation against the community', async () => {
+  it('audits the cancellation against the community, naming every request it stopped', async () => {
     // `apps/web/src/app/api/v1/communities/delete/route.ts` justifies making
     // cancellation root-exclusive by pointing at platform-admin intervention as
     // "a break-glass that leaves an audit trail". For the apps/admin route that
     // was true; for this service it was not.
-    const updated = {
-      id: 1,
-      communityId: 100,
-      status: 'cancelled',
-      cancelledBy: 'platform-admin-001',
-    };
-    const dbMock = buildDbMock({ updateReturning: [[updated]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'cancelled', request: cancelledRow, cancelledRequestIds: [1, 2] });
 
     await interveneCommunityDeletion(1, { adminUserId: 'platform-admin-001', notes: 'ok' });
 
@@ -1126,6 +1172,7 @@ describe('interveneCommunityDeletion', () => {
       resourceType: 'account_deletion_request',
       resourceId: '1',
       communityId: 100,
+      metadata: { notesProvided: true, cancelledRequestIds: [1, 2] },
     });
   });
 
@@ -1139,9 +1186,7 @@ describe('interveneCommunityDeletion', () => {
     // apps/admin's twin DOES log notes, into platform_admin_audit_log, which is
     // operator-only with zero RLS policies. Different table, different
     // readership, different rule — the two are not inconsistent.
-    const updated = { id: 1, communityId: 100, status: 'cancelled' };
-    const dbMock = buildDbMock({ updateReturning: [[updated]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'cancelled', request: cancelledRow, cancelledRequestIds: [1] });
 
     await interveneCommunityDeletion(1, {
       adminUserId: 'admin-1',
@@ -1156,21 +1201,49 @@ describe('interveneCommunityDeletion', () => {
   });
 
   it('does NOT audit a request with no community', async () => {
-    // The intervene ROUTE passes any request id straight through with no
-    // requestType filter, so a user-type request reaches this function. Same
-    // NOT NULL wall as the purge.
-    const updated = { id: 2, communityId: null, status: 'cancelled' };
-    const dbMock = buildDbMock({ updateReturning: [[updated]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+    // Same NOT NULL wall as the purge.
+    interveneDeletionRequestOpMock.mockResolvedValue({
+      outcome: 'cancelled',
+      request: { ...cancelledRow, communityId: null },
+      cancelledRequestIds: [1],
+    });
 
-    await interveneCommunityDeletion(2, { adminUserId: 'admin-1' });
+    await interveneCommunityDeletion(1, { adminUserId: 'admin-1' });
 
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
+  // Another cancel (a second tab, a platform admin) got there first.
+  it('returns the already-cancelled request without writing or auditing again', async () => {
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'not_cooling', request: cancelledRow });
+
+    await expect(interveneCommunityDeletion(1, { adminUserId: 'admin-1' })).resolves.toEqual(cancelledRow);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  // Unguarded, a cancel racing the cron overwrote `soft_deleted` with
+  // `cancelled`. Now the lost race is a 409, not a 500 and not a false success.
+  it('throws a 409 when the cron soft-deleted the request first', async () => {
+    interveneDeletionRequestOpMock.mockResolvedValue({
+      outcome: 'not_cooling',
+      request: { ...cancelledRow, status: 'soft_deleted' },
+    });
+
+    await expect(interveneCommunityDeletion(1, { adminUserId: 'admin-1' })).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'CONFLICT',
+    });
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('throws a 409 when the community is already deleted through another request', async () => {
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'target_deleted', request: { ...cancelledRow, status: 'cooling' } });
+
+    await expect(interveneCommunityDeletion(1, { adminUserId: 'admin-1' })).rejects.toMatchObject({ statusCode: 409 });
+  });
+
   it('throws when request is not found', async () => {
-    const dbMock = buildDbMock({ updateReturning: [[]] });
-    createUnscopedClientMock.mockReturnValue(dbMock);
+    interveneDeletionRequestOpMock.mockResolvedValue({ outcome: 'not_found' });
 
     await expect(
       interveneCommunityDeletion(999, { adminUserId: 'admin-001' }),

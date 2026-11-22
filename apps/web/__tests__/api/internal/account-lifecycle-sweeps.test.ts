@@ -89,6 +89,7 @@ function cronRequest(): NextRequest {
 
 interface LifecycleSummary {
   softDeleted: { users: number; communities: number };
+  skipped: { users: number; communities: number };
   purged: { users: number; communities: number };
   deletionEmails: { sent: number; notSent: number };
   siteBlocksCleaned: number;
@@ -273,6 +274,28 @@ describe('account-lifecycle cron — deletion emails at soft delete', () => {
     expect(summary.sitePublishSnapshotsPruned).toBe(2);
     // A mail failure is not a lifecycle failure: no soft-delete error recorded.
     expect(summary.errors).toEqual([]);
+  });
+
+  // Duplicate requests of one user that expire together are one deleted
+  // account: one email (under the earlier request's key) and one count. Both
+  // ids are still accounted for, so neither reads as skipped.
+  it('emails and counts a user with two expired requests once', async () => {
+    coolingExpired(5, 6);
+    executeUserSoftDeleteMock.mockResolvedValue([
+      { ...softDeleted(6, { email: 'dup@example.com', fullName: null }), userId: 'same-user' },
+      { ...softDeleted(5, { email: 'dup@example.com', fullName: null }), userId: 'same-user' },
+    ]);
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect((sendEmailMock.mock.calls[0]![0] as { idempotencyKey: string }).idempotencyKey).toBe(
+      'account-deletion/executed/5',
+    );
+    expect(summary.softDeleted.users).toBe(1);
+    expect(summary.skipped.users).toBe(0);
+    expect(summary.deletionEmails).toEqual({ sent: 1, notSent: 0 });
   });
 
   it('never sends to a purged (@redacted) address or a row with no captured recipient', async () => {

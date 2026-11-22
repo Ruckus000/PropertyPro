@@ -36,6 +36,14 @@ export interface AdminDeletionRequest {
   requesterEmail: string | null;
   requesterName: string | null;
   communityName: string | null;
+  /**
+   * Whether the request's target (the user's account, or the community) is
+   * deleted right now; null when it could not be looked up. A `soft_deleted`
+   * request whose target is NOT deleted is stale (left by an earlier recovery
+   * or a released claim) and has nothing to recover. See
+   * `deletionRequestDisplayState`.
+   */
+  targetDeleted: boolean | null;
 }
 
 export interface DeletionRequestFilters {
@@ -51,11 +59,18 @@ function throwIfError(error: { message: string } | null, context: string): void 
 
 function mapDeletionRequests(
   rows: DeletionRequestRow[],
-  userMap: Map<string, { email: string; name: string | null }>,
+  userMap: Map<string, { email: string; name: string | null; deleted?: boolean }>,
   communityMap: Map<number, string>,
+  communityDeleted: Map<number, boolean> = new Map(),
 ): AdminDeletionRequest[] {
   return rows.map((row) => {
     const userInfo = userMap.get(row.user_id);
+    const targetDeleted =
+      row.request_type === 'community'
+        ? row.community_id === null
+          ? null
+          : communityDeleted.get(row.community_id) ?? null
+        : userInfo?.deleted ?? null;
 
     return {
       id: row.id,
@@ -73,6 +88,7 @@ function mapDeletionRequests(
       requesterEmail: userInfo?.email ?? null,
       requesterName: userInfo?.name ?? null,
       communityName: row.community_id ? communityMap.get(row.community_id) ?? null : null,
+      targetDeleted,
     };
   });
 }
@@ -102,26 +118,33 @@ export async function getDeletionRequestsData(
   const userIds = [...new Set(rows.map((row) => row.user_id).filter(Boolean))];
   const communityIds = [...new Set(rows.map((row) => row.community_id).filter((id): id is number => id !== null))];
 
-  const userMap = new Map<string, { email: string; name: string | null }>();
+  const userMap = new Map<string, { email: string; name: string | null; deleted?: boolean }>();
   const communityMap = new Map<number, string>();
+  const communityDeleted = new Map<number, boolean>();
 
   if (userIds.length > 0) {
     const { data: users, error: usersError } = await (db
       .from('users')
-      .select('id, email, full_name')
+      .select('id, email, full_name, deleted_at')
       .in('id', userIds));
 
     throwIfError(usersError, 'Failed to load requester profiles');
 
-    for (const user of (users ?? []) as { id: string; email: string; full_name: string | null }[]) {
-      userMap.set(user.id, { email: user.email, name: user.full_name || null });
+    for (const user of (users ?? []) as { id: string; email: string; full_name: string | null; deleted_at?: string | null }[]) {
+      userMap.set(user.id, {
+        email: user.email,
+        name: user.full_name || null,
+        // undefined (not selected) stays unknown rather than "not deleted".
+        ...(user.deleted_at === undefined ? {} : { deleted: user.deleted_at !== null }),
+      });
     }
   }
 
   if (communityIds.length > 0) {
     // This read is a NAME LOOKUP, not a population count: `communityIds` is
     // already the exact set of communities named by the deletion requests just
-    // fetched, and the query only maps each id to its display name. Filtering
+    // fetched, and the query only maps each id to its display name (and to
+    // whether it is deleted now, which tells a live request from a stale one). Filtering
     // `is_demo` / `deleted_at` the way every other `communities` read here does
     // would blank the precise rows this screen exists to show — a community
     // deletion request that has reached `soft_deleted` has `deleted_at` set by
@@ -131,18 +154,21 @@ export async function getDeletionRequestsData(
     // admin-community-scope:exempt — display-name lookup keyed by the request rows' own community ids; a soft-deleted or demo community is the subject of the request, so excluding it would blank the row
     const { data: communities, error: communitiesError } = await (db
       .from('communities')
-      .select('id, name')
+      .select('id, name, deleted_at')
       .in('id', communityIds));
 
     throwIfError(communitiesError, 'Failed to load community names');
 
-    for (const community of (communities ?? []) as { id: number; name: string }[]) {
+    for (const community of (communities ?? []) as { id: number; name: string; deleted_at?: string | null }[]) {
       communityMap.set(community.id, community.name);
+      if (community.deleted_at !== undefined) {
+        communityDeleted.set(community.id, community.deleted_at !== null);
+      }
     }
   }
 
   return {
-    requests: mapDeletionRequests(rows, userMap, communityMap),
+    requests: mapDeletionRequests(rows, userMap, communityMap, communityDeleted),
   };
 }
 

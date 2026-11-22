@@ -64,6 +64,8 @@ export const DELETE = withErrorHandler(
       throw new AppError('No active deletion request found', 404, 'NOT_FOUND');
     }
 
+    // Cancels every cooling request of this community, and throws a 409 if the
+    // cron soft-deleted it between the lookup and here.
     await interveneCommunityDeletion(activeRequestId, {
       adminUserId: userId,
       notes: 'Cancelled by community administrator',
