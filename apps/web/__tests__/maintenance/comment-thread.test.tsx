@@ -21,6 +21,14 @@ vi.mock('@/lib/api/maintenance-requests', () => ({
 import { addComment } from '@/lib/api/maintenance-requests';
 const mockAddComment = addComment as ReturnType<typeof vi.fn>;
 
+// The Radix Checkbox measures its hidden form input with ResizeObserver,
+// which jsdom does not provide.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 const TZ = 'America/New_York';
 
 function renderWithClient(ui: ReactElement) {
@@ -57,6 +65,121 @@ describe('CommentThread', () => {
       <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} />,
     );
     expect(screen.queryByText('The resident sees comments.')).not.toBeInTheDocument();
+  });
+
+  // A manager can keep a note from the resident: a vendor quote, a cost, a
+  // judgement about the unit. The API already stores it; the box had no way
+  // to send it.
+  describe('internal notes', () => {
+    function typeAndPost(text: string) {
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: text } });
+      fireEvent.click(screen.getByRole('button', { name: /^Post / }));
+    }
+
+    it('a resident is not offered one', () => {
+      renderWithClient(<CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} />);
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    });
+
+    it('a manager posts an ordinary comment by default, with no isInternal sent', async () => {
+      mockAddComment.mockResolvedValue({ data: makeComment() });
+      renderWithClient(
+        <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+      );
+      expect(screen.getByRole('checkbox', { name: 'Internal note (managers only)' })).not.toBeChecked();
+
+      typeAndPost('We will send a plumber Tuesday.');
+      await waitFor(() =>
+        expect(mockAddComment).toHaveBeenCalledWith({
+          communityId: 42,
+          requestId: 1,
+          text: 'We will send a plumber Tuesday.',
+        }),
+      );
+    });
+
+    it('ticked, says who sees it, relabels the button and sends isInternal: true', async () => {
+      mockAddComment.mockResolvedValue({ data: makeComment({ isInternal: true }) });
+      renderWithClient(
+        <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+      );
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Internal note (managers only)' }));
+
+      const field = screen.getByLabelText('Add an internal note');
+      expect(field).toHaveAccessibleDescription('Only managers see internal notes. The resident does not.');
+      expect(screen.getByRole('button', { name: 'Post internal note' })).toBeInTheDocument();
+
+      typeAndPost('Vendor quote $900; owner disputes cause.');
+      await waitFor(() =>
+        expect(mockAddComment).toHaveBeenCalledWith({
+          communityId: 42,
+          requestId: 1,
+          text: 'Vendor quote $900; owner disputes cause.',
+          isInternal: true,
+        }),
+      );
+    });
+
+    it('marks a posted internal note with an icon and a leading word; a reply has neither', () => {
+      renderWithClient(
+        <CommentThread
+          communityId={42}
+          requestId={1}
+          comments={[
+            makeComment({ id: 1, text: 'We will send a plumber.' }),
+            makeComment({ id: 2, text: 'Vendor quote $900.', isInternal: true }),
+          ]}
+          communityTimezone={TZ}
+          isAdmin
+        />,
+      );
+      const [reply, note] = Array.from(document.querySelectorAll('li'));
+      expect(reply!.textContent).not.toContain('Internal note');
+      expect(reply!.textContent).not.toContain('Not shown to the resident');
+      expect(note!.textContent).toMatch(/^Internal note/);
+      expect(note!.textContent).toContain('Not shown to the resident');
+    });
+
+    it('cannot be toggled while a post is in flight', async () => {
+      mockAddComment.mockReturnValue(new Promise(() => {}));
+      renderWithClient(
+        <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+      );
+      const box = screen.getByRole('checkbox', { name: 'Internal note (managers only)' });
+      fireEvent.click(box);
+      typeAndPost('In flight');
+      await waitFor(() => expect(box).toBeDisabled());
+      expect(box).toBeChecked();
+    });
+
+    // A full-width clickable row let a click in empty space beside the box
+    // untick it, turning a staff-only note into a reply the resident reads.
+    it('only the box and its words toggle it, not the whole row', () => {
+      renderWithClient(
+        <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+      );
+      const row = screen.getByText('Internal note (managers only)').closest('label')!;
+      expect(row.className).toMatch(/(^|\s)w-fit(\s|$)/);
+      // Block-level, so the Post button below is not pulled onto its line.
+      expect(row.className).toMatch(/(^|\s)flex(\s|$)/);
+      expect(row.className).not.toMatch(/(^|\s)inline-flex(\s|$)/);
+    });
+
+    it('stays internal for the next note, so it never flips back to public by itself', async () => {
+      mockAddComment.mockResolvedValue({ data: makeComment({ isInternal: true }) });
+      renderWithClient(
+        <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+      );
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Internal note (managers only)' }));
+      typeAndPost('First note');
+      await waitFor(() => expect(mockAddComment).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
+
+      typeAndPost('Second note');
+      await waitFor(() => expect(mockAddComment).toHaveBeenCalledTimes(2));
+      expect(mockAddComment.mock.calls[1]![0]).toMatchObject({ text: 'Second note', isInternal: true });
+      expect(screen.getByRole('checkbox', { name: 'Internal note (managers only)' })).toBeChecked();
+    });
   });
 
   it('renders "No comments yet" when comments array is empty', () => {

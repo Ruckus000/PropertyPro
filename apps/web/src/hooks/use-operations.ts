@@ -323,10 +323,21 @@ export function useMaintenanceRequest(
   });
 }
 
+export interface AddMaintenanceCommentInput {
+  text: string;
+  /**
+   * A staff-only note. The API stores a resident's comment as non-internal
+   * whatever is sent; only a manager's note is kept from the resident.
+   */
+  isInternal?: boolean;
+}
+
 export function useAddMaintenanceComment(communityId: number, requestId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (text: string) => (await addComment({ communityId, requestId, text })).data,
+    mutationFn: async ({ text, isInternal }: AddMaintenanceCommentInput) =>
+      // Sent only when set, so a resident's request body is unchanged.
+      (await addComment({ communityId, requestId, text, ...(isInternal ? { isInternal: true } : {}) })).data,
     onSuccess: async () => {
       // The detail shows the new comment; list rows carry the comments too.
       await queryClient.invalidateQueries({ queryKey: MAINTENANCE_REQUEST_KEYS.all });

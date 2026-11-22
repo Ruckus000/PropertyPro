@@ -24,6 +24,14 @@ vi.mock('@/lib/api/admin-maintenance', () => ({
 
 import { getRequest } from '@/lib/api/maintenance-requests';
 import { updateRequestStatus } from '@/lib/api/admin-maintenance';
+
+// A manager's comment box has the Radix "Internal note" Checkbox, which
+// measures its hidden form input with ResizeObserver; jsdom has none.
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 const getRequestMock = getRequest as ReturnType<typeof vi.fn>;
 const updateRequestStatusMock = updateRequestStatus as ReturnType<typeof vi.fn>;
 

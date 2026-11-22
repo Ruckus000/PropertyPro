@@ -233,10 +233,11 @@ describe('maintenance request detail', () => {
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries');
     const { result } = renderHook(() => useAddMaintenanceComment(42, 7), { wrapper: wrapper(qc) });
 
-    await result.current.mutateAsync('Thanks');
+    await result.current.mutateAsync({ text: 'Thanks' });
 
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/v1/maintenance-requests');
+    // No isInternal key at all for an ordinary comment.
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({
       action: 'add_comment',
       communityId: 42,
@@ -244,5 +245,21 @@ describe('maintenance request detail', () => {
       text: 'Thanks',
     });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: MAINTENANCE_REQUEST_KEYS.all });
+  });
+
+  it('posts an internal note with isInternal: true', async () => {
+    fetchMock.mockResolvedValueOnce(json({ data: { id: 4, requestId: 7, text: 'Vendor quote $900' } }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(() => useAddMaintenanceComment(42, 7), { wrapper: wrapper(qc) });
+
+    await result.current.mutateAsync({ text: 'Vendor quote $900', isInternal: true });
+
+    expect(JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string)).toEqual({
+      action: 'add_comment',
+      communityId: 42,
+      requestId: 7,
+      text: 'Vendor quote $900',
+      isInternal: true,
+    });
   });
 });
