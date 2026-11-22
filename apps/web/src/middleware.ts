@@ -246,7 +246,7 @@ function buildReturnTo(request: NextRequest): string {
 /**
  * Parse a returnTo into the pathname + search to redirect to, or null when it
  * is unsafe. `isSafeReturnPath` (lib/utils/return-to.ts, shared with the login
- * page, /select-community and demo-login) is the screen: one leading `/` not
+ * and verify-email pages and /select-community) is the screen: one leading `/` not
  * followed by `/` or `\`, no control characters, and a parse whose normalised
  * pathname is not protocol-relative — `/.//evil.com` normalises to the PATH
  * `//evil.com`. Resolving against the request origin and requiring the SAME

@@ -211,8 +211,9 @@ export const ALLOWLIST_REASONS: ReadonlyMap<string, AllowlistReason> = new Map<s
   // custom X-CSV-* truncation headers, one handler, one route. The CSV branch
   // makes it non-JSON like the export family below.
   ['apps/web/src/app/api/v1/audit-trail/route.ts', 'non-json-binary'],
-  // Dev-only login helper: 302 to a target portal AND sets the session
-  // cookies on the redirect — the two blockers above combined.
+  // Demo auto-login (production, HMAC token): 307 to the role's portal, or a
+  // 200 HTML page in preview mode, AND sets the session cookies on it — the
+  // two blockers above combined.
   ['apps/web/src/app/api/v1/auth/demo-login/route.ts', 'redirect'],
   // Demo enter: 303 redirect chain into a provisioned demo community.
   ['apps/web/src/app/api/v1/demo/[slug]/enter/route.ts', 'redirect'],

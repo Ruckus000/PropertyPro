@@ -36,10 +36,9 @@ function staysOnSite(url: URL): boolean {
  * `\`, no control characters) plus the parse-and-compare step.
  *
  * The ONE screen for every returnTo/redirect reader in apps/web: the
- * middleware, the login and verify-email pages, /select-community and the
- * demo-login `?redirect=` override all call it. It must stay import-free and
- * runtime-neutral (`URL` and RegExp only) because the middleware imports it
- * into the edge bundle.
+ * middleware, the login and verify-email pages and /select-community all call
+ * it. It must stay import-free and runtime-neutral (`URL` and RegExp only)
+ * because the middleware imports it into the edge bundle.
  */
 export function isSafeReturnPath(value: string): boolean {
   if (!/^\/(?![/\\])/.test(value)) return false;
