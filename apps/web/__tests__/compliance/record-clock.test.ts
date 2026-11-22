@@ -117,6 +117,20 @@ describe('calculateComplianceClock: yearly records', () => {
     expect(result.clock.state).toBe('met_late');
   });
 
+  it('a received date LATER than the posting cannot make a year-old record current', () => {
+    // Posted 13 months ago; a received date of today is impossible, and must
+    // not lift the record back into its year.
+    const result = calculateComplianceClock({
+      documentId: 1,
+      documentReceivedAt: daysFromNow(0),
+      documentPublishedAt: daysFromNow(-395),
+      yearlyCycle: true,
+      now: NOW,
+    });
+    expect(result.status).toBe('unsatisfied');
+    expect(result.clock.state).toBe('out_of_window');
+  });
+
   it('control: the same record without a yearly cycle stays met', () => {
     expect(
       calculateComplianceClock({

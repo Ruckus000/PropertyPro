@@ -182,7 +182,13 @@ export function calculateComplianceClock(input: ComplianceStatusInput): Complian
     // invented for it — when next year's was adopted is unknown until it is
     // uploaded — so it is unsatisfied, not "N days overdue".
     const cycleStart = calculateRollingWindowStart(now, YEARLY_RECORD_CYCLE_MONTHS);
-    const recordedAt = receivedAt ?? postedAt;
+    // The EARLIER of the two dates: a record cannot be posted before the
+    // association had it, so a received date later than the posting (typed or
+    // mistaken) must not make a year-old record read as this year's.
+    const recordedAt =
+      receivedAt && postedAt
+        ? new Date(Math.min(receivedAt.getTime(), postedAt.getTime()))
+        : (receivedAt ?? postedAt);
     if (input.yearlyCycle && recordedAt && isBefore(recordedAt, cycleStart)) {
       return { status: 'unsatisfied', clock: clock('out_of_window', null, postedAt) };
     }
