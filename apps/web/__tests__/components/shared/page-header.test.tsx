@@ -97,4 +97,36 @@ describe('PageHeader', () => {
     expect(screen.getByRole('heading', { level: 1, name: 'Packages' })).toHaveClass('sr-only');
     expect(screen.queryByText('Log deliveries as they arrive.')).toBeNull();
   });
+
+  it('puts the actions on the title row inside a PageLayout, children on their own row', () => {
+    render(
+      <PageLayout
+        template="list"
+        header={
+          <PageHeader title="Packages" description="Log deliveries." actions={<button type="button">Log a package</button>}>
+            <span>Filters</span>
+          </PageHeader>
+        }
+      >
+        x
+      </PageLayout>,
+    );
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Packages' });
+    const action = screen.getByRole('button', { name: 'Log a package' });
+    const titleRow = h1.parentElement!.parentElement!;
+    expect(titleRow).toContainElement(action);
+    expect(titleRow).toHaveClass('sm:justify-between');
+    // Filters are not in the title row, and the description sits after it.
+    expect(titleRow).not.toContainElement(screen.getByText('Filters'));
+    expect(titleRow.nextElementSibling).toBe(screen.getByText('Log deliveries.'));
+  });
+
+  it('keeps the actions in a separate toolbar row, away from the h1, outside a PageLayout', () => {
+    render(<PageHeader title="Documents" actions={<button type="button">Upload Document</button>} />);
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Documents' });
+    const header = h1.parentElement!;
+    expect(h1.nextElementSibling).toContainElement(screen.getByRole('button', { name: 'Upload Document' }));
+    expect(header.children).toHaveLength(2);
+    expect(header.children[1]).toHaveClass('sm:flex-row');
+  });
 });
