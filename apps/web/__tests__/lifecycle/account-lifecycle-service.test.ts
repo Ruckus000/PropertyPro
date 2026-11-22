@@ -5,8 +5,8 @@
  *
  * Coverage:
  * - computeAccessPlanStatus: all 5 status branches (revoked, converted, active, in_grace, expired)
- * - requestUserDeletion: request created with correct cooling_ends_at
- * - cancelUserDeletion: status set to cancelled
+ * - requestUserDeletion: request created with correct cooling_ends_at; a repeat returns the pending one
+ * - cancelUserDeletion: every cooling request cancelled, state-guarded
  * - executeUserSoftDelete: users.deletedAt set, auth ban called (non-fatal)
  * - purgeUserPII: PII scrubbed, idempotent on second call
  * - requestCommunityDeletion: request created with cooling period
@@ -371,10 +371,54 @@ describe('requestUserDeletion', () => {
 
     const result = await requestUserDeletion('user-uuid-001');
 
-    expect(result).toEqual(fakeRequest);
+    expect(result).toEqual({ request: fakeRequest, created: true });
     const insertCall = dbMock._calls.find((c) => c.op === 'insert');
     expect((insertCall?.values as Record<string, unknown>)?.requestType).toBe('user');
     expect((insertCall?.values as Record<string, unknown>)?.status).toBe('cooling');
+  });
+
+  // A double POST (two tabs, a retry after a slow response) used to insert a
+  // second cooling row. Cancel stopped only one, so the other soft-deleted the
+  // account 30 days after the user was told it stays open.
+  it('returns the pending cooling request instead of creating a second one', async () => {
+    const pending = { id: 3, requestType: 'user', userId: 'user-uuid-001', status: 'cooling', coolingEndsAt: new Date() };
+    const dbMock = buildDbMock({ selectResults: [[pending]], insertReturning: [[{ id: 4 }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await requestUserDeletion('user-uuid-001');
+
+    expect(result).toEqual({ request: pending, created: false });
+    expect(dbMock._calls.find((c) => c.op === 'insert')).toBeUndefined();
+    expect(andMock).toHaveBeenCalledWith(
+      { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+      { _eq: [accountDeletionRequestsTable.requestType, 'user'] },
+      { _eq: [accountDeletionRequestsTable.status, 'cooling'] },
+    );
+  });
+
+  it('returns the earliest pending request when duplicates already exist', async () => {
+    const older = { id: 3, status: 'cooling' };
+    const newer = { id: 8, status: 'cooling' };
+    createUnscopedClientMock.mockReturnValue(
+      buildDbMock({ selectResults: [[newer, older]], insertReturning: [[{ id: 4 }]] }),
+    );
+
+    const result = await requestUserDeletion('user-uuid-001');
+
+    expect(result).toEqual({ request: older, created: false });
+  });
+
+  it('a root repeating the request gets the pending one back: no prompt, no second audit', async () => {
+    // Nothing is written on a repeat, so there is nothing to acknowledge, and
+    // the rootless flags were already recorded against the pending request.
+    const pending = { id: 3, requestType: 'user', userId: 'root-user', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ selectResults: [[pending]] }));
+    findRootOffboardingImpactMock.mockResolvedValue([impact(42, 'Sunset Condos')]);
+
+    const result = await requestUserDeletion('root-user');
+
+    expect(result).toEqual({ request: pending, created: false });
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('does not emit a root_pending_deletion audit event when the user is root of no community', async () => {
@@ -440,7 +484,7 @@ describe('requestUserDeletion', () => {
 
     const result = await requestUserDeletion('root-user', true);
 
-    expect(result).toEqual(fakeRequest);
+    expect(result).toEqual({ request: fakeRequest, created: true });
     expect(findRootOffboardingImpactMock).toHaveBeenCalledWith('root-user');
     expect(logAuditEventMock).toHaveBeenCalledTimes(2);
     const calls = logAuditEventMock.mock.calls.map((c) => c[0]);
@@ -495,7 +539,10 @@ describe('requestUserDeletion', () => {
 
     // The request is already committed and the user consented — a logging
     // failure must not surface to them as an error.
-    await expect(requestUserDeletion('root-user-4', true)).resolves.toEqual(fakeRequest);
+    await expect(requestUserDeletion('root-user-4', true)).resolves.toEqual({
+      request: fakeRequest,
+      created: true,
+    });
   });
 });
 
@@ -513,17 +560,52 @@ describe('cancelUserDeletion', () => {
     const dbMock = buildDbMock({ updateReturning: [[updated]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await cancelUserDeletion(1, 'user-uuid-001');
-    expect(result).toEqual(updated);
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
+    expect(result).toEqual([updated]);
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    expect(updateCall?.values).toMatchObject({ status: 'cancelled', cancelledBy: 'user-uuid-001' });
   });
 
-  it('throws when request is not found', async () => {
+  // Two cooling rows (a double request made before the fix, or one that beat
+  // the check-then-insert): stopping only one left the other to soft-delete
+  // the account after the user was told it stays open.
+  it('cancels every cooling request the user has, not one of them', async () => {
+    const rows = [
+      { id: 3, status: 'cancelled' },
+      { id: 8, status: 'cancelled' },
+    ];
+    const dbMock = buildDbMock({ updateReturning: [rows] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
+
+    expect(result).toEqual(rows);
+    const updates = dbMock._calls.filter((c) => c.op === 'update');
+    expect(updates).toHaveLength(1);
+    // Keyed on the user, not on one request id.
+    expect(updates[0]?.where).toEqual({
+      _and: expect.arrayContaining([
+        { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+        { _eq: [accountDeletionRequestsTable.requestType, 'user'] },
+      ]),
+    });
+    expect(eqMock).not.toHaveBeenCalledWith(accountDeletionRequestsTable.id, expect.anything());
+  });
+
+  // The 04:00 UTC cron can soft-delete between the route's lookup and this
+  // write. Unguarded, the write flipped soft_deleted back to cancelled while
+  // the account stayed deleted and banned.
+  it('only touches requests still cooling, so a soft-deleted one is left alone', async () => {
     const dbMock = buildDbMock({ updateReturning: [[]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    await expect(cancelUserDeletion(999, 'user-uuid-001')).rejects.toThrow(
-      'Deletion request 999 not found',
-    );
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
+
+    expect(result).toEqual([]);
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    expect(updateCall?.where).toEqual({
+      _and: expect.arrayContaining([{ _eq: [accountDeletionRequestsTable.status, 'cooling'] }]),
+    });
   });
 });
 

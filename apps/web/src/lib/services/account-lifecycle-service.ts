@@ -222,7 +222,12 @@ export class RootOffboardingAckRequiredError extends Error {
 }
 
 /**
- * Creates a deletion request with a 30-day cooling period.
+ * Creates a deletion request with a 30-day cooling period, or returns the one
+ * the user already has.
+ *
+ * One cooling request per user: a second call (two tabs, a retry after a slow
+ * response) returns the existing request with `created: false` and writes
+ * nothing, so the caller must not send a second "initiated" email.
  *
  * Throws `RootOffboardingAckRequiredError` when the user is root of any
  * community and `acknowledgeRootOffboarding` is false. NOTHING is written in
@@ -235,6 +240,26 @@ export async function requestUserDeletion(
 ) {
   const now = new Date();
   const coolingEndsAt = deletionCoolingEndsAt(now);
+  const db = createUnscopedClient();
+
+  // Nothing is written on this path, so it needs no root acknowledgement: the
+  // request returned here was acknowledged (or needed none) when it was made.
+  // ponytail: check-then-insert with no unique index, so two calls that both
+  // read before either inserts still create two rows (cancel stops them all).
+  // Trigger: two cooling rows for one user observed in prod; then add a partial
+  // unique index on (user_id) where request_type = 'user' and status = 'cooling'.
+  const existing = await db
+    .select()
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.userId, userId),
+        eq(accountDeletionRequests.requestType, 'user'),
+        eq(accountDeletionRequests.status, 'cooling'),
+      ),
+    );
+  const [earliest] = [...existing].sort((a, b) => a.id - b.id);
+  if (earliest) return { request: earliest, created: false };
 
   // Ack gate BEFORE any write. Unlike the flagging below, a failure here must
   // propagate: if we cannot determine the impact we must not silently proceed
@@ -244,7 +269,6 @@ export async function requestUserDeletion(
     throw new RootOffboardingAckRequiredError(rootImpact);
   }
 
-  const db = createUnscopedClient();
   const [request] = await db
     .insert(accountDeletionRequests)
     .values({
@@ -299,22 +323,35 @@ export async function requestUserDeletion(
     console.error('[root-offboarding] failed to flag rootless-on-deletion', err);
   }
 
-  return request;
+  return { request, created: true };
 }
 
-/** Cancels a deletion request during the cooling period. */
-export async function cancelUserDeletion(requestId: number, cancelledBy: string) {
+/**
+ * Cancels EVERY cooling deletion request the user has and returns the rows it
+ * cancelled. Cancelling only one would leave a duplicate to soft-delete the
+ * account after the user was told it stays open.
+ *
+ * State-guarded like `executeUserSoftDelete`: only rows still in `cooling` are
+ * touched. If the lifecycle cron soft-deleted a request between the caller's
+ * lookup and this write, that request is not in the result, and the caller
+ * must report that it is too late to cancel. Without the guard the write
+ * overwrote `soft_deleted` with `cancelled` while the account stayed deleted.
+ */
+export async function cancelUserDeletion(userId: string, cancelledBy: string) {
   const now = new Date();
   const db = createUnscopedClient();
 
-  const [updated] = await db
+  return db
     .update(accountDeletionRequests)
     .set({ status: 'cancelled', cancelledAt: now, cancelledBy })
-    .where(eq(accountDeletionRequests.id, requestId))
+    .where(
+      and(
+        eq(accountDeletionRequests.userId, userId),
+        eq(accountDeletionRequests.requestType, 'user'),
+        eq(accountDeletionRequests.status, 'cooling'),
+      ),
+    )
     .returning();
-
-  if (!updated) throw new Error(`Deletion request ${requestId} not found`);
-  return updated;
 }
 
 /**
