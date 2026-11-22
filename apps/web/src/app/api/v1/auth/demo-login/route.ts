@@ -16,7 +16,7 @@ import {
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { fillDemoCommunitySite } from '@/lib/services/site-look-service';
-import { isSafeReturnPath } from '@/lib/utils/return-to';
+import { buildClientRedirectHtml } from '@/lib/utils/client-redirect-html';
 import {
   getDemoCommunityExpiry,
   getDemoInstanceForLogin,
@@ -99,24 +99,26 @@ function createRedirectResponse(target: string | URL, options?: { isPreview?: bo
  * responses in cross-origin iframes, preventing the session from being
  * established. A 200 HTML response stores cookies normally, then JS navigates.
  */
-function createPreviewRedirectResponse(target: string | URL): NextResponse {
-  const targetUrl = typeof target === 'string' ? target : target.toString();
-  const escaped = targetUrl.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const html = `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=${escaped}"><script>window.location.replace(${JSON.stringify(targetUrl)})</script></head><body></body></html>`;
+function createPreviewRedirectResponse(target: URL): NextResponse {
+  const html = buildClientRedirectHtml(target);
 
   const response = new NextResponse(html, {
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
-  response.headers.set('Referrer-Policy', 'no-referrer');
-  response.headers.set('Cache-Control', 'no-store');
-  response.headers.set('Pragma', 'no-cache');
-
   const secHeaders = buildSecurityHeaders({ isPreview: true });
   for (const [name, value] of Object.entries(secHeaders)) {
     response.headers.set(name, value);
   }
   response.headers.set('Content-Security-Policy', buildCspHeader({ isPreview: true }));
+
+  // After the security headers, which set `strict-origin-when-cross-origin`.
+  // This page's URL carries the demo token, and the same-origin page it
+  // navigates to would otherwise see that full URL as document.referrer (and
+  // send it as Referer) — which Sentry's browser SDK records with any error.
+  response.headers.set('Referrer-Policy', 'no-referrer');
+  response.headers.set('Cache-Control', 'no-store');
+  response.headers.set('Pragma', 'no-cache');
 
   return response;
 }
@@ -125,34 +127,6 @@ function createPreviewRedirectResponse(target: string | URL): NextResponse {
 function loginError(baseUrl: string, error?: string): NextResponse {
   const url = error ? `/auth/login?error=${error}` : '/auth/login';
   return createRedirectResponse(new URL(url, baseUrl));
-}
-
-/**
- * Resolve the post-login destination. An explicit `?redirect=` override is
- * honoured only when it passes the shared returnTo screen AND, resolved against
- * the trusted base, keeps that base's origin. Anything else falls back to the
- * role's default page.
- *
- * The HMAC signs `token`, not `redirect`, so the override is attacker-chosen
- * for anyone holding a valid demo link. The URL parser maps `\` to `/` and
- * strips tabs and newlines, so `/\evil.com`, `/<TAB>/evil.com` and
- * `/<LF>/evil.com` all pass a `startsWith('/') && !startsWith('//')` screen
- * and still resolve to `https://evil.com/`.
- */
-function resolveRedirectTarget(
-  explicitRedirect: string | null,
-  defaultPath: string,
-  trustedBaseUrl: string,
-): URL {
-  const fallback = new URL(defaultPath, trustedBaseUrl);
-  if (!explicitRedirect || !isSafeReturnPath(explicitRedirect)) return fallback;
-  let candidate: URL;
-  try {
-    candidate = new URL(explicitRedirect, trustedBaseUrl);
-  } catch {
-    return fallback;
-  }
-  return candidate.origin === fallback.origin ? candidate : fallback;
 }
 
 // route-gate: public — sessionless demo auto-login; validateDemoToken checks the demo instance's HMAC before any session is minted
@@ -228,32 +202,34 @@ export async function GET(request: Request) {
   }
   await fillDemoCommunitySite(communityId);
 
-  const defaultRedirectPath =
+  // The destination is fixed by role. There is no `?redirect=` override: the
+  // HMAC signs `token` only, so an override would be attacker-chosen for anyone
+  // holding a demo link, and no current caller sends one.
+  const redirectPath =
     payload.role === 'resident'
       ? `/mobile?communityId=${communityId}`
       : `/dashboard?communityId=${communityId}`;
-  const redirectToUrl = resolveRedirectTarget(
-    url.searchParams.get('redirect'),
-    defaultRedirectPath,
-    trustedBaseUrl,
-  );
+  const redirectToUrl = new URL(redirectPath, trustedBaseUrl);
   // Propagate preview flag so the final page response has relaxed iframe headers
   if (url.searchParams.get('preview') === 'true') {
     redirectToUrl.searchParams.set('preview', 'true');
   }
-  const redirectTo = redirectToUrl.toString();
 
-  // 6. Create authenticated session via shared helper
+  // 6. Build the response, the only step here that can refuse a target, before
+  // minting a session: a refusal then leaves no session behind whose cookies
+  // would never be delivered.
+  const isPreview = url.searchParams.get('preview') === 'true';
+  const response = isPreview
+    ? createPreviewRedirectResponse(redirectToUrl)
+    : createRedirectResponse(redirectToUrl);
+
+  // 7. Create authenticated session via shared helper
   const sessionResult = await createDemoSession(email);
   if (!sessionResult.ok) {
     return loginError(trustedBaseUrl, sessionResult.error);
   }
 
-  // 7. Redirect with session cookies attached
-  const isPreview = url.searchParams.get('preview') === 'true';
-  const response = isPreview
-    ? createPreviewRedirectResponse(redirectTo)
-    : createRedirectResponse(redirectTo);
+  // 8. Redirect with session cookies attached
   for (const cookie of sessionResult.cookies) {
     response.cookies.set(cookie.name, cookie.value, cookie.options);
   }

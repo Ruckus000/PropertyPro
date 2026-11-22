@@ -97,19 +97,6 @@ vi.mock('@/lib/services/site-look-service', () => ({
   fillDemoCommunitySite: fillDemoCommunitySiteMock,
 }));
 
-// Pass-through to the real screen. `bypassScreen` lets one test prove the
-// route's own same-origin assertion holds even if the screen were to wave a
-// hostile value through.
-const returnToControl = vi.hoisted(() => ({ bypassScreen: false }));
-vi.mock('@/lib/utils/return-to', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/utils/return-to')>();
-  return {
-    ...actual,
-    isSafeReturnPath: (value: string) =>
-      returnToControl.bypassScreen || actual.isSafeReturnPath(value),
-  };
-});
-
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
 }));
@@ -360,30 +347,52 @@ describe('demo-login route hardening', () => {
     const html = await response.text();
     expect(html).toContain('https://getpropertypro.com/mobile?communityId=42&amp;preview=true');
   });
+
+  // The preview page's own URL carries the demo token. Without no-referrer the
+  // same-origin page it navigates to sees that URL as document.referrer, which
+  // Sentry's browser SDK copies into every error event.
+  it('sends no-referrer and no-store on the preview page, after the security headers', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
+    state.rows = [{ ...BASE_INSTANCE, authTokenSecret: 'plaintext-secret' }];
+
+    const response = await GET(
+      makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test&preview=true'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('sends no-referrer on the successful 307', async () => {
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://getpropertypro.com');
+    state.rows = [{ ...BASE_INSTANCE, authTokenSecret: 'plaintext-secret' }];
+
+    const response = await GET(makeRequest('https://getpropertypro.com/api/v1/auth/demo-login?token=test'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
 });
 
-describe('demo-login ?redirect= override', () => {
+describe('demo-login ignores ?redirect=', () => {
   const BASE = 'https://getpropertypro.com';
   const DEFAULT_RESIDENT = `${BASE}/mobile?communityId=42`;
 
-  // Each starts with one `/`. The old
-  // `startsWith('/') && !startsWith('//') && !includes('://')` screen let the
-  // first three (the reported payloads) through, and `new URL(value, base)`
-  // resolved each of them to https://evil.com/.
-  const HOSTILE_REDIRECTS: Array<[string, string]> = [
+  // The route once honoured a `?redirect=` override. The HMAC signs `token`
+  // only, so the override was attacker-chosen for anyone holding a demo link,
+  // and the first three values below reached https://evil.com/ through it.
+  // No current caller sends one, so the parameter is gone: every value, hostile
+  // or same-site, lands on the role's own page.
+  const REDIRECTS: Array<[string, string]> = [
     ['backslash', '/\\evil.com'],
     ['tab', '/\t/evil.com'],
     ['newline', '/\n/evil.com'],
-    ['carriage return', '/\r/evil.com'],
     ['dot segment', '/.//evil.com'],
     ['protocol-relative', '//evil.com'],
     ['absolute', 'https://evil.com/'],
-  ];
-
-  const LEGITIMATE_REDIRECTS: Array<[string, string]> = [
-    ['/dashboard?communityId=42', `${BASE}/dashboard?communityId=42`],
-    ['/documents?communityId=42&tab=minutes', `${BASE}/documents?communityId=42&tab=minutes`],
-    ['/mobile', `${BASE}/mobile`],
+    ['javascript URL', 'javascript:alert(1)'],
+    ['same-site path', '/documents?communityId=42&tab=minutes'],
   ];
 
   function demoLoginUrl(redirect: string, preview = false): string {
@@ -399,7 +408,6 @@ describe('demo-login ?redirect= override', () => {
     vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', '');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
-    returnToControl.bypassScreen = false;
     state.rows = [{ ...BASE_INSTANCE, authTokenSecret: 'plaintext-secret' }];
     state.communityRows = [{ demoExpiresAt: null }];
     queryCounter.count = 0;
@@ -419,60 +427,25 @@ describe('demo-login ?redirect= override', () => {
   });
 
   afterEach(() => {
-    returnToControl.bypassScreen = false;
     vi.unstubAllEnvs();
   });
 
-  it.each(HOSTILE_REDIRECTS)(
-    '307 branch: a %s redirect falls back to the default page',
-    async (_label, redirect) => {
-      const response = await GET(makeRequest(demoLoginUrl(redirect)));
-
-      expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toBe(DEFAULT_RESIDENT);
-    },
-  );
-
-  it.each(HOSTILE_REDIRECTS)(
-    'preview branch: a %s redirect falls back to the default page',
-    async (_label, redirect) => {
-      const response = await GET(makeRequest(demoLoginUrl(redirect, true)));
-
-      expect(response.status).toBe(200);
-      const html = await response.text();
-      expect(html).not.toContain('evil.com');
-      expect(html).toContain(
-        `window.location.replace(${JSON.stringify(`${DEFAULT_RESIDENT}&preview=true`)})`,
-      );
-    },
-  );
-
-  it.each(LEGITIMATE_REDIRECTS)('307 branch: honours %s', async (redirect, expected) => {
+  it.each(REDIRECTS)('307 branch: a %s redirect lands on the default page', async (_label, redirect) => {
     const response = await GET(makeRequest(demoLoginUrl(redirect)));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe(expected);
+    expect(response.headers.get('location')).toBe(DEFAULT_RESIDENT);
   });
 
-  it.each(LEGITIMATE_REDIRECTS)('preview branch: honours %s', async (redirect, expected) => {
+  it.each(REDIRECTS)('preview branch: a %s redirect lands on the default page', async (_label, redirect) => {
     const response = await GET(makeRequest(demoLoginUrl(redirect, true)));
 
     expect(response.status).toBe(200);
-    const target = new URL(expected);
-    target.searchParams.set('preview', 'true');
     const html = await response.text();
-    expect(html).toContain(`window.location.replace(${JSON.stringify(target.toString())})`);
+    expect(html).not.toContain('evil.com');
+    expect(html).not.toContain('tab=minutes');
+    expect(html).toContain(
+      `window.location.replace(${JSON.stringify(`${DEFAULT_RESIDENT}&preview=true`).replace(/&/g, '\\u0026')})`,
+    );
   });
-
-  it.each(HOSTILE_REDIRECTS.slice(0, 3))(
-    'the same-origin assertion alone refuses a %s redirect when the screen is bypassed',
-    async (_label, redirect) => {
-      returnToControl.bypassScreen = true;
-
-      const response = await GET(makeRequest(demoLoginUrl(redirect)));
-
-      expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toBe(DEFAULT_RESIDENT);
-    },
-  );
 });
