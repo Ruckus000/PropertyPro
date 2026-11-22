@@ -8,6 +8,19 @@ const about = (s: string) => s as AccessSentence;
 
 function Probe() { return <span>{useInPageLayout() ? 'in' : 'out'}</span>; }
 
+describe('PageLayout trail placement', () => {
+  const aside = (c: HTMLElement) => c.querySelector('[data-page-grid] > div:last-child') as HTMLElement;
+  it('moves a trail-only aside to row 1', () => {
+    const { container } = render(<PageLayout template="list" header={null} panel={{ template: 'list', shortcuts: 's' }}>x</PageLayout>);
+    expect(aside(container).className).toContain('row-start-1');
+    expect(aside(container).className).not.toContain('row-start-2');
+  });
+  it('keeps the trail in row 2 under a lead', () => {
+    const { container } = render(<PageLayout template="list" header={null} panel={{ template: 'list', glance: 'g', shortcuts: 's' }}>x</PageLayout>);
+    expect(aside(container).className).toContain('row-start-2');
+  });
+});
+
 describe('PageLayout', () => {
   it('keeps summary, main, more in reading order', () => {
     const { container } = render(

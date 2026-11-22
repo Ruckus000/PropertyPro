@@ -110,8 +110,12 @@ export function PageLayout({
             <div
               className={cn(
                 table
-                  ? "cq-xl:col-start-2 cq-xl:row-start-2"
-                  : "cq-lg:col-start-2 cq-lg:row-start-2",
+                  ? hasLead
+                    ? "cq-xl:col-start-2 cq-xl:row-start-2"
+                    : "cq-xl:col-start-2 cq-xl:row-start-1"
+                  : hasLead
+                    ? "cq-lg:col-start-2 cq-lg:row-start-2"
+                    : "cq-lg:col-start-2 cq-lg:row-start-1",
               )}
             >
               <PanelRegions regions={regions.trail} label="More about this page" />

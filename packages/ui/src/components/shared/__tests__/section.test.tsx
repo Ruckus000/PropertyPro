@@ -22,6 +22,8 @@ describe('Section kit', () => {
   it('drops its box when bare', () => {
     const { container } = render(<Section bare>cards</Section>);
     expect(container.firstChild).not.toHaveClass('border');
+    const boxed = render(<Section>cards</Section>);
+    expect(boxed.container.firstChild).toHaveClass('border');
   });
   it('puts the note left and actions right in a footer', () => {
     render(<SectionFooter note="Showing 4"><button>Load more</button></SectionFooter>);

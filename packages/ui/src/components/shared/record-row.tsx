@@ -28,10 +28,15 @@ export function RecordRow({
   outcome,
   outcomeTone = "plain",
 }: RecordRowProps) {
-  const metaLine = [statusWord, ...(meta ?? [])].join(" · ");
+  const metaLine = [statusWord, ...(meta ?? []).filter((m) => m !== "")].join(" · ");
   return (
     <li className="cq flex items-start gap-3 px-4 py-3">
-      {lead ? <div className="mt-0.5 shrink-0">{lead}</div> : null}
+      {/* The meta line carries the status word, so the glyph is not announced twice. */}
+      {lead ? (
+        <div className="mt-0.5 shrink-0" aria-hidden="true">
+          {lead}
+        </div>
+      ) : null}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 cq-sm:flex-row cq-sm:items-start cq-sm:gap-3">
         <div className="min-w-0 flex-1">
           <p className="min-w-0 truncate text-sm font-medium text-content">{title}</p>

@@ -86,6 +86,7 @@ export function SectionFirstRun({
   title: string;
   description: string;
   action?: React.ReactNode;
+  /** Rendered aria-hidden; must contain nothing focusable. */
   example?: React.ReactNode;
   exampleLabel?: string;
 }) {

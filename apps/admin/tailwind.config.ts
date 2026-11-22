@@ -320,7 +320,7 @@ const config: Config = {
   plugins: [
     /*
      * Container-query variants. `.cq` makes an element a size container named
-     * `cq`; `cq-sm|md|lg:` then apply from 480 / 720 / 960px of THAT element's
+     * `cq`; `cq-sm|md|lg|xl:` then apply from 480 / 720 / 960 / 1280px of THAT element's
      * width, not the window's. Use them for components whose room depends on
      * the shell (sidebar, top nav) rather than the device. Touch heights stay
      * on viewport `md:` — touch size follows the device, not the box.
@@ -338,6 +338,7 @@ const config: Config = {
       addVariant('cq-sm', '@container cq (min-width: 480px)');
       addVariant('cq-md', '@container cq (min-width: 720px)');
       addVariant('cq-lg', '@container cq (min-width: 960px)');
+      addVariant('cq-xl', '@container cq (min-width: 1280px)');
     }),
   ],
 };
