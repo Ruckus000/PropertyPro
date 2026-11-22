@@ -166,5 +166,12 @@ export const compliancePatchContract = defineRoute({
       ),
   },
   response: z.unknown(),
+  /**
+   * `warnings`: `received_date_kept` when the document already had an earlier
+   * received date than the one sent, which was therefore not used.
+   */
+  envelope: z.object({
+    warnings: z.array(z.looseObject({ code: z.string(), message: z.string() })).optional(),
+  }),
   permission: { resource: 'compliance', action: 'write' },
 });

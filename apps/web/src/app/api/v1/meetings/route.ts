@@ -40,7 +40,10 @@ import {
   softDeleteMeetingForCommunity,
   updateMeetingForCommunity,
 } from '@/lib/services/meeting-service';
-import { setDocumentReceivedAt } from '@/lib/services/document-received-at-service';
+import {
+  RECEIVED_DATE_KEPT_WARNING,
+  setDocumentReceivedAt,
+} from '@/lib/services/document-received-at-service';
 import { receivedAtSchema } from '@/lib/compliance/received-at';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
@@ -672,10 +675,12 @@ async function handleRecordMinutes(
     metadata: { via: 'record_minutes' },
   });
 
+  const warnings: Array<{ code: string; message: string }> = [];
   if (approvedAt) {
     const approvedDate = new Date(approvedAt);
-    // First write wins: a date already on the document is kept.
+    // Only ever moves earlier; a later date is kept and the manager told.
     const result = await setDocumentReceivedAt(communityId, documentId, approvedDate);
+    if (result && !result.written) warnings.push(RECEIVED_DATE_KEPT_WARNING);
     if (result?.written) {
       await logAuditEvent({
         userId: actorUserId,
@@ -683,7 +688,7 @@ async function handleRecordMinutes(
         resourceType: 'document',
         resourceId: String(documentId),
         communityId,
-        oldValues: { receivedAt: null },
+        oldValues: { receivedAt: result.previous?.toISOString() ?? null },
         newValues: { receivedAt: approvedDate.toISOString() },
         metadata: { via: 'record_minutes', meetingId },
       });
@@ -694,7 +699,9 @@ async function handleRecordMinutes(
   if (!meeting) {
     throw new NotFoundError('Meeting not found');
   }
-  return serializeMeetingResponse(meeting, communityType);
+  return withEnvelope(serializeMeetingResponse(meeting, communityType), {
+    warnings: warnings.length > 0 ? warnings : undefined,
+  });
 }
 
 async function handleDetach(

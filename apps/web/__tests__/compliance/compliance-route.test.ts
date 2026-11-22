@@ -139,6 +139,7 @@ vi.mock('@/lib/services/meeting-service', () => ({
 
 // The link flow writes the record's received date to the document (H-2).
 vi.mock('@/lib/services/document-received-at-service', () => ({
+  RECEIVED_DATE_KEPT_WARNING: { code: 'received_date_kept', message: 'kept' },
   setDocumentReceivedAt: setDocumentReceivedAtMock,
 }));
 
@@ -664,7 +665,11 @@ describe('PATCH /api/v1/compliance', () => {
   it('writes the received date to the linked document and audits it on the document (H-2)', async () => {
     updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
     const receivedAt = '2026-01-15T23:59:59.999Z';
-    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: true, receivedAt: new Date(receivedAt) });
+    setDocumentReceivedAtMock.mockResolvedValueOnce({
+      written: true,
+      previous: new Date('2026-02-01T00:00:00.000Z'),
+      receivedAt: new Date(receivedAt),
+    });
 
     const res = await PATCH(
       bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, receivedAt }),
@@ -678,17 +683,18 @@ describe('PATCH /api/v1/compliance', () => {
         action: 'update',
         resourceType: 'document',
         resourceId: '77',
-        oldValues: { receivedAt: null },
+        oldValues: { receivedAt: '2026-02-01T00:00:00.000Z' },
         newValues: { receivedAt },
         metadata: { via: 'compliance_link', checklistItemId: 5 },
       }),
     );
   });
 
-  it('keeps a received date already on the document, and audits no change (first write wins)', async () => {
+  it('keeps an EARLIER received date already on the document, says so, and audits no change', async () => {
     updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
     setDocumentReceivedAtMock.mockResolvedValueOnce({
       written: false,
+      previous: new Date('2026-01-01T00:00:00.000Z'),
       receivedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
 
@@ -704,9 +710,21 @@ describe('PATCH /api/v1/compliance', () => {
     );
 
     expect(res.status).toBe(200);
+    const json = (await res.json()) as { warnings?: Array<{ code: string }> };
+    expect(json.warnings).toEqual([expect.objectContaining({ code: 'received_date_kept' })]);
     expect(logAuditEventMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ resourceType: 'document' }),
     );
+  });
+
+  it('sends no warnings when the received date was used', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
+    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: true, previous: null, receivedAt: new Date() });
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, receivedAt: '2026-01-15T23:59:59.999Z' }),
+      undefined,
+    );
+    expect(await res.json()).not.toHaveProperty('warnings');
   });
 
   it('leaves the document date alone when no received date is sent', async () => {

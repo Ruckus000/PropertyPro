@@ -12,7 +12,7 @@
 -- Locking: fail fast instead of queueing behind a long read. The FK is added
 -- NOT VALID (no scan under the strong lock) and validated separately; every
 -- value is NULL, so validation is immediate.
-SET lock_timeout = '5s';--> statement-breakpoint
+SET LOCAL lock_timeout = '5s';--> statement-breakpoint
 ALTER TABLE "documents" ADD COLUMN "received_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "meetings" ADD COLUMN "minutes_document_id" bigint;--> statement-breakpoint
 ALTER TABLE "meetings" ADD CONSTRAINT "meetings_minutes_document_id_documents_id_fk" FOREIGN KEY ("minutes_document_id") REFERENCES "public"."documents"("id") ON DELETE set null ON UPDATE no action NOT VALID;--> statement-breakpoint

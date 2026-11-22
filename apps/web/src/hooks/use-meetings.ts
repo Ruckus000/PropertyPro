@@ -198,7 +198,7 @@ export function useRecordMeetingMinutes(communityId: number) {
 
   return useMutation({
     mutationFn: async (vars: { meetingId: number; documentId: number; approvedAt: string }) =>
-      requestJson<MeetingListItem>('/api/v1/meetings', {
+      requestJsonEnvelope<MeetingListItem>('/api/v1/meetings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

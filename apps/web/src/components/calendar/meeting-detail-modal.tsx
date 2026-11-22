@@ -50,8 +50,10 @@ export function MeetingDetailModal({
     setPickingMinutes(false);
     setErrorMessage(null);
     try {
-      await recordMinutes.mutateAsync({ meetingId, documentId, approvedAt });
+      const { warnings } = await recordMinutes.mutateAsync({ meetingId, documentId, approvedAt });
       toast.success('Minutes recorded.');
+      // The file already had an earlier date: say so, never drop it silently.
+      for (const warning of warnings) toast.warning(warning.message);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to record minutes.');
     }
@@ -326,13 +328,26 @@ export function MeetingDetailModal({
           }}
         >
           <Dialog.Portal>
-            <Dialog.Content aria-describedby={undefined} className="contents">
+            <Dialog.Content
+              aria-describedby={undefined}
+              className="contents"
+              // Start in the picker's search field. Radix would otherwise move
+              // focus to the first tabbable (the close button), and the
+              // picker's own mount-time focus runs before this layer's focus
+              // trap takes over from the meeting dialog's, which pulls it back.
+              onOpenAutoFocus={(event) => {
+                event.preventDefault();
+                (event.currentTarget as HTMLElement)
+                  .querySelector<HTMLInputElement>('input[type="text"]')
+                  ?.focus();
+              }}
+            >
               <Dialog.Title className="sr-only">Record minutes</Dialog.Title>
               <LinkDocumentModal
                 communityId={communityId}
                 title="Record minutes"
                 dateLabel="Approved on"
-                dateHint="The 30-day posting window for minutes starts when they are approved. A date already recorded on the file is kept."
+                dateHint="The 30-day posting window for minutes starts when they are approved. A date can correct one already on the file only to an earlier day."
                 onSelect={(documentId, approvedAt) => void handleRecordMinutes(documentId, approvedAt)}
                 onClose={() => setPickingMinutes(false)}
               />

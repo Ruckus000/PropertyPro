@@ -28,7 +28,7 @@ import {
   getFeaturesForCommunity,
   type CommunityType,
 } from '@propertypro/shared';
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute, withEnvelope } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -42,7 +42,10 @@ import { loadChecklistWithStatus, withDerivedStatus } from '@/lib/compliance/loa
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
-import { setDocumentReceivedAt } from '@/lib/services/document-received-at-service';
+import {
+  RECEIVED_DATE_KEPT_WARNING,
+  setDocumentReceivedAt,
+} from '@/lib/services/document-received-at-service';
 import {
   findChecklistLinkConflict,
   insertComplianceChecklistItems,
@@ -235,10 +238,12 @@ export const PATCH = withErrorHandler(
     // The record's own clock (H-2): when the association received or created
     // it. A property of the document, so it is written there, after the link
     // landed, and audited on the document.
+    const warnings: Array<{ code: string; message: string }> = [];
     if (patchAction === 'link_document' && receivedAt) {
       const receivedDate = new Date(receivedAt);
-      // First write wins: a date already on the document is kept.
+      // Only ever moves earlier; a later date is kept and the manager told.
       const result = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
+      if (result && !result.written) warnings.push(RECEIVED_DATE_KEPT_WARNING);
       if (result?.written) {
         await logAuditEvent({
           userId,
@@ -246,7 +251,7 @@ export const PATCH = withErrorHandler(
           resourceType: 'document',
           resourceId: String(documentId),
           communityId,
-          oldValues: { receivedAt: null },
+          oldValues: { receivedAt: result.previous?.toISOString() ?? null },
           newValues: { receivedAt: receivedDate.toISOString() },
           metadata: { via: 'compliance_link', checklistItemId: id },
         });
@@ -275,6 +280,6 @@ export const PATCH = withErrorHandler(
       void tryAutoComplete(communityId, userId, 'review_compliance');
     }
 
-    return result;
+    return withEnvelope(result, { warnings: warnings.length > 0 ? warnings : undefined });
   }),
 );

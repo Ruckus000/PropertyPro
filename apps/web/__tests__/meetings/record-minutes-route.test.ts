@@ -85,6 +85,7 @@ vi.mock('@/lib/middleware/demo-grace-guard', () => ({
   assertNotDemoGrace: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('@/lib/services/document-received-at-service', () => ({
+  RECEIVED_DATE_KEPT_WARNING: { code: 'received_date_kept', message: 'kept' },
   setDocumentReceivedAt: setDocumentReceivedAtMock,
 }));
 
@@ -153,7 +154,7 @@ describe('meetings route — record-minutes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['Date'], now: NOW });
-    setDocumentReceivedAtMock.mockResolvedValue({ written: true, receivedAt: new Date() });
+    setDocumentReceivedAtMock.mockResolvedValue({ written: true, previous: null, receivedAt: new Date() });
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-1',
       communityId: 42,
@@ -237,10 +238,13 @@ describe('meetings route — record-minutes', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('keeps an approval date already on the document, and audits no date change', async () => {
+  it('keeps an EARLIER date already on the document, says so, and audits no date change', async () => {
     mockDb();
-    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: false, receivedAt: new Date('2026-10-01T00:00:00.000Z') });
-    await recordMinutes({ approvedAt: '2026-11-03T23:59:59.999Z' });
+    const earlier = new Date('2026-10-01T00:00:00.000Z');
+    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: false, previous: earlier, receivedAt: earlier });
+    const response = await recordMinutes({ approvedAt: '2026-11-03T23:59:59.999Z' });
+    const json = (await response.json()) as { warnings?: Array<{ code: string }> };
+    expect(json.warnings).toEqual([expect.objectContaining({ code: 'received_date_kept' })]);
     expect(logAuditEventMock).not.toHaveBeenCalledWith(expect.objectContaining({ resourceType: 'document' }));
   });
 

@@ -107,9 +107,10 @@ export function LinkDocumentModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-[var(--radius-sm)] p-1 hover:bg-surface-hover transition-colors"
           >
-            <X size={16} className="text-content-tertiary" />
+            <X size={16} className="text-content-tertiary" aria-hidden="true" />
           </button>
         </div>
 
@@ -143,7 +144,7 @@ export function LinkDocumentModal({
             {...(dateLabel ? { label: dateLabel } : {})}
             hint={
               dateHint ??
-              "The 30-day posting window starts on this date. A date already recorded on the file is kept."
+              "The 30-day posting window starts on this date. A date can correct one already on the file only to an earlier day."
             }
           />
         </div>

@@ -46,8 +46,16 @@ export async function patchChecklistItem(payload: PatchPayload): Promise<Checkli
           : `PATCH failed: ${res.status}`;
     throw new Error(message);
   }
-  const json = await res.json();
-  return json.data as ChecklistItemData;
+  const json = (await res.json()) as { data: ChecklistItemData; warnings?: unknown };
+  // `received_date_kept`: the file already had an earlier date, which was kept.
+  // Said out loud, so a date the person typed is never dropped silently.
+  if (Array.isArray(json.warnings)) {
+    for (const warning of json.warnings) {
+      const message = (warning as { message?: unknown })?.message;
+      if (typeof message === "string") toast.warning(message);
+    }
+  }
+  return json.data;
 }
 
 /**
