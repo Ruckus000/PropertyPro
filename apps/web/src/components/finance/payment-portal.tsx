@@ -175,7 +175,6 @@ function OfflinePaymentGuidance({
       description={
         <>
           <span>
-            Online payment isn&rsquo;t available here.
             Contact {who} to arrange payment.
           </span>
           {(email || phone) && (

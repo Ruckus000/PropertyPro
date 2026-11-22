@@ -936,7 +936,7 @@ describe('PaymentPortal', () => {
       // make Total Due non-zero, so the banner could contradict the screen.
       expect(
         screen.getByText(/contact sunset management llc to arrange payment/i),
-      ).toHaveTextContent(/^Online payment isn’t available here\.\s+Contact Sunset Management LLC/);
+      ).toHaveTextContent(/^Contact Sunset Management LLC to arrange payment\./);
       expect(screen.queryByText(/balance above/i)).not.toBeInTheDocument();
       // This resident owes money (possibly overdue), so the banner must not read
       // as "you're paid up" — it said "Your balance is current" until 2026-11-21.
