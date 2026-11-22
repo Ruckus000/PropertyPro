@@ -78,7 +78,9 @@ describe('EmergencyListPage, manager view', () => {
 
   it('says Draft and Canceled by the same precedence as the table', () => {
     manager(mixed);
-    expect(screen.getByRole('link', { name: 'Newer draft' }).closest('li')).toHaveTextContent(/^.*Draft · /);
+    expect(screen.getByRole('link', { name: 'Newer draft' }).closest('li')).toHaveTextContent(
+      'Draft · Urgent · Mar 5, 2026, 7:00 AM',
+    );
     expect(screen.getByRole('link', { name: 'Newer cancelled' }).closest('li')).toHaveTextContent(
       /Canceled · /,
     );
@@ -122,8 +124,18 @@ describe('EmergencyListPage, manager view', () => {
     expect(screen.getAllByRole('link', { name: 'Send alert' })).toHaveLength(1);
   });
 
+  it('gives the row title link the 44px floor below md', () => {
+    manager(mixed);
+    expect(screen.getByRole('link', { name: 'Water shutoff' })).toHaveClass('min-h-11', 'md:min-h-0');
+  });
+
   it('has no axe violations', async () => {
     const { container } = manager(mixed);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it('has no axe violations in the first-run state', async () => {
+    const { container } = manager([]);
     expect(await axe(container)).toHaveNoViolations();
   });
 });
@@ -149,5 +161,17 @@ describe('EmergencyListPage, recipient view', () => {
     render(<EmergencyListPage view="recipient" broadcasts={[]} communityId={7} timeZone="America/New_York" />);
     expect(screen.getByRole('heading', { name: 'No alerts yet' })).toBeVisible();
     expect(screen.getByText('Alerts sent to you appear here.')).toBeVisible();
+  });
+
+  it('has no axe violations, populated or empty', async () => {
+    const first = render(
+      <EmergencyListPage view="recipient" broadcasts={received} communityId={7} timeZone="America/New_York" />,
+    );
+    expect(await axe(first.container)).toHaveNoViolations();
+    first.unmount();
+    const second = render(
+      <EmergencyListPage view="recipient" broadcasts={[]} communityId={7} timeZone="America/New_York" />,
+    );
+    expect(await axe(second.container)).toHaveNoViolations();
   });
 });

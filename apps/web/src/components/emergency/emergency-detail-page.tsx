@@ -11,8 +11,9 @@ import { Siren } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { Section, SectionError, SectionHeader } from '@propertypro/ui/components/shared/section';
 import type { AccessSentence } from '@propertypro/ui/components/shared/side-panel';
-import { StatusGlyph, type StatusGlyphKind } from '@propertypro/ui/components/shared/status-glyph';
+import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { PageHeader } from '@/components/shared/page-header';
+import { broadcastStatus } from '@/components/emergency/broadcast-status';
 import { DeliveryReport } from '@/components/emergency/DeliveryReport';
 import { useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
 
@@ -22,18 +23,6 @@ interface Props {
   isAdmin: boolean;
   timeZone: string;
   about?: AccessSentence;
-}
-
-// Same precedence as the list page (emergency-list-page.tsx) and getStatusLabel in
-// BroadcastHistoryTable: canceled, then sent, then draft.
-// ponytail: duplicated from emergency-list-page.tsx, which was under review when this was written. Trigger: the list page review lands; export one helper and delete this copy.
-function statusOf(b: { canceledAt: string | null; completedAt: string | null }): {
-  kind: StatusGlyphKind;
-  word: string;
-} {
-  if (b.canceledAt) return { kind: 'not-started', word: 'Canceled' };
-  if (b.completedAt) return { kind: 'done', word: 'Sent' };
-  return { kind: 'in-progress', word: 'Draft' };
 }
 
 const capitalise = (s: string) => (s === '' ? s : s.charAt(0).toUpperCase() + s.slice(1));
@@ -64,7 +53,7 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
 
   // Only a manager's response carries the delivery report; a non-admin never sees it.
   const managerReport = isAdmin && 'recipients' in report ? report : null;
-  const status = managerReport ? statusOf(managerReport) : null;
+  const status = managerReport ? broadcastStatus(managerReport) : null;
   const sentAt = managerReport?.completedAt;
 
   const banner = managerReport?.canceledAt ? (

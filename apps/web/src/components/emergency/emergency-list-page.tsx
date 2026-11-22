@@ -17,7 +17,8 @@ import {
   SectionHeader,
 } from '@propertypro/ui/components/shared/section';
 import { PanelGlance, type AccessSentence } from '@propertypro/ui/components/shared/side-panel';
-import { StatusGlyph, type StatusGlyphKind } from '@propertypro/ui/components/shared/status-glyph';
+import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
+import { broadcastStatus } from '@/components/emergency/broadcast-status';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 
@@ -43,13 +44,6 @@ type Props =
     }
   | { view: 'recipient'; broadcasts: Row[]; communityId: number; timeZone: string };
 
-// Same precedence as getStatusLabel in BroadcastHistoryTable: canceled, then sent, then draft.
-function statusOf(b: Row): { kind: StatusGlyphKind; word: string } {
-  if (b.canceledAt) return { kind: 'not-started', word: 'Canceled' };
-  if (b.completedAt) return { kind: 'done', word: 'Sent' };
-  return { kind: 'in-progress', word: 'Draft' };
-}
-
 const capitalise = (s: string) => (s === '' ? s : s.charAt(0).toUpperCase() + s.slice(1));
 
 function EmergencyRow({
@@ -63,7 +57,7 @@ function EmergencyRow({
   timeZone: string;
   showCount: boolean;
 }) {
-  const status = statusOf(b);
+  const status = broadcastStatus(b);
   const when = new Intl.DateTimeFormat('en-US', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -75,9 +69,9 @@ function EmergencyRow({
       title={
         <Link
           href={`/emergency/${b.id}?communityId=${communityId}`}
-          className="text-content-link hover:underline"
+          className="inline-flex min-h-11 max-w-full items-center text-content-link hover:underline md:min-h-0"
         >
-          {b.title}
+          <span className="truncate">{b.title}</span>
         </Link>
       }
       statusWord={status.word}
@@ -163,6 +157,7 @@ export function EmergencyListPage(props: Props) {
         {broadcasts.length === 0 ? (
           manager ? (
             <SectionFirstRun
+              headingLevel={2}
               title="No alerts sent yet"
               description="When you send one it appears here with who it went to."
               action={sendButton}
@@ -170,7 +165,11 @@ export function EmergencyListPage(props: Props) {
               example={exampleRow}
             />
           ) : (
-            <SectionFirstRun title="No alerts yet" description="Alerts sent to you appear here." />
+            <SectionFirstRun
+              headingLevel={2}
+              title="No alerts yet"
+              description="Alerts sent to you appear here."
+            />
           )
         ) : (
           <>
