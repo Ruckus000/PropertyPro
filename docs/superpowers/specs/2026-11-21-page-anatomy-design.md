@@ -3,7 +3,9 @@
 Date: 2026-11-21
 Status: awaiting approval
 Scope: `apps/web` signed-in app (`app/(authenticated)`)
-Mockups: `2026-11-21-page-anatomy-mockups.html` in this folder (open in a browser; the tabs "B revised · Alerts" and "B revised · Packages" are the approved direction)
+Mockups, both in this folder (open in a browser):
+- `2026-11-21-page-anatomy-mockups.html`: the three directions; the tabs "B revised · Alerts" and "B revised · Packages" are the approved direction.
+- `2026-11-21-page-anatomy-every-page.html`: all 96 signed-in routes drawn in that shape from the real code, with a "Refined look / Structure only" switch (section 6) and an honest note on each page that fits badly.
 
 Lines marked **(owner)** are decisions the product owner made in conversation.
 Lines marked **(call)** are the author's choices and can be overruled.
@@ -48,7 +50,8 @@ Non-goals
   (`EmptyState` sizes `hero`/`section`/`compact`, `components/shared/setup-guide`).
   They stay and sit inside the new layout.
 - Redesigning bespoke surfaces: the dashboard, the website editor, the document
-  viewer, the calendar grid. They are exempted by name (section 8).
+  viewer, the calendar grid. They are exempted by name (section 9), and get their own design pass after
+  this one, dashboard first, because it is the first screen people see.
 
 Anti-goals (a result that technically works but fails)
 
@@ -259,7 +262,133 @@ with a check icon.
   owner still finds it dull after the pilot, Settings gets its own mockup round
   before more is built.
 
-## 6. Enforcement
+### 5.9 Fit test, and what it added
+
+**(owner)** asked whether the plan was comprehensive enough and for a mockup
+of every page. All 96 routes were described from the real code and drawn.
+
+| | Count |
+|---|---|
+| Routes | 96 |
+| Redirect only | 29 |
+| Bespoke, keep their own layout | 12 |
+| Drawn in the shape | 55 (27 list, 9 detail, 11 form, 8 settings) |
+| List pages with a true headline figure | 20 of 27 |
+| List pages with a real attention item | 14 of 27 |
+
+The shape as first written held for simple pages and broke in five places.
+Sections 5.10 to 5.14 close them. **(owner)** approved extending the design
+with these.
+
+### 5.10 Page tabs
+
+Nine routes are tabbed today (Operations, Directory, Visitors, Payments,
+E-sign, the three Board pages, Documents).
+
+- Tabs sit directly under the header, above the main column and side panel.
+  Underline style; the selected tab carries the accent underline; a tab may
+  show a count.
+- Each tab supplies its own main sections and its own primary action. The
+  header's primary button changes with the tab.
+- The side panel belongs to the page, not the tab, unless a tab has its own
+  true headline figure; then "At a glance" may change per tab.
+- The selected tab is in the URL (as the pages do today), so it survives reload
+  and can be linked.
+- Tabs are for peer sets of records. A different *view* of the same records
+  (Documents: List, Board, Timeline) is a view switch at the right of the
+  section toolbar, not page tabs. **(call)**
+
+### 5.11 Step flows
+
+The form template gains a steps variant for the e-sign send and template
+builders and the resident import.
+
+- A numbered step strip under the header (the order is real, so numbers are
+  justified): done, current, upcoming.
+- One step's sections in the main column at a time. Back and Next in the
+  footer action bar; the header carries only Cancel.
+- A step that is a canvas (placing fields on a PDF) takes the full main
+  column. The side panel then holds the field palette or, if nothing true
+  belongs there, is omitted for that step.
+
+### 5.12 Card records
+
+A third record presentation beside rows and tables, for records that carry
+their own controls or a progress state: polls, elections, move-in checklists,
+storm-damage reports, reserve components.
+
+- A grid of cards inside a section, same toolbar and footer as any list.
+- Card anatomy, fixed: status badge, title, up to two lines of text, a meta
+  line, then a footer with the outcome on the left and the action on the
+  right.
+- Use only when a row cannot hold the control. Default remains rows or table.
+
+### 5.13 Preview beside details
+
+An e-sign submission is a document preview next to signer cards. This is the
+detail template: the preview is the main column, and signers, status and
+timeline are the side panel's Details and Related. No new template.
+
+### 5.14 One route, two audiences
+
+Payments, architectural requests, visitors and violations draw a different
+page for residents than for managers. Each audience's page is designed and
+migrated as its own page, chooses its own template, and may have no side
+panel. The guard checks the file, so both branches must use `PageLayout`.
+
+## 6. Visual language
+
+Structure alone makes pages consistent, not good-looking. This section is the
+craft layer. It uses the existing tokens only: no new colours, no dark theme.
+It is the "Refined look" in the every-page mockup; "Structure only" shows the
+same pages without it.
+
+Type
+- Three families by job: Geist for interface text, Geist Mono for anything a
+  person compares or copies (amounts, counts, unit numbers, dates in tables,
+  identifiers), Fraunces stays out of the signed-in app.
+- Page title `text-2xl font-semibold` with tight tracking; description one
+  step larger than body-small. Record titles are medium weight, not semibold:
+  only the page title and section titles are heavy.
+- Numbers are tabular everywhere. Numeric table columns are right-aligned.
+
+Colour
+- Neutral first. The accent (coral) appears in three places only: the one
+  primary button, the selected page tab, and links. Selected filters use the
+  ink colour, not the accent.
+- Status colours are used only for status, always with icon and text.
+- No tinted section backgrounds except the "Needs attention" item.
+
+Surfaces
+- Sand page, white sections, hairline borders, no shadows at rest.
+- The side panel has no box. It sits on the page behind a single hairline at
+  its left edge, so the main column is the only "object" on the page and the
+  panel reads as context. On narrow layouts the hairline moves to the top.
+- The header is separated from the body by one hairline (or by the tab strip).
+
+Records
+- People are shown with an initials avatar (neutral, no categorical colours).
+- Status icon tiles on rows are round and small; the row title carries the
+  weight.
+- Table header on the subtle surface, 34px; body rows 42px; row hover on the
+  subtle surface.
+- A headline figure that is a ratio ("142 of 147") gets a thin proportion bar.
+  Label/value lines in the panel are hairline-separated with mono values.
+
+Motion
+- 120ms colour transitions on hover for rows, cards, buttons and links; a 1px
+  press on buttons. Nothing moves on load. All of it is disabled under
+  `prefers-reduced-motion`.
+
+Icons
+- One stroke weight and one size (16px, 14px inside 28px tiles). Icons carry
+  status or mark an action; they are never decoration on headings.
+
+**(call)** All of the above is the author's proposal, shown for the owner to
+judge in the mockup. Sizes are given at a 16px root and are written on the rem
+scale in code.
+
+## 7. Enforcement
 
 A new guard, `pnpm guard:page-template`, added to `scripts/run-lint-guards.mjs`.
 
@@ -283,14 +412,14 @@ exempt) and refuses to pass if it scanned nothing.
 `DESIGN.md`, `.claude/rules/design.md` and `docs/design-system/` gain a "Page
 templates" section so the rule is written where page authors look.
 
-## 7. Rollout
+## 8. Rollout
 
 Each phase is its own PR or small set of PRs with disjoint files.
 
 | Phase | Contents | Done when |
 |---|---|---|
-| 0 | Kit in `packages/ui`, `PageLayout`, guard with seeded baseline, docs. No page changes. | Guard green; kit unit and axe tests pass |
-| 1 | Pilot: Emergency Alerts (list, detail, new) and Packages (staff and resident). `PageHeader` paints title and description app-wide; breadcrumb leaf rule. | Owner reviews the four pages in the running app and approves the look |
+| 0 | Kit in `packages/ui` (including tabs, steps, card records and the section 6 visual rules), `PageLayout`, guard with seeded baseline, docs. No page changes. | Guard green; kit unit and axe tests pass |
+| 1 | Pilot: Emergency Alerts (list, detail, new), Packages (staff and resident), and one tabbed page (Visitors, two tabs) so tabs are proven before phase 3. `PageHeader` paints title and description app-wide; breadcrumb leaf rule. | Owner reviews the four pages in the running app and approves the look |
 | 2 | Settings moved onto the shared kit | Settings pages unchanged in behaviour; private kit deleted |
 | 3+ | Remaining pages in batches by navigation group, list pages first | Baseline reaches only the named exemptions |
 
@@ -305,13 +434,13 @@ Painting titles app-wide in phase 1 touches unmigrated pages too. Each
 checked for a page that already shows its own
 visible heading text, so no page ends up with two.
 
-## 8. Exemptions named now
+## 9. Exemptions named now
 
 The dashboard, the website editor and overview, the document viewer, the
 calendar grid, `select-community`, `payments/success`, and redirect-only pages.
 Each carries the exemption comment with its reason.
 
-## 9. Testing
+## 10. Testing
 
 - Unit tests for each kit part; an axe test per template with a rendered,
   non-empty tree.
@@ -323,7 +452,7 @@ Each carries the exemption comment with its reason.
   under `os.tmpdir()`.
 - `perf-check` budgets unchanged for the pilot routes.
 
-## 10. Left to the builder
+## 11. Left to the builder
 
 - Exact prop names and file split inside the kit.
 - Which summary figures each phase 3 page shows, guided by 5.3. Each page's
@@ -332,13 +461,19 @@ Each carries the exemption comment with its reason.
 - Batch boundaries in phase 3.
 - Skeleton shapes for the panel slots.
 
-## 11. Open risks
+## 12. Open risks
 
 - **Laptop width.** With the sidebar open at about 1280px the content box may
   fall under 960px, so the panel moves above the list. That is the designed
   behaviour, but it has only been approximated in the mockup.
 - **Content cost.** Every list page needs a headline figure and an attention
-  condition. Some will need a small new query. A page with nothing true to say
-  ships without that slot.
+  condition. The fit test found a true figure for 20 of 27 list pages and a
+  real attention item for 14; the rest ship without that slot. Several figures
+  in the mockup are examples the app does not compute today (Announcements,
+  Move-in/out, Reserves) and need a small query or are dropped.
+- **Mockup accuracy.** The every-page mockup was written by cheaper agents from
+  the code. Three values are guesses (the 60-day windows on Leases and
+  Contracts, the 2,000-row import cap) and one page's action buttons were not
+  verified (wind-mitigation report). Each page is re-read when it is migrated.
 - **Two looks during rollout.** Until phase 3 finishes, migrated and unmigrated
   pages sit side by side. Painted titles in phase 1 narrow the gap.
