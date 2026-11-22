@@ -145,12 +145,18 @@ describe('logAdminAction', () => {
         admin: ADMIN,
         action: 'file_uploaded',
         resourceType: 'storage_object',
+        resourceId: 42,
         bestEffort: true,
       }),
     ).resolves.toBeUndefined();
 
     expect(captureException).toHaveBeenCalledTimes(1);
-    expect(captureException.mock.calls[0]![1]).toMatchObject({ level: 'warning' });
+    // The event is then the only record, so it names the actor and target (ids only).
+    expect(captureException.mock.calls[0]![1]).toEqual({
+      level: 'warning',
+      tags: { audit_action: 'file_uploaded' },
+      extra: { admin_user_id: 'admin-uuid', resource_type: 'storage_object', resource_id: '42', community_id: null },
+    });
   });
 
   it('does not report to Sentry on success', async () => {

@@ -16,10 +16,13 @@ import {
 } from 'lucide-react';
 import { AlertBanner, Badge, Button, Input, type BadgeVariant } from '@propertypro/ui';
 import type { AdminDeletionRequest } from '@/lib/server/deletion-requests';
+import {
+  canRecover,
+  deletionRequestDisplayState,
+  type DeletionRequestDisplayState,
+} from '@/lib/deletion-request-state';
 
 /* ---------- types ---------- */
-
-type DeletionStatus = 'cooling' | 'soft_deleted' | 'purged' | 'cancelled' | 'recovered';
 
 interface DeletionRequestsDashboardProps {
   initialRequests: AdminDeletionRequest[];
@@ -32,11 +35,17 @@ interface DeletionRequestsDashboardProps {
 
 /* ---------- status styling ---------- */
 
-const STATUS_CONFIG: Record<DeletionStatus, { variant: BadgeVariant; icon: typeof Clock; label: string }> = {
+const STATUS_CONFIG: Record<DeletionRequestDisplayState, { variant: BadgeVariant; icon: typeof Clock; label: string }> = {
   cooling: { variant: 'warning', icon: Clock, label: 'Cooling Off' },
   soft_deleted: { variant: 'danger', icon: Trash2, label: 'Soft Deleted' },
+  // Left over from an earlier deletion; the target is open again.
+  stale: { variant: 'neutral', icon: CheckCircle, label: 'Stale (not deleted)' },
+  // Claimed by the purge cron, not finished; retried nightly.
+  purging: { variant: 'danger', icon: Trash2, label: 'Purging' },
   purged: { variant: 'neutral', icon: XCircle, label: 'Purged' },
   cancelled: { variant: 'info', icon: CheckCircle, label: 'Cancelled' },
+  // A recovery that stopped part way; the account is still deleted.
+  recovery_unfinished: { variant: 'warning', icon: RotateCcw, label: 'Recovery Unfinished' },
   recovered: { variant: 'success', icon: RotateCcw, label: 'Recovered' },
 };
 
@@ -213,7 +222,8 @@ export function DeletionRequestsDashboard({
               </thead>
               <tbody className="divide-y divide-edge-subtle">
                 {visibleRequests.map((req) => {
-                  const config = STATUS_CONFIG[req.status];
+                  const state = deletionRequestDisplayState(req);
+                  const config = STATUS_CONFIG[state];
                   const StatusIcon = config.icon;
 
                   return (
@@ -267,10 +277,10 @@ export function DeletionRequestsDashboard({
                             Intervene
                           </Button>
                         )}
-                        {req.status === 'soft_deleted' && (
+                        {canRecover(state) && (
                           <Button variant="outline" size="sm" onClick={() => setShowRecover(req.id)}>
                             <RotateCcw size={12} aria-hidden="true" />
-                            Recover
+                            {state === 'recovery_unfinished' ? 'Resume Recovery' : 'Recover'}
                           </Button>
                         )}
                       </td>

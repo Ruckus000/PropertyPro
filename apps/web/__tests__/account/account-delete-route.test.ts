@@ -10,7 +10,7 @@ const {
   requireFreshReauthMock,
   getLatestUserDeletionRequestMock,
   requestUserDeletionMock,
-  findCoolingDeletionRequestForUserMock,
+  findCoolingDeletionRequestIdsForUserMock,
   cancelUserDeletionMock,
   getUserProfileSnapshotMock,
   sendEmailMock,
@@ -20,7 +20,7 @@ const {
   requireFreshReauthMock: vi.fn(),
   getLatestUserDeletionRequestMock: vi.fn(),
   requestUserDeletionMock: vi.fn(),
-  findCoolingDeletionRequestForUserMock: vi.fn(),
+  findCoolingDeletionRequestIdsForUserMock: vi.fn(),
   cancelUserDeletionMock: vi.fn(),
   getUserProfileSnapshotMock: vi.fn(),
   sendEmailMock: vi.fn(),
@@ -49,7 +49,7 @@ vi.mock('@/lib/api/reauth-guard', () => ({
 vi.mock('@/lib/services/account-lifecycle-service', () => ({
   getLatestUserDeletionRequest: getLatestUserDeletionRequestMock,
   requestUserDeletion: requestUserDeletionMock,
-  findCoolingDeletionRequestForUser: findCoolingDeletionRequestForUserMock,
+  findCoolingDeletionRequestIdsForUser: findCoolingDeletionRequestIdsForUserMock,
   cancelUserDeletion: cancelUserDeletionMock,
   RootOffboardingAckRequiredError: MockRootOffboardingAckRequiredError,
 }));
@@ -321,7 +321,7 @@ describe('DELETE /api/v1/account/delete', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
-    findCoolingDeletionRequestForUserMock.mockResolvedValue(9);
+    findCoolingDeletionRequestIdsForUserMock.mockResolvedValue([9]);
     cancelUserDeletionMock.mockResolvedValue({
       outcome: 'cancelled',
       requests: [{ id: 9, status: 'cancelled' }],
@@ -415,7 +415,7 @@ describe('DELETE /api/v1/account/delete', () => {
   });
 
   it('returns 404 when no active request and does not cancel', async () => {
-    findCoolingDeletionRequestForUserMock.mockResolvedValue(null);
+    findCoolingDeletionRequestIdsForUserMock.mockResolvedValue([]);
 
     const res = await DELETE(
       new NextRequest(URL, {
@@ -436,7 +436,7 @@ describe('DELETE /api/v1/account/delete', () => {
       }),
     );
     expect(res.status).toBe(401);
-    expect(findCoolingDeletionRequestForUserMock).not.toHaveBeenCalled();
+    expect(findCoolingDeletionRequestIdsForUserMock).not.toHaveBeenCalled();
     expect(cancelUserDeletionMock).not.toHaveBeenCalled();
   });
 });

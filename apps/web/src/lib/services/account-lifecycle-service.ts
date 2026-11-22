@@ -30,10 +30,12 @@ import {
   logAuditEvent,
 } from '@propertypro/db';
 import type { AccessPlan } from '@propertypro/db';
-// AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping)
-import { createUnscopedClient } from '@propertypro/db/unsafe';
+// AUTHZ: Account lifecycle: platform-level access plans + deletion workflows (no community_id scoping); interveneDeletionRequestOp is reached only through interveneCommunityDeletion, whose caller passes a request looked up by its own community after requireRootManager
+import { createUnscopedClient, interveneDeletionRequestOp } from '@propertypro/db/unsafe';
 // AUTHZ: GoTrue admin updateUserById to ban/unban/scrub accounts in the deletion lifecycle; called by the gated account routes and the lifecycle cron
 import { createAdminClient } from '@propertypro/db/supabase/admin';
+import { captureMessage } from '@sentry/nextjs';
+import { ConflictError } from '@/lib/api/errors/ConflictError';
 import { purgeCommunityAdminAssets, purgeCommunitySiteAssets } from '@/lib/site-assets/cleanup';
 import { purgeCommunityExportArchives } from '@/lib/services/export/purge-export-archives';
 import { revokeVisitorPassesForUser } from '@/lib/services/package-visitor-service';
@@ -41,6 +43,7 @@ import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
 } from '@/lib/account-lifecycle/root-offboarding';
+import { onePerUser } from '@/lib/account-lifecycle/one-per-user';
 import {
   deletionCoolingEndsAt,
   deletionPurgeAt,
@@ -150,23 +153,21 @@ export async function findCoolingCommunityDeletionRequest(
 }
 
 /**
- * Find the user's active `cooling` deletion request, if any. Returns the
- * request id or `null`. Used by the cancel-deletion path.
+ * Every `cooling` deletion request the user has, ordered the way the lifecycle
+ * cron reaches them (earliest `coolingEndsAt`, then id). The cancel route
+ * passes the first to `cancelUserDeletion`, which cancels all of them, and a
+ * support session's audit row names the whole list before the cancel runs.
  *
- * Ordered the way the lifecycle cron reaches requests (earliest
- * `coolingEndsAt`, then id), so with duplicates the row returned is the one the
- * cron soft-deletes first. That only matters for a lookup made BEFORE the cron
- * runs. Once a sibling is soft-deleted this returns the later one, which is
- * why `cancelUserDeletion` refuses on the account's state, not this row's.
+ * The order only matters for a lookup made BEFORE the cron runs. Once a
+ * sibling is soft-deleted the first is a later one, which is why
+ * `cancelUserDeletion` refuses on the account's state, not this row's.
  *
  * AUTHZ: cross-tenant read of platform-level table; safe for the user to
- * query their own row by `userId`.
+ * query their own rows by `userId`.
  */
-export async function findCoolingDeletionRequestForUser(
-  userId: string,
-): Promise<number | null> {
+export async function findCoolingDeletionRequestIdsForUser(userId: string): Promise<number[]> {
   const db = createUnscopedClient();
-  const [row] = await db
+  const rows = await db
     .select({ id: accountDeletionRequests.id })
     .from(accountDeletionRequests)
     .where(
@@ -176,9 +177,8 @@ export async function findCoolingDeletionRequestForUser(
         eq(accountDeletionRequests.status, 'cooling'),
       ),
     )
-    .orderBy(asc(accountDeletionRequests.coolingEndsAt), asc(accountDeletionRequests.id))
-    .limit(1);
-  return row?.id ?? null;
+    .orderBy(asc(accountDeletionRequests.coolingEndsAt), asc(accountDeletionRequests.id));
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -461,6 +461,9 @@ export interface DeletionEmailRecipient {
  * The auth ban is non-fatal — if Supabase is unreachable the DB state
  * is still committed.
  *
+ * Returns one row per request soft-deleted, so duplicates of one user give
+ * several rows; `onePerUser` reduces them to one per account.
+ *
  * Each returned row carries `recipient`: the user's email and name as they
  * stood in the same statement that soft-deleted them. The "account deleted"
  * email is sent to that address, captured at soft delete — not re-read later,
@@ -509,14 +512,17 @@ export async function executeUserSoftDelete(requestIds: number[]) {
     return requests.map((r) => ({ ...r, recipient: recipients.get(r.userId) ?? null }));
   });
 
-  await revokeDeletedUsersVisitorPasses(db, results.map((r) => r.userId));
+  // One ban (and one pass sweep) per user, however many of their requests
+  // expired in this batch.
+  const perUser = onePerUser(results);
+  await revokeDeletedUsersVisitorPasses(db, perUser.map((r) => r.userId));
 
   // Ban in Supabase auth (non-fatal)
   const admin = createAdminClient();
   // Chunking to avoid rate limits
   const CHUNK_SIZE = 10;
-  for (let i = 0; i < results.length; i += CHUNK_SIZE) {
-    const chunk = results.slice(i, i + CHUNK_SIZE);
+  for (let i = 0; i < perUser.length; i += CHUNK_SIZE) {
+    const chunk = perUser.slice(i, i + CHUNK_SIZE);
     await Promise.allSettled(
       chunk.map(async (result) => {
         try {
@@ -533,6 +539,13 @@ export async function executeUserSoftDelete(requestIds: number[]) {
             `[account-lifecycle] Failed to ban user ${result.userId} in Supabase auth:`,
             err,
           );
+          // The ban is what stops a deleted account signing in (nothing in the
+          // app reads users.deleted_at at sign-in), so a failure is reported,
+          // not only logged. Ids only.
+          captureMessage('account_soft_delete_ban_failed', {
+            level: 'error',
+            extra: { requestId: result.id, userId: result.userId },
+          });
         }
       })
     );
@@ -557,12 +570,32 @@ function userDeletionPurgeDue(cutoff: Date) {
 }
 
 /**
- * SQL, for a community deletion-request row: its community is still deleted
- * (or no longer exists at all). The community twin of `userDeletionPurgeDue`'s
- * still-deleted half: a recovered community is never purged.
+ * SQL, for a community deletion-request row: its community's CURRENT deletion
+ * is old enough to purge (`communities.deleted_at` set and at or before
+ * `cutoff`), or the community row no longer exists at all. The community twin
+ * of `userDeletionPurgeDue`, for the same reason: a recovered community is
+ * never purged, and one deleted again is not purged before its new deletion
+ * has had the full recovery window, whatever an older request's
+ * `scheduledPurgeAt` says.
  */
-function communityStillDeleted() {
-  return sql`(${accountDeletionRequests.communityId} is null or exists (select 1 from ${communities} c where c.id = ${accountDeletionRequests.communityId} and c.deleted_at is not null))`;
+function communityDeletionPurgeDue(cutoff: Date) {
+  return sql`(${accountDeletionRequests.communityId} is null or exists (select 1 from ${communities} c where c.id = ${accountDeletionRequests.communityId} and c.deleted_at is not null and c.deleted_at <= ${cutoff.toISOString()}::timestamptz))`;
+}
+
+/**
+ * True while community `communityId` is still deleted. Read by the purge after
+ * its claim and before each storage sweep.
+ */
+async function communityStillDeleted(
+  db: ReturnType<typeof createUnscopedClient>,
+  communityId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ deletedAt: communities.deletedAt })
+    .from(communities)
+    .where(eq(communities.id, communityId));
+  // A missing row is as deleted as it gets; the claim treats it the same way.
+  return !row || row.deletedAt !== null;
 }
 
 /**
@@ -658,13 +691,19 @@ export async function purgeUserPII(requestId: number) {
     user_metadata: { full_name: null, fullName: null, external_user_id: null, soft_deleted: true },
   });
   if (authError) {
-    const missing =
-      (authError as { status?: number }).status === 404 ||
-      (authError as { code?: string }).code === 'user_not_found';
-    if (!missing) {
+    // Only GoTrue's own "no such user" code. A bare 404 can come from a proxy
+    // or a wrong URL, and treating that as "nothing to scrub" would finish the
+    // purge with the email and name still in auth.users.
+    if ((authError as { code?: string }).code !== 'user_not_found') {
       throw new Error(`Failed to scrub auth user ${request.userId}: ${authError.message}`);
     }
     console.warn(`[account-lifecycle] auth user ${request.userId} not found; treating auth as already scrubbed`);
+    // An account deleted from Supabase Auth outside this lifecycle is worth a
+    // look, so it is reported rather than only logged. Ids only.
+    captureMessage('account_purge_auth_user_missing', {
+      level: 'warning',
+      extra: { requestId, userId: request.userId },
+    });
   }
 
   const [updated] = await db
@@ -686,12 +725,36 @@ export async function purgeUserPII(requestId: number) {
 // Deletion — Community
 // ---------------------------------------------------------------------------
 
-/** Creates a community deletion request with a 30-day cooling period. */
+/**
+ * Creates a community deletion request with a 30-day cooling period, or
+ * returns the one the community already has (the earliest, if a legacy
+ * duplicate exists). One cooling request per community, like
+ * `requestUserDeletion`: a second click must not start a second clock.
+ */
 export async function requestCommunityDeletion(communityId: number, requestedBy: string) {
   const now = new Date();
   const coolingEndsAt = deletionCoolingEndsAt(now);
 
   const db = createUnscopedClient();
+  // ponytail: check-then-insert with no unique index, as in requestUserDeletion;
+  // two calls racing past this read still create two rows (cancel and
+  // intervene stop them all). Trigger: two cooling community rows observed in
+  // prod; then add a partial unique index on (community_id) where
+  // request_type = 'community' and status = 'cooling'.
+  const [existing] = await db
+    .select()
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.communityId, communityId),
+        eq(accountDeletionRequests.requestType, 'community'),
+        eq(accountDeletionRequests.status, 'cooling'),
+      ),
+    )
+    .orderBy(asc(accountDeletionRequests.id))
+    .limit(1);
+  if (existing) return existing;
+
   const [request] = await db
     .insert(accountDeletionRequests)
     .values({
@@ -706,37 +769,43 @@ export async function requestCommunityDeletion(communityId: number, requestedBy:
   return request!;
 }
 
-/** Platform admin cancels a community deletion request. */
+/**
+ * Cancels a community's deletion during its cooling period: the given request
+ * and every other `cooling` request of the same community, in one transaction
+ * (`interveneDeletionRequestOp`). The caller is the community's root manager,
+ * through `DELETE /api/v1/communities/delete`, with a request it looked up by
+ * that community's id.
+ *
+ * - Another cancel got there first: returns that row, writing nothing.
+ * - The cron soft-deleted it first, or the community is already deleted
+ *   through another request: `ConflictError` (409). Saying the community stays
+ *   open would be false; restoring it is a platform-admin recovery.
+ */
 export async function interveneCommunityDeletion(
   requestId: number,
   params: { adminUserId: string; notes?: string },
 ) {
   const now = new Date();
-  const db = createUnscopedClient();
+  const result = await interveneDeletionRequestOp(requestId, {
+    cancelledBy: params.adminUserId,
+    notes: params.notes ?? null,
+    now,
+  });
 
-  const [updated] = await db
-    .update(accountDeletionRequests)
-    .set({
-      status: 'cancelled',
-      cancelledAt: now,
-      cancelledBy: params.adminUserId,
-      interventionNotes: params.notes ?? null,
-    })
-    // Only a request still cooling. Unguarded, a cancel racing the cron
-    // overwrote `soft_deleted` with `cancelled`, leaving a deleted community
-    // that could be neither purged nor recovered.
-    .where(
-      and(
-        eq(accountDeletionRequests.id, requestId),
-        eq(accountDeletionRequests.status, 'cooling'),
-      ),
-    )
-    .returning();
+  if (result.outcome === 'not_found') {
+    throw new Error(`Deletion request ${requestId} not found`);
+  }
+  if (result.outcome === 'not_cooling' && result.request.status === 'cancelled') {
+    return result.request;
+  }
+  if (result.outcome !== 'cancelled') {
+    throw new ConflictError(
+      'This community has already been deleted, so its deletion can no longer be cancelled. Contact support to restore it.',
+    );
+  }
+  const updated = result.request;
 
-  if (!updated) throw new Error(`Deletion request ${requestId} not found or no longer cooling`);
-
-  // `communityId` comes from the mutation's own .returning(), not a separate
-  // read — same rule as the purge above.
+  // `communityId` comes from the mutation's own result, not a separate read.
   //
   // The notes are deliberately NOT logged. They are admin-supplied free text
   // that can name a resident or repeat a grievance, and this table is
@@ -746,9 +815,9 @@ export async function interveneCommunityDeletion(
   // them — into platform_admin_audit_log, which is operator-only with no RLS
   // policies. Different readership, different rule.)
   //
-  // A user-type request reaches this function too — the route applies no
-  // requestType filter — and has no community, so it hits the same NOT NULL
-  // wall as the purge and simply is not audited.
+  // A user-type request has no community, so it hits the same NOT NULL wall as
+  // the purge and simply is not audited. (The only caller passes a community
+  // request.)
   if (updated.communityId !== null) {
     await logAuditEvent({
       userId: params.adminUserId,
@@ -761,7 +830,10 @@ export async function interveneCommunityDeletion(
         cancelledAt: now.toISOString(),
         cancelledBy: params.adminUserId,
       },
-      metadata: { notesProvided: params.notes != null },
+      metadata: {
+        notesProvided: params.notes != null,
+        cancelledRequestIds: result.cancelledRequestIds,
+      },
     });
   }
 
@@ -858,10 +930,11 @@ export async function executeCommunitySoftDelete(requestIds: number[]) {
  * skipped.
  *
  * Claims the request first (`purgeClaimable`: `soft_deleted` → `purged` with
- * `purged_at` still null), and only while the community is still deleted, so a
- * recovery and this purge cannot both act on one request. Nothing is destroyed
- * unless the claim matched; `purged_at` is set last, and a crash in between is
- * picked up by the next run.
+ * `purged_at` still null), and only while the community's current deletion is
+ * due (`communityDeletionPurgeDue`), so a recovery and this purge cannot both
+ * act on one request. Nothing is destroyed unless the claim matched, and the
+ * community is re-checked before each sweep. `purged_at` is set last, and a
+ * crash in between is picked up by the next run.
  *
  * It deliberately does NOT delete association records — documents, minutes,
  * ledgers, violations, ARC. That is a decision, not an omission: see the
@@ -886,12 +959,13 @@ export async function purgeCommunityData(requestId: number) {
       and(
         purgeClaimable(requestId),
         eq(accountDeletionRequests.requestType, 'community'),
-        communityStillDeleted(),
+        communityDeletionPurgeDue(deletionPurgeCutoff(now)),
       ),
     )
     .returning();
 
-  // Recovered, already purged, community restored, or not found.
+  // Recovered, already purged, community restored or deleted too recently, or
+  // not found.
   if (!request) return null;
 
   const communityId = request.communityId;
@@ -899,16 +973,45 @@ export async function purgeCommunityData(requestId: number) {
   let adminAssetsDeleted = 0;
   let exportArchivesDeleted = 0;
 
+  /**
+   * Re-read before each irreversible sweep. A recovery refuses while any
+   * request of the community is `purged`, so the claim already shuts it out;
+   * this catches the community being restored any other way (by hand) after
+   * the claim. Gives the claim back exactly as it was taken and stops before
+   * the NEXT sweep; a sweep already listing and removing runs to its end, so
+   * a restore landing mid-sweep can still lose that one bucket.
+   */
+  const stillDeleted = async () => {
+    if (communityId === null || (await communityStillDeleted(db, communityId))) return true;
+    await db
+      .update(accountDeletionRequests)
+      .set({ status: 'soft_deleted' })
+      .where(
+        and(
+          eq(accountDeletionRequests.id, requestId),
+          eq(accountDeletionRequests.status, 'purged'),
+          isNull(accountDeletionRequests.purgedAt),
+        ),
+      );
+    console.warn(
+      `[account-lifecycle] community ${communityId} was restored during the purge of request ${requestId}; claim released`,
+    );
+    return false;
+  };
+
   // PR #2: purge community-site-assets storage if this is a community deletion.
   // Failure leaves purged_at null, so the claimed request is retried next run.
   if (communityId !== null) {
+    if (!(await stillDeleted())) return null;
     ({ deletedCount: siteAssetsDeleted } = await purgeCommunitySiteAssets(communityId));
+    if (!(await stillDeleted())) return null;
     // The OTHER website-asset bucket. `community-assets` holds the logos and
     // site imagery uploaded through the admin console, and nothing had ever
     // swept it — so a purged community's website images survived in a PUBLIC
     // bucket indefinitely. Same category the ToS names ("community website
     // assets"), same failure semantics: a throw here leaves purged_at null.
     ({ deletedCount: adminAssetsDeleted } = await purgeCommunityAdminAssets(communityId));
+    if (!(await stillDeleted())) return null;
     // Generated export archives are a COPY OF THE ENTIRE ASSOCIATION — every
     // table plus every uploaded document, including resident PII. Without this
     // the whole dataset would survive in the exports bucket after the community
@@ -1006,8 +1109,8 @@ export async function findCoolingExpiredDeletionRequests(
  * Find the deletion requests the daily cron should purge: `soft_deleted` ones
  * whose `scheduledPurgeAt` has passed, plus ones a crashed purge already
  * claimed (`purged` with a null `purged_at`; see `purgeClaimable`). Only while
- * the target is still deleted: a user request needs the user's current
- * deletion to be due, a community request needs the community still deleted.
+ * the target is still deleted and its current deletion is due: the user's
+ * `deleted_at`, or the community's.
  * The purge functions re-check all of this in their claim.
  */
 export async function findPurgeReadyDeletionRequests(
@@ -1032,10 +1135,34 @@ export async function findPurgeReadyDeletionRequests(
         // account (recovery used to flip only the one request it was given);
         // purging it would scrub an open account, or, once the account is
         // deleted again, purge it the same night with no recovery window.
-        // A community request is due only while the community is deleted.
-        sql`((${accountDeletionRequests.requestType} = 'user' and ${userDeletionPurgeDue(deletionPurgeCutoff(now))}) or (${accountDeletionRequests.requestType} = 'community' and ${communityStillDeleted()}))`,
+        // A community request likewise needs its community's current deletion
+        // to be due.
+        sql`((${accountDeletionRequests.requestType} = 'user' and ${userDeletionPurgeDue(deletionPurgeCutoff(now))}) or (${accountDeletionRequests.requestType} = 'community' and ${communityDeletionPurgeDue(deletionPurgeCutoff(now))}))`,
       ),
     )) as LifecycleDeletionTransitionRow[];
+}
+
+/**
+ * Requests a recovery claimed and did not finish: `recovered` with a null
+ * `recovered_at` (see packages/db `deletion-request-ops.ts`). The purge never
+ * touches them, so an account stopped half way through recovery would keep its
+ * personal data past the purge date with nobody told. A recovery takes
+ * seconds, so one still unfinished when the nightly cron runs almost always
+ * crashed. Ids only, earliest first.
+ */
+export async function findUnfinishedRecoveryRequestIds(): Promise<number[]> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ id: accountDeletionRequests.id })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.status, 'recovered'),
+        isNull(accountDeletionRequests.recoveredAt),
+      ),
+    )
+    .orderBy(asc(accountDeletionRequests.id));
+  return rows.map((r) => r.id);
 }
 
 /**

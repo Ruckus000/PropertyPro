@@ -17,6 +17,7 @@ import {
   createPresignedUploadUrlDouble,
   deleteStorageObjectDouble,
   clearCapturedStorageOps,
+  listStorageObjectsDouble,
 } from './providers/test-storage-provider';
 import {
   clearCapturedPdfExtractions,
@@ -113,6 +114,8 @@ vi.mock('@propertypro/db/supabase/admin', async (importOriginal) => {
             data: { signedUrl: await createPresignedDownloadUrlDouble(bucket, path) },
             error: null,
           }),
+          // Always empty; a test can hook one call (see the provider).
+          list: async (prefix: string) => listStorageObjectsDouble(bucket, prefix),
           remove: async (paths: string[]) => {
             await Promise.all(paths.map((path) => deleteStorageObjectDouble(bucket, path)));
             return { data: null, error: null };

@@ -37,7 +37,7 @@ vi.mock('@propertypro/db/supabase/admin', () => ({
             return {
               in: () => Promise.resolve(unknown.length
                 ? { data: null, error: { message: `column users.${unknown[0]} does not exist` } }
-                : { data: [{ id: 'user-1', email: 'olivia@example.com', full_name: 'Olivia Owner' }], error: null }),
+                : { data: [{ id: 'user-1', email: 'olivia@example.com', full_name: 'Olivia Owner', deleted_at: '2026-10-02T00:00:00.000Z' }], error: null }),
             };
           },
         };
@@ -57,5 +57,8 @@ describe('getDeletionRequestsData', () => {
 
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({ requesterEmail: 'olivia@example.com', requesterName: 'Olivia Owner' });
+    // Whether the account is deleted NOW tells a live soft_deleted request from a stale one.
+    expect(usersSelect).toHaveBeenCalledWith('id, email, full_name, deleted_at');
+    expect(requests[0]!.targetDeleted).toBe(true);
   });
 });

@@ -33,6 +33,7 @@ import {
   executeUserSoftDelete,
   findCoolingExpiredDeletionRequests,
   findPurgeReadyDeletionRequests,
+  findUnfinishedRecoveryRequestIds,
   getCommunityNameForLifecycleEmail,
   listActiveAccessPlansForLifecycleCron,
   lookupLifecycleAdminRecipients,
@@ -45,6 +46,7 @@ import {
   pruneSitePublishSnapshots,
 } from '@/lib/services/site-blocks-service';
 import { sendDeletionExecutedEmails } from '@/lib/account-lifecycle/deletion-emails';
+import { onePerUser } from '@/lib/account-lifecycle/one-per-user';
 import { captureMessage } from '@sentry/nextjs';
 import { withCronJob } from '@/lib/cron/with-cron-job';
 
@@ -67,6 +69,9 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     // `skipped`: candidates whose purge claim matched nothing (recovered after
     // the scan, target no longer deleted, or finished by an overlapping run).
     purge: { dryRun: purgeDryRun, candidates: 0, cap: PURGE_SAFETY_CAP, skipped: 0 },
+    // Recoveries that claimed their requests and never finished. The purge
+    // skips them forever, so each one is reported in `errors` until resumed.
+    unfinishedRecoveries: 0,
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     // "Account deleted" emails to soft-deleted users. `notSent` counts both
     // failures and rows with no deliverable address; failures are logged by
@@ -89,13 +94,16 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   if (userDeletionIds.length > 0) {
     try {
       const results = await executeUserSoftDelete(userDeletionIds);
-      summary.softDeleted.users += results.length;
       // Any requested id not returned raced out of 'cooling' and was skipped
       // by the state guard rather than force-deleted.
       summary.skipped.users += userDeletionIds.length - results.length;
+      // A user whose duplicate requests expired together is one deleted
+      // account: counted once and emailed once.
+      const accounts = onePerUser(results);
+      summary.softDeleted.users += accounts.length;
       // To the address captured in the soft-delete statement. Never rejects,
       // so it cannot reach the catch below or stop phases 2-5.
-      const emails = await sendDeletionExecutedEmails(results);
+      const emails = await sendDeletionExecutedEmails(accounts);
       summary.deletionEmails.sent += emails.sent;
       summary.deletionEmails.notSent += emails.notSent;
     } catch (err) {
@@ -168,6 +176,21 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     } catch (err) {
       summary.errors.push(`purge ${req.requestType} ${req.id}: ${String(err)}`);
     }
+  }
+
+  // Unfinished recoveries: deleted accounts the purge will never reach, so
+  // their personal data would outlive the purge date silently. Reported every
+  // night until an operator resumes them from the Deletion Requests Dashboard.
+  try {
+    const unfinished = await findUnfinishedRecoveryRequestIds();
+    summary.unfinishedRecoveries = unfinished.length;
+    if (unfinished.length > 0) {
+      summary.errors.push(
+        `unfinished recovery: deletion request(s) ${unfinished.join(', ')} were claimed by a recovery that did not finish; the account is still deleted but its sign-in ban may already be lifted, so resume them from the Deletion Requests Dashboard`,
+      );
+    }
+  } catch (err) {
+    summary.errors.push(`check unfinished recoveries: ${String(err)}`);
   }
 
   // -------------------------------------------------------------------------

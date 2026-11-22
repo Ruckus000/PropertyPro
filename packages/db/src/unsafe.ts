@@ -160,6 +160,31 @@ export {
 } from './ops/resident-import-ops';
 
 /**
+ * Deletion requests — the recovery and the cooling-period cancellation, each a
+ * transaction over every request of the chosen request's target (a user, or a
+ * community). See the ops file for the lock they share with the purge cron.
+ *
+ * **Authorization contract:** these act on any request by id and check nothing
+ * about the caller. Recovery (`claimDeletionRecoveryOp`,
+ * `completeUserRecoveryOp`) is platform-admin only: callers MUST hold a verified
+ * platform-admin session (apps/admin `requirePlatformAdmin`). Intervene
+ * (`interveneDeletionRequestOp`) is platform-admin, or, for a community
+ * request, the community's root manager (apps/web `requireRootManager`), who
+ * MUST pass a request already looked up by that community's id.
+ */
+export {
+  claimDeletionRecoveryOp,
+  completeUserRecoveryOp,
+  interveneDeletionRequestOp,
+  RECOVERY_SOFT_DELETE_SETTLE_MS,
+  type DeletionRecoveryClaim,
+  type RecoveryAuthCalls,
+  type UserRecoveryCompletion,
+  type DeletionInterveneResult,
+  type DeletionRequestRecord,
+} from './ops/deletion-request-ops';
+
+/**
  * Returns the raw Drizzle client without tenant scoping.
  * Use only for deliberate, reviewed escape-hatch flows.
  */
