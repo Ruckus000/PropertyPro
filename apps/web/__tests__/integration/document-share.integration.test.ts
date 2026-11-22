@@ -112,7 +112,13 @@ describeDb('shareDocuments (integration)', () => {
     );
     const tenantMail = testInbox.find((mail) => mail.to === `share-tenant+${state.runSuffix}@example.com`)!;
     expect(tenantMail.subject).toContain('Rules 2026');
-    expect(tenantMail.headers['List-Unsubscribe']).toBeTruthy();
+    // A shared-document email's unsubscribe sets email_frequency to 'never',
+    // which also stops statutory notices, so a mailbox provider gets no
+    // one-click: the header names the preferences page, which changes nothing.
+    expect(tenantMail.headers['List-Unsubscribe']).toMatch(
+      new RegExp(`/settings\\?communityId=${communityId}#notifications>$`),
+    );
+    expect(tenantMail.headers).not.toHaveProperty('List-Unsubscribe-Post');
     // Each document links to itself (`/documents/<id>`), only the ones sent.
     const sent = (tenantMail.react.props as { documents: Array<{ url: string }> }).documents;
     expect(sent.map((d) => d.url)).toEqual([

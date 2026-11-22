@@ -103,8 +103,19 @@ function buildHeaders(options: SendEmailOptions): Record<string, string> {
       );
     }
 
+    // Header names are case-insensitive (RFC 5322), so a caller's
+    // `list-unsubscribe-post` is the same header as ours. Strip every
+    // List-Unsubscribe* the caller passed, in any case, before writing the
+    // pair: otherwise a lowercase copy survives beside ours and, with one-click
+    // off, puts the advertisement back.
+    for (const name of Object.keys(headers)) {
+      if (name.toLowerCase().startsWith('list-unsubscribe')) delete headers[name];
+    }
+
     headers['List-Unsubscribe'] = `<${options.unsubscribeUrl}>`;
-    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click-Unsubscribe';
+    if (options.oneClickUnsubscribe !== false) {
+      headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    }
   }
 
   return headers;

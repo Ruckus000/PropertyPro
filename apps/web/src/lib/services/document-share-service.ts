@@ -36,7 +36,7 @@ import {
   isNotificationTypeEnabled,
   type EmailFrequency,
 } from '@/lib/utils/email-preferences';
-import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
+import { buildCommunityEmailUnsubscribeLinks } from './community-email-unsubscribe-token';
 import { loadEmailBranding } from './email-branding';
 import { enqueueDigestItems } from './notification-digest-queue';
 
@@ -186,7 +186,8 @@ export async function shareDocuments(params: {
       }
 
       branding ??= await loadEmailBranding(communityId);
-      const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+      // No one-click: this topic's opt-out also stops statutory notices.
+      const links = buildCommunityEmailUnsubscribeLinks({
         baseUrl,
         communityId,
         userId,
@@ -199,10 +200,11 @@ export async function shareDocuments(params: {
             ? `${branding.communityName}: ${titleById.get(sendable[0]!)}`
             : `${branding.communityName}: ${sendable.length} documents for you`,
         category: 'non-transactional',
-        unsubscribeUrl,
+        unsubscribeUrl: links.headerUrl,
+        oneClickUnsubscribe: links.oneClick,
         idempotencyKey: `document-share/${communityId}/${sendId}/${userId}`,
         react: createElement(DocumentSharedEmail, {
-          branding: { ...branding, unsubscribeUrl, unsubscribeLabel: 'Unsubscribe from these emails' },
+          branding: { ...branding, unsubscribeUrl: links.linkUrl, unsubscribeLabel: 'Unsubscribe from these emails' },
           recipientName: user.fullName,
           senderName,
           documents: sendable.map((id) => ({ title: titleById.get(id)!, url: documentUrl(id) })),

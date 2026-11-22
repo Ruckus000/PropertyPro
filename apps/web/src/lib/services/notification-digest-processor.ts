@@ -28,7 +28,7 @@ import {
 import { updateQueuedDigestAnnouncementStatus } from '@/lib/services/announcement-delivery';
 import { getBaseUrl } from '@/lib/utils/url';
 import { loadEmailBranding } from './email-branding';
-import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
+import { buildCommunityEmailUnsubscribeLinks } from './community-email-unsubscribe-token';
 
 const MAX_ATTEMPTS = 5;
 const RETRY_MINUTES_BY_ATTEMPT = [15, 60, 240, 720] as const;
@@ -515,9 +515,10 @@ export async function processNotificationDigests(
 
       if (eligibleRows.length === 0) return;
 
-      // Per-recipient, no-login opt-out. The old `/settings?communityId=` URL
-      // was login-walled and so failed one-click List-Unsubscribe entirely.
-      const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+      // Per-recipient, no-login footer link (the old `/settings?communityId=`
+      // URL was login-walled). No one-click: this topic's opt-out sets
+      // email_frequency to 'never', which also stops statutory notices.
+      const links = buildCommunityEmailUnsubscribeLinks({
         baseUrl,
         communityId,
         userId: first.userId,
@@ -530,11 +531,12 @@ export async function processNotificationDigests(
           to: email,
           subject: `${frequencyLabel(first.frequency)} digest from ${branding.communityName}`,
           category: 'non-transactional',
-          unsubscribeUrl,
+          unsubscribeUrl: links.headerUrl,
+          oneClickUnsubscribe: links.oneClick,
           react: createElement(NotificationDigestEmail, {
             branding: {
               ...branding,
-              unsubscribeUrl,
+              unsubscribeUrl: links.linkUrl,
               unsubscribeLabel: 'Unsubscribe from these digests',
             },
             recipientName: fullName,

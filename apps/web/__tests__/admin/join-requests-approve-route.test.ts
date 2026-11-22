@@ -82,6 +82,8 @@ const SERVICE_RESULT = {
   requestId: 7,
   userId: 'new-user-uuid',
   approvedAt: new Date('2026-05-27T00:00:00.000Z'),
+  requestedResidentType: 'owner',
+  grantedResidentType: 'owner',
 };
 
 function postReq(
@@ -141,8 +143,32 @@ describe('POST /api/v1/admin/join-requests/[id]/approve', () => {
       action: 'join_request.approved',
       resourceType: 'community_join_request',
       resourceId: '7',
-      metadata: { notes: 'Looks good' },
+      metadata: { notes: 'Looks good', requestedResidentType: 'owner', grantedResidentType: 'owner' },
     });
+  });
+
+  // An apartment has no unit owners: an owner request filed there is approved
+  // as a tenant, and the audit trail must say so rather than look like a
+  // plain approval.
+  it('records an owner request approved as a tenant in the audit metadata', async () => {
+    approveJoinRequestMock.mockResolvedValueOnce({
+      ...SERVICE_RESULT,
+      requestedResidentType: 'owner',
+      grantedResidentType: 'tenant',
+    });
+
+    const res = await POST(postReq(7, { omitBody: true }), routeCtx('7'));
+
+    expect(res.status).toBe(200);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: { notes: null, requestedResidentType: 'owner', grantedResidentType: 'tenant' },
+      }),
+    );
+    // The response body is unchanged: the pair is for the audit trail only.
+    const json = (await res.json()) as { data: Record<string, unknown> };
+    expect(json.data).not.toHaveProperty('requestedResidentType');
+    expect(json.data).not.toHaveProperty('grantedResidentType');
   });
 
   it('approves with no body (empty-body tolerance); audit metadata.notes = null', async () => {
@@ -156,7 +182,7 @@ describe('POST /api/v1/admin/join-requests/[id]/approve', () => {
     });
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: { notes: null },
+        metadata: { notes: null, requestedResidentType: 'owner', grantedResidentType: 'owner' },
       }),
     );
   });

@@ -44,6 +44,7 @@ const { dbState, selectMock, insertNotificationsMock, mockDb } = vi.hoisted(() =
             last.reviewedBy = (data.reviewedBy as string) ?? null;
             last.reviewedAt = (data.reviewedAt as Date) ?? null;
             last.reviewNotes = (data.reviewNotes as string | null) ?? null;
+            if (typeof data.residentType === 'string') last.residentType = data.residentType;
             return [last];
           }
           return [] as typeof dbState.joinRequests;
@@ -220,6 +221,8 @@ describe('approveJoinRequest', () => {
       communityId: 42,
       userId: 'user-111',
       status: 'approved',
+      requestedResidentType: 'owner',
+      grantedResidentType: 'owner',
     });
     expect(dbState.joinRequests[0]!.status).toBe('approved');
     expect(dbState.joinRequests[0]!.reviewedBy).toBe('admin-222');
@@ -302,6 +305,19 @@ describe('approveJoinRequest', () => {
     expect(dbState.joinRequests[0]!.status).toBe('approved');
   });
 
+  // The request row must record what was granted: left as 'owner', the
+  // requester's list reads "Owner · Approved" and the admin list says Owner.
+  it('rewrites the request row to tenant when it converts an apartment owner request', async () => {
+    const req = seedRequest({ residentType: 'owner' });
+    mockSelectReturnsRequest(req, 'apartment');
+
+    const result = await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    expect(dbState.joinRequests[0]!.residentType).toBe('tenant');
+    // The caller's audit entry records both sides of the conversion.
+    expect(result).toMatchObject({ requestedResidentType: 'owner', grantedResidentType: 'tenant' });
+  });
+
   it('control: an owner request to a condo still approves as an owner', async () => {
     const req = seedRequest({ residentType: 'owner' });
     mockSelectReturnsRequest(req, 'condo_718');
@@ -309,6 +325,7 @@ describe('approveJoinRequest', () => {
     await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
 
     expect((dbState.userRoles[0] as { isUnitOwner: boolean }).isUnitOwner).toBe(true);
+    expect(dbState.joinRequests[0]!.residentType).toBe('owner');
   });
 
   it('notifies the requester on approval', async () => {
@@ -625,5 +642,30 @@ describe('listJoinRequestsForUser', () => {
     expect(projection!.communityName).toBe('communities.name');
     // Keyed to the requester alone.
     expect(whereArg).toEqual({ eq: ['cjr.user_id', 'user-111'] });
+  });
+
+  // An approval note is written for managers (the approve flow never says it is
+  // shared); only a denial reason is meant for the requester.
+  it('returns the reviewer note for a denied request only', async () => {
+    const rows = [
+      { id: 3, status: 'denied', reviewNotes: 'Unit 4C is not on our roster.' },
+      { id: 2, status: 'approved', reviewNotes: 'Lease checked; owner is slow to pay.' },
+      { id: 1, status: 'pending', reviewNotes: null },
+    ];
+    selectMock.mockImplementationOnce(() => ({
+      from: () => ({
+        leftJoin: () => ({
+          where: () => ({ orderBy: () => Promise.resolve(rows) }),
+        }),
+      }),
+    }));
+
+    const listed = await listJoinRequestsForUser('user-111');
+
+    expect(listed.map((r) => [r.id, r.reviewNotes])).toEqual([
+      [3, 'Unit 4C is not on our roster.'],
+      [2, null],
+      [1, null],
+    ]);
   });
 });

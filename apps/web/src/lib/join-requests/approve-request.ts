@@ -186,7 +186,12 @@ export interface OwnJoinRequestRow {
   unitIdentifier: string;
   residentType: string;
   status: string;
-  /** The reviewer's note — shown so a denied requester knows why. */
+  /**
+   * The reviewer's note, for a DENIED request only — the deny dialog tells the
+   * manager it is sent to the requester, so they know why. Null for every
+   * other status: an approval note is written for managers (nothing in the
+   * approve flow labels it shared) and stays with them.
+   */
   reviewNotes: string | null;
   reviewedAt: Date | null;
   createdAt: Date;
@@ -205,7 +210,7 @@ export async function listJoinRequestsForUser(userId: string): Promise<OwnJoinRe
   // reads only the NAME of each community they asked to join — a name they
   // already saw in the public community search before requesting — and the
   // requester is not a member yet, so a scoped client could not read it.
-  return await db
+  const rows = await db
     .select({
       id: communityJoinRequests.id,
       communityId: communityJoinRequests.communityId,
@@ -221,6 +226,10 @@ export async function listJoinRequestsForUser(userId: string): Promise<OwnJoinRe
     .leftJoin(communities, eq(communities.id, communityJoinRequests.communityId))
     .where(eq(communityJoinRequests.userId, userId))
     .orderBy(desc(communityJoinRequests.createdAt));
+  return rows.map((row) => ({
+    ...row,
+    reviewNotes: row.status === 'denied' ? row.reviewNotes : null,
+  }));
 }
 
 /**
@@ -268,17 +277,26 @@ export interface JoinRequestResult {
   status: 'approved' | 'denied';
 }
 
+/** An approval also says what was asked for and what was granted, for the audit log. */
+export interface ApproveJoinRequestResult extends JoinRequestResult {
+  /** The type on the request as filed. */
+  requestedResidentType: string;
+  /** The membership created: an apartment owner request is granted as tenant. */
+  grantedResidentType: 'owner' | 'tenant';
+}
+
 /**
  * Approve a pending join request:
  * - inserts a user_roles row (role='resident', isUnitOwner reflects residentType)
- * - marks the request approved
+ * - marks the request approved (an owner request to an apartment is also
+ *   rewritten to `residentType = 'tenant'`, matching the membership granted)
  * - notifies the requester (in-app)
  *
  * Throws if the request does not exist or is not pending.
  */
 export async function approveJoinRequest(
   input: ApproveInput,
-): Promise<JoinRequestResult> {
+): Promise<ApproveJoinRequestResult> {
   const db = createUnscopedClient();
 
   const [req] = await db
@@ -300,6 +318,10 @@ export async function approveJoinRequest(
     .limit(1);
   const isOwner = req.residentType === 'owner' && !isApartment(community?.communityType);
   const displayTitle = isOwner ? 'Owner' : 'Tenant';
+  // The request row records what was granted, so the requester's list and the
+  // admin list say Tenant rather than the Owner that was asked for.
+  const requestedResidentType = req.residentType;
+  const convertedToTenant = requestedResidentType === 'owner' && !isOwner;
 
   await db.transaction(async (tx) => {
     // Conditional update: only transition pending → approved. Ensures atomicity
@@ -308,6 +330,7 @@ export async function approveJoinRequest(
       .update(communityJoinRequests)
       .set({
         status: 'approved',
+        ...(convertedToTenant ? { residentType: 'tenant' } : {}),
         reviewedBy: input.reviewerUserId,
         reviewedAt: new Date(),
         reviewNotes: input.notes ?? null,
@@ -381,6 +404,8 @@ export async function approveJoinRequest(
     communityId: req.communityId,
     userId: req.userId,
     status: 'approved',
+    requestedResidentType,
+    grantedResidentType: isOwner ? 'owner' : 'tenant',
   };
 }
 

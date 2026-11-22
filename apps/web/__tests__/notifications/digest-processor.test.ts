@@ -231,6 +231,43 @@ describe('notification digest processor', () => {
     );
   });
 
+  // The digest's unsubscribe sets email_frequency to 'never', which also stops
+  // meeting, violation and ARC notices, so it must not offer a mailbox
+  // provider one-click: the header names the preferences page instead.
+  it('sends the digest without one-click unsubscribe', async () => {
+    findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
+    claimDigestQueueRowsMock.mockResolvedValue([
+      {
+        id: 1,
+        communityId: 101,
+        userId: 'u-1',
+        frequency: 'daily_digest',
+        sourceType: 'document',
+        sourceId: 'doc-1',
+        eventType: 'document_posted',
+        eventTitle: 'Doc doc-1',
+        eventSummary: 'Uploaded by board',
+        actionUrl: 'https://app.local/documents/doc-1',
+        attemptCount: 0,
+      },
+    ]);
+    seedCommunityState({
+      communityId: 101,
+      timezone: 'America/New_York',
+      users: [{ id: 'u-1', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }],
+      preferences: [{ userId: 'u-1', emailFrequency: 'daily_digest' }],
+    });
+
+    await processNotificationDigests({ now: new Date('2026-02-18T13:15:00.000Z') });
+
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        oneClickUnsubscribe: false,
+        unsubscribeUrl: expect.stringMatching(/\/settings\?communityId=101#notifications$/),
+      }),
+    );
+  });
+
   it('includes weekly frequency claims only on Monday local window', async () => {
     findCandidateDigestCommunityIdsMock.mockResolvedValue([101]);
     claimDigestQueueRowsMock.mockResolvedValue([]);

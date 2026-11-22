@@ -30,7 +30,14 @@ export const communityJoinRequests = pgTable(
       .notNull()
       .references(() => communities.id, { onDelete: 'cascade' }),
     unitIdentifier: text('unit_identifier').notNull(),
-    /** 'owner' | 'tenant' — the resident type claimed by the requester. */
+    /**
+     * 'owner' | 'tenant'. While pending, the type the requester claimed. Once
+     * approved, the type granted: an owner request to an apartment (which has
+     * no unit owners) is approved as a tenant and rewritten here, so the
+     * requester's and the admin's lists show what the membership is. The
+     * approve audit entry keeps both (`requestedResidentType`,
+     * `grantedResidentType`).
+     */
     residentType: text('resident_type').notNull(),
     /** 'pending' | 'approved' | 'denied' | 'withdrawn' */
     status: text('status').notNull().default('pending'),

@@ -14,11 +14,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createUnscopedClientMock } = vi.hoisted(() => ({
+const { createUnscopedClientMock, logAuditEventMock } = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
+  logAuditEventMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
+  logAuditEvent: logAuditEventMock,
   notificationPreferences: {
     id: 'prefs.id',
     communityId: 'prefs.community_id',
@@ -34,7 +36,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 const {
+  buildCommunityEmailUnsubscribeLinks,
   buildCommunityEmailUnsubscribeUrl,
+  topicAllowsOneClick,
   signCommunityEmailUnsubscribeToken,
   verifyCommunityEmailUnsubscribeToken,
 } = await import('@/lib/services/community-email-unsubscribe-token');
@@ -44,21 +48,33 @@ const { applyCommunityEmailUnsubscribe } = await import(
 
 const SECRET = 'test-unsubscribe-secret';
 
-/** Records the `set()` payload so a test can assert WHICH flags were written. */
+/**
+ * Records the `set()` payload so a test can assert WHICH flags were written.
+ *
+ * The transaction handle `tx` is a DIFFERENT object from `db`, and only `tx`
+ * can read or write: a write or audit row that escaped the transaction (made
+ * on `db` or a fresh client) would show up as a call on `db`, not `tx`.
+ */
 function buildDb(existingRows: unknown[]) {
   const setSpy = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
   const insertValues = vi.fn(() => Promise.resolve([]));
-  return {
-    setSpy,
-    insertValues,
-    db: {
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(existingRows)) })),
-      })),
-      update: vi.fn(() => ({ set: setSpy })),
-      insert: vi.fn(() => ({ values: insertValues })),
-    },
+  const tx = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(existingRows)) })),
+    })),
+    update: vi.fn(() => ({ set: setSpy })),
+    insert: vi.fn(() => ({ values: insertValues })),
   };
+  const outside = () => {
+    throw new Error('query made outside the transaction');
+  };
+  const db = {
+    select: vi.fn(outside),
+    update: vi.fn(outside),
+    insert: vi.fn(outside),
+    transaction: vi.fn(async (fn: (handle: unknown) => Promise<unknown>) => fn(tx)),
+  };
+  return { setSpy, insertValues, db, tx };
 }
 
 beforeEach(() => {
@@ -166,6 +182,60 @@ describe('buildCommunityEmailUnsubscribeUrl', () => {
   });
 });
 
+// The `notifications` opt-out sets email_frequency to 'never', which also stops
+// meeting, violation and ARC notices. A mailbox provider's one-click button
+// must never be able to do that, so that topic never advertises one-click.
+describe('one-click unsubscribe per topic', () => {
+  it('is never offered for the notifications topic', () => {
+    expect(topicAllowsOneClick('notifications')).toBe(false);
+  });
+
+  it('stays on for announcements and calendar, whose flags no statutory notice reads', () => {
+    expect(topicAllowsOneClick('announcements')).toBe(true);
+    expect(topicAllowsOneClick('calendar')).toBe(true);
+  });
+
+  it('an announcement email puts the acting token URL in the header, with one-click', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'announcements',
+    });
+
+    expect(links.oneClick).toBe(true);
+    expect(links.headerUrl).toBe(links.linkUrl);
+    expect(links.linkUrl).toContain('/api/v1/notifications/unsubscribe?token=');
+  });
+
+  it('a notifications email keeps the token link in the body but puts the preferences page in the header', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'notifications',
+    });
+
+    expect(links.oneClick).toBe(false);
+    expect(links.linkUrl).toContain('/api/v1/notifications/unsubscribe?token=');
+    // Link checkers fetch header URLs (RFC 8058 section 1); this one acts on nothing.
+    expect(links.headerUrl).toBe('https://app.example/settings?communityId=42#notifications');
+  });
+
+  it('a statutory notice never offers one-click, whatever its topic', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'announcements',
+      statutory: true,
+    });
+
+    expect(links.oneClick).toBe(false);
+    expect(links.headerUrl).toBe('https://app.example/settings?communityId=42#notifications');
+  });
+});
+
 describe('applyCommunityEmailUnsubscribe', () => {
   it('turns off email_frequency for the notifications topic', async () => {
     // Both the immediate sender and the digest read `emailFrequency`, so this
@@ -178,7 +248,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'notifications',
-    });
+    }, { confirmedVia: 'confirmation_page' });
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({ emailFrequency: 'never' }),
@@ -193,7 +263,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'announcements',
-    });
+    }, { confirmedVia: 'one_click' });
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({ emailAnnouncements: false }),
@@ -206,7 +276,10 @@ describe('applyCommunityEmailUnsubscribe', () => {
     const { db, setSpy } = buildDb([{ id: 7 }]);
     createUnscopedClientMock.mockReturnValue(db);
 
-    await applyCommunityEmailUnsubscribe({ communityId: 42, userId: 'user-1', topic: 'calendar' });
+    await applyCommunityEmailUnsubscribe(
+      { communityId: 42, userId: 'user-1', topic: 'calendar' },
+      { confirmedVia: 'one_click' },
+    );
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -227,7 +300,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'announcements',
-    });
+    }, { confirmedVia: 'confirmation_page' });
 
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -236,5 +309,36 @@ describe('applyCommunityEmailUnsubscribe', () => {
         emailAnnouncements: false,
       }),
     );
+  });
+
+  // An opt-out from a link leaves a record: what changed, for whom, and how it
+  // was confirmed. A system actor, because a token proves who held the link,
+  // not who clicked it; never the token itself (the log is append-only).
+  it('audits the opt-out in the same transaction, with how it was confirmed and no token', async () => {
+    const { db, tx } = buildDb([{ id: 7 }]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await applyCommunityEmailUnsubscribe(
+      { communityId: 42, userId: 'user-1', topic: 'notifications' },
+      { confirmedVia: 'confirmation_page' },
+    );
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      {
+        userId: null,
+        action: 'settings_changed',
+        resourceType: 'notification_preferences',
+        resourceId: 'user-1:42',
+        communityId: 42,
+        newValues: { emailFrequency: 'never' },
+        metadata: { source: 'email_unsubscribe', topic: 'notifications', confirmedVia: 'confirmation_page' },
+      },
+      // The transaction handle, not the client: the row commits or rolls back
+      // with the preference change it records.
+      tx,
+    );
+    expect(JSON.stringify(logAuditEventMock.mock.calls)).not.toMatch(/token/i);
   });
 });

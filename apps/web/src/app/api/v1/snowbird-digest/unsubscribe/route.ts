@@ -7,8 +7,9 @@
  * token authorizes setting THAT user's cadence to 'off'.
  *
  * - POST is the RFC 8058 one-click target named by List-Unsubscribe-Post
- *   (`sendEmail` sets that header on every non-transactional send, pointing at
- *   the same URL the digest links to).
+ *   (`sendEmail` sets that header on a non-transactional send unless the
+ *   caller turns one-click off; this digest leaves it on, pointing at the
+ *   same URL the digest links to).
  * - GET backs the visible "unsubscribe" link a human clicks, and shows a
  *   confirmation page.
  *
