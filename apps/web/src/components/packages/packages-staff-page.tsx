@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Package, Plus } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { PanelGlance, type AccessSentence } from '@propertypro/ui/components/shared/side-panel';
 import {
@@ -183,7 +183,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
         header={
           <PageHeader
             title="Packages"
-            navId="packages"
+            icon={<Package />}
             description="Log deliveries as they arrive. Residents are told when a package is ready to collect."
             actions={isEmpty ? undefined : logButton}
           />

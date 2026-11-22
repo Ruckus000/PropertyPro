@@ -1,5 +1,6 @@
 'use client';
 
+import { Package } from 'lucide-react';
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
@@ -100,7 +101,7 @@ export function PackagesResidentPage({ communityId }: PackagesResidentPageProps)
       header={
         <PageHeader
           title="My packages"
-          navId="packages"
+          icon={<Package />}
           description="Packages logged for your unit, and whether they are ready to collect."
         />
       }
