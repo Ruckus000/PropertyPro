@@ -1,11 +1,13 @@
 /**
  * Monthly cron: Auto-generate assessment line items for recurring assessments.
  *
- * Runs at 05:00 UTC on the 1st of each month. For each active recurring
- * assessment across all communities, generates line items for the current
- * period. Skips one-time assessments and already-generated periods.
+ * Runs at 12:00 UTC on the 1st of each month, when it is the 1st in every US
+ * zone (at 05:00 UTC, Central time was still on the last day of the previous
+ * month from December to March). For each active recurring assessment across
+ * all communities, generates line items for the community's current month.
+ * Skips one-time assessments and already-generated periods.
  *
- * Schedule: 0 5 1 * * (vercel.json)
+ * Schedule: 0 12 1 * * (vercel.json)
  */
 import { NextResponse, type NextRequest } from 'next/server';
 import { withErrorHandler } from '@/lib/api/error-handler';

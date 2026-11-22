@@ -847,14 +847,25 @@ describe('3. due date computation (via generateAssessmentLineItemsForCommunity)'
   describe('in America/Los_Angeles', () => {
     inTimeZone('America/Los_Angeles', 16);
 
-    it('the month is the process-local month, not the UTC month', async () => {
-      // CHARACTERIZATION: suspected defect — computeDueDate reads `new Date()` through
-      // local-time startOfMonth/endOfMonth. The recurring cron fires at 05:00 UTC on
-      // the 1st; in any zone west of UTC-5 that instant is still the last day of the
-      // PREVIOUS month, so May's run generates April's due date (and, being keyed on
-      // dueDate, re-uses April's idempotency set). Harmless on Vercel (UTC); wrong on
-      // any host with TZ set west of UTC-5.
-      expect(await dueDateFor({ frequency: 'monthly', dueDay: 1 }, '2026-05-01T05:00:00.000Z')).toBe('2026-04-01');
+    it('the process zone does not move the month: a UTC community at 05:00 UTC on May 1 is in May', async () => {
+      // Fixed 2026-11-21 (was a suspected defect: computeDueDate read `new Date()`
+      // through local-time startOfMonth/endOfMonth, so in Los Angeles this gave
+      // 2026-04-01). Now the month is the community's (communityToday).
+      expect(await dueDateFor({ frequency: 'monthly', dueDay: 1 }, '2026-05-01T05:00:00.000Z')).toBe('2026-05-01');
+    });
+  });
+
+  describe('a recurring due date with no override is in the community\'s month', () => {
+    // The process stays on UTC here and the community is in New York, so a month
+    // read from the server clock and one read from the community's differ.
+    beforeEach(() => seed(communitiesTable, [{ id: 11, timezone: 'America/New_York' }]));
+
+    it('21:30 EDT on April 30 (01:30 UTC May 1) is still April', async () => {
+      expect(await dueDateFor({ frequency: 'monthly', dueDay: 15 }, '2026-05-01T01:30:00.000Z')).toBe('2026-04-15');
+    });
+
+    it('control: mid-month, both clocks agree on May', async () => {
+      expect(await dueDateFor({ frequency: 'monthly', dueDay: 15 }, '2026-05-15T12:00:00.000Z')).toBe('2026-05-15');
     });
   });
 });
@@ -978,19 +989,37 @@ describe('4. recurrence (processRecurringAssessments → real generateAssessment
     expect(summary).toMatchObject({ assessmentsProcessed: 0, errors: 0 });
   });
 
-  it('the `now` argument gates the month, but the due date comes from the wall clock', async () => {
-    // CHARACTERIZATION: suspected defect (LATENT) — processRecurringAssessments(now)
-    // does not pass `now` to generateAssessmentLineItemsForCommunity, whose
-    // computeDueDate calls `new Date()`. The only production caller
-    // (api/v1/internal/generate-assessments/route.ts) passes no `now`, so today the
-    // two clocks agree and nothing is wrong. It bites the first time anyone adds a
-    // `now` (a backfill, a delayed re-run, a test): the month gate follows the
-    // argument, the due date follows the wall clock.
+  it('the `now` argument decides both the month gate and the due date', async () => {
+    // Fixed 2026-11-21 (was a LATENT suspected defect: the generator re-read the
+    // wall clock, so this run dated its charge 2026-06-01). The cron now hands the
+    // generator its period's due date.
     seed(assessmentsTable, [assessment({ id: 7, frequency: 'quarterly', startDate: '2026-04-01' })]);
     setNow('2026-06-15T12:00:00.000Z');
     const summary = await processRecurringAssessments(new Date('2026-04-01T05:00:00.000Z'));
     expect(summary.assessmentsProcessed).toBe(1);
-    expect(generatedDueDates()).toEqual(['2026-06-01']);
+    expect(generatedDueDates()).toEqual(['2026-04-01']);
+  });
+
+  describe('a community in America/Chicago', () => {
+    beforeEach(() => {
+      communityRows = [{ id: 11, communitySettings: { assessmentPaymentsEnabled: true }, timezone: 'America/Chicago' }];
+      seed(communitiesTable, [{ id: 11, timezone: 'America/Chicago' }]);
+      seed(assessmentsTable, [assessment({ id: 7, frequency: 'monthly', dueDay: 5 })]);
+    });
+
+    it('the 12:00 UTC run on December 1 bills December', async () => {
+      const summary = await processRecurringAssessments(setNow('2026-12-01T12:00:00.000Z'));
+      expect(summary.assessmentsProcessed).toBe(1);
+      expect(generatedDueDates()).toEqual(['2026-12-05']);
+    });
+
+    it('a run at 05:00 UTC on December 1 (23:00 CST November 30) bills the community\'s month, November', async () => {
+      // Why the schedule moved off 05:00 UTC: at that hour, Central time is still on
+      // the previous month from December to March.
+      const summary = await processRecurringAssessments(setNow('2026-12-01T05:00:00.000Z'));
+      expect(summary.assessmentsProcessed).toBe(1);
+      expect(generatedDueDates()).toEqual(['2026-11-05']);
+    });
   });
 
   describe('in America/New_York', () => {

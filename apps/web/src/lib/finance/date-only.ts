@@ -31,3 +31,14 @@ export function assessmentMonthOutOfRange(
   if (assessment.endDate && month > assessment.endDate.slice(0, 7)) return 'after_end';
   return null;
 }
+
+/**
+ * A recurring assessment's due date in `month` ('yyyy-MM'): dueDay clamped to
+ * the month's length, a missing or 0 dueDay meaning the 1st. The month is
+ * handed in, never read from a clock, so the server's zone cannot move it.
+ */
+export function recurringDueDate(dueDay: number | null | undefined, month: string): string {
+  const daysInMonth = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate();
+  const day = Math.max(1, Math.min(dueDay ?? 1, daysInMonth));
+  return `${month}-${String(day).padStart(2, '0')}`;
+}
