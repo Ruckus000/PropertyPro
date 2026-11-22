@@ -43,6 +43,22 @@ describe('CommentThread', () => {
     vi.clearAllMocks();
   });
 
+  // The status form's internal notes say "Not visible to residents"; a manager
+  // must not read this box the same way.
+  it('tells a manager the resident sees comments', () => {
+    renderWithClient(
+      <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} isAdmin />,
+    );
+    expect(screen.getByLabelText('Add a comment')).toHaveAccessibleDescription('The resident sees comments.');
+  });
+
+  it('gives a resident no such note', () => {
+    renderWithClient(
+      <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} />,
+    );
+    expect(screen.queryByText('The resident sees comments.')).not.toBeInTheDocument();
+  });
+
   it('renders "No comments yet" when comments array is empty', () => {
     renderWithClient(
       <CommentThread communityId={42} requestId={1} comments={[]} communityTimezone={TZ} />,

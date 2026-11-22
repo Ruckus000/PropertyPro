@@ -202,6 +202,9 @@ export function OperationsHub({
   const openRequestId = parseRequestId(searchParams.get('request'));
   // The same, for the request panel.
   const requestOpenedHereRef = useRef(false);
+  // The card button that opened the request panel, so closing it returns focus
+  // there. A ref, not state: the panel is gone before Radix asks where to focus.
+  const requestOpenerRef = useRef<HTMLElement | null>(null);
 
   const operationsQuery = useOperations(
     communityId,
@@ -382,7 +385,8 @@ export function OperationsHub({
   }
 
   /** Opens a request's panel; Back closes it, exactly as for the create sheets above. */
-  function openRequest(requestId: number) {
+  function openRequest(requestId: number, opener: HTMLElement) {
+    requestOpenerRef.current = opener;
     const params = new URLSearchParams(searchParams.toString());
     params.set('request', String(requestId));
     requestOpenedHereRef.current = true;
@@ -400,6 +404,15 @@ export function OperationsHub({
     params.delete('request');
     const query = params.toString();
     window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
+  }
+
+  /** The panel has no Radix trigger, so without this focus falls to <body> on close. */
+  function restoreRequestOpenerFocus(event: Event) {
+    const opener = requestOpenerRef.current;
+    requestOpenerRef.current = null;
+    if (!opener?.isConnected) return;
+    event.preventDefault();
+    opener.focus();
   }
 
   const requestsDescription = requestScope === 'community'
@@ -550,7 +563,7 @@ export function OperationsHub({
                     </p>
                     <h2 className="text-lg font-semibold text-content">
                       {item.type === 'maintenance_request' && requestsEnabled ? (
-                        <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={() => openRequest(item.id)}>
+                        <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(item.id, e.currentTarget)}>
                           {item.title}
                         </button>
                       ) : (
@@ -584,7 +597,7 @@ export function OperationsHub({
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
                     <h2 className="text-lg font-semibold text-content">
-                      <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={() => openRequest(request.id)}>
+                      <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(request.id, e.currentTarget)}>
                         {request.title}
                       </button>
                     </h2>
@@ -674,6 +687,7 @@ export function OperationsHub({
           key={openRequestId}
           open
           onClose={closeRequest}
+          onCloseAutoFocus={restoreRequestOpenerFocus}
           communityId={communityId}
           requestId={openRequestId}
           communityTimezone={communityTimezone}

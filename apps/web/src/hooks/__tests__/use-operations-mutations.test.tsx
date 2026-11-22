@@ -205,6 +205,28 @@ describe('maintenance request detail', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/maintenance-requests/7?communityId=42');
   });
 
+  // A `?request=` the viewer may not read (403) or that is gone (404) will not
+  // change on a second asking; the default three retries held the panel's
+  // skeleton for ~7s before the refusal showed.
+  it.each([403, 404])('does not retry a %i refusal', async (status) => {
+    fetchMock.mockImplementation(async () => json({ error: { code: 'REFUSED', message: 'Refused' } }, status));
+    // App-like defaults: three retries unless the query says otherwise.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: 3, retryDelay: 0 } } });
+    const { result } = renderHook(() => useMaintenanceRequest(42, 7), { wrapper: wrapper(qc) });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('still retries a server failure', async () => {
+    fetchMock.mockImplementation(async () => json({ error: { code: 'INTERNAL_ERROR', message: 'Boom' } }, 500));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: 3, retryDelay: 0 } } });
+    const { result } = renderHook(() => useMaintenanceRequest(42, 7), { wrapper: wrapper(qc) });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it('posts a comment with add_comment and refetches every request list and detail', async () => {
     fetchMock.mockResolvedValueOnce(json({ data: { id: 3, requestId: 7, text: 'Thanks' } }));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

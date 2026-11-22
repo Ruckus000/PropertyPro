@@ -31,7 +31,7 @@ describe('maintenance/[id] (redirect-only page)', () => {
   });
 
   it('lands on the list, with no panel, for an id that is not a request id', async () => {
-    for (const bad of ['abc', '0', '-4', '1.5']) {
+    for (const bad of ['abc', '0', '-4', '1.5', '1e3', '0x10', ' 7', '7abc']) {
       redirectMock.mockClear();
       await expect(
         LegacyMaintenanceRequestPage({

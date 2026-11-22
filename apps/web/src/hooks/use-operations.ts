@@ -9,6 +9,7 @@ import {
 } from '@/lib/api/admin-maintenance';
 import { addComment, getRequest, listMyRequests } from '@/lib/api/maintenance-requests';
 import { requestJson } from '@/lib/api/request-json';
+import { retryUnlessRefused } from '@/lib/api/retry-unless-refused';
 import type { BookingRules } from '@/lib/amenities/booking-rules';
 import { walkAndSlice, walkPaginated } from '@/lib/api/walk-paginated';
 
@@ -317,6 +318,8 @@ export function useMaintenanceRequest(
     queryFn: async () => (await getRequest(requestId, communityId)).data,
     enabled: (options?.enabled ?? true) && communityId > 0 && requestId > 0,
     staleTime: 30_000,
+    // A 403/404 `?request=` will not change on a second asking: show it at once.
+    retry: retryUnlessRefused,
   });
 }
 
@@ -332,7 +335,8 @@ export function useAddMaintenanceComment(communityId: number, requestId: number)
 }
 
 export interface UpdateMaintenanceStatusInput {
-  status: string;
+  /** Omitted when the manager keeps the current status and only edits the notes. */
+  status?: string;
   internalNotes?: string | null;
   resolutionDescription?: string | null;
   resolutionDate?: string | null;

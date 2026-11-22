@@ -11,6 +11,8 @@ interface RequestCardProps {
   communityTimezone: string;
   /** The signed-in user, so their own comments read "You". */
   viewerUserId?: string;
+  /** A manager is told that comments reach the resident. */
+  isAdmin?: boolean;
 }
 
 /**
@@ -18,7 +20,7 @@ interface RequestCardProps {
  * resolution once there is one, and the comment thread. The body of the
  * Operations hub's request panel, for residents and managers alike.
  */
-export function RequestCard({ request, communityId, communityTimezone, viewerUserId }: RequestCardProps) {
+export function RequestCard({ request, communityId, communityTimezone, viewerUserId, isAdmin = false }: RequestCardProps) {
   // Legacy names the API may still send for older rows.
   const status = request.status === 'open' ? 'submitted' : request.status;
   const priority = request.priority === 'normal' ? 'medium' : request.priority;
@@ -87,6 +89,7 @@ export function RequestCard({ request, communityId, communityTimezone, viewerUse
         communityTimezone={communityTimezone}
         viewerUserId={viewerUserId}
         submittedById={request.submittedById}
+        isAdmin={isAdmin}
       />
     </div>
   );

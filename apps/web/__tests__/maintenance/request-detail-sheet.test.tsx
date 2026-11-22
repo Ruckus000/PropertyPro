@@ -10,6 +10,7 @@ import { RequestDetailSheet } from '../../src/components/operations/RequestDetai
 import { StatusUpdateForm } from '../../src/components/maintenance/StatusUpdateForm';
 import { MAINTENANCE_REQUEST_KEYS, OPERATIONS_KEYS } from '../../src/hooks/use-operations';
 import type { MaintenanceRequestItem } from '../../src/lib/api/maintenance-requests';
+import { ApiRequestError } from '../../src/lib/api/request-json';
 
 vi.mock('@/lib/api/maintenance-requests', () => ({
   addComment: vi.fn(),
@@ -90,11 +91,14 @@ describe('RequestDetailSheet', () => {
   it('gives a manager the status control as well as the comment box', async () => {
     renderSheet(true);
     expect(await screen.findByLabelText('Change status')).toBeInTheDocument();
-    expect(screen.getByLabelText('Add a comment')).toBeInTheDocument();
+    expect(screen.getByLabelText('Add a comment')).toHaveAccessibleDescription('The resident sees comments.');
   });
 
   it("shows the API's refusal when the request cannot be read", async () => {
-    getRequestMock.mockRejectedValue(new Error('You can only view your own maintenance requests'));
+    // The API's refusal is an ApiRequestError, which the panel's read does not retry.
+    getRequestMock.mockRejectedValue(
+      new ApiRequestError('You can only view your own maintenance requests', { status: 403, code: 'FORBIDDEN' }),
+    );
     renderSheet(false);
     expect(await screen.findByText('You can only view your own maintenance requests')).toBeInTheDocument();
     expect(screen.queryByLabelText('Add a comment')).not.toBeInTheDocument();
@@ -105,7 +109,8 @@ describe('RequestDetailSheet', () => {
     const client = renderSheet(true);
     const invalidate = vi.spyOn(client, 'invalidateQueries');
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Update status' }));
+    fireEvent.change(await screen.findByLabelText('Change status'), { target: { value: 'acknowledged' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update status' }));
 
     await waitFor(() => expect(updateRequestStatusMock).toHaveBeenCalledWith(7, 42, { status: 'acknowledged' }));
     await waitFor(() => {
@@ -118,6 +123,10 @@ describe('RequestDetailSheet', () => {
 });
 
 describe('StatusUpdateForm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   function renderForm(request: MaintenanceRequestItem) {
     render(
       <QueryClientProvider client={newClient()}>
@@ -126,8 +135,48 @@ describe('StatusUpdateForm', () => {
     );
   }
 
+  // The status moves on offer; the first option is always "Keep current status" ('').
   const options = () =>
-    within(screen.getByLabelText('Change status')).getAllByRole('option').map((o) => (o as HTMLOptionElement).value);
+    within(screen.getByLabelText('Change status'))
+      .getAllByRole('option')
+      .map((o) => (o as HTMLOptionElement).value)
+      .filter((v) => v !== '');
+
+  it('opens on "Keep current status", never on a move', () => {
+    renderForm({ ...REQUEST, status: 'in_progress' });
+    const select = screen.getByLabelText('Change status') as HTMLSelectElement;
+    expect(select.value).toBe('');
+    expect(within(select).getAllByRole('option')[0]).toHaveTextContent('Keep current status (In Progress)');
+  });
+
+  it('has nothing to submit until the status or the notes change', () => {
+    renderForm({ ...REQUEST, status: 'acknowledged' });
+    expect(screen.getByRole('button', { name: 'Save notes' })).toBeDisabled();
+  });
+
+  // `acknowledged` lists `submitted` first. Preselecting it sent a manager who
+  // only typed notes back to Submitted, and emailed the resident.
+  it('saving only the notes sends no status', async () => {
+    updateRequestStatusMock.mockResolvedValue({ data: { id: 7, status: 'acknowledged' } });
+    renderForm({ ...REQUEST, status: 'acknowledged' });
+    fireEvent.change(screen.getByLabelText('Internal notes'), { target: { value: 'Plumber booked Tuesday' } });
+    // Whatever the button says: the point is what a notes-only submit sends.
+    fireEvent.click(screen.getByRole('button', { name: /^(Save notes|Update status)$/ }));
+
+    await waitFor(() =>
+      expect(updateRequestStatusMock).toHaveBeenCalledWith(7, 42, { internalNotes: 'Plumber booked Tuesday' }),
+    );
+    expect(updateRequestStatusMock.mock.lastCall![2]).not.toHaveProperty('status');
+  });
+
+  it('choosing a status sends it', async () => {
+    updateRequestStatusMock.mockResolvedValue({ data: { id: 7, status: 'in_progress' } });
+    renderForm({ ...REQUEST, status: 'acknowledged' });
+    fireEvent.change(screen.getByLabelText('Change status'), { target: { value: 'in_progress' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update status' }));
+
+    await waitFor(() => expect(updateRequestStatusMock).toHaveBeenCalledWith(7, 42, { status: 'in_progress' }));
+  });
 
   it('offers only the moves the server accepts from the current status', () => {
     renderForm({ ...REQUEST, status: 'in_progress' });
@@ -170,6 +219,7 @@ describe('StatusUpdateForm', () => {
   it("shows the server's message when the update is refused", async () => {
     updateRequestStatusMock.mockRejectedValue(new Error("Invalid status transition: 'resolved' → 'in_progress'"));
     renderForm({ ...REQUEST, status: 'submitted' });
+    fireEvent.change(screen.getByLabelText('Change status'), { target: { value: 'acknowledged' } });
     fireEvent.click(screen.getByRole('button', { name: 'Update status' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid status transition');
   });

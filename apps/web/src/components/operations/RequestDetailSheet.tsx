@@ -16,6 +16,8 @@ interface RequestDetailSheetProps {
   /** Managers change the status; everyone who can read the request comments on it. */
   isAdmin: boolean;
   userId: string;
+  /** Returns focus to the card that opened the panel (see `SlideOverPanel`). */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
@@ -32,6 +34,7 @@ export function RequestDetailSheet({
   communityTimezone,
   isAdmin,
   userId,
+  onCloseAutoFocus,
 }: RequestDetailSheetProps) {
   const requestQuery = useMaintenanceRequest(communityId, requestId, { enabled: open });
   const request = requestQuery.data;
@@ -40,6 +43,7 @@ export function RequestDetailSheet({
     <SlideOverPanel
       open={open}
       onClose={onClose}
+      onCloseAutoFocus={onCloseAutoFocus}
       title="Maintenance request"
       description={isAdmin ? 'Review the request, reply, and update its status.' : 'Follow progress and reply to management.'}
     >
@@ -74,6 +78,7 @@ export function RequestDetailSheet({
             communityId={communityId}
             communityTimezone={communityTimezone}
             viewerUserId={userId}
+            isAdmin={isAdmin}
           />
         </div>
       ) : null}

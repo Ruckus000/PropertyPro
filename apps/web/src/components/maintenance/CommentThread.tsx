@@ -17,6 +17,11 @@ interface CommentThreadProps {
   viewerUserId?: string;
   /** The resident who submitted the request, so their comments read "Resident". */
   submittedById?: string;
+  /**
+   * A manager is told the resident reads what they post here: the internal
+   * notes beside this box are private, and comments are not.
+   */
+  isAdmin?: boolean;
   onCommentAdded?: () => void;
 }
 
@@ -33,6 +38,7 @@ export function CommentThread({
   communityTimezone,
   viewerUserId,
   submittedById,
+  isAdmin = false,
   onCommentAdded,
 }: CommentThreadProps) {
   const [text, setText] = useState('');
@@ -53,6 +59,7 @@ export function CommentThread({
   }
 
   const fieldId = `comment-${requestId}`;
+  const hintId = `comment-hint-${requestId}`;
 
   return (
     <div className="space-y-4">
@@ -76,8 +83,14 @@ export function CommentThread({
 
       <form onSubmit={handleSubmit} className="space-y-2">
         <Label htmlFor={fieldId}>Add a comment</Label>
+        {isAdmin ? (
+          <p id={hintId} className="text-sm text-content-tertiary">
+            The resident sees comments.
+          </p>
+        ) : null}
         <Textarea
           id={fieldId}
+          aria-describedby={isAdmin ? hintId : undefined}
           value={text}
           onChange={(e) => setText(e.target.value)}
           maxLength={5000}

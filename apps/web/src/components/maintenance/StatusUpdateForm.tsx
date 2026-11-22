@@ -23,13 +23,19 @@ interface StatusUpdateFormProps {
  *
  * Mount it with `key={request.status}` so the choices restart from the new
  * status after an update.
+ *
+ * It opens on "Keep current status", never on a move: several statuses can move
+ * backward (`acknowledged` and `in_progress` both go back to `submitted`), and a
+ * status change emails the resident. A manager who only edits the internal
+ * notes sends the notes alone.
  */
 export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpdateFormProps) {
   const currentStatus = request.status === 'open' ? 'submitted' : request.status;
   const allowed = allowedNextStatuses(currentStatus);
   const savedNotes = request.internalNotes ?? '';
 
-  const [newStatus, setNewStatus] = useState(allowed[0] ?? '');
+  // '' is "Keep current status": the PATCH then carries no `status`.
+  const [newStatus, setNewStatus] = useState('');
   const [internalNotes, setInternalNotes] = useState(savedNotes);
   const [resolutionDescription, setResolutionDescription] = useState(request.resolutionDescription ?? '');
   const [resolutionDate, setResolutionDate] = useState(
@@ -39,14 +45,17 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
   const update = useUpdateMaintenanceRequestStatus(communityId, request.id);
 
   const isResolving = newStatus === 'resolved';
+  const notesChanged = internalNotes !== savedNotes;
+  const hasChanges = newStatus !== '' || notesChanged;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!newStatus) return;
+    if (!hasChanges) return;
     setError(null);
-    const input: UpdateMaintenanceStatusInput = { status: newStatus };
+    const input: UpdateMaintenanceStatusInput = {};
+    if (newStatus) input.status = newStatus;
     // Send the notes only when they changed, so the audit trail records real edits.
-    if (internalNotes !== savedNotes) input.internalNotes = internalNotes || null;
+    if (notesChanged) input.internalNotes = internalNotes || null;
     if (isResolving) {
       input.resolutionDescription = resolutionDescription || null;
       if (resolutionDate) input.resolutionDate = `${resolutionDate}T00:00:00Z`;
@@ -82,6 +91,7 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
           onChange={(e) => setNewStatus(e.target.value)}
           className="flex h-11 w-full rounded-sm border border-edge-strong bg-transparent px-3 text-base focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus md:h-8 md:text-sm"
         >
+          <option value="">Keep current status ({getStatusConfig(currentStatus).label})</option>
           {allowed.map((s) => (
             <option key={s} value={s}>
               {getStatusConfig(s).label}
@@ -130,8 +140,8 @@ export function StatusUpdateForm({ request, communityId, onUpdated }: StatusUpda
         </p>
       )}
 
-      <Button type="submit" size="sm" disabled={update.isPending || !newStatus}>
-        {update.isPending ? 'Updating...' : 'Update status'}
+      <Button type="submit" size="sm" disabled={update.isPending || !hasChanges}>
+        {update.isPending ? 'Saving...' : newStatus ? 'Update status' : 'Save notes'}
       </Button>
     </form>
   );

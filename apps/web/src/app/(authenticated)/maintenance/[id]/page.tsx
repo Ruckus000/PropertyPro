@@ -9,6 +9,13 @@ import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
 import { buildLegacyRedirectParams, operationsHubHref } from '@/lib/operations/routes';
 
+/** Digits only, as the hub reads `?request=`: `Number` would also take `1e3` and `0x10`. */
+function parseRequestId(raw: string): number | undefined {
+  if (!/^\d+$/.test(raw)) return undefined;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
 interface PageProps {
   params: Promise<{ id: string }>;
   searchParams: Promise<SearchParams>;
@@ -22,8 +29,8 @@ export default async function LegacyMaintenanceRequestPage({ params, searchParam
     redirect('/dashboard?reason=invalid-selection');
   }
 
-  // A non-numeric id is dropped by operationsHubHref: the link lands on the list.
-  const base = operationsHubHref(communityId, 'requests', { from: 'maintenance', request: Number(id) });
+  // An id that is not a request id is dropped: the link lands on the list.
+  const base = operationsHubHref(communityId, 'requests', { from: 'maintenance', request: parseRequestId(id) });
   // Mirror the sibling inbox/page.tsx shim: preserve any Operations-supported
   // filter params (status, priority, unitId, q) that ride along on the link.
   const passthrough = buildLegacyRedirectParams(query as Record<string, string | string[] | undefined>).toString();
