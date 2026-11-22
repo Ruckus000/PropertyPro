@@ -431,6 +431,56 @@ On phones: tables become stacked records (first column as the title, the rest
 as label and value pairs), a calendar shows marks only with the agenda list
 below it, the key-figure band is two-up, and controls are 44px.
 
+### 5.18 First-run (onboarding) screens
+
+**(owner)** asked for the onboarding feature just shipped to be restructured
+into the direction. That feature is the "guided blueprint" empty-state series
+merged on 2026-11-20 (#1470 to #1488): `SetupGuide`, record slots, the context
+column, the Continue-setup bar, resident waiting states, first-run heroes and
+the scene illustrations. Its content, steps, records and behaviour are kept.
+Only where each piece sits changes. Thirteen screens plus two partial-state
+examples are drawn in the mockup's "Onboarding" group.
+
+**(owner)** chose: fold the guide into the page shape, and keep the scenes
+but quieter.
+
+| Today | In the direction |
+|---|---|
+| One self-contained card with its own eyebrow, title and description | The page header. The page name is the title; the guide's outcome sentence is the description. No second heading. |
+| Progress ring and count in the hero | The side panel's "At a glance" figure ("0 of 13 required records posted") with its proportion bar. The ring component is retired. |
+| Fact chips | Plain lines under that figure |
+| Context column (`ContextSection` blocks) | The side panel's existing slots: anything time-bound goes to "Needs attention" with the time-left chip, who-sees-what and where-it-shows go to "About", help links go to "Shortcuts". No new slot. |
+| Step rail | The standard step strip under the header (5.11). Any step still opens; a blocked step says why. A step the system completed shows a check and no number. |
+| Open step: heading, count, slots | One section. Each slot is a row: status glyph, record name, a "Required" or "If it applies" tag, then its action. A conditional record keeps "Doesn't apply". |
+| Later steps as rows with chips | A second section, "Later steps", in the same form |
+| Scene on a teal sky panel | The scene drawn in ink line with sand fills and one teal accent, set on the section surface beside the step or hero text, about 150px wide, hidden on phones. No tinted panel. |
+| First-run hero (Announcements, Contracts, Assessments) | Header, then one section with the headline in the display face, one action, what a record has, and an example record from 5.7 |
+| Resident waiting state | Header, then one section with the display-face headline and sentence. "How you'll hear" becomes "About". |
+| Continue-setup bar (a bordered row with a ring) | One hairline row between header and content: an in-progress glyph, "Continue setup: 3 of 13 required posted · Next: …", an outline button, and "Hide setup for now" |
+
+Rules that come out of it:
+
+- The step's primary action lives in the page header. The next slot to fill is
+  marked with an ink outline, not a second coral button.
+- When every record in a step shares one deadline (the 30-day posting window on
+  Compliance), the time-left chip appears once beside the step heading, not on
+  every row.
+- The top bar's "Next deadline" reflects the community's real state: on a new
+  community it shows the posting window, not an overdue item.
+- Legal copy that must appear in full (the storm-damage notice) is rendered in
+  full under the step, never moved to the side panel or shortened.
+
+Not drawn, and still to be designed when built: the Directory steps' CSV
+format tables; the "Upload several" row and "Close setup" on Documents; the
+HOA and apartment record sets; the non-manager Compliance view; the board-
+approval note on Assessments. The scenes in the mockup are stand-ins: the six
+real scenes need redrawing in the quieter style. `/welcome` and the getting-
+started checklist predate this series and were drawn in 5.15.
+
+**(call)** The illustrations stay as a deliberate, limited exception to the
+"house illustration styles date" finding in 6.8: first-run screens only, line
+and paper only.
+
 ## 6. Visual language
 
 **(owner)** found the first refined look "still too bland" and asked for
