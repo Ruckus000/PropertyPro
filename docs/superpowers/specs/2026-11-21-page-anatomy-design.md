@@ -481,6 +481,71 @@ started checklist predate this series and were drawn in 5.15.
 "house illustration styles date" finding in 6.8: first-run screens only, line
 and paper only.
 
+### 5.19 The help center
+
+**(owner)** asked for the help center. It lives in its own route group
+(`app/(help)/help`: home, topic, article, search) with its own shell, which is
+why the first inventory of signed-in routes missed it. Four pages are drawn.
+
+- **Shell.** A reading shell, not the app shell: "Back to" link, the "Help
+  center" wordmark in the display face, and the community-type switch
+  (Condominium, Homeowners association, Apartment community). No sidebar.
+- **Home.** Display-face heading, one large search field, then topics as
+  de-layered groups in two columns: a firmer rule under each topic name with
+  its icon and count, hairlines between article links. No cards.
+- **Topic and search.** One group of article rows: title, one-line summary,
+  and a mono meta at the right.
+- **Article.** A 680px reading column at 16px, numbered steps, callouts as a
+  left rule (teal for information, amber for a statute or deadline note, no
+  tinted box), screenshots in a hairline frame. The margin holds "On this
+  page" and "Related". Feedback and the legal disclaimer close the page; the
+  disclaimer is rendered in full.
+
+Not drawn: the left topic sidebar and "Contact support" footer on the home
+page, Previous/Next cards and the comment box on articles, the community-FAQ
+block on search, and `/help/statutes/[statute]`'s chips on articles.
+
+### 5.20 Overlays
+
+**(owner)** asked for the notifications dropdown. It is one of a family of
+things that open over a page, none of which had been designed. Ten are drawn
+(group "Overlays"), each over its real page.
+
+Rules for every overlay:
+
+- **Elevation lives here and nowhere else.** Popovers and menus use E2, dialogs
+  and the command palette E3, on the card surface with a 12px radius. A sheet
+  is a full-height panel with a left hairline. Dialogs, sheets and the palette
+  dim the page; popovers and menus do not.
+- **No display face.** Overlay titles are sans, 14px semibold (16px in a
+  dialog). The display face stays on page titles.
+- **Rows** are a bare icon, a title, an optional one-line preview, and a mono
+  meta at the right. Unread is a bolder title plus an ink dot, never colour
+  alone. An urgent row gets the danger icon, not red text.
+- **Actions.** A header text action is a link ("Mark all read"). Footer
+  buttons sit at the right: outline secondary, then the one primary. A
+  destructive confirm is the only filled danger button in the app.
+- **States.** Every list overlay has an empty and an error state with the
+  code's wording.
+
+| Overlay | Form | Notes |
+|---|---|---|
+| Notifications | Popover from the bell | Header with "Mark all read", rows, "View all notifications" footer; "You're all caught up" when empty |
+| Help panel / help modal | Sheet from the help button; dialog when the docs-modal flag is on | Search, "Relevant to this page", link to the help center. Two surfaces exist behind a flag today; **(call)** keep the modal and retire the panel when the flag is settled |
+| Profile menu | Menu | Settings, Help Center, Switch Community, Add Community, Data Export, Log out. Log out is not styled destructive, as in the code |
+| Command palette | Palette | Large search row, grouped results with a kind label, keyboard hints in the footer |
+| Community switcher | Popover from the sidebar | Current community marked with a check and the word "Current" |
+| Delete confirmation | Dialog | Says what happens and that it can be undone where true |
+| Detail panel | Sheet | Label and value pairs, then the decision form; actions in a sticky footer |
+| Form dialog | Dialog | Same field styles as form pages; one primary |
+| Toast | Bottom-right | Status glyph and one sentence; an "Undo" link where the code offers one |
+
+Not drawn: the add-community modal and its checkout, the idle-timeout dialog,
+the lease unit panel, the create sheets under Operations, the help media
+lightbox, the support banner, and the site editor's publish sheet. They follow
+the rules above. On phones a popover, menu, dialog or palette spans the width
+with 12px margins, and a sheet is full width.
+
 ## 6. Visual language
 
 **(owner)** found the first refined look "still too bland" and asked for
