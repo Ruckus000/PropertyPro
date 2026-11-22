@@ -13,6 +13,7 @@ import {
 } from '@propertypro/ui/components/shared/section';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { usePackages, type PackageListItem } from '@/hooks/use-packages';
+import { Table } from '@/components/ui/table';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
@@ -59,7 +60,7 @@ function ExampleRow({ headers }: { headers: string[] }) {
     'Picked Up': '—',
   };
   return (
-    <table className="w-full text-left text-sm">
+    <Table className="w-full text-left text-sm">
       <thead>
         <tr className="border-b border-edge text-xs text-content-secondary">
           {headers.map((h) => (
@@ -78,7 +79,7 @@ function ExampleRow({ headers }: { headers: string[] }) {
           ))}
         </tr>
       </tbody>
-    </table>
+    </Table>
   );
 }
 
