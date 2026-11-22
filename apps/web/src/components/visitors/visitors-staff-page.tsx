@@ -46,7 +46,8 @@ const STATUS: Record<VisitorStatus, { kind: StatusGlyphKind; word: string }> = {
   checked_in: { kind: 'in-progress', word: 'Checked In' },
   overstayed: { kind: 'attention', word: 'Overstayed' },
   checked_out: { kind: 'done', word: 'Checked Out' },
-  expired: { kind: 'not-started', word: 'Expired' },
+  // Expired means do not admit; Expected means admit after check-in, so not the same mark.
+  expired: { kind: 'attention', word: 'Expired' },
   revoked: { kind: 'overdue', word: 'Revoked' },
   revoked_on_site: { kind: 'overdue', word: 'Revoked On-Site' },
 };
@@ -136,18 +137,18 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
           panel={{ template: 'list', about }}
         >
           <TabsContent value="visitors" className="mt-0">
-            <Section aria-busy={isLoading}>
+            <Section aria-busy={isLoading} data-testid="visitors-section">
               {isError ? null : (
                 <SectionToolbar
                   filters={
-                    <div className="flex items-center gap-3 py-2">
+                    <div className="flex flex-col gap-3 py-2 md:flex-row md:items-center">
                       <QuickFilterTabs
                         tabs={VISITOR_FILTER_TABS}
                         active={activeFilter}
                         onChange={setActiveFilter}
                       />
                       <Select value={guestTypeFilter} onValueChange={setGuestTypeFilter}>
-                        <SelectTrigger className="w-44" aria-label="Guest type">
+                        <SelectTrigger className="w-full md:w-44" aria-label="Guest type">
                           <SelectValue placeholder="Guest type" />
                         </SelectTrigger>
                         <SelectContent>
@@ -186,7 +187,8 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
           </TabsContent>
 
           <TabsContent value="denied" className="mt-0">
-            <Section>
+            {/* The tab brings its own button row and bordered table. */}
+            <Section bare data-testid="denied-section">
               <DeniedVisitorsTab communityId={communityId} />
             </Section>
           </TabsContent>

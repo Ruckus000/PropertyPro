@@ -125,6 +125,54 @@ describe('VisitorsStaffPage', () => {
     expect(screen.queryByRole('button', { name: 'Register Visitor' })).toBeNull();
   });
 
+  it('falls back to the visitors tab for an unknown ?tab value', () => {
+    searchParamsRef.current = new URLSearchParams('communityId=1&tab=x');
+    mount();
+    expect(screen.getByRole('tab', { name: 'Visitors' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Guest 1')).toBeVisible();
+  });
+
+  it('draws the denied tab bare, so its own table is not boxed twice', async () => {
+    const user = userEvent.setup();
+    const { container } = mount();
+    expect(container.querySelector('[data-testid="visitors-section"]')!.className).toContain('border');
+    await user.click(screen.getByRole('tab', { name: 'Denied list' }));
+    const denied = container.querySelector('[data-testid="denied-section"]')!;
+    expect(denied.className.split(/\s+/)).not.toContain('border');
+  });
+
+  it('stacks the filters below md and lets the guest-type select fill the row', () => {
+    const { container } = mount();
+    const group = container.querySelector('[data-filters] > div')!;
+    expect(group.className).toContain('flex-col');
+    expect(group.className).toContain('md:flex-row');
+    expect(screen.getByRole('combobox').className).toContain('w-full');
+    expect(screen.getByRole('combobox').className).toContain('md:w-44');
+  });
+
+  it('draws Expired with a different mark from Expected', async () => {
+    const user = userEvent.setup();
+    useVisitorsMock.mockReturnValue(
+      result({
+        data: [
+          visitor(1),
+          visitor(2, { expectedArrival: new Date(Date.now() - 3 * 86400000).toISOString(), validUntil: new Date(Date.now() - 86400000).toISOString() }),
+        ],
+      }),
+    );
+    const { container } = mount();
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    const mark = (word: string) => {
+      const td = Array.from(container.querySelectorAll('tbody td')).find(
+        (c) => c.textContent?.trim() === word && c.querySelector('svg'),
+      );
+      return td?.querySelector('svg')?.outerHTML;
+    };
+    expect(mark('Expected')).toBeDefined();
+    expect(mark('Expired')).toBeDefined();
+    expect(mark('Expired')).not.toEqual(mark('Expected'));
+  });
+
   it('records the tab in the URL without navigating, keeping other params', async () => {
     const user = userEvent.setup();
     searchParamsRef.current = new URLSearchParams('communityId=1&tab=denied');
@@ -165,6 +213,17 @@ describe('VisitorsStaffPage', () => {
     mount();
     await user.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
     expect(await screen.findByRole('dialog')).toHaveTextContent('Revoke Visitor Pass');
+  });
+
+  it('keeps Revoke Pass disabled until a reason is typed', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
+    const dialog = await screen.findByRole('dialog');
+    const confirm = within(dialog).getByRole('button', { name: 'Revoke Pass' });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByPlaceholderText('Required reason'), 'Left a door open');
+    expect(confirm).toBeEnabled();
   });
 
   it('keeps the guest-type filter and the quick filters', async () => {
