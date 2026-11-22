@@ -211,6 +211,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
                   tabs={tabs}
                   active={filter}
                   onChange={(v) => setFilter(v as Filter)}
+                  tone="ink"
                 />
               }
             />

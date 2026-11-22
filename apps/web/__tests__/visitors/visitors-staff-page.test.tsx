@@ -117,6 +117,16 @@ describe('VisitorsStaffPage', () => {
     expect(selected[0]!.className).toContain('border-content');
   });
 
+  it('marks the active filter in ink, never in the interactive colour', () => {
+    mount();
+    const active = screen
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true');
+    expect(active).toHaveLength(1);
+    expect(active[0]!.className).not.toContain('interactive');
+    expect(active[0]!.className).toContain('bg-surface-inverse');
+  });
+
   it('starts on the denied list for ?tab=denied and shows its own add action', () => {
     searchParamsRef.current = new URLSearchParams('communityId=1&tab=denied');
     mount();

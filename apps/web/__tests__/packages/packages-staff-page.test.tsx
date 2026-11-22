@@ -66,6 +66,16 @@ describe('PackagesStaffPage', () => {
     expect(screen.getByText('Showing 3')).toBeInTheDocument();
   });
 
+  it('marks the active filter in ink, never in the interactive colour', () => {
+    mount();
+    const active = screen
+      .getAllByRole('button')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true');
+    expect(active).toHaveLength(1);
+    expect(active[0]!.className).not.toContain('interactive');
+    expect(active[0]!.className).toContain('bg-surface-inverse');
+  });
+
   it('keeps the figure and the table in agreement', () => {
     usePackagesMock.mockReturnValue(
       result({ data: [1, 2, 3, 4].map((i) => pkg(i, 'received')) }),

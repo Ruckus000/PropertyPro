@@ -146,6 +146,7 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
                         tabs={VISITOR_FILTER_TABS}
                         active={activeFilter}
                         onChange={setActiveFilter}
+                        tone="ink"
                       />
                       <Select value={guestTypeFilter} onValueChange={setGuestTypeFilter}>
                         <SelectTrigger className="w-full md:w-44" aria-label="Guest type">

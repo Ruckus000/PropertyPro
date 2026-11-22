@@ -14,13 +14,23 @@ interface QuickFilterTabsProps {
   active: string;
   onChange: (value: string) => void;
   className?: string;
+  /**
+   * How the selected tab is marked. 'brand' (default) is the coral fill every
+   * existing screen uses; 'ink' is the redesigned pages' ink fill.
+   */
+  tone?: 'brand' | 'ink';
 }
+
+// Complete literals so Tailwind's scanner (web and admin both compile this file) sees them.
+const ACTIVE_BRAND = 'bg-interactive text-content-inverse shadow-sm';
+const ACTIVE_INK = 'bg-surface-inverse text-content-inverse';
 
 export function QuickFilterTabs({
   tabs,
   active,
   onChange,
   className,
+  tone = 'brand',
 }: QuickFilterTabsProps) {
   return (
     // `flex-wrap`, not `overflow-x-auto`: a scroller would need a tab stop to
@@ -41,7 +51,9 @@ export function QuickFilterTabs({
             className={cn(
               'inline-flex h-11 md:h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-quick',
               isActive
-                ? 'bg-interactive text-content-inverse shadow-sm'
+                ? tone === 'ink'
+                  ? ACTIVE_INK
+                  : ACTIVE_BRAND
                 : 'text-content-tertiary hover:bg-surface-hover hover:text-content'
             )}
             onClick={() => onChange(tab.value)}
