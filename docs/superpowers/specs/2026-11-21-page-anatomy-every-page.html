@@ -617,6 +617,14 @@ td:first-child{color:var(--text);font-weight:500;white-space:normal;min-width:16
 .mob .ds{font-size:14px;color:var(--text2)}
 .mob .acts .btn{min-height:44px}
 .shell.oshell.mobile .tbar{display:none}.shell.oshell.mobile .body{padding:0}
+
+/* honest size check: the app renders text about 29% larger than this mockup was drawn (large text on, fluid root, 18px at 1440) */
+.frame.real .shell{zoom:1.2857}
+.frame.real #ovl{zoom:1.2857}
+/* zoom also scales the px breakpoints, so restore the real 960px panel threshold (960/1.2857 = 747) */
+@container pg (min-width:747px){.frame.real .grid:not(.solo){grid-template-columns:minmax(0,1fr) 280px;grid-template-areas:"main top" "main rest";row-gap:0}
+ .frame.real .ptop{border-radius:8px 8px 0 0}.frame.real .prest{border-top:0;border-radius:0 0 8px 8px}
+ .frame.real.sg .ptop,.frame.real.sg .prest{border:0;border-left:1px solid var(--edge-strong);border-radius:0}.frame.real.sg .grp{padding-left:20px}}
 </style>
 
 <div class="app">
@@ -644,6 +652,10 @@ td:first-child{color:var(--text);font-weight:500;white-space:normal;min-width:16
         <button data-v="loading" aria-pressed="false">Loading</button>
         <button data-v="error" aria-pressed="false">Error</button>
         <button data-v="none" aria-pressed="false">No results</button>
+      </div>
+      <div class="seg" role="group" aria-label="Text size" id="ts">
+        <button data-v="mock" aria-pressed="true">Mockup size</button>
+        <button data-v="real" aria-pressed="false">App text size</button>
       </div>
       <div class="seg" role="group" aria-label="Screen" id="vp">
         <button data-v="desk" aria-pressed="true">Desktop</button>
@@ -966,6 +978,7 @@ document.getElementById('sel').addEventListener('change',e=>{cur=+e.target.value
 document.getElementById('q').addEventListener('input',e=>{filter=e.target.value.trim().toLowerCase();nav()});
 document.getElementById('state').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;st=b.dataset.v;draw()});
 document.getElementById('look').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;LOOK=b.dataset.v;const f=document.getElementById('frame');f.classList.toggle('rf',LOOK!=='plain');f.classList.toggle('sg',LOOK==='sg');draw();document.querySelectorAll('#look button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
+document.getElementById('ts').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;document.getElementById('frame').classList.toggle('real',b.dataset.v==='real');document.querySelectorAll('#ts button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
 document.getElementById('vp').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;VP=b.dataset.v;draw();document.querySelectorAll('#vp button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
 document.getElementById('prev').addEventListener('click',()=>{cur=(cur-1+PAGES.length)%PAGES.length;location.hash=slug(PAGES[cur])});
 document.getElementById('next').addEventListener('click',()=>{cur=(cur+1)%PAGES.length;location.hash=slug(PAGES[cur])});

@@ -1,8 +1,8 @@
 # Page anatomy: one shape for every signed-in page
 
 Date: 2026-11-21
-Status: awaiting approval
-Scope: `apps/web` signed-in app (`app/(authenticated)`)
+Status: awaiting approval. **Section 13 (study rulings) supersedes any earlier section it conflicts with.** Sections 1 to 12 are the record of how the design was reached and contain superseded statements.
+Scope: `apps/web`. The signed-in app, its shell, overlays, first-run screens, the help center, and the routes outside the shell listed in 5.21. See 13.2 for the workstreams.
 Mockups, both in this folder (open in a browser):
 - `2026-11-21-page-anatomy-mockups.html`: the three directions; the tabs "B revised · Alerts" and "B revised · Packages" are the approved direction.
 - `2026-11-21-page-anatomy-every-page.html`: all 96 signed-in routes drawn in that shape from the real code, with a "Refined look / Structure only" switch (section 6) and an honest note on each page that fits badly.
@@ -860,3 +860,225 @@ a reason; the baseline starts with zero uses of it.
   verified (wind-mitigation report). Each page is re-read when it is migrated.
 - **Two looks during rollout.** Until phase 3 finishes, migrated and unmigrated
   pages sit side by side. Painted titles in phase 1 narrow the gap.
+
+## 13. Study rulings
+
+**(owner)** asked for a Talmudic study before the plan is locked. Six readers
+each raised difficulties from one angle (the text against itself, the design
+against the code, accessibility, roles and data and states, rollout, and the
+people who use it). Two disputants then cross-examined: a defender ruled on all
+sixty findings and re-verified nine key facts in the code, and a prosecutor
+pressed the most dangerous ones and looked for what all six missed. The
+consolidated round-one findings are in `2026-11-21-page-anatomy-study-findings.md`.
+The defender upheld about forty-five, found four true of today's app and not
+caused by this design, and rejected none. The rulings below are the author's.
+
+### 13.1 Corrections of fact
+
+| Earlier statement | Fact |
+|---|---|
+| 6.7: Fraunces "must be added to the web app's fonts… small font-loading cost" | False. Web already loads and preloads it (`apps/web/src/app/layout.tsx:53-58`) and a global `h1` rule already applies it (`globals.css:32-34`). The vendored file has only `opsz` and `wght` axes, so the "soft" and "wonky" settings do not exist to turn off; the plain cut is what renders. Painting titles makes them serif with no further work. |
+| 5.16: "every table in the mockup fits without sideways scrolling" at 1280 and 1440 | False at the app's real text size. The mockup was drawn at 14px rows on a 16px root. The app has large text on by default and a fluid root (18px at 1440), so text renders about 29% larger. Measured with the mockup's new "App text size" switch: every table page scrolls sideways with the panel beside it, at both widths. Row pages fit. |
+| 5.3: "a per-page article lookup does not exist on the server" | False. `getContextualArticles(pathname, …)` exists (`help-article-service.ts:530-541`). It matches the path only, so all tabs of one page share an article. |
+| 8: "every help article… (31 files)" | The corpus is 103 MDX files with 95 screenshot-capture manifests under `scripts/help-capture/manifests`. |
+| 5.16: sidebar collapses to a rail by width; phones use a drawer | The sidebar's open or collapsed state is the user's, saved in the browser (`sidebar-context.tsx`). #1458 (2026-11-11) gave phones the tab row with no menu button, and #1460 removed the rail from portfolio pages. See owner decision 4. |
+| 6.5 and the mockup: coral is the action colour | In the signed-in app the action colour is each community's brand colour (`--interactive-primary: var(--theme-primary, …)`, set in `(authenticated)/layout.tsx`). Presets include a red equal to the danger colour and a teal equal to the information colour. See owner decision 1. |
+
+### 13.2 Rulings the author settled
+
+Structure and text
+
+- **Scope, as workstreams.** (1) kit, `Icon`, guards; (2) signed-in pages on
+  six templates; (3) shell; (4) overlays and the single help dialog;
+  (5) first-run screens, folded in per page; (6) help center; (7) auth,
+  signing, editor, public, print, demo frames. **The phone app (`/mobile`) is
+  its own later programme** and is not in this build: it sits outside the
+  earlier token migration and holds 15 of the 27 frozen token-baseline files.
+  Admin is untouched.
+- **Six templates, no bespoke pages.** 5.8 and 5.9's "four" and "twelve
+  bespoke" are superseded. Phase "lists, details, forms" ends when the
+  baseline is empty.
+- **Side-panel slots are four positions with a closed name set per template**,
+  not one fixed set of four names:
+
+  | Position | List, canvas | Detail | Form and steps | Help article |
+  |---|---|---|---|---|
+  | 1 | At a glance | Details | Preview or summary | On this page |
+  | 2 | Needs attention | Needs attention | Needs attention | none |
+  | 3 | Shortcuts | Related | none | Related |
+  | 4 | About | About | About | none |
+
+  "At a glance" appears only where a true figure exists. A panel that would
+  hold only "About", or under two lines in total, is not drawn: its sentence
+  goes under the page description and the main column takes the width.
+- **The display face is allowed in exactly these places:** the page or screen
+  title; headline figures ("At a glance" and the key-figure band); the headline
+  of a first-run, waiting or outcome state; and the community or product name
+  in the sidebar switcher, brand bar and help wordmark.
+- **Sizes come from the existing type scale, nothing smaller than `xs`.** Page
+  title and headline figures use `3xl` (there is no 42px step). The time-left
+  count, row meta and table cells are `sm`. Labels and stamps are `xs`, which
+  is 14px in the default large-text mode. The mockup's 10 to 13px text is not
+  buildable and is superseded.
+- **Selected tabs and filters are ink.** 5.10's "accent underline" is superseded.
+- **"Tile" means only the place mark:** the selected navigation item, the mark
+  beside the page title, and the selected section in the editor. `RecordRow`
+  has a bare glyph or a bare icon.
+- **Where the primary action sits:** list, detail and canvas pages in the
+  header; forms in a footer action bar with only Cancel in the header; step
+  flows Back and Next in the footer; a first-run setup page (a list page in its
+  first-run state) in the header.
+- **Geist Mono is kept out of first-paint chrome.** It is not preloaded and the
+  font budget is tight. Stamps, counts and the running head use Geist with
+  tabular figures; mono is for statute chips and keyboard hints only.
+- **No new colours.** The look is restated in existing tokens: hairline
+  `--border-default`, firmer and double rules `--border-strong`, ink
+  `--text-primary`, the dimming layer black alpha. Chip pips use the three
+  existing status colours with the level carried by pip count and words.
+  `packages/ui/src/tokens/compliance.ts` maps "aware" to the brand colour
+  today; that mapping changes, because the action colour must not also mean a
+  deadline level.
+
+The time-left chip
+
+- **One shared `daysLeft` formatter** replaces the three rounding rules in the
+  code today (`Math.ceil`, `Math.floor`, calendar-day difference). It never
+  rounds remaining time up, switches to hours under 48 hours, and takes its
+  level from the owning domain module's status, never from its own arithmetic.
+- **A closed set of chip states:** time left; due today; overdue; met late
+  (fixed, does not keep counting); out of its window; no clock applies; does
+  not apply. A deadline with no date shows the state in words, not a chip.
+- **Community time everywhere.** Dates, "today" and the "As of" stamp use the
+  community's timezone and say so when the viewer's differs.
+- The wording and reach of the chip are owner decisions 2 and 3.
+
+Accessibility
+
+- **Status is always a glyph plus a word.** 6.2's "a row shows the bare glyph"
+  is superseded: the word sits in the row's meta line, and is visually hidden
+  only where a status column already says it. Minimum glyph size 16px.
+- **The chip says its level in words.** "9 days left" in full outside tables;
+  in tables the accessible name is "Due in 9 days, Dec 3, urgent". Pips are
+  redundant decoration and are hidden from assistive tech.
+- **Attention, error and callout blocks keep an icon and a leading word.** A
+  coloured left rule alone is not enough. Errors use `role="alert"`.
+- **Phone tables are a real list, not a reflowed table.** `DataTable` renders
+  label and value pairs as a definition list below the phone breakpoint.
+  Calendar days carry an accessible name with their event count.
+- **The split side panel is two labelled regions in reading order**, never a
+  CSS reorder. Heading levels: h1 page title, h2 sections and panel slots.
+- **The collapsed rail keeps every name** as an accessible name and a tooltip
+  on hover and focus.
+- **Targets.** Standalone links and icon buttons get the 44px floor on phones
+  and at least 24px on desktop; close buttons are 36px.
+- **Overlays use the existing Dialog, Sheet, Popover and Command primitives**
+  for focus trap, return and Escape. A toast with "Undo" stays until
+  dismissed. The idle-timeout dialog gets designed.
+- **(call) One new token is recommended despite "no new colours":** a
+  control-edge neutral at 3:1 for input, select, radio and toggle borders.
+  Today's borders are 1.40:1 on cards. This is true of the app today and not
+  caused by this design, but the design should not ship without fixing it.
+
+States and data
+
+- **Four more states**, added to 5.17: plan-locked and lapsed (today's
+  `locked-feature-screen` and `lapsed-feature-screen`, redrawn inside the page
+  shape with the header intact); denied or not found (the dashboard reads the
+  `reason` it is already sent and says why the person landed there, which is
+  silent today); read-only (the primary action is disabled and says why);
+  and "figures unavailable" for a panel whose data failed while the list
+  loaded.
+- **One banner slot** above the header with a priority order (support session,
+  billing, trial, continue-setup), one at a time.
+- **Counts.** A footer says "Showing N" with "Load more". "of M", and counts on
+  filters, appear only where a count is already computed. Cursor pagination
+  returns no total.
+- **Panel figures obey the page's permission and feature gates.** A figure for
+  a switched-off channel (SMS) or a gated feature (fines) is not shown, and a
+  role sees only what it may read. Each figure names the existing summary
+  function it comes from; no figure gets its own new population.
+- **"About" is generated, not written.** One `describeAccess(resource,
+  features)` module reads the permission matrix and feature gates. A guard bans
+  hand-written role claims ("Managers can…", "Owners see…", "can be undone")
+  in panel content, following `guard:page-state-copy`.
+- **Residents get their own page on every shared route.** Documents, Meetings
+  and Operations join 5.14's list. A resident's page opens on the newest
+  records, has no statute chips or posting columns, and offers "Report a
+  problem" directly.
+- **First-run reassurance leads.** The description of a first-run page carries
+  the standing and the next step ("Nothing is late. Start with the
+  declaration."), as the shipped Compliance first run does.
+- **The dashboard keeps its status sentence** (`buildStatusSentence`) as the
+  page description. No greeting in the title.
+- **The section toolbar gains a slot for selection, bulk actions and export.**
+  A table over its column budget drops columns in a declared priority order.
+- **Two voices.** A registrar's voice for records and stamps; the warm voice
+  `design.md` already requires for empty, waiting and error states and for
+  anything said to a resident.
+- **Print.** A print stylesheet hides the sidebar, top bar and side panel;
+  chips print as text.
+- **Links survive.** `?tab=` values in emailed links keep working; renaming a
+  tab or turning tabs into a view switch needs a redirect.
+- **Emails are not restyled in this build**, but they must read the same level
+  from the same domain module, so the app and its emails never grade one item
+  differently.
+
+Layout at real sizes
+
+- **Table pages cannot hold the side panel beside the table on a laptop at the
+  default text size.** Ruling: on a table page the panel sits beside the table
+  only when the content box is at least 1280px wide. Below that, positions 1
+  and 2 become one compact strip above the table and positions 3 and 4 follow
+  it. Row pages keep the panel beside the list from 960px. The pilot is where
+  these two numbers get confirmed, at large text, at 1280 and 1440.
+
+Rollout, replacing section 8
+
+1. **Fix this document** into one consistent text (the plan is written from
+   section 13 and the sections it does not supersede).
+2. **Kit, `Icon` wrapper and guards, additive only.** New files beside the
+   existing ones. No shared primitive changes, so nothing reaches admin. The
+   icon guard covers class-name sizing as well as props, with a shrink-only
+   baseline, and names its roots. Performance delta measured in CI here: the
+   shell has about 31 KiB of headroom against a required check.
+3. **Preview gate.** A per-user preference (`user_preferences`, no migration)
+   turns the new look on for the owner only, in production. Titles and
+   descriptions paint only inside `PageLayout`, never app-wide in one step:
+   `PageHeader`'s `description` prop is deprecated today and 93 call sites
+   carry unreviewed text.
+4. **Pilot** on Sunset Condos (the review path must pin that community,
+   because most demo personas land on a plan where these pages are locked):
+   Emergency Alerts, Packages, Visitors. The owner reviews in the real app
+   behind the gate.
+5. **Shell**, after owner decision 4.
+6. **Dashboard, then Settings.**
+7. **Lists, details and forms** by navigation group, each page with its
+   first-run state, its resident page and its help-capture manifest updated in
+   the same PR.
+8. **Overlays and the help dialog.** Primitive edits in their own PRs, each
+   with an admin check (`guard:admin-semantic-css` needs a build).
+9. **Help center, then auth, signing, editor, public, print, demo.**
+10. **After the last merge:** the owner's content task (103 help articles,
+    95 capture manifests, example data).
+
+Proof for each page: a "direction" manifest set in `scripts/help-capture`
+shoots it at 1280 and 1440 in default large text and the contact sheet is
+attached to the PR; `e2e/responsive-overflow.spec.ts` gains the page and a
+"panel beside or strip above" assertion. End-to-end tests are treated as
+required for this programme even though the repository does not require them.
+Expected size: 45 to 70 pull requests. `components/layout` and `nav-config`
+change often, so shell work ships as one short series, rebased daily.
+
+### 13.3 Not changing
+
+- **Tertiary text contrast (4.24:1 on muted) and placeholder contrast.** True
+  of today's tokens, not caused by this design; recorded for a separate token
+  decision. Text under 14px or on a muted surface uses the secondary colour.
+- **"Quiet until it matters."** A critical item is not made louder across the
+  page; the statutory-overdue state uses the danger glyph and word.
+- **The name "About".** Kept; its content is now generated.
+- **Login photo.** Still the owner's call (5.21).
+
+### 13.4 Owner decisions
+
+Pending. See the message that accompanies this commit.
