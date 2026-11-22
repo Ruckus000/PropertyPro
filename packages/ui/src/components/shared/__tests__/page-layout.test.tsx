@@ -50,4 +50,22 @@ describe('PageLayout', () => {
     render(<><Probe /><PageLayout template="list" header={<Probe />}>x</PageLayout></>);
     expect(screen.getAllByText(/in|out/).map((e) => e.textContent)).toEqual(['out', 'in']);
   });
+  it('stacks the panel as a compact strip and goes vertical only from cq-lg on row pages', () => {
+    const { container } = render(<PageLayout template="list" records="rows" header={null} panel={{ template: 'list', glance: 'g' }}>x</PageLayout>);
+    const aside = container.querySelector('aside')!;
+    expect(aside.className).toContain('flex-wrap');
+    expect(aside.className).toContain('gap-x-12');
+    expect(aside.className).toContain('cq-lg:flex-col');
+    expect(aside.className).not.toMatch(/cq-xl:/);
+    const region = aside.querySelector('section')!;
+    expect(region.className).toContain('max-w-xs');
+    expect(region.className).toContain('cq-lg:max-w-none');
+  });
+  it('never carries a cq-lg class on a table page panel, only cq-xl', () => {
+    const { container } = render(<PageLayout template="list" records="table" header={null} panel={{ template: 'list', glance: 'g' }}>x</PageLayout>);
+    const aside = container.querySelector('aside')!;
+    expect(aside.className).toContain('cq-xl:flex-col');
+    expect(aside.querySelector('section')!.className).toContain('cq-xl:max-w-none');
+    expect(aside.outerHTML).not.toMatch(/cq-lg:/);
+  });
 });

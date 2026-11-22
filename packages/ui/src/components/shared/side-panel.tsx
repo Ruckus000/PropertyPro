@@ -71,11 +71,31 @@ export function isPanelWorthDrawing(props: SidePanelProps): boolean {
   return lead.length + trail.filter((r) => r.heading !== "About").length > 0;
 }
 
-export function PanelRegions({ regions, label }: { regions: PanelRegion[]; label: string }) {
+// Stacked above or below the main column the panel is a compact strip: regions
+// sit in a wrapping row, each no wider than 20rem, so a label and its value stay
+// near each other. Beside the main column (the box is wide enough) the aside is
+// the 17.5rem column and its regions stack vertically at full width. Each
+// alternative is a complete literal so Tailwind's scanner sees it; table pages
+// switch only at `cq-xl`, never `cq-lg`.
+const ASIDE_ROWS = "flex min-w-0 flex-wrap gap-x-12 gap-y-4 cq-lg:flex-col cq-lg:flex-nowrap";
+const ASIDE_TABLE = "flex min-w-0 flex-wrap gap-x-12 gap-y-4 cq-xl:flex-col cq-xl:flex-nowrap";
+const REGION_ROWS = "flex min-w-0 max-w-xs flex-col gap-2 cq-lg:max-w-none";
+const REGION_TABLE = "flex min-w-0 max-w-xs flex-col gap-2 cq-xl:max-w-none";
+
+export function PanelRegions({
+  regions,
+  label,
+  table = false,
+}: {
+  regions: PanelRegion[];
+  label: string;
+  /** True on table pages, whose panel sits beside the main column only from `cq-xl`. */
+  table?: boolean;
+}) {
   return (
-    <aside aria-label={label} className="flex min-w-0 flex-col gap-4">
+    <aside aria-label={label} className={table ? ASIDE_TABLE : ASIDE_ROWS}>
       {regions.map((r) => (
-        <section key={r.heading} className="flex flex-col gap-2">
+        <section key={r.heading} className={table ? REGION_TABLE : REGION_ROWS}>
           <h2 className="text-xs font-medium text-content-secondary">{r.heading}</h2>
           <div className="text-sm text-content">{r.content}</div>
         </section>
