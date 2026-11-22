@@ -13,6 +13,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { AnnouncementListContainer } from '@/components/announcements/announcement-list-container';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -48,6 +49,10 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   const userId = await requireAuthenticatedUserId();
   const membership = await requireCommunityMembership(context.communityId, userId);
   requirePermission(membership, 'announcements', 'read');
+  // Opening the list completes "Review an announcement" on the onboarding
+  // checklist, as the list API does. Fire-and-forget: it never throws, and it
+  // is a no-op for anyone whose checklist lacks the key.
+  void tryAutoComplete(context.communityId, userId, 'review_announcement');
   const canWriteAnnouncements = checkPermissionV2(
     membership.role,
     membership.communityType,

@@ -112,11 +112,27 @@ describe('MeetingMinutesList', () => {
     expect(july.queryByRole('link', { name: 'Author minutes' })).not.toBeInTheDocument();
   });
 
-  it('reads All posted when nothing is owed, and hides authoring from readers', () => {
+  it('shows a reader what is on the record, without the deadline tracking or authoring (D4)', () => {
     renderList({ meetings: [JULY_PUBLISHED, AUGUST_OWED], canWrite: false });
 
     expect(screen.queryByRole('link', { name: 'Author minutes' })).not.toBeInTheDocument();
-    expect(screen.getByText('1 set owed')).toBeInTheDocument();
+    // No owed count, post-by date, escalation badge or counsel caveat.
+    expect(screen.queryByText(/owed/)).not.toBeInTheDocument();
+    expect(screen.queryByText('All posted')).not.toBeInTheDocument();
+    expect(screen.queryByText(/post by/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Aware')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Post-by dates are a conservative internal reminder/)).not.toBeInTheDocument();
+
+    const [august, july] = screen.getAllByRole('listitem');
+    expect(within(august!).getByText('No minutes on record yet')).toBeInTheDocument();
+    expect(within(july!).getByText('Posted Jul 20')).toBeInTheDocument();
+    expect(within(july!).getByText('Posted')).toBeInTheDocument();
+  });
+
+  it('gives a writer the counsel caveat under the post-by dates', () => {
+    renderList();
+
+    expect(screen.getByText(/Post-by dates are a conservative internal reminder/)).toBeInTheDocument();
   });
 
   it('pluralises the owed count and reads All posted at zero', () => {

@@ -19,6 +19,11 @@ vi.mock('@/hooks/use-document-search', () => ({
   useDocumentSearch: (communityId: number) => useDocumentSearchMock(communityId),
 }));
 
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/communities/42/documents',
+  useSearchParams: () => new URLSearchParams('view=board'),
+}));
+
 import { DocumentSearch } from '../../src/components/documents/document-search';
 
 interface HookShape {
@@ -131,5 +136,38 @@ describe('DocumentSearch (presenter)', () => {
     setHookState();
     render(<DocumentSearch communityId={1} />);
     expect(runSearchMock).not.toHaveBeenCalled();
+  });
+
+  it('each result links to the library ?doc= handler, keeping the other params', () => {
+    setHookState({ items: [makeRecord(7, 'Budget'), makeRecord(8, null)] });
+    render(<DocumentSearch communityId={42} />);
+
+    const link = screen.getByRole('link', { name: /Doc 7/ });
+    expect(link.getAttribute('href')).toBe('/communities/42/documents?view=board&doc=7');
+    expect(screen.getByRole('link', { name: /Doc 8/ }).getAttribute('href')).toBe(
+      '/communities/42/documents?view=board&doc=8',
+    );
+  });
+
+  it('shows the no-results empty state once a search has returned nothing', () => {
+    setHookState();
+    render(<DocumentSearch communityId={1} />);
+    expect(screen.queryByText('No results found')).toBeNull();
+
+    const input = screen.getByPlaceholderText('Search documents');
+    fireEvent.change(input, { target: { value: 'nothing-matches' } });
+    fireEvent.submit(input.closest('form')!);
+
+    expect(screen.getByText('No results found')).toBeDefined();
+  });
+
+  it('does not show the empty state while a search is pending or after an error', () => {
+    setHookState({ isPending: true });
+    const { rerender } = render(<DocumentSearch communityId={1} initialQuery="x" />);
+    expect(screen.queryByText('No results found')).toBeNull();
+
+    setHookState({ error: 'Search failed (500)' });
+    rerender(<DocumentSearch communityId={1} initialQuery="x" />);
+    expect(screen.queryByText('No results found')).toBeNull();
   });
 });

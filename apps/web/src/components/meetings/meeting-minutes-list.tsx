@@ -47,6 +47,10 @@ function escalationStatusKey(variant: 'neutral' | 'warning' | 'danger'): string 
  * The Minutes view: every past meeting, most recent first, with whether its
  * minutes are on the record and how long is left to post them.
  *
+ * The deadline half — the owed count, the post-by date, the escalation badge
+ * and the counsel caveat — is the manager's tracking, so it shows only to a
+ * viewer who can write (D4). A reader sees which minutes are on the record.
+ *
  * "On the record" is the schema's `minutes_approved_at` stamp — the same fact
  * the export and the snowbird digest read. Publishing minutes authored from a
  * meeting stamps it, so a meeting stops reading as owed once its minutes are
@@ -122,19 +126,21 @@ export function MeetingMinutesList({
                 <div className="text-xs text-content-tertiary">
                   {published
                     ? `Posted ${formatShortDate(meeting.minutesApprovedAt as string, timeZone)}`
-                    : `No minutes on record · post by ${formatDeadlineStamp(meeting.deadlines.minutesPostBy, timeZone)}`}
+                    : canWrite
+                      ? `No minutes on record · post by ${formatDeadlineStamp(meeting.deadlines.minutesPostBy, timeZone)}`
+                      : 'No minutes on record yet'}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {published ? (
                   <StatusBadge status="completed" label="Posted" subtle />
-                ) : (
+                ) : canWrite ? (
                   <StatusBadge
                     status={escalationStatusKey(escalation.variant)}
                     label={escalation.label}
                     subtle
                   />
-                )}
+                ) : null}
                 {!published && canWrite ? (
                   <Link
                     href={`/communities/${communityId}/meetings/${meeting.id}/minutes/author`}
@@ -156,18 +162,20 @@ export function MeetingMinutesList({
     <Card className="border-edge-subtle bg-surface-card">
       <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-edge-subtle">
         <h2 className="font-semibold leading-none tracking-tight">Minutes</h2>
-        {owed > 0 ? (
+        {!canWrite ? null : owed > 0 ? (
           <StatusBadge status="pending" label={`${owed} ${owed === 1 ? 'set' : 'sets'} owed`} subtle />
         ) : (
           <StatusBadge status="completed" label="All posted" subtle />
         )}
       </CardHeader>
       <CardContent className="p-0">{body}</CardContent>
-      <p className="border-t border-edge-subtle px-6 py-3 text-xs text-content-tertiary">
-        Post-by dates are a conservative internal reminder based on the meeting date; statutory
-        website-posting deadlines may depend on when approved minutes are created or received.
-        Confirm with counsel.
-      </p>
+      {canWrite ? (
+        <p className="border-t border-edge-subtle px-6 py-3 text-xs text-content-tertiary">
+          Post-by dates are a conservative internal reminder based on the meeting date; statutory
+          website-posting deadlines may depend on when approved minutes are created or received.
+          Confirm with counsel.
+        </p>
+      ) : null}
     </Card>
   );
 }

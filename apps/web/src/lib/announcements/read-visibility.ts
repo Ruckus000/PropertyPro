@@ -265,14 +265,28 @@ async function buildDemoAnnouncementProvenanceWhere(
   }
 }
 
+/**
+ * Archived and expired announcements are an admin view, like deleted ones: a
+ * member who is not an admin asking for `includeArchived` gets the default
+ * feed. The API route forwards `?includeArchived=true` from anyone, so the
+ * gate lives here, where both the SQL page and the in-memory list read it.
+ */
+function resolveIncludeArchived(
+  options: Pick<VisibleAnnouncementsOptions, 'includeArchived'>,
+  membership: Pick<CommunityMembership, 'isAdmin'>,
+): boolean {
+  return options.includeArchived === true && membership.isAdmin;
+}
+
 async function buildVisibleAnnouncementsWhere(
   community: AnnouncementCommunityContext,
   membership: CommunityMembership,
   options: VisibleAnnouncementsOptions,
 ): Promise<{ where?: SQL; failClosed: boolean }> {
   const clauses: SQL[] = [];
+  const includeArchived = resolveIncludeArchived(options, membership);
 
-  if (options.includeArchived !== true) {
+  if (!includeArchived) {
     clauses.push(isNull(announcements.archivedAt));
   }
 
@@ -281,7 +295,7 @@ async function buildVisibleAnnouncementsWhere(
   // — which includes what has expired. Keeping them on one flag avoids a
   // second axis whose only distinct combination ("show archived but hide
   // expired") nobody has asked for.
-  if (options.includeArchived !== true) {
+  if (!includeArchived) {
     clauses.push(announcementNotExpiredWhere());
   }
 
@@ -384,7 +398,7 @@ export async function filterVisibleAnnouncements(
     return { rows: [], totalCount: 0 };
   }
 
-  const includeArchived = options.includeArchived === true;
+  const includeArchived = resolveIncludeArchived(options, membership);
   const includeDeleted = options.includeDeleted === true && membership.isAdmin;
   const normalizedQuery = normalizeQuery(options.query);
 

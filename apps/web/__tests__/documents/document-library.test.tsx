@@ -13,6 +13,9 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+// jsdom has no scrollIntoView; a linked document scrolls its inspector into view.
+Element.prototype.scrollIntoView = () => {};
+
 const { useComplianceChecklistMock, useDocumentsMock, fetchAccessibleDocumentMock, categoriesMock } = vi.hoisted(() => ({
   categoriesMock: { current: [] as Array<{ id: number; name: string; slug: string; description: string | null }> },
   fetchAccessibleDocumentMock: vi.fn(async (): Promise<unknown> => null),
@@ -241,6 +244,23 @@ describe('DocumentLibrary', () => {
     expect(screen.getByTestId('statutory-columns')).toHaveTextContent('true');
   });
 
+  it('gives an uploader the Unlinked and Drafts tabs', () => {
+    renderLibrary();
+
+    expect(screen.getByRole('button', { name: /Unlinked/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Drafts/ })).toBeDefined();
+  });
+
+  it('keeps the statutory facts for an owner but not the uploader-only tabs', () => {
+    renderLibrary({ userRole: 'resident', isUnitOwner: true, canReadCompliance: true });
+
+    expect(screen.getByText(/statutory records/i)).toBeDefined();
+    expect(screen.getByTestId('statutory-columns')).toHaveTextContent('true');
+    expect(screen.queryByRole('button', { name: /Unlinked/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Drafts/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /All records/i })).toBeNull();
+  });
+
   it('never asks for the checklist a tenant is not permitted to read', () => {
     // A tenant has documents:read but compliance:read is FALSE. The request
     // would 403, so it must not be made at all.
@@ -452,6 +472,30 @@ describe('opening a linked document (?doc=)', () => {
 
     expect(await screen.findByText(MISSING)).toBeDefined();
     expect(screen.getByTestId('viewer-mime')).toHaveTextContent('none');
+  });
+
+  it('brings the opened document into view, since a search result can sit far above it', () => {
+    // Search results render above the library, so the inspector opened by a
+    // result's `?doc=` link was ~1,800px below the click and looked like nothing
+    // happened (found in the sandbox 2026-11-21).
+    const scrollIntoView = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      listReturns([linked]);
+      const { rerender } = render(libraryTree());
+      // Control: rendering the library with no link moves nothing.
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      searchParams = new URLSearchParams('doc=77');
+      rerender(libraryTree());
+
+      expect(screen.getByTestId('viewer-mime')).toHaveTextContent('text/plain');
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
   });
 
   it('waits for the list rather than reporting a miss while it loads', () => {

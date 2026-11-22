@@ -24,7 +24,7 @@
  * this screen actually reads.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -380,12 +380,23 @@ export function DocumentLibrary({
   const linkedDocumentId =
     Number.isInteger(rawLinkedDocumentId) && rawLinkedDocumentId > 0 ? rawLinkedDocumentId : null;
   const documentsLoaded = documentsQuery.isSuccess && !documentsQuery.isPlaceholderData;
+  // A document opened by link (a search result, a notification) may render
+  // far below where the reader is looking — search results sit above the
+  // library — so the viewer is brought into view once it has rendered.
+  const viewerRef = useRef<HTMLDivElement>(null);
+  const [revealLinkedDocument, setRevealLinkedDocument] = useState(false);
+  useEffect(() => {
+    if (!revealLinkedDocument || !selectedDocument) return;
+    setRevealLinkedDocument(false);
+    viewerRef.current?.scrollIntoView({ block: 'start' });
+  }, [revealLinkedDocument, selectedDocument]);
   useEffect(() => {
     if (linkedDocumentId === null || !documentsLoaded) return;
 
     const settle = (linked: DocumentRow | null) => {
       if (linked) {
         setSelectedDocument(linked);
+        setRevealLinkedDocument(true);
         setLinkedDocumentMissing(false);
       } else {
         setLinkedDocumentMissing(true);
@@ -536,18 +547,22 @@ export function DocumentLibrary({
             {' · '}
             <b className="font-semibold text-content">{facts.publicCount}</b> on the public site
           </p>
-          <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
-            <QuickFilterTabs
-              className="w-max"
-              active={quickFilter}
-              onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
-              tabs={[
-                { label: 'All records', value: 'all' },
-                { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
-                { label: 'Drafts', value: 'drafts', count: draftCount },
-              ]}
-            />
-          </div>
+          {/* Unlinked and Drafts are the uploader's to-do lists; a viewer who
+              cannot upload keeps the statutory facts above but not these. */}
+          {canUpload && (
+            <div className="-mx-1 w-full overflow-x-auto px-1 sm:w-auto">
+              <QuickFilterTabs
+                className="w-max"
+                active={quickFilter}
+                onChange={(value) => setQuickFilter(value as DocumentQuickFilter)}
+                tabs={[
+                  { label: 'All records', value: 'all' },
+                  { label: 'Unlinked', value: 'unlinked', count: unlinkedCount },
+                  { label: 'Drafts', value: 'drafts', count: draftCount },
+                ]}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -724,7 +739,7 @@ export function DocumentLibrary({
             )}
           </div>
 
-          <div className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden'}`}>
+          <div ref={viewerRef} className={`min-w-0 p-6 ${selectedDocument ? '' : 'hidden'}`}>
             {selectedDocument && (
               <button
                 type="button"

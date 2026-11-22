@@ -6,6 +6,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
+import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { MobileAnnouncementsContent } from '@/components/mobile/MobileAnnouncementsContent';
 
@@ -32,6 +33,8 @@ export default async function MobileAnnouncementsPage({ searchParams }: PageProp
   }
 
   requirePermission(membership, 'announcements', 'read');
+  // Same checklist step the list API and the desktop page complete.
+  void tryAutoComplete(communityId, userId!, 'review_announcement');
   const timezone = resolveTimezone(membership!.timezone);
   const { rows: active } = await listVisibleAnnouncements(communityId, membership);
 

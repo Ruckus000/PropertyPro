@@ -249,6 +249,14 @@ describe('MeetingsPageShell — one switcher, one view at a time', () => {
     expect(screen.getByText('Detail 11')).toBeInTheDocument();
   });
 
+  it('gives a reader neither the next-notice strip nor the owed count (D4)', () => {
+    search = new URLSearchParams('view=minutes');
+    renderShell({ canWrite: false });
+
+    expect(screen.queryByRole('region', { name: 'Next notice owed' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Minutes' })).toHaveTextContent(/^Minutes$/);
+  });
+
   it('shows no strip when every upcoming notice is posted', () => {
     meetingsData = [
       { ...UPCOMING_BOARD, noticePostedAt: '2026-08-25T14:00:00.000Z' },

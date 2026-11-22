@@ -163,61 +163,65 @@ export function MeetingDetailModal({
                 )}
               </div>
 
-              <div className="space-y-3">
-                <div className="text-sm font-semibold text-[var(--text-primary)]">Compliance deadlines</div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {[
-                    { label: 'Notice post by', value: meeting.deadlines.noticePostBy },
-                    { label: 'Vote docs by', value: meeting.deadlines.ownerVoteDocsBy },
-                    {
-                      label: 'Target post by',
-                      value: meeting.deadlines.minutesPostBy,
-                      title:
-                        'Conservative internal reminder based on meeting date; statutory website-posting deadlines may depend on when approved minutes are created or received. Confirm with counsel.',
-                    },
-                  ].map(({ label, value, title }) => {
-                    const badge = deadlineEscalation(value, new Date());
-                    return (
-                      <div
-                        key={label}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div
-                            className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]"
-                            title={title}
-                          >
-                            {label}
+              {/* The deadlines and their escalation badges are the manager's
+                  tracking (D4); a reader sees the meeting itself. */}
+              {canWrite ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">Compliance deadlines</div>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    {[
+                      { label: 'Notice post by', value: meeting.deadlines.noticePostBy },
+                      { label: 'Vote docs by', value: meeting.deadlines.ownerVoteDocsBy },
+                      {
+                        label: 'Target post by',
+                        value: meeting.deadlines.minutesPostBy,
+                        title:
+                          'Conservative internal reminder based on meeting date; statutory website-posting deadlines may depend on when approved minutes are created or received. Confirm with counsel.',
+                      },
+                    ].map(({ label, value, title }) => {
+                      const badge = deadlineEscalation(value, new Date());
+                      return (
+                        <div
+                          key={label}
+                          className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--surface-page)] px-4 py-3"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div
+                              className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]"
+                              title={title}
+                            >
+                              {label}
+                            </div>
+                            <Badge variant={badge.variant}>{badge.label}</Badge>
                           </div>
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
-                        </div>
-                        {/*
-                          Show the weekday AND the time, not just the date.
+                          {/*
+                            Show the weekday AND the time, not just the date.
 
-                          These deadlines carry the meeting's clock time — a
-                          14:00 meeting has a 14:00 post-by — so a date alone
-                          reads as "any time that day" and invites posting nine
-                          hours late. The weekday matters too: since the weekend
-                          rule was removed (issue 931) a deadline can
-                          legitimately land on a Saturday, and a manager needs to
-                          see that rather than discover it.
-                        */}
-                        <div className="mt-2 text-sm text-[var(--text-primary)]">
-                          {new Date(value).toLocaleString('en-US', {
-                            timeZone: communityTimezone,
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                          })}
+                            These deadlines carry the meeting's clock time — a
+                            14:00 meeting has a 14:00 post-by — so a date alone
+                            reads as "any time that day" and invites posting nine
+                            hours late. The weekday matters too: since the weekend
+                            rule was removed (issue 931) a deadline can
+                            legitimately land on a Saturday, and a manager needs to
+                            see that rather than discover it.
+                          */}
+                          <div className="mt-2 text-sm text-[var(--text-primary)]">
+                            {new Date(value).toLocaleString('en-US', {
+                              timeZone: communityTimezone,
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="space-y-3">
                 <div className="text-sm font-semibold text-[var(--text-primary)]">Attached documents</div>

@@ -447,4 +447,63 @@ describe('filterVisibleAnnouncements full-list visibility', () => {
     expect(result.rows.map((row) => row.id)).toEqual([2, 1]);
     expect(result.totalCount).toBe(2);
   });
+
+  it('ignores includeArchived for a member who is not an admin (archived and expired stay hidden)', async () => {
+    const result = await filterVisibleAnnouncements(
+      community,
+      membership as never,
+      [
+        announcement(1, 'all'),
+        { ...announcement(2, 'all'), archivedAt: new Date() },
+        { ...announcement(3, 'all'), expiresAt: new Date(Date.now() - 60_000) },
+      ] as never,
+      { includeArchived: true },
+    );
+
+    expect(result.rows.map((row) => row.id)).toEqual([1]);
+    expect(result.totalCount).toBe(1);
+  });
+});
+
+describe('includeArchived is an admin view on the SQL page path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const archiveAndExpiry = [
+    { __isNull: announcementsTableMock.archivedAt },
+    {
+      __or: [
+        { __isNull: announcementsTableMock.expiresAt },
+        { __gt: { col: announcementsTableMock.expiresAt, val: expect.any(Date) } },
+      ],
+    },
+  ];
+
+  it('keeps the archive and expiry predicates for a non-admin who asks for archived rows', async () => {
+    const { selectFrom } = mockScopedRows({ announcements: [] });
+
+    await listVisibleAnnouncements(42, membership as never, {
+      includeArchived: true,
+      pageSize: 10,
+    });
+
+    const where = selectFrom.mock.calls[1]?.[2] as { __and: unknown[] };
+    expect(where.__and).toEqual(expect.arrayContaining(archiveAndExpiry));
+  });
+
+  it('drops the archive and expiry predicates for an admin who asks for archived rows', async () => {
+    const { selectFrom } = mockScopedRows({ announcements: [] });
+
+    await listVisibleAnnouncements(
+      42,
+      { ...membership, role: 'manager', isAdmin: true, isUnitOwner: false } as never,
+      { includeArchived: true, pageSize: 10 },
+    );
+
+    const where = selectFrom.mock.calls[1]?.[2] as { __and?: unknown[] } | undefined;
+    const clauses = where?.__and ?? (where ? [where] : []);
+    expect(clauses).not.toContainEqual(archiveAndExpiry[0]);
+    expect(clauses).not.toContainEqual(archiveAndExpiry[1]);
+  });
 });
