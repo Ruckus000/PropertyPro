@@ -342,11 +342,14 @@ export async function requestUserDeletion(
  * - only rows still in `cooling` are touched (like `executeUserSoftDelete`).
  *   Without it, a cancel that landed just after the lifecycle cron
  *   soft-deleted the request overwrote `soft_deleted` with `cancelled`.
- * - nothing is touched once the ACCOUNT is deleted: the user has a
- *   `soft_deleted` user request, or `users.deleted_at` is set. With a legacy
- *   duplicate pair the cron soft-deletes the earlier row while the later one is
- *   still cooling; cancelling that one would report success and send the
- *   "cancelled" email to an account that stays deleted and banned.
+ * - nothing is touched once the ACCOUNT is deleted, i.e. `users.deleted_at`
+ *   is set. With a legacy duplicate pair the cron soft-deletes the earlier row
+ *   while the later one is still cooling; cancelling that one would report
+ *   success and send the "cancelled" email to an account that stays deleted
+ *   and banned. `users.deleted_at` is the signal, not a `soft_deleted` request
+ *   row: the soft delete sets it in the same transaction as the request flip,
+ *   and recovery clears it, whereas an old recovery could leave a duplicate
+ *   request `soft_deleted` on an account that is open again.
  *
  * `requestId` is the cooling request the caller looked up. The outcome:
  * - `cancelled`: this call cancelled it;
@@ -363,8 +366,8 @@ export async function cancelUserDeletion(
 ) {
   const now = new Date();
   const db = createUnscopedClient();
-  // True once the account is deleted, whichever request did it.
-  const accountDeleted = sql<boolean>`(exists (select 1 from ${accountDeletionRequests} sib where sib.user_id = ${userId} and sib.request_type = 'user' and sib.status = 'soft_deleted') or exists (select 1 from ${users} u where u.id = ${userId} and u.deleted_at is not null))`;
+  // True while the account is deleted, whichever request did it.
+  const accountDeleted = sql<boolean>`exists (select 1 from ${users} u where u.id = ${userId} and u.deleted_at is not null)`;
 
   const requests = await db
     .update(accountDeletionRequests)
@@ -903,6 +906,11 @@ export async function findPurgeReadyDeletionRequests(
         isNotNull(accountDeletionRequests.scheduledPurgeAt),
         lt(accountDeletionRequests.scheduledPurgeAt, now),
         isNull(accountDeletionRequests.purgedAt),
+        // Backstop: never purge a user whose account is not deleted. A duplicate
+        // request can stay `soft_deleted` after an operator recovered the
+        // account (recovery used to flip only the one request it was given),
+        // and purging it would scrub the PII of an open account.
+        sql`(${accountDeletionRequests.requestType} <> 'user' or exists (select 1 from ${users} u where u.id = ${accountDeletionRequests.userId} and u.deleted_at is not null))`,
       ),
     )) as LifecycleDeletionTransitionRow[];
 }

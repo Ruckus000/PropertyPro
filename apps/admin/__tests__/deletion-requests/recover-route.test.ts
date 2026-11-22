@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const requirePlatformAdmin = vi.fn();
 const requestUpdate = vi.fn();
+// The second account_deletion_requests update: every other soft_deleted
+// request of the same user. Receives the payload and the .eq() filters.
+const duplicatesUpdate = vi.fn();
 const usersUpdate = vi.fn();
 const communitiesUpdate = vi.fn();
 const updateUserById = vi.fn();
@@ -12,15 +15,23 @@ function makeFromMock(table: string) {
   switch (table) {
     case 'account_deletion_requests':
       return {
-        update: (payload: unknown) => ({
-          eq: () => ({
-            eq: () => ({
-              select: () => ({
-                single: () => requestUpdate(payload),
-              }),
+        // `.single()` ends the by-id update; awaiting `.select()` directly is
+        // the update of the user's other soft_deleted requests.
+        update: (payload: unknown) => {
+          const filters: Record<string, unknown> = {};
+          const chain = {
+            eq: (col: string, val: unknown) => {
+              filters[col] = val;
+              return chain;
+            },
+            select: () => ({
+              single: () => requestUpdate(payload),
+              then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+                Promise.resolve(duplicatesUpdate(payload, { ...filters })).then(resolve, reject),
             }),
-          }),
-        }),
+          };
+          return chain;
+        },
       };
     case 'users':
       return {
@@ -93,6 +104,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
   beforeEach(() => {
     requirePlatformAdmin.mockReset();
     requestUpdate.mockReset();
+    duplicatesUpdate.mockReset();
     usersUpdate.mockReset();
     communitiesUpdate.mockReset();
     updateUserById.mockReset();
@@ -104,6 +116,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     updateUserById.mockResolvedValue({ data: {}, error: null });
     usersUpdate.mockResolvedValue({ error: null });
     communitiesUpdate.mockResolvedValue({ error: null });
+    duplicatesUpdate.mockResolvedValue({ data: [], error: null });
   });
 
   afterEach(() => {
@@ -140,6 +153,57 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(communitiesUpdate).toHaveBeenCalledWith({ deleted_at: null }, 99);
     expect(usersUpdate).not.toHaveBeenCalled();
     expect(updateUserById).not.toHaveBeenCalled();
+  });
+
+  // Duplicate requests expire together, so one cron run soft-deletes all of
+  // them. Recovering only the one given left the others soft_deleted on an
+  // open account, and the purge would later scrub its PII.
+  it("recovers every other soft_deleted request of the user, and audits all their ids", async () => {
+    requestUpdate.mockResolvedValue({
+      data: { request_type: 'user', user_id: 'user-uuid', community_id: null },
+      error: null,
+    });
+    duplicatesUpdate.mockResolvedValue({ data: [{ id: 43 }], error: null });
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(200);
+    expect(duplicatesUpdate).toHaveBeenCalledTimes(1);
+    expect(duplicatesUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'recovered' }),
+      { user_id: 'user-uuid', request_type: 'user', status: 'soft_deleted' },
+    );
+    expect(logAdminAction).toHaveBeenCalledTimes(1);
+    const audit = logAdminAction.mock.calls[0]![0] as { newValues: Record<string, unknown> };
+    expect(audit.newValues.recovered_request_ids).toEqual([42, 43]);
+  });
+
+  it('does not restore the user when recovering the other requests fails', async () => {
+    requestUpdate.mockResolvedValue({
+      data: { request_type: 'user', user_id: 'user-uuid', community_id: null },
+      error: null,
+    });
+    duplicatesUpdate.mockResolvedValue({ data: null, error: { message: 'boom' } });
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(500);
+    expect((await response.json()).error.code).toBe('DUPLICATE_RECOVER_FAILED');
+    expect(usersUpdate).not.toHaveBeenCalled();
+    expect(updateUserById).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('touches no other request for a community recovery', async () => {
+    requestUpdate.mockResolvedValue({
+      data: { request_type: 'community', user_id: null, community_id: 99 },
+      error: null,
+    });
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(200);
+    expect(duplicatesUpdate).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the request is not in soft_deleted status', async () => {

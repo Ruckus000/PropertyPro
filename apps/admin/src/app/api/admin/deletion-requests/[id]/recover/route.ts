@@ -94,13 +94,14 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
   }
 
   const db = createAdminTypedClient();
+  const recoveredAt = new Date().toISOString();
 
   // Mark the request as recovered, conditional on still being soft_deleted.
   const { data, error } = await (db
     .from('account_deletion_requests'))
     .update({
       status: 'recovered',
-      recovered_at: new Date().toISOString(),
+      recovered_at: recoveredAt,
     })
     .eq('id', requestId)
     .eq('status', 'soft_deleted')
@@ -123,7 +124,40 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     community_id: number | null;
   };
 
+  // Every request this call recovered; recorded in the audit row.
+  const recoveredRequestIds = [requestId];
+
   if (requestRow.request_type === 'user' && requestRow.user_id) {
+    // Duplicate requests for one user expire together, so one cron run
+    // soft-deletes all of them. Recover them all: a duplicate left
+    // soft_deleted on a restored account would reach the purge, which scrubs
+    // the account's PII. Same guard as above (still soft_deleted). Done before
+    // the user is restored, so a failure leaves the account consistently
+    // deleted rather than open with a purge pending.
+    const { data: siblings, error: siblingError } = await (db
+      .from('account_deletion_requests'))
+      .update({ status: 'recovered', recovered_at: recoveredAt })
+      .eq('user_id', requestRow.user_id)
+      .eq('request_type', 'user')
+      .eq('status', 'soft_deleted')
+      .select('id');
+
+    if (siblingError) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DUPLICATE_RECOVER_FAILED',
+            message: 'Request marked recovered, but this user’s other deleted requests could not be, so the account was not restored. Recover one of those requests to finish.',
+          },
+          request: data,
+        },
+        { status: 500 },
+      );
+    }
+    for (const sibling of (siblings ?? []) as { id: number }[]) {
+      recoveredRequestIds.push(sibling.id);
+    }
+
     const { error: restoreError } = await (db
       .from('users'))
       .update({ deleted_at: null })
@@ -198,6 +232,7 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
       request_type: requestRow.request_type,
       restored_user_id: requestRow.user_id,
       restored_community_id: requestRow.community_id,
+      recovered_request_ids: recoveredRequestIds,
     },
   });
 

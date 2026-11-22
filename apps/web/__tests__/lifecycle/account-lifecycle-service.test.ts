@@ -653,14 +653,15 @@ describe('cancelUserDeletion', () => {
 
     expect(result).toEqual({ outcome: 'too_late', status: 'cooling' });
     const updateCall = dbMock._calls.find((c) => c.op === 'update');
-    // `not (<soft_deleted sibling exists> or <users.deleted_at set>)`, keyed on the user.
+    // `not <users.deleted_at set>`, keyed on the user. Not on a soft_deleted
+    // request row: a recovered account can still carry one.
     expect(updateCall?.where).toEqual({
       _and: expect.arrayContaining([
         {
           _sql: 'not ?',
           values: [
             expect.objectContaining({
-              _sql: expect.stringMatching(/sib\.status = 'soft_deleted'.*u\.deleted_at is not null/s),
+              _sql: expect.stringMatching(/^exists \(select 1 from \? u where u\.id = \? and u\.deleted_at is not null\)$/),
               values: expect.arrayContaining(['user-uuid-001']),
             }),
           ],
