@@ -50,17 +50,23 @@ export function operationsTabHref(communityId: number, tab: OperationsTab): stri
  * the only way to link to one request: there is no per-request page. A value
  * that is not a positive integer is left out, so the link still lands on the
  * list rather than on a panel that can only fail.
+ *
+ * `create: 'request'` opens the new-request sheet on arrival. Prefer it to
+ * linking /maintenance/submit, which reaches the same sheet through a redirect
+ * that also sets `from=maintenance` and so shows the "you were redirected from
+ * a legacy maintenance page" banner.
  */
 export function operationsHubHref(
   communityId: number,
   tab?: OperationsTab,
-  extras?: { from?: 'maintenance'; scope?: 'mine' | 'community'; request?: number },
+  extras?: { from?: 'maintenance'; scope?: 'mine' | 'community'; request?: number; create?: 'request' },
 ): string {
   assertValidCommunityId(communityId);
 
   const params = new URLSearchParams();
   if (tab) params.set('tab', tab);
   if (extras?.from) params.set('from', extras.from);
+  if (extras?.create) params.set('create', extras.create);
   if (extras?.scope) params.set('scope', extras.scope);
   const request = extras?.request;
   if (typeof request === 'number' && Number.isInteger(request) && request > 0) {

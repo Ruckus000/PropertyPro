@@ -5,6 +5,8 @@
  * Reuses DashboardAnnouncements without modification.
  */
 import type { ApartmentMetrics } from '@/lib/queries/apartment-metrics';
+import { directoryHref } from '@/lib/directory/directory-href';
+import { operationsHubHref } from '@/lib/operations/routes';
 import { ApartmentMetricsCards } from './apartment-metrics';
 import { DashboardAnnouncements } from './dashboard-announcements';
 
@@ -12,35 +14,48 @@ interface ApartmentDashboardProps {
   metrics: ApartmentMetrics;
   communityId: number;
   canWriteAnnouncements: boolean;
+  /** residents:write. Tenants see the dashboard too and cannot add anyone. */
+  canManageResidents: boolean;
 }
 
 interface QuickActionsProps {
   communityId: number;
   canWriteAnnouncements: boolean;
+  canManageResidents: boolean;
 }
 
-function QuickActions({ communityId, canWriteAnnouncements }: QuickActionsProps) {
+/**
+ * Every href here must reach the page its label promises. "Add Tenant" pointed
+ * at /tenants/invite, a route that was never built (a 404). "New Maintenance
+ * Request" pointed at /maintenance/new, which the legacy /maintenance/[id] shim
+ * read as a request id and sent to the request list with no form open.
+ * Raw links below `md` keep the 44px touch floor (`min-h-11 md:min-h-0`).
+ */
+function QuickActions({ communityId, canWriteAnnouncements, canManageResidents }: QuickActionsProps) {
   return (
     <section className="rounded-md border border-edge bg-surface-card p-5">
       <h2 className="text-lg font-semibold text-content">Quick Actions</h2>
       <div className="mt-4 flex flex-col gap-2">
-        <a
-          href={`/tenants/invite?communityId=${communityId}`}
-          className="inline-flex items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover"
-        >
-          Add Tenant
-        </a>
+        {canManageResidents ? (
+          <a
+            href={directoryHref('residents', { communityId })}
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover md:min-h-0"
+          >
+            Add Tenant
+          </a>
+        ) : null}
         {canWriteAnnouncements ? (
           <a
             href={`/announcements/new?communityId=${communityId}`}
-            className="inline-flex items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover md:min-h-0"
           >
             Post Announcement
           </a>
         ) : null}
         <a
-          href={`/maintenance/new?communityId=${communityId}`}
-          className="inline-flex items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover"
+          // Opens the new-request sheet in Operations directly.
+          href={operationsHubHref(communityId, 'requests', { create: 'request' })}
+          className="inline-flex min-h-11 items-center justify-center rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary hover:bg-surface-hover md:min-h-0"
         >
           New Maintenance Request
         </a>
@@ -53,6 +68,7 @@ export function ApartmentDashboard({
   metrics,
   communityId,
   canWriteAnnouncements,
+  canManageResidents,
 }: ApartmentDashboardProps) {
   return (
     <div className="space-y-6">
@@ -66,6 +82,7 @@ export function ApartmentDashboard({
         <QuickActions
           communityId={communityId}
           canWriteAnnouncements={canWriteAnnouncements}
+          canManageResidents={canManageResidents}
         />
       </div>
     </div>

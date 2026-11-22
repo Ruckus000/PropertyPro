@@ -65,6 +65,14 @@ export default async function ApartmentDashboardPage({
     },
   );
 
+  const canManageResidents = checkPermissionV2(
+    membership.role,
+    membership.communityType,
+    'residents',
+    'write',
+    { isUnitOwner: membership.isUnitOwner },
+  );
+
   const celebrationNextStep = celebrationNextStepFor({
     communityId: context.communityId,
     role: membership.role,
@@ -91,6 +99,7 @@ export default async function ApartmentDashboardPage({
           userId={userId}
           celebrationNextStep={celebrationNextStep}
           canWriteAnnouncements={canWriteAnnouncements}
+          canManageResidents={canManageResidents}
         />
       </Suspense>
     </div>
@@ -117,6 +126,7 @@ interface ApartmentDashboardPanelsProps {
   userId: string;
   celebrationNextStep: CelebrationNextStep | null;
   canWriteAnnouncements: boolean;
+  canManageResidents: boolean;
 }
 
 async function ApartmentDashboardPanels({
@@ -126,6 +136,7 @@ async function ApartmentDashboardPanels({
   userId,
   celebrationNextStep,
   canWriteAnnouncements,
+  canManageResidents,
 }: ApartmentDashboardPanelsProps) {
   const [metrics, websiteCard] = await Promise.all([metricsPromise, websiteCardPromise]);
 
@@ -137,6 +148,7 @@ async function ApartmentDashboardPanels({
           metrics={metrics}
           communityId={communityId}
           canWriteAnnouncements={canWriteAnnouncements}
+          canManageResidents={canManageResidents}
         />
       </div>
       {/* Setup rail, after the main content in the DOM so the reading and tab
