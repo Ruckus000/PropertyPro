@@ -41,7 +41,11 @@ import {
   findRootOffboardingImpact,
   type RootOffboardingCommunity,
 } from '@/lib/account-lifecycle/root-offboarding';
-import { deletionCoolingEndsAt, deletionPurgeAt } from '@/lib/account-lifecycle/deletion-timeline';
+import {
+  deletionCoolingEndsAt,
+  deletionPurgeAt,
+  deletionPurgeCutoff,
+} from '@/lib/account-lifecycle/deletion-timeline';
 
 /** GoTrue ban duration for a deleted account (~100 years). 'none' lifts a ban. */
 const PERMANENT_BAN = '876600h';
@@ -538,8 +542,31 @@ export async function executeUserSoftDelete(requestIds: number[]) {
 }
 
 /**
- * Scrubs PII from a user record after the purge window.
- * Idempotent: guarded by purgedAt IS NULL on the deletion request.
+ * SQL, for a deletion-request row: its user's CURRENT deletion is old enough to
+ * purge, i.e. `users.deleted_at` is set and at or before `cutoff`.
+ *
+ * The request's own `scheduledPurgeAt` is not enough. A request can outlive the
+ * deletion it belongs to (a duplicate left `soft_deleted` by an old recovery),
+ * and if the account is deleted again later that stale date is already past:
+ * the cron run that re-deletes it would purge it at once and skip the new
+ * deletion's whole recovery window. `users.deleted_at` is the current
+ * deletion's time, set and cleared with every soft delete and recovery.
+ */
+function userDeletionPurgeDue(cutoff: Date) {
+  return sql`exists (select 1 from ${users} u where u.id = ${accountDeletionRequests.userId} and u.deleted_at is not null and u.deleted_at <= ${cutoff.toISOString()}::timestamptz)`;
+}
+
+/**
+ * Scrubs PII from a user record after the purge window. Returns the purged
+ * request, or `null` when it is skipped.
+ *
+ * Re-checks before touching anything, because the cron's candidate list can be
+ * stale by the time this runs (an operator may recover the account in
+ * between): the request must still be `soft_deleted` and unpurged, and its
+ * user's current deletion must still be due (`userDeletionPurgeDue`). The
+ * users scrub is itself conditional on `deleted_at` still being set, and
+ * nothing reaches the auth.users rewrite unless both checks passed. Either
+ * check failing skips quietly with `null`.
  */
 export async function purgeUserPII(requestId: number) {
   const now = new Date();
@@ -551,13 +578,16 @@ export async function purgeUserPII(requestId: number) {
     .where(
       and(
         eq(accountDeletionRequests.id, requestId),
+        eq(accountDeletionRequests.status, 'soft_deleted'),
         isNull(accountDeletionRequests.purgedAt),
+        userDeletionPurgeDue(deletionPurgeCutoff(now)),
       ),
     );
 
-  if (!request) return null; // Already purged or not found — idempotent
+  // Already purged, recovered, re-deleted too recently, or not found.
+  if (!request) return null;
 
-  await db
+  const scrubbed = await db
     .update(users)
     .set({
       email: `deleted-${request.userId}@redacted`,
@@ -566,7 +596,10 @@ export async function purgeUserPII(requestId: number) {
       phoneVerifiedAt: null,
       avatarUrl: null,
     })
-    .where(eq(users.id, request.userId));
+    .where(and(eq(users.id, request.userId), isNotNull(users.deletedAt)))
+    .returning({ id: users.id });
+  // Recovered since the check above: leave the account, and auth.users, alone.
+  if (scrubbed.length === 0) return null;
 
   // auth.users keeps its own copy of the email and name. Scrub it before the
   // status flip, so a failure leaves purgedAt NULL and the next run retries.
@@ -583,10 +616,22 @@ export async function purgeUserPII(requestId: number) {
   const [updated] = await db
     .update(accountDeletionRequests)
     .set({ status: 'purged', purgedAt: now })
-    .where(eq(accountDeletionRequests.id, requestId))
+    .where(
+      and(
+        eq(accountDeletionRequests.id, requestId),
+        eq(accountDeletionRequests.status, 'soft_deleted'),
+      ),
+    )
     .returning();
+  if (!updated) {
+    // The request left soft_deleted while the scrub ran (a recovery landing
+    // mid-purge). The scrub is already done, so this is loud, not quiet.
+    throw new Error(
+      `Deletion request ${requestId} left soft_deleted during its purge; user ${request.userId} was already scrubbed`,
+    );
+  }
 
-  return updated!;
+  return updated;
 }
 
 // ---------------------------------------------------------------------------
@@ -906,11 +951,13 @@ export async function findPurgeReadyDeletionRequests(
         isNotNull(accountDeletionRequests.scheduledPurgeAt),
         lt(accountDeletionRequests.scheduledPurgeAt, now),
         isNull(accountDeletionRequests.purgedAt),
-        // Backstop: never purge a user whose account is not deleted. A duplicate
-        // request can stay `soft_deleted` after an operator recovered the
-        // account (recovery used to flip only the one request it was given),
-        // and purging it would scrub the PII of an open account.
-        sql`(${accountDeletionRequests.requestType} <> 'user' or exists (select 1 from ${users} u where u.id = ${accountDeletionRequests.userId} and u.deleted_at is not null))`,
+        // A user request is due only when its user's CURRENT deletion is: the
+        // account is deleted now, and has been for the full purge delay. A
+        // duplicate can stay `soft_deleted` after an operator recovered the
+        // account (recovery used to flip only the one request it was given);
+        // purging it would scrub an open account, or, once the account is
+        // deleted again, purge it the same night with no recovery window.
+        sql`(${accountDeletionRequests.requestType} <> 'user' or ${userDeletionPurgeDue(deletionPurgeCutoff(now))})`,
       ),
     )) as LifecycleDeletionTransitionRow[];
 }

@@ -146,6 +146,7 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: andMock,
   isNull: isNullMock,
+  isNotNull: (col: unknown) => ({ _isNotNull: col }),
   ne: neMock,
   inArray: inArrayMock,
   asc: ascMock,
@@ -884,8 +885,8 @@ describe('purgeUserPII', () => {
     const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
       selectResults: [[request]], // found, not yet purged
-      // Only the request update calls .returning(); user update does not
-      updateReturning: [[updatedRequest]],
+      // The users scrub (still deleted), then the request flip (still soft_deleted).
+      updateReturning: [[{ id: 'user-uuid-001' }], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
     const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
@@ -925,7 +926,7 @@ describe('purgeUserPII', () => {
 
   it('does not mark the request purged when the auth scrub fails, so the next run retries', async () => {
     const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
-    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [[{}]] });
+    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [[{ id: 'user-uuid-001' }]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
     createAdminClientMock.mockReturnValue({
       auth: {
@@ -940,6 +941,62 @@ describe('purgeUserPII', () => {
       (c) => c.op === 'update' && (c.values as Record<string, unknown>).status === 'purged',
     );
     expect(statusUpdates).toHaveLength(0);
+  });
+
+  // The cron's candidate list can be stale: an operator may recover the
+  // account between the scan and this call. Re-check before scrubbing.
+  it('re-checks the request is still soft_deleted and its account still deleted long enough', async () => {
+    const dbMock = buildDbMock({ selectResults: [[]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+
+    expect(andMock).toHaveBeenCalledWith(
+      { _eq: [accountDeletionRequestsTable.id, 1] },
+      { _eq: [accountDeletionRequestsTable.status, 'soft_deleted'] },
+      { _isNull: accountDeletionRequestsTable.purgedAt },
+      expect.objectContaining({ _sql: expect.stringContaining('u.deleted_at <= ?::timestamptz') }),
+    );
+    expect(dbMock._calls.filter((c) => c.op === 'update')).toHaveLength(0);
+  });
+
+  it('skips, and leaves auth.users alone, when the account was recovered after the check', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    // The users scrub is conditional on deleted_at still being set; it matches nothing.
+    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+    createAdminClientMock.mockReturnValue({ auth: { admin: { updateUserById: updateUserByIdMock } } });
+
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+
+    expect(updateUserByIdMock).not.toHaveBeenCalled();
+    const updates = dbMock._calls.filter((c) => c.op === 'update');
+    expect(updates).toHaveLength(1);
+    expect(updates[0]!.where).toEqual({
+      _and: [{ _eq: [usersTable.id, 'user-uuid-001'] }, { _isNotNull: usersTable.deletedAt }],
+    });
+  });
+
+  it('only marks a request purged while it is still soft_deleted, and says so loudly otherwise', async () => {
+    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
+    const dbMock = buildDbMock({
+      selectResults: [[request]],
+      updateReturning: [[{ id: 'user-uuid-001' }], []],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: { admin: { updateUserById: vi.fn().mockResolvedValue({ data: {}, error: null }) } },
+    });
+
+    await expect(purgeUserPII(1)).rejects.toThrow(/left soft_deleted during its purge/);
+    const flip = dbMock._calls.filter((c) => c.op === 'update')[1];
+    expect(flip?.where).toEqual({
+      _and: [
+        { _eq: [accountDeletionRequestsTable.id, 1] },
+        { _eq: [accountDeletionRequestsTable.status, 'soft_deleted'] },
+      ],
+    });
   });
 });
 

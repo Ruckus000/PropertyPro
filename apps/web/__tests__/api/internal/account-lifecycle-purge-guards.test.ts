@@ -83,7 +83,7 @@ import { PURGE_SAFETY_CAP } from '@/lib/account-lifecycle/purge-guards';
 
 interface PurgeSummary {
   purged: { users: number; communities: number };
-  purge: { dryRun: boolean; candidates: number; cap: number };
+  purge: { dryRun: boolean; candidates: number; cap: number; skipped: number };
   errors: string[];
 }
 
@@ -124,6 +124,24 @@ describe('account-lifecycle cron — purge guards', () => {
     expect(purgeUserPIIMock).toHaveBeenCalledWith(2);
     expect(summary.purged).toEqual({ users: 1, communities: 1 });
     expect(summary.purge.dryRun).toBe(false);
+  });
+
+  // purgeUserPII re-checks each candidate and returns null when it is no
+  // longer due (for example recovered after the scan). That is a skip, not a
+  // purge, and the summary must not count it as one.
+  it('counts a user purge that re-checked and touched nothing as skipped', async () => {
+    findPurgeReadyDeletionRequestsMock.mockResolvedValue([
+      { id: 2, requestType: 'user' },
+      { id: 3, requestType: 'user' },
+    ]);
+    purgeUserPIIMock.mockResolvedValueOnce(null as never);
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect(purgeUserPIIMock).toHaveBeenCalledTimes(2);
+    expect(summary.purged.users).toBe(1);
+    expect(summary.purge.skipped).toBe(1);
   });
 
   // -- dry run ---------------------------------------------------------------

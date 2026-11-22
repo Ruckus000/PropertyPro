@@ -13,8 +13,13 @@
  * - a `soft_deleted` request left behind on a RECOVERED account does not block
  *   a new request from being cancelled.
  *
- * `findPurgeReadyDeletionRequests` never returns a user request whose account
- * is not deleted, so a stranded `soft_deleted` row cannot purge an open account.
+ * `findPurgeReadyDeletionRequests` returns a user request only when its
+ * account's CURRENT deletion (`users.deleted_at`) is older than the purge
+ * delay: a stranded `soft_deleted` row cannot purge an open account, nor purge
+ * a re-deleted one the night it is deleted again.
+ *
+ * `purgeUserPII` re-checks before scrubbing, so a recovery that lands after
+ * the candidate scan leaves the account untouched.
  *
  * Inserts run-unique users rows and their requests directly; afterAll deletes
  * them (requests first: `user_id` is ON DELETE RESTRICT).
@@ -28,6 +33,7 @@ import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   cancelUserDeletion,
   findPurgeReadyDeletionRequests,
+  purgeUserPII,
 } from '../../src/lib/services/account-lifecycle-service';
 import { getDescribeDb, requireDatabaseUrlInCI } from './helpers/multi-tenant-test-kit';
 
@@ -42,8 +48,17 @@ const USER_IDS = {
   recoveredThenAgain: randomUUID(),
   purgeDeleted: randomUUID(),
   purgeRecovered: randomUUID(),
+  purgeRedeleted: randomUUID(),
+  purgeRace: randomUUID(),
+  purgeRaceUserOnly: randomUUID(),
+  purgeNotSoftDeleted: randomUUID(),
+  purgeTooRecent: randomUUID(),
 };
+type Label = keyof typeof USER_IDS;
+const emailOf = (label: Label) => `deletion-guards-${label}-${USER_IDS[label]}@lifecycletest.invalid`;
 const DAY = 24 * 60 * 60 * 1000;
+// Rough, for placing timestamps well clear of the six-month purge delay.
+const MONTH = 31 * DAY;
 
 describeDb('account deletion SQL guards (integration)', () => {
   const db = createUnscopedClient();
@@ -69,14 +84,14 @@ describeDb('account deletion SQL guards (integration)', () => {
     return row!.status;
   }
 
-  const markUserDeleted = (userId: string) =>
-    db.update(users).set({ deletedAt: new Date() }).where(eq(users.id, userId));
+  const markUserDeleted = (userId: string, at: Date = new Date()) =>
+    db.update(users).set({ deletedAt: at }).where(eq(users.id, userId));
 
   beforeAll(async () => {
     await db.insert(users).values(
-      Object.entries(USER_IDS).map(([label, id]) => ({
-        id,
-        email: `deletion-guards-${label}-${id}@lifecycletest.invalid`,
+      (Object.keys(USER_IDS) as Label[]).map((label) => ({
+        id: USER_IDS[label],
+        email: emailOf(label),
         fullName: `Deletion ${label}`,
       })),
     );
@@ -150,7 +165,8 @@ describeDb('account deletion SQL guards (integration)', () => {
 
   it('never offers a request for purge when its account is not deleted', async () => {
     const past = new Date(Date.now() - DAY);
-    await markUserDeleted(USER_IDS.purgeDeleted);
+    // Deleted seven months ago: the six-month recovery window has passed.
+    await markUserDeleted(USER_IDS.purgeDeleted, new Date(Date.now() - 7 * MONTH));
     const deletedAccount = await request(USER_IDS.purgeDeleted, 'soft_deleted', past, past);
     // Stranded by an old recovery: soft_deleted, purge date passed, account open.
     const recoveredAccount = await request(USER_IDS.purgeRecovered, 'soft_deleted', past, past);
@@ -159,5 +175,90 @@ describeDb('account deletion SQL guards (integration)', () => {
 
     expect(ready).toContain(deletedAccount);
     expect(ready).not.toContain(recoveredAccount);
+  });
+
+  // A stranded soft_deleted request (old purge date) on an account that is
+  // later deleted again: the cron run that re-deletes it sets users.deleted_at
+  // in phase 1, and phase 2 must not then purge the stranded row at once.
+  it('does not purge a re-deleted account until its NEW deletion has had the full window', async () => {
+    const userId = USER_IDS.purgeRedeleted;
+    const longAgo = new Date(Date.now() - 8 * MONTH);
+    const stranded = await request(userId, 'soft_deleted', longAgo, new Date(Date.now() - 2 * MONTH));
+    // The new deletion, made by tonight's phase 1.
+    await markUserDeleted(userId, new Date());
+    await request(userId, 'soft_deleted', new Date(Date.now() - DAY), new Date(Date.now() + 6 * MONTH));
+
+    const ready = (await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id);
+
+    expect(ready).not.toContain(stranded);
+  });
+
+  // The cron's candidate list can be stale: an operator recovers the account
+  // between the scan and the purge loop.
+  it('purges nothing when the account is recovered between the candidate scan and the purge', async () => {
+    const userId = USER_IDS.purgeRace;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+    expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).toContain(id);
+
+    // The recovery: request recovered, users.deleted_at cleared.
+    await db
+      .update(accountDeletionRequests)
+      .set({ status: 'recovered', recoveredAt: new Date() })
+      .where(eq(accountDeletionRequests.id, id));
+    await db.update(users).set({ deletedAt: null }).where(eq(users.id, userId));
+
+    // Returns before the auth.users rewrite (there is no Auth service here, so
+    // reaching it would throw).
+    await expect(purgeUserPII(id)).resolves.toBeNull();
+
+    expect(await statusOf(id)).toBe('recovered');
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    expect(user!.email).toBe(emailOf('purgeRace'));
+    expect(user!.fullName).toBe('Deletion purgeRace');
+  });
+
+  // The account is deleted (long enough ago), so the users-row condition alone
+  // would let these through. Only the re-check of the REQUEST stops them.
+  it('skips a request that is no longer soft_deleted, though its account is deleted', async () => {
+    const userId = USER_IDS.purgeNotSoftDeleted;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'recovered', past, past);
+
+    await expect(purgeUserPII(id)).resolves.toBeNull();
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    expect(user!.email).toBe(emailOf('purgeNotSoftDeleted'));
+  });
+
+  it("skips while the account's current deletion is younger than the purge delay", async () => {
+    const userId = USER_IDS.purgeTooRecent;
+    // A stranded row with an old purge date; the account was deleted again today.
+    await markUserDeleted(userId, new Date());
+    const id = await request(userId, 'soft_deleted', new Date(Date.now() - 8 * MONTH), new Date(Date.now() - 2 * MONTH));
+
+    await expect(purgeUserPII(id)).resolves.toBeNull();
+
+    expect(await statusOf(id)).toBe('soft_deleted');
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    expect(user!.email).toBe(emailOf('purgeTooRecent'));
+  });
+
+  // Same race, one step later: the request is still soft_deleted but the
+  // account was restored. The users scrub is conditional on deleted_at.
+  it('scrubs nothing when only the users row was restored', async () => {
+    const userId = USER_IDS.purgeRaceUserOnly;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+    await db.update(users).set({ deletedAt: null }).where(eq(users.id, userId));
+
+    await expect(purgeUserPII(id)).resolves.toBeNull();
+
+    expect(await statusOf(id)).toBe('soft_deleted');
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    expect(user!.email).toBe(emailOf('purgeRaceUserOnly'));
   });
 });

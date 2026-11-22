@@ -11,7 +11,7 @@
  *   soft delete (sign-in banned; support can restore) ──6 months──▶
  *   purge (name, email, phone, avatar erased)
  */
-import { addDays, addMonths } from 'date-fns';
+import { addDays, addMonths, subMonths } from 'date-fns';
 
 export const DELETION_COOLING_DAYS = 30;
 export const DELETION_PURGE_DELAY_MONTHS = 6;
@@ -24,4 +24,13 @@ export function deletionCoolingEndsAt(requestedAt: Date): Date {
 /** When an account soft-deleted at `softDeletedAt` is purged. */
 export function deletionPurgeAt(softDeletedAt: Date): Date {
   return addMonths(softDeletedAt, DELETION_PURGE_DELAY_MONTHS);
+}
+
+/**
+ * The latest soft-delete time whose purge is due at `now`: an account deleted
+ * at or before this has had its full recovery window. At a month end this can
+ * be a few days later than `deletionPurgeAt` would give, never earlier.
+ */
+export function deletionPurgeCutoff(now: Date): Date {
+  return subMonths(now, DELETION_PURGE_DELAY_MONTHS);
 }

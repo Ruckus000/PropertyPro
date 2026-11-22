@@ -66,6 +66,8 @@ export type AdminAuditAction =
   // Account/community deletion lifecycle
   | 'deletion_request_intervened'
   | 'deletion_request_recovered'
+  // A recovery that stopped part way; metadata names the failed stage.
+  | 'deletion_request_recover_failed'
   // Site templates
   | 'site_template_reset'
   | 'site_template_restored'

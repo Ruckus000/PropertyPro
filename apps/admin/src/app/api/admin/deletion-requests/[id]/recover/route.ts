@@ -6,6 +6,11 @@
  * A recovered USER account also gets the "account restored" email. A community
  * recovery sends nothing: the request row names who asked for the deletion, not
  * who should hear that the association is back.
+ *
+ * Recovering a user also recovers every other `soft_deleted` request of that
+ * user and cancels any still `cooling`, so no leftover request can purge or
+ * re-delete the restored account. The steps run in a retryable order; see the
+ * comment in POST.
  */
 import { createElement } from 'react';
 import { NextRequest, NextResponse } from 'next/server';
@@ -94,127 +99,132 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
   }
 
   const db = createAdminTypedClient();
-  const recoveredAt = new Date().toISOString();
+  const now = new Date().toISOString();
 
-  // Mark the request as recovered, conditional on still being soft_deleted.
-  const { data, error } = await (db
+  // Read, don't write: the request is flipped LAST (see the order below).
+  const { data: found, error: findError } = await (db
     .from('account_deletion_requests'))
-    .update({
-      status: 'recovered',
-      recovered_at: recoveredAt,
-    })
+    .select('*')
     .eq('id', requestId)
     .eq('status', 'soft_deleted')
-    .select()
-    .single();
+    .maybeSingle();
 
-  assertNoDbError(error, 'Failed to mark deletion request recovered');
+  assertNoDbError(findError, 'Failed to load deletion request');
 
-  if (!data) {
+  if (!found) {
     return NextResponse.json({ error: { message: 'Request not found or not in soft_deleted status' } }, { status: 404 });
   }
 
-  // Restore the deletion target. Without this, the request was marked
-  // 'recovered' but the underlying user / community row still had its
-  // deleted_at column set, leaving the account effectively destroyed
-  // despite the admin UI showing "recovered."
-  const requestRow = data as {
+  const requestRow = found as {
     request_type: 'user' | 'community';
     user_id: string | null;
     community_id: number | null;
   };
 
-  // Every request this call recovered; recorded in the audit row.
-  const recoveredRequestIds = [requestId];
+  // Order: restore the target, lift the ban, cancel pending requests, and only
+  // then mark the request recovered. This call is not one transaction, so the
+  // order is what makes a partial failure retryable: until the last step the
+  // request is still `soft_deleted`, so the operator can run the same recovery
+  // again, and every step before it is safe to repeat. (Flipping the request
+  // first, as this route used to, meant a later failure left it `recovered`, a
+  // retry answered 404, and the account stayed deleted and banned.) Meanwhile
+  // the purge cannot touch the account, because it requires `users.deleted_at`
+  // to be set and the first step clears it.
+  const completed: string[] = [];
+  /** Audits a recovery that stopped part way, then answers 500. */
+  async function fail(stage: string, code: string, message: string) {
+    await logAdminAction({
+      admin,
+      action: 'deletion_request_recover_failed',
+      resourceType: 'account_deletion_request',
+      resourceId: requestId,
+      communityId: requestRow.community_id,
+      metadata: { stage, code, completed, request_type: requestRow.request_type },
+      // The 500 below is the signal that matters; an audit outage must not
+      // replace it with a different error.
+      bestEffort: true,
+    });
+    return NextResponse.json(
+      { error: { code, message: `${message} The request is still deleted, so retry the recovery to finish.` }, request: found },
+      { status: 500 },
+    );
+  }
+
+  const recoveredRequestIds: number[] = [];
+  const cancelledRequestIds: number[] = [];
 
   if (requestRow.request_type === 'user' && requestRow.user_id) {
-    // Duplicate requests for one user expire together, so one cron run
-    // soft-deletes all of them. Recover them all: a duplicate left
-    // soft_deleted on a restored account would reach the purge, which scrubs
-    // the account's PII. Same guard as above (still soft_deleted). Done before
-    // the user is restored, so a failure leaves the account consistently
-    // deleted rather than open with a purge pending.
-    const { data: siblings, error: siblingError } = await (db
-      .from('account_deletion_requests'))
-      .update({ status: 'recovered', recovered_at: recoveredAt })
-      .eq('user_id', requestRow.user_id)
-      .eq('request_type', 'user')
-      .eq('status', 'soft_deleted')
-      .select('id');
-
-    if (siblingError) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'DUPLICATE_RECOVER_FAILED',
-            message: 'Request marked recovered, but this user’s other deleted requests could not be, so the account was not restored. Recover one of those requests to finish.',
-          },
-          request: data,
-        },
-        { status: 500 },
-      );
-    }
-    for (const sibling of (siblings ?? []) as { id: number }[]) {
-      recoveredRequestIds.push(sibling.id);
-    }
+    const userId = requestRow.user_id;
 
     const { error: restoreError } = await (db
       .from('users'))
       .update({ deleted_at: null })
-      .eq('id', requestRow.user_id);
-
+      .eq('id', userId);
     if (restoreError) {
-      // Surface clearly — the request status update succeeded but the user
-      // was not restored. Operator must intervene.
-      return NextResponse.json(
-        {
-          error: {
-            code: 'USER_RESTORE_FAILED',
-            message: 'Request marked recovered, but clearing the user\u2019s deletion flag failed. Retry or clear it manually.',
-          },
-          request: data,
-        },
-        { status: 500 },
-      );
+      return fail('restore_user', 'USER_RESTORE_FAILED', 'Clearing the user’s deletion flag failed.');
     }
+    completed.push('restore_user');
 
     // The lifecycle cron banned the login at soft delete (876600h). Without
     // this the user is "recovered" but still cannot sign in.
-    const { error: unbanError } = await db.auth.admin.updateUserById(requestRow.user_id, {
+    const { error: unbanError } = await db.auth.admin.updateUserById(userId, {
       ban_duration: 'none',
       user_metadata: { soft_deleted: null },
     });
-
     if (unbanError) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'USER_UNBAN_FAILED',
-            message: 'Request marked recovered, but lifting the sign-in ban failed. Retry or unban the user in Supabase Auth.',
-          },
-          request: data,
-        },
-        { status: 500 },
-      );
+      return fail('unban_user', 'USER_UNBAN_FAILED', 'Lifting the sign-in ban failed.');
     }
+    completed.push('unban_user');
+
+    // A request still cooling would delete the restored account again at the
+    // end of its cooling period.
+    const { data: cancelled, error: cancelError } = await (db
+      .from('account_deletion_requests'))
+      .update({ status: 'cancelled', cancelled_at: now, cancelled_by: admin.id })
+      .eq('user_id', userId)
+      .eq('request_type', 'user')
+      .eq('status', 'cooling')
+      .select('id');
+    if (cancelError) {
+      return fail('cancel_cooling', 'COOLING_CANCEL_FAILED', 'Cancelling the user’s pending deletion requests failed.');
+    }
+    for (const row of (cancelled ?? []) as { id: number }[]) cancelledRequestIds.push(row.id);
+    completed.push('cancel_cooling');
+
+    // Every soft_deleted request of the user, this one included. Duplicates
+    // expire together, so one cron run soft-deletes all of them, and one left
+    // soft_deleted would be purged if the account were ever deleted again.
+    const { data: recovered, error: recoverError } = await (db
+      .from('account_deletion_requests'))
+      .update({ status: 'recovered', recovered_at: now })
+      .eq('user_id', userId)
+      .eq('request_type', 'user')
+      .eq('status', 'soft_deleted')
+      .select('id');
+    if (recoverError) {
+      return fail('mark_recovered', 'REQUESTS_UPDATE_FAILED', 'Marking the user’s deletion requests recovered failed.');
+    }
+    for (const row of (recovered ?? []) as { id: number }[]) recoveredRequestIds.push(row.id);
   } else if (requestRow.request_type === 'community' && requestRow.community_id) {
     const { error: restoreError } = await (db
       .from('communities'))
       .update({ deleted_at: null })
       .eq('id', requestRow.community_id);
-
     if (restoreError) {
-      return NextResponse.json(
-        {
-          error: {
-            code: 'COMMUNITY_RESTORE_FAILED',
-            message: 'Request marked recovered, but clearing the community\u2019s deletion flag failed. Retry or clear it manually.',
-          },
-          request: data,
-        },
-        { status: 500 },
-      );
+      return fail('restore_community', 'COMMUNITY_RESTORE_FAILED', 'Clearing the community’s deletion flag failed.');
     }
+    completed.push('restore_community');
+
+    const { data: recovered, error: recoverError } = await (db
+      .from('account_deletion_requests'))
+      .update({ status: 'recovered', recovered_at: now })
+      .eq('id', requestId)
+      .eq('status', 'soft_deleted')
+      .select('id');
+    if (recoverError) {
+      return fail('mark_recovered', 'REQUESTS_UPDATE_FAILED', 'Marking the deletion request recovered failed.');
+    }
+    for (const row of (recovered ?? []) as { id: number }[]) recoveredRequestIds.push(row.id);
   }
 
   await logAdminAction({
@@ -233,6 +243,7 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
       restored_user_id: requestRow.user_id,
       restored_community_id: requestRow.community_id,
       recovered_request_ids: recoveredRequestIds,
+      cancelled_request_ids: cancelledRequestIds,
     },
   });
 
@@ -240,5 +251,5 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     await sendRecoveredEmail(db, requestId, requestRow.user_id);
   }
 
-  return NextResponse.json({ request: data });
+  return NextResponse.json({ request: { ...found, status: 'recovered', recovered_at: now } });
 });
