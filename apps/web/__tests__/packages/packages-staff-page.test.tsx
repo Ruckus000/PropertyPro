@@ -132,4 +132,20 @@ describe('PackagesStaffPage', () => {
     expect(container.querySelectorAll('tbody tr').length).toBeGreaterThan(0);
     expect(await axe(container)).toHaveNoViolations();
   });
+
+  it('shows the status as a glyph and its word, with no link or interactive colour', () => {
+    usePackagesMock.mockReturnValue(result({ data: [pkg(1, 'received')] }));
+    const { container } = mount();
+    const cell = Array.from(container.querySelectorAll('tbody td')).find((td) =>
+      td.textContent?.includes('Received') && td.querySelector('svg'),
+    ) as HTMLElement;
+    expect(cell).toBeDefined();
+    expect(cell).toHaveTextContent('Received');
+    const all = [cell, ...Array.from(cell.querySelectorAll('*'))];
+    for (const el of all) {
+      const cls = el.getAttribute('class') ?? '';
+      expect(cls).not.toContain('content-link');
+      expect(cls).not.toContain('interactive');
+    }
+  });
 });

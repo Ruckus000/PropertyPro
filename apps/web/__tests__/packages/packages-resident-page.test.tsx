@@ -86,6 +86,19 @@ describe('PackagesResidentPage', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the unit-link state, not an error, when the API says no unit is associated', () => {
+    useMyPackagesMock.mockReturnValue(
+      result({ isError: true, error: Object.assign(new Error('forbidden'), { status: 403, code: 'NO_UNIT_ASSOCIATION' }) }),
+    );
+    render(<PackagesResidentPage communityId={7} />);
+    expect(screen.getByRole('heading', { name: "Your account isn't linked to a unit yet" })).toBeVisible();
+    expect(screen.getByRole('link', { name: 'Contact management' })).toHaveAttribute(
+      'href',
+      '/help/contact?communityId=7',
+    );
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('has no axe violations', async () => {
     const { container } = render(<PackagesResidentPage communityId={1} />);
     expect(container.querySelectorAll('li')).toHaveLength(2);

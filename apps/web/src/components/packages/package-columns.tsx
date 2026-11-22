@@ -50,8 +50,14 @@ export interface PackageColumnActions {
   onMarkPickedUp: (pkg: PackageListItem) => void;
 }
 
+export interface PackageColumnOptions {
+  /** Replaces the status badge; absent, the column renders the badge as before. */
+  renderStatus?: (status: PackageListItem['status']) => React.ReactNode;
+}
+
 export function getPackageColumns(
   actions: PackageColumnActions,
+  options?: PackageColumnOptions,
 ): ColumnDef<PackageListItem, unknown>[] {
   return [
     {
@@ -87,7 +93,12 @@ export function getPackageColumns(
     {
       id: 'status',
       header: 'Status',
-      cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      cell: ({ row }) =>
+        options?.renderStatus ? (
+          options.renderStatus(row.original.status)
+        ) : (
+          <StatusBadge status={row.original.status} />
+        ),
     },
     {
       accessorKey: 'pickedUpAt',

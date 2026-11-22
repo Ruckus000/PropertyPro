@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Clock, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { PanelGlance, type AccessSentence } from '@propertypro/ui/components/shared/side-panel';
 import {
@@ -11,6 +11,7 @@ import {
   SectionFooter,
   SectionToolbar,
 } from '@propertypro/ui/components/shared/section';
+import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { usePackages, type PackageListItem } from '@/hooks/use-packages';
 import { DataTable } from '@/components/shared/data-table';
 import { PageHeader } from '@/components/shared/page-header';
@@ -30,6 +31,22 @@ type Filter = 'all' | 'pending' | 'picked_up';
 
 const isAwaiting = (p: PackageListItem) => p.status !== 'picked_up';
 
+// The words are the ones the current view's badge shows; only the mark changes.
+const STATUS_WORD: Record<PackageListItem['status'], string> = {
+  received: 'Received',
+  notified: 'Notified',
+  picked_up: 'Picked Up',
+};
+
+function renderStatus(status: PackageListItem['status']): React.ReactNode {
+  return (
+    <StatusGlyph
+      kind={status === 'picked_up' ? 'done' : 'in-progress'}
+      label={STATUS_WORD[status]}
+    />
+  );
+}
+
 /** One static row from the real column labels, so the empty page shows what a log looks like. */
 function ExampleRow({ headers }: { headers: string[] }) {
   const sample: Record<string, React.ReactNode> = {
@@ -38,12 +55,7 @@ function ExampleRow({ headers }: { headers: string[] }) {
     Carrier: 'UPS',
     'Tracking #': '—',
     Received: 'Today, 9:30 AM',
-    Status: (
-      <span className="inline-flex items-center gap-1">
-        <Clock className="size-4" aria-hidden="true" />
-        Received
-      </span>
-    ),
+    Status: renderStatus('received'),
     'Picked Up': '—',
   };
   return (
@@ -78,7 +90,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
   const { data: packages, isLoading, isError, refetch } = usePackages(communityId);
 
   const baseColumns = useMemo(
-    () => getPackageColumns({ onMarkPickedUp: (pkg) => setPickupPkg(pkg) }),
+    () => getPackageColumns({ onMarkPickedUp: (pkg) => setPickupPkg(pkg) }, { renderStatus }),
     [],
   );
   const headers = useMemo(
@@ -157,6 +169,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
         columns={columns}
         data={visible}
         isLoading={isLoading}
+        bare
         getRowId={(p) => String(p.id)}
       />
     );

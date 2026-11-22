@@ -102,6 +102,11 @@ interface DataTableProps<TData, TValue> {
    * cell in place instead of moving the node.
    */
   getRowId?: (originalRow: TData, index: number) => string;
+  /**
+   * Drops the table's own border and radius, for a table that sits inside a
+   * bordered container (a `Section`) and would otherwise draw a second frame.
+   */
+  bare?: boolean;
 }
 
 export function DataTable<TData, TValue>({
@@ -111,6 +116,7 @@ export function DataTable<TData, TValue>({
   emptyMessage = 'No results found.',
   emptyAction,
   getRowId,
+  bare = false,
 }: DataTableProps<TData, TValue>) {
   const colCount = columns.length;
   // Matches the pre-existing default: ten skeleton rows when nothing says otherwise.
@@ -118,7 +124,7 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-edge">
+      <div className={cn(!bare && 'rounded-md border border-edge')}>
         <Table>
           <TableHeader>
             <TableRow>
