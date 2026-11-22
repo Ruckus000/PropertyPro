@@ -4,6 +4,7 @@ import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   useCreateJoinRequest,
+  useMyJoinRequests,
   type CreateJoinRequestInput,
 } from '../use-join-requests';
 
@@ -143,5 +144,18 @@ describe('useCreateJoinRequest', () => {
     expect(result.current.error).toEqual(
       new Error('Submission failed. Please try again.'),
     );
+  });
+});
+
+describe('useMyJoinRequests', () => {
+  it("GETs the caller's own requests and unwraps the data envelope", async () => {
+    const rows = [{ id: 1, communityId: 7, communityName: 'Sunset Condos', status: 'pending' }];
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, { data: rows }));
+
+    const { result } = renderHook(() => useMyJoinRequests(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(rows);
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/v1/account/join-requests');
   });
 });

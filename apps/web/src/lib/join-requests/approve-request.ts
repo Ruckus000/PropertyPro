@@ -9,6 +9,7 @@
 // AUTHZ: Cross-tenant by design — the requester is not yet a member of the target community, so a scoped client wouldn't have permission. Caller MUST have verified reviewer admin membership via requirePermission(membership, 'residents', 'write') first.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
+  communities,
   communityJoinRequests,
   createScopedClient,
   units,
@@ -17,7 +18,20 @@ import {
   insertNotifications,
 } from '@propertypro/db';
 import { and, desc, eq, inArray, isNull, sql } from '@propertypro/db/filters';
-import { NotFoundError, ConflictError } from '@/lib/api/errors';
+import { NotFoundError, ConflictError, ValidationError } from '@/lib/api/errors';
+
+/**
+ * Apartment communities have no unit owners (ADR-006: `isUnitOwner` splits a
+ * condo/HOA resident into owner or tenant; an apartment resident is always a
+ * tenant). Join requests to one are tenant-only, enforced at submit AND at
+ * approval so a request filed before this rule cannot mint an owner.
+ */
+const APARTMENT_OWNER_REQUEST_MESSAGE =
+  'Apartment communities accept tenant requests only. Choose Tenant and try again.';
+
+function isApartment(communityType: string | null | undefined): boolean {
+  return communityType === 'apartment';
+}
 
 export interface PendingJoinRequestRow {
   id: number;
@@ -130,6 +144,22 @@ export async function createJoinRequest(
   input: CreateJoinRequestInput,
 ): Promise<CreatedJoinRequest> {
   const db = createUnscopedClient();
+
+  // AUTHZ: unscoped read of ONE community's type by the id the caller chose to
+  // request. Exposes nothing back (it only gates the insert), and the requester
+  // is not a member yet, so a scoped client cannot see the row.
+  const [community] = await db
+    .select({ communityType: communities.communityType })
+    .from(communities)
+    .where(and(eq(communities.id, input.communityId), isNull(communities.deletedAt)))
+    .limit(1);
+  if (!community) throw new NotFoundError('Community not found');
+  if (isApartment(community.communityType) && input.residentType === 'owner') {
+    throw new ValidationError(APARTMENT_OWNER_REQUEST_MESSAGE, {
+      fields: [{ field: 'residentType', message: APARTMENT_OWNER_REQUEST_MESSAGE }],
+    });
+  }
+
   const [row] = await db
     .insert(communityJoinRequests)
     .values({
@@ -148,16 +178,48 @@ export async function createJoinRequest(
   return { id: row.id, status: row.status };
 }
 
+/** One of the requester's own join requests, as the requester may see it. */
+export interface OwnJoinRequestRow {
+  id: number;
+  communityId: number;
+  communityName: string | null;
+  unitIdentifier: string;
+  residentType: string;
+  status: string;
+  /** The reviewer's note — shown so a denied requester knows why. */
+  reviewNotes: string | null;
+  reviewedAt: Date | null;
+  createdAt: Date;
+}
+
 /**
  * List a user's own join requests across all communities, newest first.
- * Cross-tenant by design — see file-level AUTHZ comment.
+ *
+ * Projected for the requester: no `reviewedBy` (the reviewing manager's user id
+ * is not the requester's to see) and no `userId`/`updatedAt`.
  */
-export async function listJoinRequestsForUser(userId: string) {
+export async function listJoinRequestsForUser(userId: string): Promise<OwnJoinRequestRow[]> {
   const db = createUnscopedClient();
+  // AUTHZ: cross-tenant read keyed to the authenticated requester's own rows
+  // (`userId` comes from requireAuthenticatedUserId in the route). The join
+  // reads only the NAME of each community they asked to join — a name they
+  // already saw in the public community search before requesting — and the
+  // requester is not a member yet, so a scoped client could not read it.
   return await db
-    .select()
+    .select({
+      id: communityJoinRequests.id,
+      communityId: communityJoinRequests.communityId,
+      communityName: communities.name,
+      unitIdentifier: communityJoinRequests.unitIdentifier,
+      residentType: communityJoinRequests.residentType,
+      status: communityJoinRequests.status,
+      reviewNotes: communityJoinRequests.reviewNotes,
+      reviewedAt: communityJoinRequests.reviewedAt,
+      createdAt: communityJoinRequests.createdAt,
+    })
     .from(communityJoinRequests)
-    .where(and(eq(communityJoinRequests.userId, userId)))
+    .leftJoin(communities, eq(communities.id, communityJoinRequests.communityId))
+    .where(eq(communityJoinRequests.userId, userId))
     .orderBy(desc(communityJoinRequests.createdAt));
 }
 
@@ -228,7 +290,15 @@ export async function approveJoinRequest(
   if (!req) throw new NotFoundError('Join request not found');
   if (req.status !== 'pending') throw new ConflictError('Request is not pending');
 
-  const isOwner = req.residentType === 'owner';
+  // An apartment has no unit owners, so an owner request to one — filed
+  // before submit refused them — is approved as a tenant rather than minting
+  // `isUnitOwner = true` in a community where nothing reads it correctly.
+  const [community] = await db
+    .select({ communityType: communities.communityType })
+    .from(communities)
+    .where(eq(communities.id, req.communityId))
+    .limit(1);
+  const isOwner = req.residentType === 'owner' && !isApartment(community?.communityType);
   const displayTitle = isOwner ? 'Owner' : 'Tenant';
 
   await db.transaction(async (tx) => {
@@ -297,7 +367,9 @@ export async function approveJoinRequest(
           sourceType: 'join_request',
           sourceId: String(req.id),
           priority: 'normal',
-          actionUrl: '/dashboard',
+          // Pin the community: a member of several lands on whichever sorts
+          // first without it, not the one that just let them in.
+          actionUrl: `/dashboard?communityId=${req.communityId}`,
         },
       ],
       tx,

@@ -6,6 +6,7 @@ import {
   type CommunitySearchResult,
 } from '@/components/join-requests/community-search';
 import { JoinRequestForm } from '@/components/join-requests/join-request-form';
+import { MyJoinRequests } from '@/components/join-requests/my-join-requests';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageBody } from '@/components/shared/page-body';
 import { PageHeader } from '@/components/shared/page-header';
@@ -30,10 +31,13 @@ export default function JoinCommunityPage() {
         <JoinRequestForm
           communityId={selected.id}
           communityName={selected.name}
+          communityType={selected.communityType}
           onDone={() => setSubmitted(true)}
           onBack={() => setSelected(null)}
         />
       )}
+
+      <MyJoinRequests />
     </PageBody>
   );
 }

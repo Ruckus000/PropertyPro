@@ -9,6 +9,12 @@ import { useCreateJoinRequest } from '@/hooks/use-join-requests';
 interface JoinRequestFormProps {
   communityId: number;
   communityName: string;
+  /**
+   * The target community's type, from the community search result. An
+   * `apartment` has no unit owners, so the request is tenant-only (the submit
+   * route refuses an owner request to one with a 400).
+   */
+  communityType?: string;
   onDone: () => void;
   onBack: () => void;
 }
@@ -16,11 +22,15 @@ interface JoinRequestFormProps {
 export function JoinRequestForm({
   communityId,
   communityName,
+  communityType,
   onDone,
   onBack,
 }: JoinRequestFormProps) {
+  const tenantOnly = communityType === 'apartment';
   const [unit, setUnit] = useState('');
-  const [residentType, setResidentType] = useState<'owner' | 'tenant'>('owner');
+  const [residentType, setResidentType] = useState<'owner' | 'tenant'>(
+    tenantOnly ? 'tenant' : 'owner',
+  );
 
   const submit = useCreateJoinRequest();
 
@@ -28,7 +38,11 @@ export function JoinRequestForm({
 
   const handleSubmit = () => {
     submit.mutate(
-      { communityId, unitIdentifier: unit.trim(), residentType },
+      {
+        communityId,
+        unitIdentifier: unit.trim(),
+        residentType: tenantOnly ? 'tenant' : residentType,
+      },
       { onSuccess: onDone },
     );
   };
@@ -63,20 +77,30 @@ export function JoinRequestForm({
         />
       </div>
 
-      <div>
-        <label htmlFor="resident-type" className="block text-sm font-medium mb-2">
-          I am a(n) <span className="text-status-danger">*</span>
-        </label>
-        <select
-          id="resident-type"
-          className="flex h-10 w-full rounded-md border border-edge bg-transparent px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          value={residentType}
-          onChange={(e) => setResidentType(e.target.value as 'owner' | 'tenant')}
-        >
-          <option value="owner">Owner</option>
-          <option value="tenant">Tenant</option>
-        </select>
-      </div>
+      {tenantOnly ? (
+        <div>
+          <p className="block text-sm font-medium mb-2">I am a(n)</p>
+          <p className="text-sm">Tenant</p>
+          <p className="text-sm text-content-secondary mt-1">
+            Apartment communities accept tenant requests only.
+          </p>
+        </div>
+      ) : (
+        <div>
+          <label htmlFor="resident-type" className="block text-sm font-medium mb-2">
+            I am a(n) <span className="text-status-danger">*</span>
+          </label>
+          <select
+            id="resident-type"
+            className="flex h-10 w-full rounded-md border border-edge bg-transparent px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+            value={residentType}
+            onChange={(e) => setResidentType(e.target.value as 'owner' | 'tenant')}
+          >
+            <option value="owner">Owner</option>
+            <option value="tenant">Tenant</option>
+          </select>
+        </div>
+      )}
 
       <div className="flex gap-2 pt-2">
         <Button variant="ghost" onClick={onBack} disabled={submit.isPending}>

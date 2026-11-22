@@ -132,6 +132,22 @@ describe('account/join-requests route', () => {
       expect(json.error?.details?.reason).toBe('pending_request');
     });
 
+    it('returns 400 with a residentType field message for an owner request to an apartment', async () => {
+      const { ValidationError } = await import('@/lib/api/errors');
+      const message = 'Apartment communities accept tenant requests only. Choose Tenant and try again.';
+      createJoinRequestMock.mockRejectedValueOnce(
+        new ValidationError(message, { fields: [{ field: 'residentType', message }] }),
+      );
+      const res = await POST(
+        postRequest({ communityId: 9, unitIdentifier: '3B', residentType: 'owner' }),
+      );
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.error?.code).toBe('VALIDATION_ERROR');
+      expect(json.error?.message).toBe(message);
+      expect(json.error?.details?.fields).toEqual([{ field: 'residentType', message }]);
+    });
+
     it.each([
       ['another community', 6],
       ['the consented community itself', 5],

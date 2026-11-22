@@ -145,6 +145,31 @@ describe('WS72 middleware rate-limit and spoofing hardening', () => {
     expect(response.status).not.toBe(401);
   });
 
+  /**
+   * Same shape for the snowbird digest. Its TOKEN_AUTH_ROUTES entry was
+   * GET-only, so the RFC 8058 one-click POST that `sendEmail`'s
+   * List-Unsubscribe-Post header invites was 401'd here before the route ran.
+   */
+  it('does NOT 401 the snowbird digest unsubscribe GET without a session', async () => {
+    mockAuthState(null);
+
+    const response = await middleware(
+      createApiRequest('/api/v1/snowbird-digest/unsubscribe?token=whatever', 'GET'),
+    );
+
+    expect(response.status).not.toBe(401);
+  });
+
+  it('does NOT 401 the snowbird digest unsubscribe POST — the one-click target', async () => {
+    mockAuthState(null);
+
+    const response = await middleware(
+      createApiRequest('/api/v1/snowbird-digest/unsubscribe?token=whatever', 'POST'),
+    );
+
+    expect(response.status).not.toBe(401);
+  });
+
   it('control: a NEIGHBOURING /api/v1/notifications path is still 401 without a session', async () => {
     // Proves the carve-out is path-exact rather than a prefix hole. Without
     // this, an entry that accidentally matched all of /api/v1/notifications

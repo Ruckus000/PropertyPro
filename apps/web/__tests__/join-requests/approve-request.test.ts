@@ -93,7 +93,24 @@ const { createScopedClientMock } = vi.hoisted(() => ({ createScopedClientMock: v
 
 vi.mock('@propertypro/db', () => ({
   createScopedClient: createScopedClientMock,
-  communityJoinRequests: { id: 'cjr.id' },
+  communities: {
+    id: 'communities.id',
+    name: 'communities.name',
+    communityType: 'communities.community_type',
+    deletedAt: 'communities.deleted_at',
+  },
+  communityJoinRequests: {
+    id: 'cjr.id',
+    userId: 'cjr.user_id',
+    communityId: 'cjr.community_id',
+    unitIdentifier: 'cjr.unit_identifier',
+    residentType: 'cjr.resident_type',
+    status: 'cjr.status',
+    reviewedBy: 'cjr.reviewed_by',
+    reviewNotes: 'cjr.review_notes',
+    reviewedAt: 'cjr.reviewed_at',
+    createdAt: 'cjr.created_at',
+  },
   userRoles: { id: 'ur.id' },
   units: { id: 'units.id', unitNumber: 'units.unit_number', communityId: 'units.community_id', deletedAt: 'units.deleted_at' },
   users: { id: 'users.id', fullName: 'users.full_name', email: 'users.email' },
@@ -112,7 +129,9 @@ vi.mock('@propertypro/db/filters', () => ({
 // Import after mocks
 import {
   approveJoinRequest,
+  createJoinRequest,
   denyJoinRequest,
+  listJoinRequestsForUser,
   listPendingJoinRequestsForCommunity,
 } from '@/lib/join-requests/approve-request';
 
@@ -136,13 +155,25 @@ function seedRequest(overrides: Partial<(typeof dbState.joinRequests)[0]> = {}) 
   return req;
 }
 
-function mockSelectReturnsRequest(req: (typeof dbState.joinRequests)[0] | null) {
+function mockSelectReturnsRequest(
+  req: (typeof dbState.joinRequests)[0] | null,
+  communityType: string = 'condo_718',
+) {
   selectMock.mockReturnValueOnce({
     from: () => ({
       where: () => ({
         limit: () => Promise.resolve(req ? [req] : []),
       }),
     }),
+  });
+  // Approval reads the target community's type next (apartments are tenant-only).
+  mockSelectReturnsCommunity(communityType ? [{ communityType }] : []);
+}
+
+/** A `communities` lookup by id: resolves to these rows. */
+function mockSelectReturnsCommunity(rows: Array<{ communityType: string }>) {
+  selectMock.mockReturnValueOnce({
+    from: () => ({ where: () => ({ limit: () => Promise.resolve(rows) }) }),
   });
 }
 
@@ -257,6 +288,29 @@ describe('approveJoinRequest', () => {
     expect(role.displayTitle).toBe('Tenant');
   });
 
+  // D12: an apartment has no unit owners. A pending owner request filed before
+  // submit refused them must not mint isUnitOwner=true on approval.
+  it('approves an OWNER request to an apartment as a tenant', async () => {
+    const req = seedRequest({ residentType: 'owner' });
+    mockSelectReturnsRequest(req, 'apartment');
+
+    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    const role = dbState.userRoles[0] as { isUnitOwner: boolean; displayTitle: string };
+    expect(role.isUnitOwner).toBe(false);
+    expect(role.displayTitle).toBe('Tenant');
+    expect(dbState.joinRequests[0]!.status).toBe('approved');
+  });
+
+  it('control: an owner request to a condo still approves as an owner', async () => {
+    const req = seedRequest({ residentType: 'owner' });
+    mockSelectReturnsRequest(req, 'condo_718');
+
+    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    expect((dbState.userRoles[0] as { isUnitOwner: boolean }).isUnitOwner).toBe(true);
+  });
+
   it('notifies the requester on approval', async () => {
     const req = seedRequest();
     mockSelectReturnsRequest(req);
@@ -270,6 +324,18 @@ describe('approveJoinRequest', () => {
     }>;
     expect(notifRows[0]!.userId).toBe('user-111');
     expect(notifRows[0]!.category).toBe('system');
+  });
+
+  it("the approval notification opens THAT community's dashboard", async () => {
+    // Without the pin, a member of several communities lands on whichever
+    // sorts first alphabetically, not the one that just approved them.
+    const req = seedRequest({ communityId: 42 });
+    mockSelectReturnsRequest(req);
+
+    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+
+    const notifRows = insertNotificationsMock.mock.calls[0]![0] as Array<{ actionUrl?: string }>;
+    expect(notifRows[0]!.actionUrl).toBe('/dashboard?communityId=42');
   });
 
   it('throws if request does not exist', async () => {
@@ -474,5 +540,90 @@ describe('listPendingJoinRequestsForCommunity', () => {
 
     await expect(listPendingJoinRequestsForCommunity(42)).resolves.toEqual([]);
     expect(selectFrom).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createJoinRequest', () => {
+  const input = {
+    userId: 'user-111',
+    communityId: 42,
+    unitIdentifier: 'Apt 3B',
+    residentType: 'owner' as const,
+  };
+
+  it('refuses an OWNER request to an apartment with a 400 on residentType', async () => {
+    mockSelectReturnsCommunity([{ communityType: 'apartment' }]);
+
+    const error = await createJoinRequest(input).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      details: { fields: [{ field: 'residentType', message: expect.stringContaining('tenant') }] },
+    });
+    expect(dbState.userRoles).toHaveLength(0); // nothing inserted
+  });
+
+  it('accepts a TENANT request to an apartment', async () => {
+    mockSelectReturnsCommunity([{ communityType: 'apartment' }]);
+
+    await createJoinRequest({ ...input, residentType: 'tenant' });
+
+    expect(dbState.userRoles).toHaveLength(1);
+    expect(dbState.userRoles[0]).toMatchObject({ communityId: 42, residentType: 'tenant' });
+  });
+
+  it('control: accepts an OWNER request to a condo', async () => {
+    mockSelectReturnsCommunity([{ communityType: 'condo_718' }]);
+
+    await createJoinRequest(input);
+
+    expect(dbState.userRoles[0]).toMatchObject({ residentType: 'owner' });
+  });
+
+  it('404s an unknown or deleted community instead of inserting', async () => {
+    mockSelectReturnsCommunity([]);
+
+    await expect(createJoinRequest(input)).rejects.toThrow('Community not found');
+    expect(dbState.userRoles).toHaveLength(0);
+  });
+});
+
+describe('listJoinRequestsForUser', () => {
+  it("projects the requester's own rows with the community name and without reviewedBy", async () => {
+    let projection: Record<string, unknown> | undefined;
+    let whereArg: unknown;
+    const rows = [{ id: 1, communityId: 42, communityName: 'Sunset Ridge', status: 'denied' }];
+    selectMock.mockImplementationOnce((fields: Record<string, unknown>) => {
+      projection = fields;
+      return {
+        from: () => ({
+          leftJoin: () => ({
+            where: (w: unknown) => {
+              whereArg = w;
+              return { orderBy: () => Promise.resolve(rows) };
+            },
+          }),
+        }),
+      };
+    });
+
+    await expect(listJoinRequestsForUser('user-111')).resolves.toEqual(rows);
+
+    expect(Object.keys(projection ?? {}).sort()).toEqual([
+      'communityId',
+      'communityName',
+      'createdAt',
+      'id',
+      'residentType',
+      'reviewNotes',
+      'reviewedAt',
+      'status',
+      'unitIdentifier',
+    ]);
+    expect(projection).not.toHaveProperty('reviewedBy');
+    expect(projection!.communityName).toBe('communities.name');
+    // Keyed to the requester alone.
+    expect(whereArg).toEqual({ eq: ['cjr.user_id', 'user-111'] });
   });
 });

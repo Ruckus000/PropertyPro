@@ -4,7 +4,11 @@
  * POST /api/v1/account/join-requests — submit a new join request (authenticated user)
  * GET  /api/v1/account/join-requests — list the authenticated user's own join requests
  *
- * Plan A1 drain #151. Migrated to `runRoute(contract, handler)`; see `./contract.ts`.
+ * POST refuses an `owner` request to an apartment community with a 400 on
+ * `residentType` (apartments are tenant-only); `createJoinRequest` enforces it,
+ * since it is the one place that reads the target community before inserting.
+ * GET returns the requester's own rows projected for them — status, review
+ * notes and the community's name, never the reviewer's id.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
