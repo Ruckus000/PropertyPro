@@ -2,183 +2,93 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the page kit, its guards and an owner-only preview switch, then rebuild Emergency Alerts, Packages and Visitors on it so the owner can judge the design direction in the real app before anything else is migrated.
+**Goal:** Build the smallest page kit the pilot needs and an owner-only preview gate, then rebuild Emergency Alerts, Packages and Visitors on it so the owner can judge the design direction in the real app before anything else is migrated.
 
-**Architecture:** New kit parts are added beside the existing ones in `packages/ui/src/components/shared/` and nothing existing is edited there, so admin cannot change. Pure deadline logic lives in `packages/shared` so emails can later read the same answer. Each pilot page keeps its current implementation and gains a second one that renders only when a per-user preference is on, so customers see no change until the owner opens the gate.
+**Architecture:** New kit parts are added beside the existing ones in `packages/ui/src/components/shared/`; nothing existing is edited there and `packages/ui` gains no new package dependency, so admin cannot change. Each pilot page keeps its current view and gains a second one that renders only for users on an environment allow-list, so customers see no change. Task 19 deletes the old views and the gate once the owner has decided; until then every branch point carries a `ponytail:` marker.
 
 **Tech Stack:** Next.js 15 App Router, React 19, TypeScript, Tailwind with container-query variants, Vitest (jsdom for `packages/ui`), Playwright, `lucide-react`, `tsx` guard scripts.
 
-**Spec:** `docs/superpowers/specs/2026-11-21-page-anatomy-design.md`. Section numbers below (§) refer to it. Read §0, §3, §5, §11, §12, §13, §14 and §16 before any task.
+**Spec:** `docs/superpowers/specs/2026-11-21-page-anatomy-design.md`. Section numbers below (§) refer to it. Read §0, §3, §5, §11, §13, §14 and §16 before any task.
 
 **This is Plan A of five.** The spec's rollout (§17) has nine workstreams. Plan A covers workstreams 1 to 3. The others are written after the owner approves the pilot, because the pilot fixes two layout thresholds and may change the design:
 
 | Plan | Workstreams | Written when |
 |---|---|---|
-| A (this) | 1 kit and guards, 2 preview gate, 3 pilot | now |
-| B | 4 shell, fixed coral, "Next deadline" | pilot approved |
+| A (this) | 1 kit and guard, 2 preview gate, 3 pilot | now |
+| B | 4 shell, fixed coral, "Next deadline", the time-left chip, icons | pilot approved |
 | C | 5 dashboard and settings, 6 lists, details, forms | pilot approved |
 | D | 7 overlays and the help dialog | Plan C under way |
 | E | 8 help center and outside frames | Plan C under way |
 
 ## Out of this plan
 
-These spec parts are deliberately left to later plans, so do not build them here: `RecordCard`, `StepStrip`, `StatuteChip` and the canvas section kinds (Plan C, with the first page that needs each); the plan-locked, lapsed, denied and read-only states and the banner slot (Plan C; the pilot pages keep their existing `FeatureGate` wrapper and its current locked screen); the shell, fixed coral and "Next deadline" (Plan B); overlays and the help dialog (Plan D); the print stylesheet and outside frames (Plan E). The compliance UI is not switched to `daysLeft` here; Task 1 only creates the formatter.
+A part is built in the plan that first uses it. These have no user among the pilot pages, so do not build them here:
+
+- **`daysLeft`, `formatTimeLeft`, `TimeLeft` (Plan B).** No pilot page shows a deadline. They arrive with "Next deadline", in the same pull request that moves `compliance-checklist-item.tsx` and `meeting-status.ts` onto the one formatter, so the app never holds a fourth rounding rule. Plan B must also decide where `TimeLeft` lives: `packages/ui` depends only on `@propertypro/tokens` today, and `EscalationTier` already exists in `packages/ui/src/tokens/compliance.ts`.
+- **`Icon`, the icon registry and `guard:icons` (Plan B).** Web imports 124 distinct `lucide-react` icons across 232 files. A single registry map would put every one of them in each page's bundle, and `perf-check` has about 31 KiB of headroom. Plan B designs this with the shell. Here the page title's icon comes from `nav-config.ts`, which already holds one icon per section.
+- **`SectionRow`, `SectionGroup`, `SectionLinkRow` (Plan C).** They are the Settings shapes. Plan C re-points `apps/web/src/components/settings/settings-layout.tsx` onto the Section kit and deletes its six bodies in the same pull request, so the app does not keep two kits.
+- **`PageTabs`.** Not built. Radix `Tabs` (`apps/web/src/components/ui/tabs.tsx`) already has the keyboard behaviour and the 44px floor; the Visitors pilot styles it.
+- **`guard:panel-copy`.** Replaced by a type: a panel's "About" accepts only the value `describeAccess` returns (Tasks 7 and 10).
+- **The hand-built-box count** from §16 (Plan C, when there are kit parts to migrate boxes onto).
+- `RecordCard`, `StepStrip`, `StatuteChip` and the canvas section kinds (Plan C); the plan-locked, lapsed, denied and read-only states and the banner slot (Plan C; pilot pages keep their `FeatureGate` wrapper); the shell and fixed coral (Plan B); overlays and the help dialog (Plan D); print and outside frames (Plan E).
+- **Rewriting `DESIGN.md` around the direction.** Done after the owner approves the pilot (Task 19). Plan A corrects only statements its own code makes false.
+
+## What the pilot will not show
+
+Say this to the owner when handing over the pilot, so its absence is not read as a result:
+
+1. **The time-left chip.** None of the three pilot features has a deadline.
+2. **The side panel beside a table on a laptop.** Packages and Visitors are table pages, whose panel moves beside the table only when the content box reaches 1280px. At a 1440px window with the rail open it stays a strip above. Emergency Alerts (rows) shows the panel beside the list.
+3. **A "residents reachable" figure on Emergency Alerts.** The mockup drew one. Computing it means three whole-table reads on every page load, for an audience and severity the list page does not have, and the send rule (`emergency-broadcast-service.ts:203`) also requires a verified phone and consent. The pilot shows the recipient count of the last sent alert, which the page already loads.
+
+## Pull requests
+
+Six, opened and merged in this order, rebasing between each. The kit merges unused; if the owner rejects the pilot, Task 19 removes it.
+
+| PR | Tasks | Contents |
+|---|---|---|
+| 1 | 2, 5, 6, 7, 8, 9 | the kit, and `PageHeader` painting inside a layout |
+| 2 | 10, 11 | `describeAccess` and the preview gate |
+| 3 | 13, 14 | Packages, both views |
+| 4 | 15, 16a, 16b | Emergency Alerts: list, detail, new |
+| 5 | 16c | Visitors |
+| 6 | 12, 17 | `guard:page-template` and the proof at real size |
+
+Task 12 runs after the pilot pages on purpose: its baseline is then written once, with the five pilot `page.tsx` files already passing.
 
 ## Global Constraints
 
-- Work on branch `claude/component-design-modernization-2999df`. One pull request per task unless a task says otherwise; open and merge them in order, rebasing between each.
-- **No admin change.** Do not edit any existing file under `packages/ui/src/components/ui/`, any existing file in `packages/ui/src/components/shared/`, or `packages/ui/src/constants/status.ts`. Add new files only.
-- Import kit parts by file path (`@propertypro/ui/components/shared/<file>`), never through the package barrel.
+- Work on branch `claude/component-design-modernization-2999df`.
+- **No admin change.** Do not edit any existing file under `packages/ui/src/components/ui/`, any existing file in `packages/ui/src/components/shared/`, `packages/ui/src/constants/status.ts`, `packages/ui/package.json` or `packages/ui/tsup.config.ts`. Add new files only.
+- Import kit parts by file path (`@propertypro/ui/components/shared/<file>`), never through the package barrel. Inside the kit, import `cn` from `../../utils/cn`. A server page that imports the barrel pulls every `'use client'` module into its route bundle (measured +40 KiB on `/settings`; see the comment at the top of `settings-layout.tsx`).
 - Semantic token classes only. No raw hex, no slash-opacity on semantic tokens, no arbitrary pixel values. Every colour class must exist in `apps/web/tailwind.config.ts`.
-- All sizes on the existing rem scale; nothing smaller than `text-xs`. Page title and headline figures `text-3xl`; rows, cells, meta and time-left counts `text-sm`; labels and stamps `text-xs` (§11.2).
-- Geist Mono (`font-mono`) only on statute chips and keyboard hints (§11.2).
+- All sizes on the existing rem scale; nothing smaller than `text-xs`. Page title and headline figures `text-3xl`; rows, cells and meta `text-sm`; labels and stamps `text-xs` (§11.2).
 - Coral (`bg-interactive`, `text-content-link`) only on the one primary button and on links. Selected states use ink (§11.3).
-- Status is always a glyph plus a word (§13). Deadlines always go through `TimeLeft` (§12).
+- Status is always a glyph plus a word (§13).
 - Heading levels: `h1` page title, `h2` section titles and panel positions (§11.2).
 - Controls are 44px below `md`; standalone links and icon buttons get `min-h-11 md:min-h-0` (§13).
-- Run one test file with `pnpm test <path>` (no `--`). For `packages/ui` and `packages/shared` use `pnpm --filter <pkg> exec vitest run <path>`. Do not pipe a test command when you need its exit status.
-- After changing `packages/ui` or `packages/shared`, run `pnpm --filter <pkg> build` before running web tests; web reads their `dist/`.
+- A pilot view states only what the current view already states or what its loaded data proves. Do not add a figure, a status or a warning the code does not compute today.
+- Run one test file with `pnpm test <path>` (no `--`). For `packages/ui` use `pnpm --filter @propertypro/ui exec vitest run <path>`. Do not pipe a test command when you need its exit status.
 - Never run integration tests against `.env.local` (it is production). Use `pnpm test:integration:local`.
 - Every fix-shaped test gets a revert-check, recorded in the commit message (`.claude/rules/verification.md`).
 - A deliberate shortcut carries a `ponytail:` comment naming the limit and an observable trigger.
 - Before every push: run a security review and a code review of the diff (owner's standing rule).
 - End commit messages with `Co-Authored-By: Claude Fable 5.2 <noreply@anthropic.com>`.
-- Each task starts with a **pre-check**: one grep or read confirming the files and names it depends on still exist as written here. `main` moves fast (43 commits in two days). If a pre-check fails, stop and report; do not improvise.
+- Each task starts with a **pre-check**: one grep or read confirming the files and names it depends on still exist as written here. `main` moves fast. If a pre-check fails, stop and report; do not improvise.
 
 ## Review Focus
 
-1. **A deadline within minutes of now.** One minute past must read as overdue, never as "0 hours left" or "due today" (pinned in Task 1).
-2. **A viewer who may not read a figure.** An owner on Emergency Alerts must not see reach or delivery figures; a community with SMS switched off must not see a text-message figure (pinned in Tasks 14 and 15).
-3. **Zero records.** Every pilot page must render its header, its panel and a first-run section with no records, without a blank main column (pinned in Tasks 13 to 16).
-4. **Very long text at the app's real size.** A 90-character title and a 40-character name must not make the page scroll sideways at 1280 and 1440 with large text on (pinned in Task 17).
-5. **The preview switch failing.** If the preference read throws, or the user is removed from the allow-list while their preference is on, the page renders the current implementation and does not error (pinned in Task 11).
+1. **A viewer who may not read a figure.** An owner on Emergency Alerts must not see recipient counts or the delivery report; a resident on Packages must not see management figures (pinned in Tasks 14, 15 and 16a).
+2. **An "About" sentence that overclaims.** Residents see only their own packages and owners only the alerts sent to them; the sentence must say so, for every community type (pinned in Task 10).
+3. **Zero records.** Every pilot page must render its header and a first-run section with no records, without a blank main column (pinned in Tasks 13 to 16).
+4. **Very long text at the app's real size.** A 90-character package description must not make the page scroll sideways at 1280 and 1440 with large text on (pinned in Task 17).
+5. **The preview gate failing or leaking.** If the check throws, the page renders the current view. The development-only cookie must do nothing in a production build (pinned in Task 11).
 
 ---
 
-### Task 1: `daysLeft` and `formatTimeLeft`
+### Task 1: moved to Plan B
 
-**Files:**
-- Create: `packages/shared/src/time/days-left.ts`
-- Modify: `packages/shared/src/index.ts` (export the new module)
-- Test: `packages/shared/__tests__/days-left.test.ts`
-
-**Interfaces:**
-- Produces:
-  ```ts
-  export type DeadlineBasis = 'statute' | 'governing-docs' | 'contract' | 'event';
-  export type TimeLeftLevel = 'calm' | 'aware' | 'urgent' | 'critical';
-  export type TimeLeft =
-    | { kind: 'left'; unit: 'days' | 'hours'; count: number; dueToday: boolean }
-    | { kind: 'overdue'; unit: 'days' | 'hours'; count: number };
-  export type TimeLeftStatus =
-    | TimeLeft
-    | { kind: 'met-late' }
-    | { kind: 'out-of-window' }
-    | { kind: 'no-clock' }
-    | { kind: 'not-applicable' };
-  export function daysLeft(deadline: Date, now: Date, timeZone: string): TimeLeft;
-  export function formatTimeLeft(status: TimeLeftStatus, basis: DeadlineBasis, form: 'long' | 'short'): string;
-  ```
-
-Rules the tests pin (§12): remaining time is exact elapsed milliseconds, never rounded up. At 48 hours or more the unit is days, `count = floor(ms / 86_400_000)`. Under 48 hours the unit is hours, `count = floor(ms / 3_600_000)`. Any negative remainder is `overdue`, with days at 24 hours or more past and hours below that. `dueToday` is true when the deadline falls on the current calendar day in `timeZone`.
-
-Wording, long form:
-
-| Status | `statute`, `governing-docs` | `contract` | `event` |
-|---|---|---|---|
-| left, days | `9 days left` | `Ends in 9 days` | `In 9 days` |
-| left, 1 day | `1 day left` | `Ends in 1 day` | `In 1 day` |
-| left, hours | `14 hours left` | `Ends in 14 hours` | `In 14 hours` |
-| left, 0 hours | `Under 1 hour left` | `Ends in under 1 hour` | `In under 1 hour` |
-| overdue, days | `2 days overdue` | `Ended` | `Past` |
-| overdue, hours | `3 hours overdue` | `Ended` | `Past` |
-| overdue, 0 hours | `Overdue` | `Ended` | `Past` |
-| met-late | `Met late` | `Ended` | `Past` |
-| out-of-window | `Out of window` | same | same |
-| no-clock | `No deadline applies` | same | same |
-| not-applicable | `Does not apply` | same | same |
-
-Short form replaces ` days`/` day` with `d` and ` hours`/` hour` with `h` (`9d left`, `14h left`, `2d overdue`); every other string is unchanged.
-
-- [ ] **Step 1: Pre-check.** `ls packages/shared/__tests__ | head -3` lists test files; `grep -n "export \* from" packages/shared/src/index.ts | head -3` shows the barrel style to copy.
-
-- [ ] **Step 2: Write the failing tests**
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { daysLeft, formatTimeLeft } from '../src/time/days-left';
-
-const NY = 'America/New_York';
-const at = (iso: string) => new Date(iso);
-const HOUR = 3_600_000;
-
-describe('daysLeft', () => {
-  const now = at('2026-11-21T15:00:00Z');
-  it('uses days at exactly 48 hours', () => {
-    expect(daysLeft(new Date(now.getTime() + 48 * HOUR), now, NY)).toMatchObject({ kind: 'left', unit: 'days', count: 2 });
-  });
-  it('switches to hours one minute under 48 hours', () => {
-    expect(daysLeft(new Date(now.getTime() + 48 * HOUR - 60_000), now, NY)).toMatchObject({ kind: 'left', unit: 'hours', count: 47 });
-  });
-  it('never rounds 23 hours up to a day', () => {
-    expect(daysLeft(new Date(now.getTime() + 23 * HOUR), now, NY)).toMatchObject({ kind: 'left', unit: 'hours', count: 23 });
-  });
-  it('reports under an hour as zero hours left', () => {
-    expect(daysLeft(new Date(now.getTime() + 59 * 60_000), now, NY)).toMatchObject({ kind: 'left', unit: 'hours', count: 0 });
-  });
-  it('is overdue one minute past, not due today', () => {
-    expect(daysLeft(new Date(now.getTime() - 60_000), now, NY)).toEqual({ kind: 'overdue', unit: 'hours', count: 0 });
-  });
-  it('counts whole days overdue', () => {
-    expect(daysLeft(new Date(now.getTime() - 25 * HOUR), now, NY)).toEqual({ kind: 'overdue', unit: 'days', count: 1 });
-  });
-  it('counts exact elapsed time across the Nov 1 clock change', () => {
-    // 2026-11-01 06:00Z is 02:00 EDT -> 01:00 EST. Ten days of real time is ten days.
-    const start = at('2026-10-28T12:00:00Z');
-    expect(daysLeft(new Date(start.getTime() + 10 * 24 * HOUR), start, NY)).toMatchObject({ unit: 'days', count: 10 });
-  });
-  it('decides "today" in the community time zone', () => {
-    const deadline = at('2026-11-22T04:30:00Z'); // Nov 21, 11:30 PM in New York
-    expect(daysLeft(deadline, now, NY)).toMatchObject({ dueToday: true });
-    expect(daysLeft(deadline, now, 'UTC')).toMatchObject({ dueToday: false });
-  });
-});
-
-describe('formatTimeLeft', () => {
-  it.each([
-    [{ kind: 'left', unit: 'days', count: 9, dueToday: false }, 'statute', 'long', '9 days left'],
-    [{ kind: 'left', unit: 'days', count: 1, dueToday: false }, 'statute', 'long', '1 day left'],
-    [{ kind: 'left', unit: 'hours', count: 0, dueToday: true }, 'statute', 'long', 'Under 1 hour left'],
-    [{ kind: 'overdue', unit: 'hours', count: 0 }, 'statute', 'long', 'Overdue'],
-    [{ kind: 'overdue', unit: 'days', count: 2 }, 'governing-docs', 'long', '2 days overdue'],
-    [{ kind: 'overdue', unit: 'days', count: 27 }, 'contract', 'long', 'Ended'],
-    [{ kind: 'left', unit: 'days', count: 24, dueToday: false }, 'contract', 'long', 'Ends in 24 days'],
-    [{ kind: 'left', unit: 'days', count: 12, dueToday: false }, 'event', 'long', 'In 12 days'],
-    [{ kind: 'overdue', unit: 'days', count: 3 }, 'event', 'long', 'Past'],
-    [{ kind: 'met-late' }, 'statute', 'long', 'Met late'],
-    [{ kind: 'no-clock' }, 'statute', 'long', 'No deadline applies'],
-    [{ kind: 'left', unit: 'days', count: 9, dueToday: false }, 'statute', 'short', '9d left'],
-    [{ kind: 'overdue', unit: 'days', count: 2 }, 'statute', 'short', '2d overdue'],
-  ] as const)('%j %s %s -> %s', (status, basis, form, expected) => {
-    expect(formatTimeLeft(status, basis, form)).toBe(expected);
-  });
-  it('never says overdue for a contract or an event', () => {
-    for (const basis of ['contract', 'event'] as const) {
-      expect(formatTimeLeft({ kind: 'overdue', unit: 'days', count: 5 }, basis, 'long')).not.toMatch(/overdue/i);
-    }
-  });
-});
-```
-
-- [ ] **Step 3: Run to verify failure.** `pnpm --filter @propertypro/shared exec vitest run __tests__/days-left.test.ts` — expected: FAIL, cannot resolve `../src/time/days-left`.
-
-- [ ] **Step 4: Implement** `daysLeft` and `formatTimeLeft` in `packages/shared/src/time/days-left.ts` with the signatures above. Use `Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })` to compare calendar days. No `date-fns` (it is local-calendar). Export from `packages/shared/src/index.ts`.
-
-- [ ] **Step 5: Run to verify pass.** Same command — expected: PASS, 22 tests.
-
-- [ ] **Step 6: Revert-check.** Change `floor` to `ceil` in the hours branch; confirm "never rounds 23 hours up" stays green and "switches to hours one minute under 48 hours" goes red with `count: 48`; restore.
-
-- [ ] **Step 7: Commit.** `git add packages/shared/src/time/days-left.ts packages/shared/src/index.ts packages/shared/__tests__/days-left.test.ts && git commit -m "shared: one daysLeft formatter that never rounds remaining time up"`
+`daysLeft` and `formatTimeLeft` have no user among the pilot pages. See "Out of this plan". The number is kept so references in other tasks stay valid.
 
 ---
 
@@ -233,163 +143,46 @@ describe('StatusGlyph', () => {
 
 ---
 
-### Task 3: `TimeLeft`
+### Task 3: moved to Plan B
 
-**Files:**
-- Create: `packages/ui/src/components/shared/time-left.tsx`
-- Test: `packages/ui/src/components/shared/__tests__/time-left.test.tsx`
-
-**Interfaces:**
-- Consumes: `TimeLeftStatus`, `DeadlineBasis`, `TimeLeftLevel`, `formatTimeLeft` from `@propertypro/shared` (Task 1).
-- Produces:
-  ```ts
-  type Common = { status: TimeLeftStatus; label?: string; form?: 'long' | 'short'; className?: string };
-  export type TimeLeftProps =
-    | (Common & { basis: 'statute'; level: TimeLeftLevel; citation: string })
-    | (Common & { basis: 'governing-docs'; level: TimeLeftLevel })
-    | (Common & { basis: 'contract'; level: Exclude<TimeLeftLevel, 'critical'> })
-    | (Common & { basis: 'event' });
-  export function TimeLeft(props: TimeLeftProps): JSX.Element;
-  ```
-
-Rules (§12): the level is passed in; the component does no date arithmetic. Four pips, `aria-hidden`, filled count calm 1, aware 2, urgent 3, critical 4; filled colour `bg-status-info` for calm, `bg-status-warning` for aware and urgent, `bg-status-danger` for critical; unfilled `bg-edge-strong`. `event` renders no pips. The count text is `text-sm font-medium tabular-nums`, and takes `text-status-danger` only at critical. `label` renders after the count in `text-content-secondary`. In short form the root has `aria-label` equal to the long wording, then `label` if present, then the level, comma-separated. `citation` is not rendered here; it is required so a statutory chip cannot be written without one (the page renders `StatuteChip` beside it in Plan C).
-
-- [ ] **Step 1: Pre-check.** `grep -n "status-info\|status-warning\|status-danger\|edge-strong" apps/web/tailwind.config.ts | head` shows all four classes exist.
-- [ ] **Step 2: Write the failing tests**
-
-```tsx
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { TimeLeft } from '../time-left';
-
-const left9 = { kind: 'left', unit: 'days', count: 9, dueToday: false } as const;
-
-describe('TimeLeft', () => {
-  it('says the count in words', () => {
-    render(<TimeLeft basis="statute" level="aware" citation="§718.111(12)(g)" status={left9} label="Dec 3" />);
-    expect(screen.getByText('9 days left')).toBeVisible();
-    expect(screen.getByText('Dec 3')).toBeVisible();
-  });
-  it('fills pips by level and hides them from assistive tech', () => {
-    const { container } = render(<TimeLeft basis="statute" level="urgent" citation="§718.112(2)(c)" status={left9} />);
-    const pips = container.querySelector('[data-pips]')!;
-    expect(pips).toHaveAttribute('aria-hidden', 'true');
-    expect(pips.querySelectorAll('[data-filled="true"]')).toHaveLength(3);
-  });
-  it('draws no pips for an event', () => {
-    const { container } = render(<TimeLeft basis="event" status={left9} />);
-    expect(container.querySelector('[data-pips]')).toBeNull();
-    expect(screen.getByText('In 9 days')).toBeVisible();
-  });
-  it('names the level in the short form', () => {
-    render(<TimeLeft basis="statute" level="urgent" citation="§718.112(2)(c)" status={left9} label="Dec 3" form="short" />);
-    expect(screen.getByLabelText('9 days left, Dec 3, urgent')).toBeInTheDocument();
-    expect(screen.getByText('9d left')).toBeVisible();
-  });
-  it('cannot be critical for a contract, or statutory without a citation', () => {
-    // @ts-expect-error a contract date is never critical
-    render(<TimeLeft basis="contract" level="critical" status={left9} />);
-    // @ts-expect-error a statutory deadline must name its citation
-    render(<TimeLeft basis="statute" level="calm" status={left9} />);
-  });
-});
-```
-
-- [ ] **Step 3: Run to verify failure.** `pnpm --filter @propertypro/ui exec vitest run src/components/shared/__tests__/time-left.test.tsx` — FAIL.
-- [ ] **Step 4: Implement** `TimeLeft`. Check that `packages/ui/package.json` lists `@propertypro/shared` as a dependency; if not, add it as `workspace:*` and run `pnpm install`.
-- [ ] **Step 5: Run to verify pass**, then `pnpm --filter @propertypro/ui typecheck` — exit 0.
-- [ ] **Step 6: Commit.** `git commit -m "ui: TimeLeft chip with a required basis and a level it does not compute"`
+`TimeLeft` has no user among the pilot pages. See "Out of this plan". The number is kept so references in other tasks stay valid.
 
 ---
 
-### Task 4: `Icon` and the icon registry
+### Task 4: moved to Plan B
 
-**Files:**
-- Create: `packages/ui/src/components/shared/icon-registry.ts`, `packages/ui/src/components/shared/icon.tsx`
-- Test: `packages/ui/src/components/shared/__tests__/icon.test.tsx`
-
-**Interfaces:**
-- Produces:
-  ```ts
-  export const ICON_REGISTRY: Record<IconKey, LucideIcon>;   // icon-registry.ts
-  export type IconKey = 'home' | 'announcements' | 'emergency' | 'documents' | 'meetings' | 'compliance'
-    | 'maintenance' | 'violations' | 'arc' | 'packages' | 'visitors' | 'directory' | 'leases' | 'move'
-    | 'contracts' | 'insurance' | 'storm' | 'reserves' | 'payments' | 'assessments' | 'board' | 'esign'
-    | 'website' | 'settings' | 'help' | 'search' | 'close' | 'more' | 'back' | 'expand';
-  export interface IconProps { icon: IconKey | LucideIcon; size?: 'sm' | 'md' | 'lg'; label?: string; className?: string }
-  export function Icon(props: IconProps): JSX.Element;
-  ```
-
-Registry values, in key order (§11.6): `LayoutDashboard, Megaphone, Siren, FileText, Calendar, ClipboardCheck, Wrench, TriangleAlert, Paintbrush, Package, UserCheck, Users, KeyRound, Truck, BriefcaseBusiness, Umbrella, CloudRain, Landmark, CreditCard, Receipt, Vote, FileSignature, Globe, Settings, LifeBuoy, Search, X, Ellipsis, ArrowLeft, ChevronDown`.
-
-Rules: sizes `sm` `size-4`, `md` `size-5`, `lg` `size-6`; default `sm`. `strokeWidth={1.6}`. Colour is inherited. With `label`, the svg has `role="img"` and `aria-label`; without, `aria-hidden="true"`.
-
-- [ ] **Step 1: Pre-check.** `node -e "const l=require('lucide-react');for(const n of ['TriangleAlert','BriefcaseBusiness','KeyRound','Ellipsis','FileSignature','LifeBuoy'])console.log(n,typeof l[n])"` run from `apps/web` prints `object` or `function` for each. If a name is missing, report it; do not substitute.
-- [ ] **Step 2: Write the failing tests**
-
-```tsx
-import { render } from '@testing-library/react';
-import { Wrench } from 'lucide-react';
-import { describe, expect, it } from 'vitest';
-import { Icon } from '../icon';
-import { ICON_REGISTRY } from '../icon-registry';
-
-describe('Icon', () => {
-  it('is decorative without a label', () => {
-    const { container } = render(<Icon icon="packages" />);
-    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-  });
-  it('is named with a label', () => {
-    const { getByRole } = render(<Icon icon="close" label="Close" />);
-    expect(getByRole('img', { name: 'Close' })).toBeInTheDocument();
-  });
-  it('sizes from the closed set', () => {
-    const { container } = render(<Icon icon={Wrench} size="lg" />);
-    expect(container.querySelector('svg')).toHaveClass('size-6');
-  });
-  it('gives every concept exactly one icon', () => {
-    const concepts = Object.entries(ICON_REGISTRY).filter(([k]) => !['search', 'close', 'more', 'back', 'expand'].includes(k));
-    expect(new Set(concepts.map(([, v]) => v)).size).toBe(concepts.length);
-  });
-  it('rejects a key outside the registry', () => {
-    // @ts-expect-error not a registry key
-    render(<Icon icon="unicorn" />);
-  });
-});
-```
-
-- [ ] **Step 3: Run to verify failure**, **Step 4: implement**, **Step 5: run to verify pass** and `pnpm --filter @propertypro/ui typecheck`.
-- [ ] **Step 6: Commit.** `git commit -m "ui: Icon wrapper and a one-concept-one-icon registry"`
+`Icon` and the icon registry need a bundle-size design first. See "Out of this plan". The number is kept so references in other tasks stay valid.
 
 ---
 
 ### Task 5: Section kit
 
 **Files:**
-- Create: `packages/ui/src/components/shared/section.tsx`, `apps/web/src/components/shared/section.tsx`
+- Create: `packages/ui/src/components/shared/section.tsx`
 - Test: `packages/ui/src/components/shared/__tests__/section.test.tsx`
 
 **Interfaces:**
-- Produces (from `section.tsx`):
+- Produces:
   ```ts
-  export function Section(props: React.HTMLAttributes<HTMLElement> & { bare?: boolean }): JSX.Element; // <section>; bare drops border and background (for card records)
-  export function SectionGroup(props: { title: string; description?: string; children: React.ReactNode }): JSX.Element;
-  export function SectionHeader(props: { title: string; description?: React.ReactNode; action?: React.ReactNode; icon?: React.ReactNode }): JSX.Element;
+  export function Section(props: React.HTMLAttributes<HTMLElement> & { bare?: boolean }): JSX.Element; // <section>; bare drops border and background
+  export function SectionHeader(props: { title: string; description?: React.ReactNode; action?: React.ReactNode }): JSX.Element;
   export function SectionToolbar(props: { filters?: React.ReactNode; search?: React.ReactNode; bulk?: React.ReactNode }): JSX.Element;
-  export function SectionRow(props: { label: React.ReactNode; description?: React.ReactNode; control?: React.ReactNode; className?: string }): JSX.Element;
   export function SectionFooter(props: { note?: React.ReactNode; children?: React.ReactNode }): JSX.Element;
+  export function SectionFirstRun(props: { title: string; description: string; action?: React.ReactNode; example?: React.ReactNode; exampleLabel?: string }): JSX.Element;
+  export function SectionError(props: { message: string; onRetry?: () => void }): JSX.Element;
   ```
-- The web file re-exports all six by file path and adds `SectionLinkRow({ href, title, description })` using `next/link`.
 
-Classes (§5.5, §11.4): `Section` `overflow-hidden rounded-md border border-edge bg-surface-card`; `SectionHeader` `flex items-center justify-between gap-3 border-b border-edge-strong px-4 py-3` with an `<h2 className="text-base font-semibold text-content">`; `SectionToolbar` `flex items-center gap-3 border-b border-edge px-4`, `filters` in a `min-w-0 flex-1 overflow-x-auto` strip, `bulk` shown in place of `filters` when present; rows `px-4 py-3` with `border-t border-edge` between; `SectionFooter` `flex items-center justify-between gap-3 border-t border-edge px-4 py-2 text-xs text-content-secondary`.
+Classes (§5.5, §11.4): `Section` `overflow-hidden rounded-md border border-edge bg-surface-card`; `SectionHeader` `flex items-center justify-between gap-3 border-b border-edge-strong px-4 py-3` with an `<h2 className="text-base font-semibold text-content">`; `SectionToolbar` `flex items-center gap-3 border-b border-edge px-4`, `filters` in a `min-w-0 flex-1 overflow-x-auto` strip marked `data-filters`, `bulk` shown in place of `filters` when present; `SectionFooter` `flex items-center justify-between gap-3 border-t border-edge px-4 py-2 text-xs text-content-secondary`.
 
-- [ ] **Step 1: Pre-check.** `grep -n "^export function" apps/web/src/components/settings/settings-layout.tsx` lists the six Settings parts these mirror; read `SettingsRow` and `SettingsCardFooter` for behaviour to keep.
+`SectionFirstRun` (§7) is the one first-run shape every pilot page uses: an `<h3 className="text-base font-semibold">`, the sentence in `text-sm text-content-secondary`, the action, then, when `example` is given, the example under a `text-xs` label reading `exampleLabel` with `aria-hidden` on the example itself (it is an illustration, not a record). `SectionError` renders `role="alert"` with the message and, when `onRetry` is given, a "Try again" button. Neither needs `"use client"`.
+
+- [ ] **Step 1: Pre-check.** `grep -n "^export function" apps/web/src/components/settings/settings-layout.tsx` lists the six Settings parts; they are left untouched here. `sed -n 1,60p apps/web/src/components/shared/setup-guide/setup-slot.tsx`: `SetupSlot` is a per-file upload slot inside the multi-step `SetupGuide`, not a first-run block for a one-action page, so `SectionFirstRun` does not reuse it. If that file has since gained a generic example or placeholder part, use it for `example` and report.
 - [ ] **Step 2: Write the failing tests**
 
 ```tsx
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { Section, SectionFooter, SectionHeader, SectionToolbar } from '../section';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { Section, SectionError, SectionFirstRun, SectionFooter, SectionHeader, SectionToolbar } from '../section';
 
 describe('Section kit', () => {
   it('titles a section with an h2', () => {
@@ -416,11 +209,24 @@ describe('Section kit', () => {
     expect(screen.getByText('Showing 4')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Load more' })).toBeVisible();
   });
+  it('labels a first-run example and hides it from assistive tech', () => {
+    render(<SectionFirstRun title="No packages logged yet" description="Log the first delivery." example={<p>FedEx box</p>} exampleLabel="Example of a logged package" />);
+    expect(screen.getByRole('heading', { level: 3, name: 'No packages logged yet' })).toBeVisible();
+    expect(screen.getByText('Example of a logged package')).toBeVisible();
+    expect(screen.getByText('FedEx box').closest('[aria-hidden="true"]')).not.toBeNull();
+  });
+  it('announces an error and retries', () => {
+    const onRetry = vi.fn();
+    render(<SectionError message="We couldn't load packages." onRetry={onRetry} />);
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't load packages.");
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
 });
 ```
 
-- [ ] **Step 3: Run to verify failure**, **Step 4: implement** both files, **Step 5: run to verify pass**; then `pnpm --filter @propertypro/ui build && pnpm guard:class-resolution` — exit 0.
-- [ ] **Step 6: Commit.** `git commit -m "ui: shared Section kit (header, toolbar, row, footer, group)"`
+- [ ] **Step 3: Run to verify failure**, **Step 4: implement**, **Step 5: run to verify pass**; then `pnpm guard:class-resolution` — exit 0.
+- [ ] **Step 6: Commit.** `git commit -m "ui: Section kit (header, toolbar, footer, first-run, error)"`
 
 ---
 
@@ -431,11 +237,11 @@ describe('Section kit', () => {
 - Test: `packages/ui/src/components/shared/__tests__/record-row.test.tsx`
 
 **Interfaces:**
-- Consumes: `StatusGlyph` (Task 2), `Icon` (Task 4).
+- Consumes: `StatusGlyph` (Task 2).
 - Produces:
   ```ts
   export interface RecordRowProps {
-    lead: React.ReactNode;            // a <StatusGlyph hideLabel> or an <Icon>
+    lead: React.ReactNode;            // a <StatusGlyph hideLabel>, or null
     title: React.ReactNode;
     statusWord: string;               // rendered first in the meta line
     meta?: string[];                  // joined with " · " after the status word
@@ -491,10 +297,12 @@ describe('RecordRow', () => {
 - Produces:
   ```ts
   type Slot = React.ReactNode;
+  /** The only value a panel's "About" accepts. Produced by `describeAccess` (Task 10), never written by hand. */
+  export type AccessSentence = string & { readonly __brand: 'AccessSentence' };
   export type SidePanelProps =
-    | { template: 'list' | 'canvas'; glance?: Slot; attention?: Slot; shortcuts?: Slot; about?: Slot }
-    | { template: 'detail'; details?: Slot; attention?: Slot; related?: Slot; about?: Slot }
-    | { template: 'form'; preview?: Slot; attention?: Slot; about?: Slot }
+    | { template: 'list' | 'canvas'; glance?: Slot; attention?: Slot; shortcuts?: Slot; about?: AccessSentence }
+    | { template: 'detail'; details?: Slot; attention?: Slot; related?: Slot; about?: AccessSentence }
+    | { template: 'form'; preview?: Slot; attention?: Slot; about?: AccessSentence }
     | { template: 'help'; onThisPage?: Slot; related?: Slot };
   export interface PanelRegion { heading: string; content: React.ReactNode }
   /** Positions 1-2 and 3-4, in order, with their headings. Empty positions are dropped. */
@@ -509,17 +317,19 @@ describe('RecordRow', () => {
 
 Headings by slot: `glance` "At a glance"; `details` "Details"; `preview` "Preview"; `onThisPage` "On this page"; `attention` "Needs attention"; `shortcuts` "Shortcuts"; `related` "Related"; `about` "About". `lead` is positions 1 and 2, `trail` positions 3 and 4. `PanelGlance` renders the figure in `font-display text-3xl`, the unit in `text-sm text-content-secondary`, a proportion bar when `of` is given, and `data-source={source}` on its root (§14.1: every figure names the function it comes from). `PanelAttention` with `lead`/`title` renders an alert icon, `<strong>{lead}:</strong> {title}`, a left rule `border-l-2 border-status-warning`, no tinted background; with `none`, one `text-sm text-content-secondary` sentence.
 
-- [ ] **Step 1: Pre-check.** `grep -n "font-display\|fontFamily" apps/web/tailwind.config.ts | head -5` shows a `display` family class; if the class is named differently, use that name here and in Task 9.
+- [ ] **Step 1: Pre-check.** `grep -n "display:" apps/web/tailwind.config.ts` shows the `display` font family (line 15), so the class is `font-display`.
 - [ ] **Step 2: Write the failing tests**
 
 ```tsx
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { isPanelWorthDrawing, PanelAttention, PanelGlance, panelRegions } from '../side-panel';
+import { type AccessSentence, isPanelWorthDrawing, PanelAttention, PanelGlance, panelRegions } from '../side-panel';
+
+const about = (s: string) => s as AccessSentence; // tests only; pages get one from describeAccess
 
 describe('SidePanel', () => {
   it('orders positions regardless of how props are written', () => {
-    const r = panelRegions({ template: 'list', about: 'a', shortcuts: 's', attention: 'n', glance: 'g' });
+    const r = panelRegions({ template: 'list', about: about('a'), shortcuts: 's', attention: 'n', glance: 'g' });
     expect(r.lead.map((x) => x.heading)).toEqual(['At a glance', 'Needs attention']);
     expect(r.trail.map((x) => x.heading)).toEqual(['Shortcuts', 'About']);
   });
@@ -528,13 +338,17 @@ describe('SidePanel', () => {
     expect([...r.lead, ...r.trail].map((x) => x.heading)).toEqual(['Details', 'Related']);
   });
   it('is not worth drawing with only About', () => {
-    expect(isPanelWorthDrawing({ template: 'list', about: 'Managers can send alerts.' })).toBe(false);
+    expect(isPanelWorthDrawing({ template: 'list', about: about('Managers can send alerts.') })).toBe(false);
     expect(isPanelWorthDrawing({ template: 'list', glance: 'g' })).toBe(true);
     expect(isPanelWorthDrawing({ template: 'list' })).toBe(false);
   });
   it('rejects a position that belongs to another template', () => {
     // @ts-expect-error a detail panel has no shortcuts
     panelRegions({ template: 'detail', shortcuts: 's' });
+  });
+  it('refuses a hand-written About sentence', () => {
+    // @ts-expect-error About comes from describeAccess, not from a string literal
+    panelRegions({ template: 'list', about: 'Managers can send alerts.' });
   });
   it('names where a figure comes from', () => {
     const { container } = render(<PanelGlance figure="7" unit="awaiting pickup" source="usePackages" />);
@@ -556,10 +370,10 @@ describe('SidePanel', () => {
 
 ---
 
-### Task 8: `PageLayout`, `PageTabs`, and the `cq-xl` variant
+### Task 8: `PageLayout` and the `cq-xl` variant
 
 **Files:**
-- Create: `packages/ui/src/components/shared/page-layout.tsx`, `packages/ui/src/components/shared/page-tabs.tsx`
+- Create: `packages/ui/src/components/shared/page-layout.tsx`
 - Modify: `apps/web/tailwind.config.ts` (add `cq-xl` beside `cq-lg`, near line 310)
 - Test: `packages/ui/src/components/shared/__tests__/page-layout.test.tsx`
 
@@ -579,11 +393,9 @@ describe('SidePanel', () => {
   }
   export function PageLayout(props: PageLayoutProps): JSX.Element;
   export function useInPageLayout(): boolean;                       // true under a PageLayout
-  export interface PageTab { id: string; label: string; count?: number; href: string }
-  export function PageTabs(props: { tabs: PageTab[]; active: string; renderLink: (tab: PageTab, className: string, children: React.ReactNode) => React.ReactNode }): JSX.Element;
   ```
 
-Rules (§5.1, §5.4, §13): the root is `<div data-page-template={template} class="cq flex flex-col gap-5">`. Order in the document: banner, header, tabs, then a grid holding lead regions (`<aside aria-label="Summary">`), the main column, trail regions (`<aside aria-label="More about this page">`) — in that DOM order, always. Layout: with `records` `rows` or `cards`, the grid is one column by default and `cq-lg:grid-cols-[minmax(0,1fr)_17.5rem]` with lead and trail both placed in column 2 by `grid-column`/`grid-row`, main spanning both rows in column 1. With `records="table"` the same switch happens at `cq-xl:` and not at `cq-lg:`. No `order-*` utilities and no reversed flex: placement is by grid lines only. When `panel` is absent or `isPanelWorthDrawing` is false, neither aside renders; if the panel had an `about`, it renders as a `text-sm text-content-secondary` paragraph directly under the header. `template="focus"` ignores `panel` and centres children at `max-w-2xl`. `PageTabs` is a `<nav aria-label="Sections">` of links; the active one has `aria-current="page"` and `border-b-2 border-content` (ink, not coral); a count renders in `text-xs tabular-nums`.
+Rules (§5.1, §5.4, §13): the root is `<div data-page-template={template} class="cq flex flex-col gap-5">`. Order in the document: banner, header, tabs, then a grid holding lead regions (`<aside aria-label="Summary">`), the main column, trail regions (`<aside aria-label="More about this page">`) — in that DOM order, always. Layout: with `records` `rows` or `cards`, the grid is one column by default and `cq-lg:grid-cols-[minmax(0,1fr)_17.5rem]` with lead and trail both placed in column 2 by `grid-column`/`grid-row`, main spanning both rows in column 1. With `records="table"` the same switch happens at `cq-xl:` and not at `cq-lg:`. No `order-*` utilities and no reversed flex: placement is by grid lines only. When `panel` is absent or `isPanelWorthDrawing` is false, neither aside renders; if the panel had an `about`, it renders as a `text-sm text-content-secondary` paragraph directly under the header. `template="focus"` ignores `panel` and centres children at `max-w-2xl`. The `tabs` slot takes whatever the page passes; the kit ships no tab component (Task 16c passes a Radix `TabsList`).
 
 `cq-xl` is `@container cq (min-width: 1280px)`.
 
@@ -594,7 +406,9 @@ Rules (§5.1, §5.4, §13): the root is `<div data-page-template={template} clas
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { PageLayout, useInPageLayout } from '../page-layout';
-import { PageTabs } from '../page-tabs';
+import type { AccessSentence } from '../side-panel';
+
+const about = (s: string) => s as AccessSentence;
 
 function Probe() { return <span>{useInPageLayout() ? 'in' : 'out'}</span>; }
 
@@ -615,11 +429,11 @@ describe('PageLayout', () => {
     expect(cls).not.toMatch(/cq-lg:grid-cols/);
   });
   it('never reorders with CSS', () => {
-    const { container } = render(<PageLayout template="list" header={null} panel={{ template: 'list', glance: 'g', about: 'a' }}>x</PageLayout>);
+    const { container } = render(<PageLayout template="list" header={null} panel={{ template: 'list', glance: 'g', about: about('a') }}>x</PageLayout>);
     expect(container.innerHTML).not.toMatch(/\border-(first|last|\d)/);
   });
   it('folds an About-only panel into a line under the header', () => {
-    const { container } = render(<PageLayout template="list" header={<h1>Forum</h1>} panel={{ template: 'list', about: 'Anyone on the board can post.' }}>x</PageLayout>);
+    const { container } = render(<PageLayout template="list" header={<h1>Forum</h1>} panel={{ template: 'list', about: about('Anyone on the board can post.') }}>x</PageLayout>);
     expect(container.querySelector('aside')).toBeNull();
     expect(screen.getByText('Anyone on the board can post.')).toBeVisible();
   });
@@ -627,43 +441,42 @@ describe('PageLayout', () => {
     render(<><Probe /><PageLayout template="list" header={<Probe />}>x</PageLayout></>);
     expect(screen.getAllByText(/in|out/).map((e) => e.textContent)).toEqual(['out', 'in']);
   });
-  it('marks the active tab without coral', () => {
-    render(<PageTabs tabs={[{ id: 'a', label: 'Visitors', href: '?tab=a', count: 5 }, { id: 'b', label: 'Denied list', href: '?tab=b' }]} active="a" renderLink={(t, c, ch) => <a href={t.href} className={c} aria-current={t.id === 'a' ? 'page' : undefined}>{ch}</a>} />);
-    const active = screen.getByRole('link', { name: /Visitors/ });
-    expect(active).toHaveAttribute('aria-current', 'page');
-    expect(active.className).not.toMatch(/interactive/);
-  });
 });
 ```
 
-- [ ] **Step 3 to 5:** run to fail; add the `cq-xl` variant; implement both files (`page-layout.tsx` needs `"use client"` for the context — it is the only kit file that does); run to pass; `pnpm --filter @propertypro/ui build && pnpm guard:class-resolution && pnpm exec tsx scripts/verify-shared-side-effects.ts --root packages/ui/src` — the last must report no finding other than `"use client"` prologues and `displayName` assignments.
-- [ ] **Step 6: Commit.** `git commit -m "ui: PageLayout and PageTabs; table pages hold the panel to a wider box"`
+- [ ] **Step 3 to 5:** run to fail; add the `cq-xl` variant; implement (`page-layout.tsx` needs `"use client"` for the context — it is the only kit file that does); run to pass; `pnpm guard:class-resolution && pnpm exec tsx scripts/verify-shared-side-effects.ts --root packages/ui/src` — the last must report no finding other than `"use client"` prologues and `displayName` assignments.
+- [ ] **Step 6: Commit.** `git commit -m "ui: PageLayout; table pages hold the panel to a wider box"`
 
 ---
 
 ### Task 9: `PageHeader` paints inside a `PageLayout`
 
 **Files:**
-- Modify: `apps/web/src/components/shared/page-header.tsx`
+- Modify: `apps/web/src/components/shared/page-header.tsx`, `.claude/rules/design.md` (the one paragraph this makes false)
 - Test: `apps/web/__tests__/components/shared/page-header.test.tsx` (extend; keep every existing case)
 
 **Interfaces:**
-- Consumes: `useInPageLayout` (Task 8), `Icon`, `IconKey` (Task 4).
-- Produces: `PageHeaderProps` gains `icon?: IconKey` and `status?: React.ReactNode`. Outside a `PageLayout` the component behaves exactly as today.
+- Consumes: `useInPageLayout` (Task 8).
+- Produces: `PageHeaderProps` gains `navId?: string` and `status?: React.ReactNode`. Outside a `PageLayout` the component behaves exactly as today. `navId` is a string, not an icon component, because server pages render `PageHeader` and a function cannot cross from a server component to a client one. `PageHeader` looks the icon up itself with `NAV_ITEMS.find((i) => i.id === navId)?.icon`, so a page title and the sidebar cannot show different icons for one section; an unknown id renders no place mark.
 
-Rules (§5.2): inside a layout the `<h1>` is `font-display text-3xl font-medium tracking-tight text-content` with no `sr-only`; `description` renders as `text-sm text-content-secondary` under it; `icon` renders the place mark before the title: a `size-9 rounded-md bg-surface-inverse text-content-inverse` tile holding `<Icon size="md">`; `status` renders after the title; the block has `border-b border-edge-strong pb-4`. `children` and `actions` keep their current positions.
+Rules (§5.2): inside a layout the `<h1>` is `font-display text-3xl font-medium tracking-tight text-content` with no `sr-only`; `description` renders as `text-sm text-content-secondary` under it; `navId` renders the place mark before the title: a `size-9 rounded-md bg-surface-inverse text-content-inverse` tile holding the icon at `size-5` with `strokeWidth={1.6}` and `aria-hidden`; `status` renders after the title; the block has `border-b border-edge-strong pb-4`. `children`, `actions` and the Help button keep their current positions. `data-page-header="true"` stays on the root: `shell-breadcrumbs.tsx:58` reads the title through it.
 
-- [ ] **Step 1: Pre-check.** `sed -n 1,78p apps/web/src/components/shared/page-header.tsx` matches the shape in the spec history (an `h1.sr-only`, `_description` unused, a toolbar of `children` and `actions`); `grep -n "sr-only\|does not paint" apps/web/__tests__/components/shared/page-header.test.tsx` shows the two pinned assertions.
+- [ ] **Step 1: Pre-check.** `sed -n 40,78p apps/web/src/components/shared/page-header.tsx` shows `'use client'`, an `h1.sr-only`, `_description` unused, and a toolbar of `children`, `actions` and Help; `grep -n "export const NAV_ITEMS\|^import" apps/web/src/components/layout/nav-config.ts` finds the list and shows the file imports nothing server-only (the client sidebar already imports it); `grep -n "does not paint" .claude/rules/design.md` finds the paragraph.
 - [ ] **Step 2: Add the failing tests** (below the existing ones)
 
 ```tsx
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 
-it('paints the title and description inside a PageLayout', () => {
-  render(<PageLayout template="list" header={<PageHeader title="Packages" description="Log deliveries as they arrive." icon="packages" />}>x</PageLayout>);
+it('paints the title, description and place mark inside a PageLayout', () => {
+  const { container } = render(<PageLayout template="list" header={<PageHeader title="Packages" description="Log deliveries as they arrive." navId="packages" />}>x</PageLayout>);
   const h1 = screen.getByRole('heading', { level: 1, name: 'Packages' });
   expect(h1).not.toHaveClass('sr-only');
   expect(screen.getByText('Log deliveries as they arrive.')).toBeVisible();
+  expect(container.querySelector('[data-page-header] svg')).toHaveAttribute('aria-hidden', 'true');
+});
+it('draws no place mark for an id the navigation does not know', () => {
+  const { container } = render(<PageLayout template="list" header={<PageHeader title="X" navId="nope" hideHelpButton />}>x</PageLayout>);
+  expect(container.querySelector('[data-page-header] svg')).toBeNull();
 });
 it('still hides the title and drops the description outside a PageLayout', () => {
   render(<PageHeader title="Packages" description="Log deliveries as they arrive." />);
@@ -672,8 +485,8 @@ it('still hides the title and drops the description outside a PageLayout', () =>
 });
 ```
 
-- [ ] **Step 3: Run to verify failure.** `pnpm --filter @propertypro/ui build && pnpm test apps/web/__tests__/components/shared/page-header.test.tsx` — the first new test FAILS on `sr-only`; all earlier tests pass.
-- [ ] **Step 4: Implement.** Rewrite the file's docblock to describe both behaviours.
+- [ ] **Step 3: Run to verify failure.** `pnpm test apps/web/__tests__/components/shared/page-header.test.tsx` — the first new test FAILS on `sr-only`; all earlier tests pass.
+- [ ] **Step 4: Implement.** Rewrite the file's docblock to describe both behaviours. In `.claude/rules/design.md`, change the "`PageHeader` does not paint its title or description" paragraph to say it paints inside a `PageLayout` and stays hidden on every page not yet moved; change nothing else there.
 - [ ] **Step 5: Run to verify pass**, then `pnpm guard:page-header && pnpm guard:breadcrumbs` — exit 0.
 - [ ] **Step 6: Revert-check.** Remove the `useInPageLayout()` branch; the first new test goes red, the second and all older tests stay green; restore.
 - [ ] **Step 7: Commit.** `git commit -m "web: PageHeader paints its title and description only inside a PageLayout"`
@@ -687,185 +500,236 @@ it('still hides the title and drops the description outside a PageLayout', () =>
 - Test: `apps/web/__tests__/lib/access/describe-access.test.ts`
 
 **Interfaces:**
-- Consumes: `RBAC_MATRIX`, `RBAC_RESOURCES`, `MATRIX_ROLES`, `RbacResource` from `@propertypro/shared`.
-- Produces: `export function describeAccess(resource: RbacResource): string;`
+- Consumes: `RBAC_MATRIX`, `RBAC_RESOURCES`, `MATRIX_ROLES`, `COMMUNITY_TYPES`, `RbacResource`, `CommunityType` from `@propertypro/shared`; `AccessSentence` from `@propertypro/ui/components/shared/side-panel` (Task 7).
+- Produces:
+  ```ts
+  /** What a resident's read covers. The matrix cannot express this, so the page states it. */
+  export type ResidentScope = 'all' | 'own' | 'sent-to-them';
+  export function describeAccess(communityType: CommunityType, resource: RbacResource, residentScope?: ResidentScope): AccessSentence; // residentScope defaults to 'all'
+  ```
 
-Rules (§14.2): the sentence is built only from the matrix. Role words: `manager` "Managers", `owner` "Owners", `tenant` "Tenants"; owners and tenants together are "Residents". Templates, chosen by who can write and who can only read:
+Rules (§14.2): the matrix is `RBAC_MATRIX[communityType][role][resource]` with `read` and `write` booleans (`rbac-matrix.ts:124-127`). Each role's capability is `write`, else `read`, else none. A role with none is never named. When `owner` and `tenant` have the same capability they are named together as "Residents"; otherwise "Owners" and "Tenants" get a sentence each. The manager sentence comes first. Sentences are joined by one space.
 
-- writers and read-only roles both exist: `"{Writers} can add and change these. {Readers} can see them."`
-- everyone who can read can write: `"{Writers} can add and change these."`
-- nobody can write: `"{Readers} can see these."`
-- a role with no read is never named.
+| Who | Capability | Sentence |
+|---|---|---|
+| manager | write | `Managers can add and change these.` |
+| manager | read | `Managers can see these.` |
+| residents | write | `{Name} can add and change {object}.` |
+| residents | read | `{Name} can see {object}.` |
 
-- [ ] **Step 1: Pre-check.** `sed -n 430,450p packages/shared/src/rbac-matrix.ts` shows `RBAC_MATRIX` keyed by role then resource with `read`/`write` booleans. If the shape differs (resource then role), keep the public signature and adapt the lookup.
+`{object}` is `them` for scope `all`, `only their own` for `own`, `only the ones sent to them` for `sent-to-them`.
+
+- [ ] **Step 1: Pre-check.** `sed -n 122,128p packages/shared/src/rbac-matrix.ts` shows `MATRIX_ROLES` and the `Record<CommunityType, Record<MatrixRole, Record<RbacResource, RbacCell>>>` shape.
 - [ ] **Step 2: Write the failing tests**
 
 ```ts
-import { MATRIX_ROLES, RBAC_MATRIX, RBAC_RESOURCES } from '@propertypro/shared';
+import { COMMUNITY_TYPES, MATRIX_ROLES, RBAC_MATRIX, RBAC_RESOURCES } from '@propertypro/shared';
 import { describe, expect, it } from 'vitest';
 import { describeAccess } from '@/lib/access/describe-access';
 
 const WORD = { manager: 'Managers', owner: 'Owners', tenant: 'Tenants' } as const;
+const cases = COMMUNITY_TYPES.flatMap((type) => RBAC_RESOURCES.map((resource) => [type, resource] as const));
 
 describe('describeAccess', () => {
-  it.each(RBAC_RESOURCES)('%s names exactly the roles the matrix admits', (resource) => {
-    const sentence = describeAccess(resource);
+  it.each(cases)('%s %s names exactly the roles the matrix admits', (type, resource) => {
+    const sentence = describeAccess(type, resource);
     for (const role of MATRIX_ROLES) {
-      const canRead = RBAC_MATRIX[role][resource].read;
+      const canRead = RBAC_MATRIX[type][role][resource].read;
       const named = sentence.includes(WORD[role]) || (role !== 'manager' && sentence.includes('Residents'));
-      expect(named, `${role} on ${resource}: "${sentence}"`).toBe(canRead);
+      expect(named, `${role}: "${sentence}"`).toBe(canRead);
     }
   });
-  it('says Residents only when owners and tenants both have access', () => {
-    for (const resource of RBAC_RESOURCES) {
-      if (describeAccess(resource).includes('Residents')) {
-        expect(RBAC_MATRIX.owner[resource].read && RBAC_MATRIX.tenant[resource].read).toBe(true);
-      }
-    }
+  it.each(cases)('%s %s says Residents only when owners and tenants can do the same', (type, resource) => {
+    if (!describeAccess(type, resource).includes('Residents')) return;
+    const { owner, tenant } = RBAC_MATRIX[type];
+    expect(owner[resource]).toEqual(tenant[resource]);
+    expect(owner[resource].read).toBe(true);
+  });
+  it('says when residents see only their own', () => {
+    expect(describeAccess('condo_718', 'packages', 'own')).toBe('Managers can add and change these. Residents can see only their own.');
+  });
+  it('says when owners see only what was sent to them, and never names tenants who cannot read', () => {
+    expect(describeAccess('condo_718', 'emergency_broadcasts', 'sent-to-them')).toBe('Managers can add and change these. Owners can see only the ones sent to them.');
   });
   it('never claims something can be undone', () => {
-    for (const resource of RBAC_RESOURCES) expect(describeAccess(resource)).not.toMatch(/undo|undone|restore/i);
+    for (const [type, resource] of cases) expect(describeAccess(type, resource)).not.toMatch(/undo|undone|restore/i);
   });
 });
 ```
 
 - [ ] **Step 3 to 5:** run `pnpm test apps/web/__tests__/lib/access/describe-access.test.ts` to fail, implement, run to pass.
-- [ ] **Step 6: Commit.** `git commit -m "web: describeAccess builds the About sentence from the permission matrix"`
+- [ ] **Step 6: Revert-check.** Make the function ignore `residentScope`; the two scope tests go red, the matrix tests stay green; restore.
+- [ ] **Step 7: Commit.** `git commit -m "web: describeAccess builds the About sentence from the permission matrix"`
 
 ---
 
-### Task 11: The preview switch
+### Task 11: The preview gate
 
 **Files:**
-- Create: `apps/web/src/lib/design-preview.ts`, `apps/web/src/app/api/v1/account/design-preview/contract.ts`, `apps/web/src/app/api/v1/account/design-preview/route.ts`, `apps/web/src/components/settings/design-preview-row.tsx`
-- Modify: `apps/web/src/app/(authenticated)/settings/page.tsx` (render the row in the Display section when allowed), `.env.example` (document `DESIGN_PREVIEW_USER_IDS`)
-- Test: `apps/web/__tests__/lib/design-preview.test.ts`, `apps/web/__tests__/account/design-preview-route.test.ts`
+- Create: `apps/web/src/lib/design-preview.ts`
+- Modify: `.env.example` (document `DESIGN_PREVIEW_USER_IDS`)
+- Test: `apps/web/__tests__/lib/design-preview.test.ts`
 
 **Interfaces:**
-- Consumes: `getUserPreference(userId, key)`, `setUserPreference(userId, key, value)` from `@/lib/services/user-preferences-service`.
 - Produces:
   ```ts
-  export const DESIGN_PREVIEW_KEY = 'design_direction_preview';
-  export function isDesignPreviewAllowed(userId: string): boolean;          // userId is in env DESIGN_PREVIEW_USER_IDS (comma-separated)
-  export async function isDesignPreviewOn(userId: string): Promise<boolean>; // allowed AND the stored preference is exactly true; false on any error
+  export const DESIGN_PREVIEW_COOKIE = 'pp_design_preview';
+  /** True when the user is on the allow-list, or, outside a production build, when the cookie is "1". Never throws. */
+  export async function isDesignPreviewOn(userId: string): Promise<boolean>;
   ```
-- Route: `PATCH /api/v1/account/design-preview`, body `{ enabled: boolean }`, response `{ enabled: boolean }`, written through `runRoute` with a contract, wrapped in `withErrorHandler`. Auth chain: `requireAuthenticatedUserId`, then `if (!isDesignPreviewAllowed(userId)) throw new ForbiddenError(...)`. No community scope. Carries `// route-gate: self-scoped — writes only the caller's own preference` above the export.
 
-`isDesignPreviewOn` is wrapped in React `cache` so a page and its children read it once per request.
+Rules: the allow-list is env `DESIGN_PREVIEW_USER_IDS`, comma-separated Supabase user ids, whitespace trimmed, empty means nobody. The cookie is read with `cookies()` from `next/headers` and is honoured only when `process.env.NODE_ENV !== 'production'`; it exists so Playwright can switch the pilot on per browser context without restarting the dev server. The whole body is in a `try`; any error returns `false`. There is no stored preference, no API route and no settings control.
 
-- [ ] **Step 1: Pre-check.** `sed -n 15,45p apps/web/src/lib/services/user-preferences-service.ts` confirms the two signatures; open `apps/web/src/app/api/v1/account/profile/route.ts` and its contract as the pattern for a session-anchored body route.
+Above the function:
+
+```ts
+// ponytail: an env allow-list, so the owner cannot flip between old and new on one
+// account (compare with a second account or a second browser profile). Trigger: the
+// owner asks to flip back, or anyone other than the owner needs the preview.
+```
+
+- [ ] **Step 1: Pre-check.** `grep -rn "from 'next/headers'" apps/web/src/lib | head -3` shows `cookies`/`headers` used from server code in this app.
 - [ ] **Step 2: Write the failing tests**
 
 ```ts
-// design-preview.test.ts
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const { getUserPreferenceMock } = vi.hoisted(() => ({ getUserPreferenceMock: vi.fn() }));
-vi.mock('@/lib/services/user-preferences-service', () => ({ getUserPreference: getUserPreferenceMock, setUserPreference: vi.fn() }));
-import { isDesignPreviewAllowed, isDesignPreviewOn } from '@/lib/design-preview';
+const { cookieGet } = vi.hoisted(() => ({ cookieGet: vi.fn() }));
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: cookieGet }) }));
+import { isDesignPreviewOn } from '@/lib/design-preview';
 
-describe('design preview', () => {
-  beforeEach(() => { vi.stubEnv('DESIGN_PREVIEW_USER_IDS', 'u-1, u-2'); getUserPreferenceMock.mockReset(); });
-  it('allows only listed users', () => {
-    expect(isDesignPreviewAllowed('u-2')).toBe(true);
-    expect(isDesignPreviewAllowed('u-9')).toBe(false);
+describe('design preview gate', () => {
+  beforeEach(() => {
+    vi.stubEnv('DESIGN_PREVIEW_USER_IDS', 'u-1, u-2');
+    vi.stubEnv('NODE_ENV', 'production');
+    cookieGet.mockReset().mockReturnValue(undefined);
   });
-  it('is off when the list is unset', () => {
-    vi.stubEnv('DESIGN_PREVIEW_USER_IDS', '');
-    expect(isDesignPreviewAllowed('u-1')).toBe(false);
-  });
-  it('is on only for an allowed user whose preference is exactly true', async () => {
-    getUserPreferenceMock.mockResolvedValue(true);
-    expect(await isDesignPreviewOn('u-1')).toBe(true);
-    getUserPreferenceMock.mockResolvedValue('true');
-    expect(await isDesignPreviewOn('u-2')).toBe(false);
-  });
-  it('is off for a user removed from the list even if their preference is on', async () => {
-    getUserPreferenceMock.mockResolvedValue(true);
+  it('is on only for listed users', async () => {
+    expect(await isDesignPreviewOn('u-2')).toBe(true);
     expect(await isDesignPreviewOn('u-9')).toBe(false);
-    expect(getUserPreferenceMock).not.toHaveBeenCalled();
   });
-  it('is off, not an error, when the preference read throws', async () => {
-    getUserPreferenceMock.mockRejectedValue(new Error('db down'));
-    await expect(isDesignPreviewOn('u-1')).resolves.toBe(false);
+  it('is off for everyone when the list is unset', async () => {
+    vi.stubEnv('DESIGN_PREVIEW_USER_IDS', '');
+    expect(await isDesignPreviewOn('u-1')).toBe(false);
+    expect(await isDesignPreviewOn('')).toBe(false);
+  });
+  it('ignores the cookie in a production build', async () => {
+    cookieGet.mockReturnValue({ value: '1' });
+    expect(await isDesignPreviewOn('u-9')).toBe(false);
+  });
+  it('honours the cookie in development', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    cookieGet.mockReturnValue({ value: '1' });
+    expect(await isDesignPreviewOn('u-9')).toBe(true);
+    cookieGet.mockReturnValue({ value: 'true' });
+    expect(await isDesignPreviewOn('u-9')).toBe(false);
+  });
+  it('is off, not an error, when reading cookies throws', async () => {
+    vi.stubEnv('NODE_ENV', 'development');
+    cookieGet.mockImplementation(() => { throw new Error('no request scope'); });
+    await expect(isDesignPreviewOn('u-9')).resolves.toBe(false);
   });
 });
 ```
 
-The route test covers: 200 with `{ data: { enabled: true } }` and `setUserPreference` called with `('u-1', 'design_direction_preview', true)`; 401 when unauthenticated; 403 for a user not on the list with `setUserPreference` not called; 400 for a body without a boolean `enabled`.
-
-- [ ] **Step 3 to 5:** run both files to fail; implement; run to pass; `pnpm guard:contracts && pnpm guard:route-gates` — exit 0 and the Contracted count rises by one.
-- [ ] **Step 6: Settings row.** `DesignPreviewRow` is a client component rendering a `SettingsRow` labelled "Preview the new design" with the description "Shows redesigned pages to you only. Other people see no change." and a `Switch`. The settings page renders it only when `isDesignPreviewAllowed(userId)`.
-- [ ] **Step 7: Commit.** `git commit -m "web: owner-only design preview switch (allow-list plus per-user preference)"`
+- [ ] **Step 3 to 5:** run `pnpm test apps/web/__tests__/lib/design-preview.test.ts` to fail; implement; run to pass.
+- [ ] **Step 6: Revert-check.** Remove the `NODE_ENV !== 'production'` condition; "ignores the cookie in a production build" goes red, the rest stay green; restore.
+- [ ] **Step 7: Commit.** `git commit -m "web: owner-only design preview gate (env allow-list; dev-only cookie for e2e)"`
 
 The owner sets the list with `vercel env add DESIGN_PREVIEW_USER_IDS --no-sensitive` on the web project (their Supabase user id), then redeploys.
 
 ---
 
-### Task 12: Guards
+### Task 12: `guard:page-template`
+
+Runs after Task 16, in the last pull request, so the baseline is written once.
 
 **Files:**
-- Create: `scripts/verify-page-template.ts`, `scripts/page-template-baseline.json`, `scripts/verify-icons.ts`, `scripts/icons-baseline.json`, `scripts/verify-panel-copy.ts`
-- Modify: `package.json` (scripts `guard:page-template`, `guard:icons`, `guard:panel-copy`), `scripts/run-lint-guards.mjs` (add the three)
-- Test: `scripts/__tests__/verify-page-template.test.ts`, `scripts/__tests__/verify-icons.test.ts`, `scripts/__tests__/verify-panel-copy.test.ts`
+- Create: `scripts/verify-page-template.ts`, `scripts/page-template-baseline.json`
+- Modify: `package.json` (script `guard:page-template`), `scripts/run-lint-guards.mjs` (register it), `CLAUDE.md` (guard list; count 35 to 36, with the date)
+- Test: `scripts/__tests__/verify-page-template.test.ts`
 
 **Interfaces:**
-- Each script exports a pure `scan(root: string): Result` and decides whether to run with `isMainModule(import.meta.url)` from `scripts/lib/is-main-module.ts`. Each accepts `--root <dir>` through `scripts/lib/root-arg.ts` and `--write-baseline`. Exit 0 clean, 1 violations, 2 could not check (missing root, zero files scanned, parse failure).
+- The script exports a pure `scan(root: string): Result` and decides whether to run with `isMainModule(import.meta.url)` from `scripts/lib/is-main-module.ts`. It accepts `--root <dir>` through `scripts/lib/root-arg.ts` and `--write-baseline`. Exit 0 clean, 1 violations, 2 could not check (missing root, zero pages scanned, parse failure).
 
-Rules (§16):
+Rules (§16): roots under `apps/web/src/app`: `(authenticated)`, `(help)`, `auth`, `(auth)`, `sign`, `(print)`, `(site-editor)`, `public-transparency`, `demo`. `mobile` is excluded with the printed reason "phone app is a separate programme". A `page.tsx` passes when:
 
-- **`guard:page-template`.** Roots under `apps/web/src/app`: `(authenticated)`, `(help)`, `auth`, `(auth)`, `sign`, `(print)`, `(site-editor)`, `public-transparency`, `demo`. `mobile` is excluded with the printed reason "phone app is a separate programme". A `page.tsx` passes when it, or the one component named in a top-of-file `// page-template: delegated to <path>` comment, contains a JSX `PageLayout` element; or it contains a `redirect(` call and no JSX element; or it carries `// page-template:exempt — <reason>`. Every other page must be listed in the baseline (per-file). A baselined file that now passes is a stale entry and fails. Second rule in the same script, per-file shrink-only counts: string literals containing all three of `rounded-`, `border` and `bg-surface-` in `apps/web/src`, outside `components/ui/` and `components/shared/`. Prints: pages scanned, compliant, redirect-only, baselined, exempt.
-- **`guard:icons`.** In `apps/web/src` and `packages/ui/src/components/shared`: an import from `lucide-react` anywhere except `packages/ui/src/components/shared/icon.tsx`, `icon-registry.ts`, and type-only imports of `LucideIcon`; and a JSX element whose tag was imported from `lucide-react` carrying `size=`, `strokeWidth=` or a `className` containing `h-`/`w-`/`size-` followed by a digit. Per-file shrink-only baseline. `apps/admin` is excluded by name.
-- **`guard:panel-copy`.** In any file that imports from `components/shared/side-panel`: a string literal or JSX text matching `/\b(Managers?|Owners?|Tenants?|Residents?) (can|may|see|sees)\b|can be undone|cannot be undone/`. No baseline; escape hatch `// panel-copy:exempt — <reason>`. Use `collectCommentRanges` to ignore comments.
+- it contains a JSX `PageLayout` element; or
+- it carries a top-of-file `// page-template: delegated to <path>[, <path>…]` comment and **every** named file exists and contains a JSX `PageLayout` element (a page with a staff view and a resident view names both); or
+- it contains a `redirect(` call and no JSX element; or
+- it carries `// page-template:exempt — <reason>`.
 
-- [ ] **Step 1: Pre-check.** `sed -n 1,40p scripts/verify-page-padding.ts` and `cat scripts/lib/root-arg.ts scripts/lib/is-main-module.ts` for the house pattern; `grep -n "guard:page-padding" package.json scripts/run-lint-guards.mjs` for where to register.
-- [ ] **Step 2: Write the failing tests.** For each guard, three directions, with fixtures built under `fs.mkdtempSync(path.join(os.tmpdir(), 'guard-'))` (never inside the repo):
+Every other page must be listed in the per-file baseline. A baselined file that now passes is a stale entry and fails. The script prints: pages scanned, compliant, redirect-only, baselined, exempt.
+
+At the top of the script:
+
+```ts
+// ponytail: proves a page HAS a PageLayout view, not that customers are served it
+// (a pilot page still renders its old view to everyone off the allow-list).
+// Trigger: Task 19 removes the gate; delete this note then.
+```
+
+- [ ] **Step 1: Pre-check.** `sed -n 1,40p scripts/verify-page-padding.ts` and `cat scripts/lib/root-arg.ts scripts/lib/is-main-module.ts` for the house pattern; `grep -n "guard:page-padding" package.json scripts/run-lint-guards.mjs` for where to register; `ls apps/web/src/app` still lists all nine roots.
+- [ ] **Step 2: Write the failing tests**, with fixtures built under `fs.mkdtempSync(path.join(os.tmpdir(), 'guard-'))` (never inside the repo):
   - passes on the real repo with its baseline: `scan(repoRoot)` returns no violations and a scanned count above zero;
-  - fails on an injected violation: a fixture `page.tsx` returning `<div>hi</div>` is reported by path; a fixture importing `{ Siren } from 'lucide-react'` and rendering `<Siren className="h-4 w-4" />` is reported twice (import, sizing); a fixture importing `side-panel` and containing `"Managers can send alerts."` is reported;
-  - refuses on nothing to check: `scan` of an empty temp directory yields exit status 2, and of a missing directory 2.
-  - page-template only: a fixture with `redirect('/x')` and no JSX passes; a fixture with a `// page-template: delegated to ./view` comment passes when `view.tsx` holds `<PageLayout`, and fails when it does not; a baseline entry for a file that now passes is reported as stale.
-- [ ] **Step 3: Run to verify failure.** `pnpm test scripts/__tests__/verify-page-template.test.ts` (and the other two) — FAIL, modules not found.
-- [ ] **Step 4: Implement** the three scripts with the TypeScript parser (`ts.createSourceFile`), not regular expressions over raw text.
-- [ ] **Step 5: Seed baselines.** `pnpm exec tsx scripts/verify-page-template.ts --write-baseline` and `pnpm exec tsx scripts/verify-icons.ts --write-baseline`; read both files; confirm the page count is close to 130 and the icon file count close to 232.
-- [ ] **Step 6: Run to verify pass**, then `pnpm lint` — exit 0, and its summary lists 38 guards.
-- [ ] **Step 7: Commit.** `git commit -m "guards: page-template, icons and panel-copy, each with a shrink-only baseline"`
+  - a fixture `page.tsx` returning `<div>hi</div>` is reported by path;
+  - a fixture with `redirect('/x')` and no JSX passes;
+  - a fixture delegating to `./a, ./b` passes when both hold `<PageLayout`, and fails naming `./b` when only `a` does, and fails when `./b` does not exist;
+  - a baseline entry for a file that now passes is reported as stale;
+  - `scan` of an empty temp directory, and of a missing one, yields status 2.
+- [ ] **Step 3: Run to verify failure.** `pnpm test scripts/__tests__/verify-page-template.test.ts` — FAIL, module not found.
+- [ ] **Step 4: Implement** with the TypeScript parser (`ts.createSourceFile`), not regular expressions over raw text.
+- [ ] **Step 5: Add the delegated comments** to the five pilot `page.tsx` files (Packages, Visitors, and the Emergency list, detail and new pages; Packages names both of its views), naming the view files Tasks 13 to 16 created. Then seed: `pnpm exec tsx scripts/verify-page-template.ts --write-baseline`; read the file; confirm none of the five pilot pages is in it and print the counts.
+- [ ] **Step 6: Run to verify pass**, then `pnpm lint` — exit 0, and its summary lists 36 guards.
+- [ ] **Step 7: Commit.** `git commit -m "guards: page-template, with a shrink-only baseline"`
 
 ---
 
 ### Task 13: Pilot — Packages, staff view
 
 **Files:**
-- Create: `apps/web/src/components/packages/next/packages-staff-next.tsx`
-- Modify: `apps/web/src/app/(authenticated)/dashboard/packages/page.tsx` (branch on the preview switch), `apps/web/src/components/packages/package-columns.tsx` only if a column needs a priority order (see rules)
-- Test: `apps/web/__tests__/packages/packages-staff-next.test.tsx`
+- Create: `apps/web/src/components/packages/PackagePickupDialog.tsx`, `apps/web/src/components/packages/packages-staff-page.tsx`
+- Modify: `apps/web/src/components/packages/PackageStaffView.tsx` (use the extracted dialog; no behaviour change), `apps/web/src/app/(authenticated)/dashboard/packages/page.tsx` (branch on the gate)
+- Test: `apps/web/__tests__/packages/package-pickup-dialog.test.tsx`, `apps/web/__tests__/packages/packages-staff-page.test.tsx`
 
 **Interfaces:**
-- Consumes: `PageLayout` (Task 8), `PageHeader` (Task 9), `Section*` (Task 5), `PanelGlance`, `PanelLinks` (Task 7), `describeAccess` (Task 10), `isDesignPreviewOn` (Task 11), `usePackages`, `usePickupPackage` from `@/hooks/use-packages`, the existing `DataTable`, `QuickFilterTabs`, `PackageLogForm`.
-- Produces: `export function PackagesStaffNext({ communityId }: { communityId: number }): JSX.Element` (client component).
+- Consumes: `PageLayout` (Task 8), `PageHeader` (Task 9), `Section*` (Task 5), `PanelGlance` (Task 7), `describeAccess` (Task 10), `isDesignPreviewOn` (Task 11), `usePackages`, `usePickupPackage`, `PackageListItem` from `@/hooks/use-packages`, the existing `DataTable`, `QuickFilterTabs`, `getPackageColumns`, `PackageLogForm`.
+- Produces:
+  ```ts
+  export function PackagePickupDialog(props: { communityId: number; pkg: PackageListItem | null; onClose: () => void }): JSX.Element;
+  export function PackagesStaffPage(props: { communityId: number; about: AccessSentence }): JSX.Element; // client component
+  ```
 
 Decisions (§5, §14.1):
 
+- **Extract first.** The "Mark as Picked Up" dialog, its name field and `handlePickup` live inline in `PackageStaffView.tsx:107-145`. Move them, unchanged, into `PackagePickupDialog` (it owns the name state and calls `usePickupPackage`), and make `PackageStaffView` render it. Both views then share one dialog.
 - `PageLayout template="list" records="table"`.
-- Header: title "Packages", icon `packages`, description "Log deliveries as they arrive. Residents are told when a package is ready to collect.", one primary "Log a package" opening the existing log form.
-- Toolbar filters: the existing three (`pending` labelled "Awaiting pickup", `picked_up` "Picked up", all "All"), with counts computed from the loaded list. No search unless the current view has one.
+- Header: title "Packages", `navId="packages"`, description "Log deliveries as they arrive. Residents are told when a package is ready to collect.", one primary "Log a package" opening the existing `PackageLogForm`.
+- Toolbar filters: the existing three, relabelled "Awaiting pickup" (`pending`), "Picked up" (`picked_up`), "All", with counts from the loaded list. No search: the current view has none.
 - Footer: "Showing N". No "of M".
-- Panel, position 1: figure = count of packages whose `status !== 'picked_up'`, unit "awaiting pickup", `source="usePackages"`, computed from the same query result as the table. Lines: "Picked up" with the count of `picked_up`. No other lines.
-- Panel, position 2: **omitted.** The code has no rule for a package waiting too long, so no attention condition exists. Do not invent one.
-- Panel, position 3: omitted unless the current page already links elsewhere.
-- Panel, position 4: `describeAccess('packages')`; if `packages` is not an `RbacResource`, use the resource the route's `requirePermission` call names.
-- States: loading uses skeleton rows in the section and `aria-busy`; error renders the section error block with "Try again" calling the query's `refetch`; zero packages renders the first-run section: heading "No packages logged yet", sentence "Log the first delivery and the resident gets a notice straight away.", the primary action, and one example row built with the real columns and labelled "Example of a logged package"; a filter with no matches renders "Nothing matches this filter" with "Show all".
-- `page.tsx`: after resolving `userId`, `const preview = await isDesignPreviewOn(userId)`; when true and the viewer is staff, render `<PackagesStaffNext communityId={…} />` in place of the current header and `PackageStaffView`. The `FeatureGate` wrapper stays.
+- Panel position 1: figure = count of packages whose `status !== 'picked_up'`, unit "awaiting pickup", `source="usePackages"`, from the same query result as the table. One line: "Picked up" with the count of `picked_up`.
+- Panel positions 2 and 3: **omitted.** The code has no rule for a package waiting too long, and the current page links nowhere else.
+- Panel position 4: the `about` prop. `page.tsx` builds it with `describeAccess(membership.communityType, 'packages', 'own')` and passes it down, so the client component does not import the matrix.
+- States: loading uses the `DataTable`'s own skeleton inside the section, with `aria-busy` on the section; error renders `SectionError` with the query's `refetch`; zero packages renders `SectionFirstRun` with title "No packages logged yet", description "Log the first delivery and the resident gets a notice straight away.", the primary action, `exampleLabel` "Example of a logged package" and an example built from the real columns; a filter with no matches renders "Nothing matches this filter" with a "Show all" button.
+- `page.tsx`: after resolving `userId`, `const preview = await isDesignPreviewOn(userId)`. When `preview && isStaff`, render `<PackagesStaffPage … />` inside the existing `FeatureGate`, in place of the current `PageHeader` and `PackageStaffView`. Above the branch:
 
-- [ ] **Step 1: Pre-check.** `sed -n 36,60p apps/web/src/components/packages/PackageStaffView.tsx` shows `usePackages(communityId)` and the three filters; `sed -n 15,35p apps/web/src/hooks/use-packages.ts` shows the `status` union `'received' | 'notified' | 'picked_up'`; `grep -n "requirePermission\|isAdminRole" "apps/web/src/app/(authenticated)/dashboard/packages/page.tsx"` shows how staff is decided.
-- [ ] **Step 2: Write the failing tests** (mock `@/hooks/use-packages` with `vi.hoisted`):
-  - with three packages (two `received`, one `picked_up`): the `h1` "Packages" is visible; the glance figure reads `2` with "awaiting pickup" and its root has `data-source="usePackages"`; the "Awaiting pickup" filter shows `2`; the footer reads "Showing 2".
+  ```ts
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  ```
+
+- [ ] **Step 1: Pre-check.** `sed -n 99,147p apps/web/src/components/packages/PackageStaffView.tsx` shows the inline pickup dialog; `sed -n 15,35p apps/web/src/hooks/use-packages.ts` shows the `status` union `'received' | 'notified' | 'picked_up'` and whether `usePackages` returns `error` and `refetch`; `grep -rn "PackageStaffView" apps/web/__tests__` lists the tests that must stay green after the extraction.
+- [ ] **Step 2: Write the failing tests** (mock `@/hooks/use-packages` with `vi.hoisted`).
+  - `PackagePickupDialog`: with a package, the description names the recipient and carrier; "Confirm Pickup" is disabled until a name is typed; confirming calls the mutation with `{ packageId, pickedUpByName }` trimmed, then `onClose`; with `pkg={null}` no dialog is in the document.
+  - `PackagesStaffPage`, three packages (two `received`, one `picked_up`): the `h1` "Packages" is visible; the glance figure reads `2` with "awaiting pickup" and its root has `data-source="usePackages"`; the "Awaiting pickup" filter shows `2`; the footer reads "Showing 3" on "All".
   - the figure and the table agree: after the mock returns four `received`, the figure reads `4` and the table has four body rows.
-  - with zero packages: the heading "No packages logged yet" and "Example of a logged package" are visible, the glance figure reads `0`, and one button named "Log a package" exists in the header.
-  - while loading: the section has `aria-busy="true"` and the `h1` is already visible.
-  - on error: an element with `role="alert"` is visible and clicking "Try again" calls `refetch` once.
+  - clicking a row's "Mark picked up" action opens the pickup dialog for that package.
+  - zero packages: the heading "No packages logged yet" and "Example of a logged package" are visible, the glance figure reads `0`, and exactly one button named "Log a package" exists.
+  - loading: the section has `aria-busy="true"` and the `h1` is already visible.
+  - error: an element with `role="alert"` is visible and clicking "Try again" calls `refetch` once.
   - there is no "Needs attention" heading.
   - axe: `expect(await axe(container)).toHaveNoViolations()` on the three-package render, after asserting the table has rows.
-- [ ] **Step 3 to 5:** run `pnpm test apps/web/__tests__/packages/packages-staff-next.test.tsx` to fail; implement; run to pass.
-- [ ] **Step 6: Guards.** `pnpm guard:page-template` reports `dashboard/packages/page.tsx` as stale in the baseline; run `--write-baseline`, confirm the diff removes exactly that entry. `pnpm guard:panel-copy && pnpm guard:icons && pnpm guard:design-tokens && pnpm guard:class-resolution` — exit 0.
+- [ ] **Step 3 to 5:** run both files to fail; extract the dialog and re-run the existing `PackageStaffView` tests from Step 1 (green, unchanged); implement the page; run to pass.
+- [ ] **Step 6:** `pnpm guard:design-tokens && pnpm guard:class-resolution && pnpm guard:page-header` — exit 0.
 - [ ] **Step 7: Commit.** `git commit -m "packages: staff page on the page kit, behind the design preview"`
 
 ---
@@ -873,15 +737,15 @@ Decisions (§5, §14.1):
 ### Task 14: Pilot — Packages, resident view
 
 **Files:**
-- Create: `apps/web/src/components/packages/next/packages-resident-next.tsx`
+- Create: `apps/web/src/components/packages/packages-resident-page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/dashboard/packages/page.tsx`
-- Test: `apps/web/__tests__/packages/packages-resident-next.test.tsx`
+- Test: `apps/web/__tests__/packages/packages-resident-page.test.tsx`
 
 **Interfaces:**
 - Consumes: as Task 13, plus `RecordList`, `RecordRow` (Task 6), `StatusGlyph` (Task 2), `useMyPackages`.
-- Produces: `export function PackagesResidentNext({ communityId }: { communityId: number }): JSX.Element`.
+- Produces: `export function PackagesResidentPage({ communityId }: { communityId: number }): JSX.Element`.
 
-Decisions (§5.8): `PageLayout template="list" records="rows"` with **no panel**. Title "My packages", description "Packages logged for your unit, and whether they are ready to collect." No primary action. Each package is a `RecordRow`: lead `StatusGlyph` (`in-progress` "Ready to collect" for `received`/`notified`, `done` "Picked up"), title = carrier and description as the current resident view composes them, meta = received date. First-run: heading "No packages for you yet", sentence "When staff log a delivery for your unit it appears here and you get a notice." No example row for residents.
+Decisions (§5.8): `PageLayout template="list" records="rows"` with **no panel**. Title "My packages", description "Packages logged for your unit, and whether they are ready to collect." No primary action. Each package is a `RecordRow`: lead `StatusGlyph` (`in-progress` "Ready to collect" for `received`/`notified`, `done` "Picked up"), title = carrier and description as the current resident view composes them, meta = received date. First-run: `SectionFirstRun` with title "No packages for you yet" and description "When staff log a delivery for your unit it appears here and you get a notice.", no action and no example. `page.tsx` renders it when `preview && !isStaff`, under the same `ponytail:` marker as Task 13.
 
 - [ ] **Step 1: Pre-check.** Read `apps/web/src/components/packages/PackageResidentView.tsx` for which fields it shows and how it words them; keep that wording.
 - [ ] **Step 2: Write the failing tests:** no `aside` is rendered; no management figure text ("awaiting pickup") appears; a `received` package shows the words "Ready to collect"; zero packages shows the first-run heading and no button; axe passes on a two-package render.
@@ -892,119 +756,138 @@ Decisions (§5.8): `PageLayout template="list" records="rows"` with **no panel**
 ### Task 15: Pilot — Emergency Alerts list
 
 **Files:**
-- Create: `apps/web/src/components/emergency/next/emergency-list-next.tsx`, `apps/web/src/lib/emergency/reach-summary.ts`
+- Create: `apps/web/src/components/emergency/emergency-list-page.tsx`
 - Modify: `apps/web/src/app/(authenticated)/emergency/page.tsx`
-- Test: `apps/web/__tests__/emergency/emergency-list-next.test.tsx`, `apps/web/__tests__/emergency/reach-summary.test.ts`
+- Test: `apps/web/__tests__/emergency/emergency-list-page.test.tsx`
 
 **Interfaces:**
-- Consumes: the kit; `resolveEmergencyRecipients` and `listBroadcastsForRecipient` from `@/lib/services/emergency-broadcast-service`; the page's existing `broadcasts` mapping.
-- Produces:
+- Consumes: the kit; `describeAccess`; `isDesignPreviewOn`; the page's existing `broadcasts` mappings (both branches) and `membership.timezone`.
+- Produces (server component, no `"use client"`):
   ```ts
-  // reach-summary.ts
-  export interface ReachSummary { reachable: number; byEmail: number; byText: number | null }  // byText is null when SMS is not available to this community
-  export function summarizeReach(recipients: Array<{ email?: string | null; phone?: string | null; smsOptIn?: boolean }>, smsEnabled: boolean): ReachSummary;
-  // emergency-list-next.tsx  (server component)
-  export function EmergencyListNext(props: { view: 'manager'; broadcasts: ManagerBroadcast[]; reach: ReachSummary; communityId: number } | { view: 'recipient'; broadcasts: RecipientBroadcast[]; communityId: number }): JSX.Element;
+  type Row = { id: number; title: string; severity: string; initiatedAt: string; completedAt: string | null; canceledAt: string | null };
+  export function EmergencyListPage(props:
+    | { view: 'manager'; broadcasts: Array<Row & { recipientCount: number }>; canWrite: boolean; communityId: number; timeZone: string; about: AccessSentence }
+    | { view: 'recipient'; broadcasts: Row[]; communityId: number; timeZone: string }
+  ): JSX.Element;
   ```
 
-Decisions:
+Decisions. The page states only what `BroadcastHistoryTable` states today: a title, a severity, a recipient count and one of three statuses. It adds no delivery or reach figure.
 
-- `PageLayout template="list" records="rows"`. Title "Emergency Alerts", icon `emergency`, description "Send urgent notices by text and email. Every alert is logged with who received it."
-- **Manager view.** Primary "Send alert" linking to the existing new-alert route. No secondary: the code has no "send a test". Each alert is a `RecordRow`: lead `StatusGlyph` by severity (`emergency` → `overdue` "Emergency"; `urgent` → `attention` "Urgent"; `info` → `in-progress` "Info"; a cancelled alert → `not-started` "Cancelled"); meta = sent date and time in the community time zone; outcome = "Delivered to all N" when `failedCount === 0`, otherwise "{delivered} of {recipients} delivered, {failed} not reached" with `outcomeTone="problem"`. Footer "Showing N".
-- Panel position 1: figure `reach.reachable`, unit "residents reachable", `source="resolveEmergencyRecipients"`. Lines: "By email" always; "By text" **only when `reach.byText !== null`**.
-- Panel position 2: `PanelAttention none="Nothing needs attention."` — the code computes no unreachable-resident list here; do not invent one.
-- Panel position 4: `describeAccess('emergency_broadcasts')`.
-- **Recipient view** (non-admins, as the page branches today): no panel, no delivery outcomes, no primary. Title and description as above; first-run sentence "Alerts sent to you appear here."
-- First-run, manager: heading "No alerts sent yet", sentence "When you send one it appears here with who received it and who did not.", the primary action, and one example row labelled "Example of a sent alert".
-- `summarizeReach` counts a recipient as reachable with an email, or with a phone and SMS opt-in when `smsEnabled`; `byText` is `null` when `!smsEnabled`.
+- `PageLayout template="list" records="rows"`. Title "Emergency Alerts", `navId="emergency"`, description "Send urgent notices to residents. Every alert is logged with who it went to."
+- **Manager view.** Primary "Send alert" linking to `/emergency/new?communityId=…`, only when `canWrite`. Each alert is a `RecordRow` whose title links to `/emergency/{id}?communityId=…`:
+  - status word and glyph, by the same precedence as `getStatusLabel` in `BroadcastHistoryTable.tsx`: `canceledAt` → `not-started` "Canceled"; `completedAt` → `done` "Sent"; otherwise `in-progress` "Draft";
+  - meta: the severity word, capitalised, then the date and time of `initiatedAt` formatted with `Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone })`;
+  - outcome: `"{recipientCount} recipients"`, plain tone.
+  Footer "Showing N".
+- Panel position 1, only when at least one alert has `completedAt` and no `canceledAt`: figure = that newest alert's `recipientCount`, unit "recipients on the last alert", one line "Sent" with its date, `source="emergencyBroadcasts.recipientCount"`.
+- Panel positions 2 and 3: omitted. The list loads nothing that says a resident was not reached; that is on the detail page.
+- Panel position 4: `about`, built in `page.tsx` with `describeAccess(membership.communityType, 'emergency_broadcasts', 'sent-to-them')`.
+- **Recipient view** (the page's existing `!membership.isAdmin` branch): no panel, no recipient counts, no primary. Rows show status "Sent", severity and date only. First-run: `SectionFirstRun` title "No alerts yet", description "Alerts sent to you appear here."
+- First-run, manager: title "No alerts sent yet", description "When you send one it appears here with who it went to.", the primary action when `canWrite`, `exampleLabel` "Example of a sent alert" and one example `RecordRow`.
+- `page.tsx`: compute `preview` once after `userId`; in **both** returns (recipient and manager) render `EmergencyListPage` when it is on, under the Task 13 `ponytail:` marker. The no-`communityId` return is unchanged.
 
-- [ ] **Step 1: Pre-check.** `sed -n 765,800p apps/web/src/lib/services/emergency-broadcast-service.ts` for the exact return shape of `resolveEmergencyRecipients` (adapt `summarizeReach`'s input type to it, keeping its output type); `sed -n 55,70p "apps/web/src/app/(authenticated)/emergency/new/page.tsx"` for how SMS availability is decided, and reuse that same check for `smsEnabled`.
+- [ ] **Step 1: Pre-check.** `sed -n 26,34p apps/web/src/components/emergency/BroadcastHistoryTable.tsx` shows `getStatusLabel` with the Canceled, Sent, Draft precedence; `grep -n "isAdmin\|canWrite\|recipientCount" "apps/web/src/app/(authenticated)/emergency/page.tsx"` shows the two branches and the mapping; `grep -n "timezone" apps/web/src/lib/api/community-membership.ts` shows the field.
 - [ ] **Step 2: Write the failing tests.**
-  - `summarizeReach`: three recipients (email only; phone with opt-in; neither) with `smsEnabled=true` → `{ reachable: 2, byEmail: 1, byText: 1 }`; same input with `smsEnabled=false` → `{ reachable: 1, byEmail: 1, byText: null }`.
-  - manager view with one failed delivery: the row shows "142 of 147 delivered, 5 not reached" with the warning class; a fully delivered row shows "Delivered to all 48" without it; each row's meta begins with its severity word.
-  - **SMS off:** with `reach.byText === null`, the text "By text" is not in the document.
-  - **recipient view:** no `aside`, no text matching `/delivered|reachable/i`, no link named "Send alert".
+  - manager view: a sent row's meta reads "Sent · Urgent · " followed by the date in the given zone (render with `timeZone="America/New_York"` and an instant that is the previous calendar day in UTC-5, and assert the New York date); its outcome reads "48 recipients"; a draft reads "Draft"; a cancelled one reads "Canceled".
+  - the glance figure equals the newest sent alert's `recipientCount`, ignoring a newer draft and a newer cancelled alert; with only drafts there is no `aside`.
+  - no text matching `/delivered|reachable|not reached/i` anywhere.
+  - `canWrite={false}`: no link named "Send alert".
+  - **recipient view:** no `aside`, no text matching `/recipients/i`, no link named "Send alert".
   - zero alerts, manager: first-run heading, example label and exactly one "Send alert" link.
   - axe on the manager render.
-- [ ] **Step 3 to 5:** run to fail, implement, wire the branch in `page.tsx` (both the admin and non-admin returns), run to pass.
-- [ ] **Step 6: Revert-check.** Remove the `reach.byText !== null` condition; the "SMS off" test goes red with "By text" found; the others stay green; restore.
-- [ ] **Step 7:** refresh the page-template baseline for this file; run the four guards; commit `"emergency: alerts list on the page kit; reach figures obey the SMS gate and the viewer's role"`.
+- [ ] **Step 3 to 5:** run to fail, implement, wire both branches in `page.tsx`, run to pass.
+- [ ] **Step 6: Revert-check.** In the recipient branch pass the manager rows through (so `recipientCount` renders); the recipient test goes red on `/recipients/i`; the others stay green; restore.
+- [ ] **Step 7:** `pnpm guard:design-tokens && pnpm guard:class-resolution && pnpm guard:page-header`; commit `"emergency: alerts list on the page kit; owners see no recipient figures"`.
 
 ---
 
 ### Task 16: Pilot — Emergency alert detail, new alert, and Visitors
 
-Three small pages that prove the detail and form templates and tabs. One pull request each; they touch disjoint files.
+Three small pages that prove the detail and form templates and tabs. 16a and 16b go in the Emergency pull request, 16c in its own.
 
 **16a. Alert detail**
 
-- Files: create `apps/web/src/components/emergency/next/emergency-detail-next.tsx`; modify `apps/web/src/app/(authenticated)/emergency/[id]/page.tsx`; test `apps/web/__tests__/emergency/emergency-detail-next.test.tsx`.
-- `PageLayout template="detail" records="table"`. Title = the alert's title; `status` = `StatusGlyph` with the severity word; no primary. Main: a "Message" section with the body, then a "Delivery" section reusing the existing `DeliveryReport`. Panel `details`: Severity, Sent (community time zone), Audience, Channels as label and value pairs; `about`: `describeAccess('emergency_broadcasts')`.
-- The page is a client component loading through `useEmergencyBroadcast`; the panel reads that same hook's data. Recipients (non-admins) get no "Delivery" section and no panel.
-- Pre-check: `sed -n 15,60p "apps/web/src/app/(authenticated)/emergency/[id]/page.tsx"`.
-- Tests: the `h1` is the alert title; "Details" lists the four labels; a non-admin render has no "Delivery" heading; loading shows the `h1` skeleton and `aria-busy`; axe passes.
+- Files: create `apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx` and `apps/web/src/components/emergency/emergency-detail-page.tsx`; modify `apps/web/src/app/(authenticated)/emergency/[id]/page.tsx`; test `apps/web/__tests__/emergency/emergency-detail-page.test.tsx`.
+- **The page is a client component today** (`"use client"` on line 9) and cannot call the gate. First move its whole body, unchanged, into `broadcast-detail-client.tsx` as `BroadcastDetailClient` (use `git mv`, then rename the export). `page.tsx` becomes a server component: read `communityId` from `searchParams`, resolve `userId` and `membership` exactly as `emergency/page.tsx` does, call `requirePermission(membership, 'emergency_broadcasts', 'read')`, then render `<EmergencyDetailPage about={…} isAdmin={membership.isAdmin} />` when the gate is on and `<BroadcastDetailClient />` otherwise, under the Task 13 `ponytail:` marker. Give `page.tsx` a top-of-file `// breadcrumbs:exempt — delegated to ./broadcast-detail-client.tsx`.
+- `EmergencyDetailPage` (client): `PageLayout template="detail" records="table"`. Title = the alert's title; `status` = the same glyph and word as the list (Task 15); no primary. Main: a "Message" section with the body, then, for admins only, a "Delivery" section holding the existing `DeliveryReport` unchanged. Panel `details`, admins only: Severity, Sent (community time zone, passed from `page.tsx`), and any other field the current page already shows above the report; `about` as in Task 15. Non-admins get no "Delivery" section and no panel.
+- It loads through `useEmergencyBroadcast`; the panel reads that same hook's data.
+- Pre-check: `sed -n 9,70p "apps/web/src/app/(authenticated)/emergency/[id]/page.tsx"` for the fields the page shows today and how it tells an admin response from a recipient one; `pnpm guard:breadcrumbs` is green before the change.
+- Tests: the `h1` is the alert title; "Details" lists Severity and Sent; a non-admin render has no "Delivery" heading and no `aside`; loading shows `aria-busy`; a failed load shows `role="alert"`; axe passes. After the move, `pnpm guard:breadcrumbs && pnpm guard:page-header` — exit 0.
 
 **16b. New alert**
 
-- Files: create `apps/web/src/components/emergency/next/emergency-new-next.tsx`; modify `apps/web/src/app/(authenticated)/emergency/new/page.tsx`; test `apps/web/__tests__/emergency/emergency-new-next.test.tsx`.
-- `PageLayout template="form"`. Title "New alert", description "Write the alert, choose who gets it, and review it before sending." Header has only a "Cancel" link. The existing `BroadcastComposer` renders in the main column unchanged; its own submit button is the primary and sits at the bottom of the form. Panel `preview`: the existing `SmsPreview`, shown **only when SMS is available** (the same check as Task 15); `about`: the fixed sentence the composer already shows about sending being immediate, moved here verbatim if one exists, otherwise omitted.
-- Pre-check: read `BroadcastComposer.tsx` for its submit control and any warning copy; do not change its behaviour.
-- Tests: exactly one element with the primary button class; with SMS unavailable there is no "Preview" heading; the header contains a "Cancel" link and no button; axe passes.
+- Files: create `apps/web/src/components/emergency/emergency-new-page.tsx`; modify `apps/web/src/app/(authenticated)/emergency/new/page.tsx`; test `apps/web/__tests__/emergency/emergency-new-page.test.tsx`.
+- `PageLayout template="form"`. Title "New alert", description "Write the alert, choose who gets it, and review it before sending." The header has only a "Cancel" link back to the list. The existing `BroadcastComposer` renders in the main column with the props `page.tsx` passes today, including `smsEnabled={isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled}`; its own submit button is the primary. **No panel**: the composer already holds its SMS preview, and moving that out would mean changing the composer.
+- Pre-check: `grep -n "SmsPreview\|type=\"submit\"\|<Button" apps/web/src/components/emergency/BroadcastComposer.tsx` confirms the composer renders its own preview and submit; do not change the composer.
+- Tests (mock `BroadcastComposer` to a stub that records its props): the stub receives the same four props as today; the header contains a "Cancel" link and no button; there is no `aside`; axe passes.
 
 **16c. Visitors**
 
-- Files: create `apps/web/src/components/visitors/next/visitors-staff-next.tsx`; modify `apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx`; test `apps/web/__tests__/visitors/visitors-staff-next.test.tsx`.
-- `PageLayout template="list" records="table"` with `PageTabs`: "Visitors" and "Denied list", ids `visitors` and `denied`, selected tab read from and written to `?tab=` (default `visitors`) through `next/link`. Each tab renders the existing table for that tab inside a `Section`; the header primary is that tab's existing action. Panel position 1: the count the staff view already shows for expected visitors, if it computes one from its loaded list, with `source` naming that hook; otherwise no glance. Position 4: `describeAccess` for the visitors resource.
-- Pre-check: `sed -n 150,215p apps/web/src/components/visitors/VisitorStaffView.tsx` for the two tabs, their tables and actions.
-- Tests: two links in a `nav` named "Sections"; the active one has `aria-current="page"`; with `?tab=denied` the denied table renders and the primary is the denied-list action; axe passes.
+- Files: create `apps/web/src/components/visitors/visitors-staff-page.tsx`; modify `apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx`; test `apps/web/__tests__/visitors/visitors-staff-page.test.tsx`.
+- `PageLayout template="list" records="table"`, wrapped in the existing Radix `<Tabs>` root so the list and the panels can sit in different slots: the `tabs` slot holds `<TabsList>` with "Visitors" and "Denied list"; the main column holds the two `<TabsContent>`, each rendering that tab's existing table (`DataTable` with its `QuickFilterTabs`, and `DeniedVisitorsTab`) inside a `Section`. The selected trigger is marked with `data-[state=active]:border-b-2 data-[state=active]:border-content` (ink, not coral); pass it by `className` and do not edit `components/ui/tabs.tsx`.
+- The selected tab starts from `?tab=` (default `visitors`) and each change calls `window.history.replaceState`, the way `components/meetings/meetings-page-shell.tsx` does. No navigation, so no server round trip.
+- Header: title "Visitors", `navId="visitors"`, description "Expected visitors and the people who may not be let in." The header primary is the selected tab's existing action. Every dialog and mutation the staff view has today is reused by importing it; if one is inline in `VisitorStaffView.tsx`, extract it to its own file first, unchanged, exactly as Task 13 does for the pickup dialog.
+- Panel position 1: only if `VisitorStaffView` already computes a count from its loaded list, show that count with `source` naming the hook; otherwise no glance. Position 4: `describeAccess(membership.communityType, 'visitors', 'own')`, built in `page.tsx`.
+- Pre-check: `sed -n 60,220p apps/web/src/components/visitors/VisitorStaffView.tsx` for the tabs, tables, actions and any inline dialog; `grep -n "replaceState" apps/web/src/components/meetings/meetings-page-shell.tsx` for the pattern; `grep -n "listActorUnitIds" "apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx"` confirms residents are scoped to their own units, which is what `'own'` claims.
+- Tests: two elements with `role="tab"`; the selected one has `aria-selected="true"` and no class containing `interactive`; rendering with `?tab=denied` shows the denied table and the denied-list action as the primary; selecting the other tab calls `history.replaceState` with a URL containing `tab=visitors`; axe passes.
 
-For each of 16a to 16c: write the failing tests, run to fail, implement, run to pass, refresh the page-template baseline for the one file, run the four guards, commit.
+For each of 16a to 16c: write the failing tests, run to fail, implement, run to pass, run `pnpm guard:design-tokens && pnpm guard:class-resolution && pnpm guard:page-header`, commit.
 
 ---
 
 ### Task 17: Proof at the app's real size
 
 **Files:**
-- Create: `scripts/help-capture/manifests/direction/pilot.json`, `apps/web/e2e/design-direction-pilot.spec.ts`
-- Modify: `apps/web/e2e/responsive-overflow.spec.ts` (add the pilot routes with the preview on), `apps/web/e2e/ci-safe-specs.json` (add the new spec and raise `expectedTestCount` by the number of blocks it adds), `apps/web/e2e/helpers/dev-login.ts` only if a helper is needed to switch the preview on
+- Create: `apps/web/e2e/design-direction-pilot.spec.ts`
+- Modify: `apps/web/e2e/ci-safe-specs.json` (add the spec and raise `expectedTestCount` by the number of blocks it adds, counted with `playwright test --config playwright.ci.config.ts --list | grep -c chromium` before and after)
 
 **Interfaces:**
-- Consumes: `loginAs(page, role, { communitySlug })` from `apps/web/e2e/helpers/dev-login.ts`, `clickWhenHydrated` from `helpers/hydration.ts`, the overflow helper in `helpers/overflow.ts`.
+- Consumes: `loginAs(page, role, { communitySlug })` from `apps/web/e2e/helpers/dev-login.ts`, the overflow helper in `helpers/overflow.ts`, `DESIGN_PREVIEW_COOKIE` (Task 11).
 
-Decisions (§17 proof, Review Focus 3 and 4):
+Decisions (§17 proof, Review Focus 1, 3 and 4):
 
-- The spec logs in as `cam` pinned to `sunset-condos`, sets `DESIGN_PREVIEW_USER_IDS` for the dev server to that persona's id, and turns the preview on through the settings switch (using `clickWhenHydrated`).
-- For each of `/dashboard/packages`, `/emergency`, `/dashboard/visitors` at 1280 and 1440 wide with large text on (the default):
+- Each block logs in, then switches the pilot on with `context.addCookies([{ name: 'pp_design_preview', value: '1', url: baseURL }])`. The dev server honours that cookie because it is not a production build; no server env changes and no other spec is affected.
+- As `cam` pinned to `sunset-condos`, for each of `/dashboard/packages`, `/emergency`, `/dashboard/visitors` at 1280 and 1440 wide with large text on (the default):
+  - the painted `h1` is visible (proves the pilot view rendered, so the next assertions are not vacuous);
   - no page-level horizontal overflow and no table that scrolls sideways;
-  - the layout is one of two things, asserted from bounding boxes: the "Summary" region sits to the right of the main column, or it sits wholly above it. Record which, per route and width, in the test output with `test.info().annotations`.
-- One block inserts a package whose description is 90 characters and a recipient whose name is 40 characters (through the existing create endpoints), reloads, and re-asserts no overflow at both widths.
-- One block logs in as `owner` pinned to `sunset-condos` and asserts `/emergency` shows no "residents reachable" text.
-- The capture manifest shoots the six pilot screens at 1280 and 1440 as stills so the contact sheet can be attached to the pull request.
+  - from bounding boxes, the "Summary" region sits either to the right of the main column or wholly above it. Record which, per route and width, with `test.info().annotations`.
+  - attach a full-page screenshot with `testInfo.attach`, so the twelve stills come out of the report.
+- One block logs a package whose description is 90 characters through the app's own "Log a package" form, reloads, and re-asserts no overflow at both widths.
+- One block logs in as `owner` pinned to `sunset-condos` and asserts `/emergency` shows no text matching `/recipients/i` and no "Send alert" link.
+- One block, without the cookie, asserts `/dashboard/packages` still has an `h1` with class `sr-only` (customers see the current page).
 
-- [ ] **Step 1: Pre-check.** `sed -n 30,60p apps/web/e2e/responsive-overflow.spec.ts` for `VIEWPORTS` and `expectNoBleed`; `cat apps/web/e2e/ci-safe-specs.json` for the current `expectedTestCount`; `sed -n 1,60p scripts/help-capture/manifest-schema.ts` for the manifest fields.
-- [ ] **Step 2:** Write the spec and the manifest. Start the sandbox with `pnpm agent:env:prepare` then `pnpm agent:live:web` (check `docker exec <any container> cat /proc/pressure/memory` first; stop idle stacks if `full` is well above zero).
-- [ ] **Step 3:** Run `pnpm exec playwright test apps/web/e2e/design-direction-pilot.spec.ts --config apps/web/playwright.ci.config.ts`; expected: all blocks pass. If a table scrolls sideways beside the panel at 1440, that is a finding about §5.4's 1280px threshold, not a test to loosen: report the measured widths.
-- [ ] **Step 4:** Run `pnpm help:capture direction/pilot` and assemble the twelve stills into one contact sheet.
-- [ ] **Step 5:** `pnpm build && pnpm perf:check`; record the three pilot routes' sizes and the aggregate before and after in the pull request description. Expected: exit 0.
-- [ ] **Step 6: Commit.** `git commit -m "e2e: pilot pages hold at 1280 and 1440 in large text; capture manifest for review"`
+- [ ] **Step 1: Pre-check.** `sed -n 30,60p apps/web/e2e/responsive-overflow.spec.ts` for `VIEWPORTS` and the overflow helper's name; `grep -n "expectedTestCount" apps/web/e2e/ci-safe-specs.json` for the current floor (69 when this was written); `grep -rln "dashboard/packages\|/emergency" apps/web/e2e` lists existing specs that touch the pilot routes and must stay green.
+- [ ] **Step 2:** Write the spec. Start the sandbox with `pnpm agent:env:prepare` then `pnpm agent:live:web` (check `docker exec <any container> cat /proc/pressure/memory` first; stop idle stacks if `full` is well above zero).
+- [ ] **Step 3:** Run `pnpm exec playwright test apps/web/e2e/design-direction-pilot.spec.ts --config apps/web/playwright.ci.config.ts`; expected: all blocks pass. If a table scrolls sideways beside the panel, that is a finding about §5.4's thresholds, not a test to loosen: report the measured widths.
+- [ ] **Step 4: Anti-vacuity probe.** Temporarily make `isDesignPreviewOn` return `false`; the "painted `h1`" assertions go red and the no-cookie block stays green; restore and confirm the file is unchanged with `git diff --stat`.
+- [ ] **Step 5:** `pnpm build && pnpm perf:check`; record the pilot routes' sizes and the aggregate before and after in the pull request description. Expected: exit 0.
+- [ ] **Step 6: Commit.** `git commit -m "e2e: pilot pages hold at 1280 and 1440 in large text"`
 
 ---
 
-### Task 18: Write the direction where page authors look
+### Task 18: folded into other tasks
 
-**Files:**
-- Modify: `DESIGN.md` (new opening section), `.claude/rules/design.md` (new opening section; correct the statements this plan makes false), `CLAUDE.md` (the guards list and count), `docs/design-system/README.md` (link)
+The factual corrections moved to the tasks that cause them: the `PageHeader` paragraph in `.claude/rules/design.md` (Task 9) and the guard count in `CLAUDE.md` (Task 12). Writing the direction into `DESIGN.md` waits for the owner's decision (Task 19).
 
-Decisions: the opening section of both design files is spec §0 verbatim, followed by a short "Page templates" section naming the six templates, the kit parts and their import paths, the panel positions table from §5.3, and the three new guards with their escape hatches. In `.claude/rules/design.md`, the paragraph "`PageHeader` does not paint its title or description" is rewritten to say it paints inside a `PageLayout` and stays hidden elsewhere until that page is migrated. `CLAUDE.md`'s guard count changes from 35 to 38 with today's date.
+---
 
-- [ ] **Step 1: Pre-check.** `grep -n "does not paint\|35\*\* guards\|guard:page-header" .claude/rules/design.md CLAUDE.md` finds the three statements.
-- [ ] **Step 2:** Make the edits. **Step 3:** `pnpm lint` — exit 0 (some guards read these files).
-- [ ] **Step 4: Commit.** `git commit -m "docs: the design direction and page templates in DESIGN.md and the design rules"`
+### Task 19: After the owner decides — remove the second copy
+
+Not started until the owner has reviewed the pilot. One pull request either way. Until it merges, a fix to a pilot page must be made in both views.
+
+**If the pilot is approved:**
+
+- Delete the old views and anything only they used: `PackageStaffView.tsx`, `PackageResidentView.tsx`, `BroadcastHistoryTable.tsx`, `emergency/[id]/broadcast-detail-client.tsx`, `VisitorStaffView.tsx` and the resident visitor view if Task 16c replaced it. Before each deletion, `grep -rn "<name>" apps/web/src apps/web/__tests__ apps/web/e2e scripts/help-capture` and move or delete every reference.
+- Delete `apps/web/src/lib/design-preview.ts`, its test, the `DESIGN_PREVIEW_USER_IDS` line in `.env.example`, every `isDesignPreviewOn` branch and every `ponytail:` marker Tasks 11 to 16 added. Remove the cookie step and the no-cookie block from `design-direction-pilot.spec.ts` and lower `expectedTestCount` by one. Ask the owner to remove the Vercel env var.
+- Write spec §0 and a short "Page templates" section into `DESIGN.md` and `.claude/rules/design.md`.
+- Check: `grep -rn "isDesignPreviewOn\|pp_design_preview\|DESIGN_PREVIEW" apps packages scripts` prints nothing; `pnpm lint && pnpm typecheck && pnpm test` exit 0; `pnpm guard:page-template` still lists the five pilot pages as compliant.
+
+**If the pilot is rejected:** delete the six new view files, the gate, the branches and markers, and the kit files from Tasks 2 and 5 to 8; revert Task 9 and add the five pages back to Task 12's baseline; keep the extracted `PackagePickupDialog` (it is a plain refactor).
 
 ---
 
 ## After this plan
 
-1. The owner turns the preview on in production and reviews the six pilot screens on Sunset Condos.
+1. The owner adds their user id to `DESIGN_PREVIEW_USER_IDS` in production and reviews the six pilot screens on Sunset Condos, with the three points under "What the pilot will not show" in hand.
 2. The owner decides the two open items in the spec (§4, decisions 12 and 13) and either approves the pilot or asks for changes.
-3. Only then are Plans B to E written, using the thresholds and any design changes the pilot produced.
+3. Task 19 runs. Only then are Plans B to E written, using the thresholds and any design changes the pilot produced.
