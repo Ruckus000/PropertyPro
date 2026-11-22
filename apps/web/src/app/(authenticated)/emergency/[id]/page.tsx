@@ -1,94 +1,65 @@
+// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx
 /**
- * Emergency Broadcast delivery report page.
+ * Emergency Broadcast detail page.
  *
  * Route: /emergency/[id]?communityId=X
- * Auth: any community member with emergency_broadcasts read permission.
- * Managers get the delivery report; everyone else gets the message only, and
- * only for an alert sent to them (the API returns 404 otherwise).
+ * Auth: any community member with emergency_broadcasts read permission; the
+ * API decides what the viewer gets (managers the delivery report, everyone
+ * else the message alone, and only for an alert sent to them).
+ *
+ * The page body is a client component. With the design preview off this page
+ * does exactly what it always did: it renders that component and nothing else,
+ * so no membership or permission is resolved here (middleware and the API
+ * enforce access, as before).
  */
-"use client";
+import { redirect } from 'next/navigation';
+import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
+import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
+import { requirePermission } from '@/lib/db/access-control';
+import { describeAccess } from '@/lib/access/describe-access';
+import { isDesignPreviewOn } from '@/lib/design-preview';
+import { EmergencyDetailPage } from '@/components/emergency/emergency-detail-page';
+import { BroadcastDetailClient } from './broadcast-detail-client';
 
-import { useSearchParams, useParams } from 'next/navigation';
-import { useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
-import { DeliveryReport } from '@/components/emergency/DeliveryReport';
-import { PageHeader } from '@/components/shared/page-header';
+interface PageProps {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
-export default function BroadcastDetailPage() {
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const broadcastId = Number(params.id);
-  const communityId = Number(searchParams.get('communityId'));
-
-  const { data: report, isLoading, error } = useEmergencyBroadcast(communityId, broadcastId);
-
-  if (!communityId || !broadcastId) {
-    return <p className="text-sm text-status-danger">Missing communityId or broadcast ID.</p>;
+export default async function BroadcastDetailPage({ params, searchParams }: PageProps) {
+  let userId: string;
+  try {
+    userId = await requireAuthenticatedUserId();
+  } catch {
+    redirect('/auth/login');
   }
 
-  if (isLoading) {
-    return <p className="text-sm text-content-secondary">Loading delivery report...</p>;
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  if (!(await isDesignPreviewOn(userId))) return <BroadcastDetailClient />;
+
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const communityId = Number(query['communityId']);
+  const broadcastId = Number(id);
+  if (
+    !Number.isInteger(communityId) ||
+    communityId <= 0 ||
+    !Number.isInteger(broadcastId) ||
+    broadcastId <= 0
+  ) {
+    return <BroadcastDetailClient />;
   }
 
-  if (error || !report) {
-    return <p className="text-sm text-status-danger">Failed to load broadcast: {error?.message}</p>;
-  }
-
-  // Only a manager's view carries the delivery report (recipients, status).
-  const managerReport = 'recipients' in report ? report : null;
-
-  const SEVERITY_BADGE: Record<string, string> = {
-    emergency: 'bg-status-danger-bg text-status-danger',
-    urgent: 'bg-status-warning-bg text-status-warning',
-    info: 'bg-interactive-subtle text-interactive',
-  };
+  const membership = await requireCommunityMembership(communityId, userId);
+  requirePermission(membership, 'emergency_broadcasts', 'read');
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader
-        title={report.title}
-        actions={
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${SEVERITY_BADGE[report.severity] ?? 'bg-surface-muted'}`}
-          >
-            {report.severity}
-          </span>
-        }
-      />
-
-      {/* Status banner */}
-      {managerReport?.canceledAt && (
-        <div className="rounded-md border border-edge bg-surface-hover p-3 text-sm text-content-secondary">
-          This broadcast was canceled.
-        </div>
-      )}
-      {managerReport && !managerReport.canceledAt && !managerReport.completedAt && (
-        <div className="rounded-md border border-edge bg-status-warning-bg p-3 text-sm text-status-warning">
-          This broadcast is pending confirmation.
-        </div>
-      )}
-
-      {/* Message preview */}
-      <div className="rounded-md border border-edge bg-surface-card p-4 space-y-2">
-        <div className="text-xs font-medium uppercase text-content-secondary">Message</div>
-        <p className="text-sm text-content whitespace-pre-wrap">{report.body}</p>
-        {managerReport?.smsBody && (
-          <>
-            <div className="mt-3 text-xs font-medium uppercase text-content-secondary">SMS</div>
-            <p className="text-sm text-content">{managerReport.smsBody}</p>
-          </>
-        )}
-      </div>
-
-      {/* Delivery report — managers only; residents get the message alone. */}
-      {managerReport?.completedAt && (
-        <DeliveryReport
-          recipients={managerReport.recipients}
-          recipientCount={managerReport.recipientCount}
-          deliveredCount={managerReport.deliveredCount}
-          failedCount={managerReport.failedCount}
-          sentCount={managerReport.sentCount}
-        />
-      )}
-    </div>
+    <EmergencyDetailPage
+      communityId={communityId}
+      broadcastId={broadcastId}
+      isAdmin={membership.isAdmin}
+      timeZone={membership.timezone}
+      about={describeAccess(membership.communityType, 'emergency_broadcasts', 'sent-to-them')}
+    />
   );
 }

@@ -24,7 +24,7 @@ vi.mock('@/components/shared/page-header', () => ({
   PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 
-import BroadcastDetailPage from '../../src/app/(authenticated)/emergency/[id]/page';
+import { BroadcastDetailClient as BroadcastDetailPage } from '../../src/app/(authenticated)/emergency/[id]/broadcast-detail-client';
 
 const MESSAGE = {
   id: 5,
