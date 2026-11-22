@@ -15,6 +15,8 @@ import { requirePermission } from '@/lib/db/access-control';
 import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
 import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
 import { PageHeader } from '@/components/shared/page-header';
+import { EmergencyNewPage } from '@/components/emergency/emergency-new-page';
+import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -45,6 +47,22 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
   const community = communityRows.find((r) => r['id'] === context.communityId);
   const communityName = typeof community?.['name'] === 'string' ? community['name'] : 'PropertyPro';
 
+  // BOTH layers, not just the per-community flag; see @/lib/sms/dispatch-flag.
+  const smsEnabled = isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled;
+
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  if (await isDesignPreviewOn(userId)) {
+    return (
+      <EmergencyNewPage
+        communityId={context.communityId}
+        communityName={communityName}
+        communityType={membership.communityType}
+        smsEnabled={smsEnabled}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <PageHeader
@@ -61,7 +79,7 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
         communityId={context.communityId}
         communityName={communityName}
         communityType={membership.communityType}
-        smsEnabled={isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled}
+        smsEnabled={smsEnabled}
       />
     </div>
   );

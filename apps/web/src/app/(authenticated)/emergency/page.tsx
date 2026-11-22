@@ -17,6 +17,9 @@ import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
 import { BroadcastHistoryTable } from '@/components/emergency/BroadcastHistoryTable';
 import { listBroadcastsForRecipient } from '@/lib/services/emergency-broadcast-service';
 import { PageHeader } from '@/components/shared/page-header';
+import { EmergencyListPage } from '@/components/emergency/emergency-list-page';
+import { describeAccess } from '@/lib/access/describe-access';
+import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -58,10 +61,31 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     { isUnitOwner: membership.isUnitOwner },
   );
 
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  const preview = await isDesignPreviewOn(userId);
+
   // Non-managers (owners, board seats included) see only the alerts sent to
   // them, dated when sent — never drafts, canceled alerts or delivery counts.
   if (!membership.isAdmin) {
     const received = await listBroadcastsForRecipient(context.communityId, userId);
+    if (preview) {
+      return (
+        <EmergencyListPage
+          view="recipient"
+          broadcasts={received.map((b) => ({
+            id: b.id,
+            title: b.title,
+            severity: b.severity,
+            initiatedAt: b.completedAt.toISOString(),
+            completedAt: b.completedAt.toISOString(),
+            canceledAt: null,
+          }))}
+          communityId={context.communityId}
+          timeZone={membership.timezone}
+        />
+      );
+    }
     return (
       <div className="mx-auto max-w-4xl space-y-6">
         <PageHeader title="Emergency Alerts" />
@@ -102,6 +126,19 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     completedAt: r['completedAt'] instanceof Date ? (r['completedAt'] as Date).toISOString() : null,
     canceledAt: r['canceledAt'] instanceof Date ? (r['canceledAt'] as Date).toISOString() : null,
   }));
+
+  if (preview) {
+    return (
+      <EmergencyListPage
+        view="manager"
+        broadcasts={broadcasts}
+        canWrite={canWrite}
+        communityId={context.communityId}
+        timeZone={membership.timezone}
+        about={describeAccess(membership.communityType, 'emergency_broadcasts', 'sent-to-them')}
+      />
+    );
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
