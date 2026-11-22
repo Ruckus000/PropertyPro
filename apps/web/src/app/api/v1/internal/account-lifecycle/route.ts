@@ -186,7 +186,7 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     summary.unfinishedRecoveries = unfinished.length;
     if (unfinished.length > 0) {
       summary.errors.push(
-        `unfinished recovery: deletion request(s) ${unfinished.join(', ')} were claimed by a recovery that did not finish; resume them from the Deletion Requests Dashboard`,
+        `unfinished recovery: deletion request(s) ${unfinished.join(', ')} were claimed by a recovery that did not finish; the account is still deleted but its sign-in ban may already be lifted, so resume them from the Deletion Requests Dashboard`,
       );
     }
   } catch (err) {

@@ -815,6 +815,12 @@ describe('executeUserSoftDelete', () => {
 
     expect(result).toEqual([{ ...request, recipient: null }]);
     expect(consoleWarnSpy).toHaveBeenCalled();
+    // The ban is what stops a deleted account signing in, so a failure is
+    // reported, by id, not only logged.
+    expect(captureMessageMock).toHaveBeenCalledWith('account_soft_delete_ban_failed', {
+      level: 'error',
+      extra: { requestId: 1, userId: 'user-uuid-001' },
+    });
     consoleWarnSpy.mockRestore();
   });
 

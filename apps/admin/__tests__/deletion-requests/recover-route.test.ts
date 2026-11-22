@@ -233,6 +233,21 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(audits()[0]).toMatchObject({ oldValues: { status: 'recovered' }, newValues: { resumed: true } });
   });
 
+  // A second click: its claim waited on the first attempt's locks, then found
+  // the recovery finished. Not "not found".
+  it('returns 409 ALREADY_RECOVERED for a request whose recovery has finished', async () => {
+    claimDeletionRecoveryOp.mockResolvedValue({
+      outcome: 'not_recoverable',
+      request: { ...REQUEST, status: 'recovered', recoveredAt: new Date() },
+    });
+
+    const response = await callRecover('42');
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('ALREADY_RECOVERED');
+    expect(writes).toEqual(['claim']);
+  });
+
   it.each([['not_found'], ['not_recoverable']])('returns 404, and changes nothing, on %s', async (outcome) => {
     claimDeletionRecoveryOp.mockResolvedValue({ outcome, request: REQUEST });
 

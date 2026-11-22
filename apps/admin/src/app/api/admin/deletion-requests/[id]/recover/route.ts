@@ -152,8 +152,14 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     });
 
   switch (claim.outcome) {
-    case 'not_found':
     case 'not_recoverable':
+      // A second click usually lands here: its claim waited on the first
+      // attempt's locks and then found the recovery finished.
+      if (claim.request.status === 'recovered' && claim.request.recoveredAt !== null) {
+        return conflict('ALREADY_RECOVERED', 'This request has already been recovered.');
+      }
+      return NextResponse.json({ error: { message: 'Request not found or not in soft_deleted status' } }, { status: 404 });
+    case 'not_found':
       return NextResponse.json({ error: { message: 'Request not found or not in soft_deleted status' } }, { status: 404 });
     case 'purged':
       // A purge claimed it first: finished, or failing part way and retried

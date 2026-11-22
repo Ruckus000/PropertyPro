@@ -539,6 +539,13 @@ export async function executeUserSoftDelete(requestIds: number[]) {
             `[account-lifecycle] Failed to ban user ${result.userId} in Supabase auth:`,
             err,
           );
+          // The ban is what stops a deleted account signing in (nothing in the
+          // app reads users.deleted_at at sign-in), so a failure is reported,
+          // not only logged. Ids only.
+          captureMessage('account_soft_delete_ban_failed', {
+            level: 'error',
+            extra: { requestId: result.id, userId: result.userId },
+          });
         }
       })
     );
