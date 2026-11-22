@@ -175,7 +175,6 @@ function OfflinePaymentGuidance({
       description={
         <>
           <span>
-            The balance above can&rsquo;t be paid through PropertyPro.
             Contact {who} to arrange payment.
           </span>
           {(email || phone) && (

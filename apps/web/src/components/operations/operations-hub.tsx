@@ -55,7 +55,9 @@ type CreateValue = 'request' | 'work-order' | 'reservation' | 'amenity';
 /** Rows each "Load more" adds. */
 const LIST_STEP = 20;
 // The reservations route clamps `limit` to 100 and the list is not walked like the others.
-// ponytail: reservations stop at 100 in view. Trigger: a community shows >100 reservations
+// ponytail: reservations stop at 100 in view; past that the list shows the note "Showing 100
+// of N reservations, latest dates first." Trigger: anyone reports that note while looking for
+// an older reservation.
 const RESERVATIONS_MAX_LIMIT = 100;
 
 /**
@@ -664,9 +666,12 @@ export function OperationsHub({
               reservations={reservationsQuery.data.data}
               amenityNames={amenityNames}
             />
+            {/* Keyed on the limit the rows on screen were fetched with, not the one requested: while
+                the last step (80 -> 100) loads, the earlier rows stay as placeholder and the button
+                stays in its Loading state instead of vanishing before the rows arrive. */}
             <LoadMoreButton
               visible={
-                reservationsLimit < RESERVATIONS_MAX_LIMIT
+                reservationsQuery.data.meta.limit < RESERVATIONS_MAX_LIMIT
                 && reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total
               }
               isLoading={reservationsQuery.isFetching}
@@ -677,6 +682,13 @@ export function OperationsHub({
                 window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
               }}
             />
+            {reservationsQuery.data.meta.limit >= RESERVATIONS_MAX_LIMIT
+            && reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total ? (
+              // The route sorts by start time, newest first, so the rows past the cap are the earliest.
+              <p className="text-center text-sm text-content-secondary">
+                {`Showing ${reservationsQuery.data.meta.limit} of ${reservationsQuery.data.meta.total} reservations, latest dates first.`}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </section>
