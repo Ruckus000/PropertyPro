@@ -5,6 +5,7 @@
  * Presentational and import-time pure (no "use client").
  */
 import * as React from "react";
+import { Fragment } from "react";
 import { TriangleAlert } from "lucide-react";
 
 type Slot = React.ReactNode;
@@ -130,12 +131,12 @@ export function PanelGlance({
         </div>
       ) : null}
       {lines?.length ? (
-        <dl className="flex flex-col gap-1 text-sm">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           {lines.map(([k, v]) => (
-            <div key={k} className="flex justify-between gap-2">
+            <Fragment key={k}>
               <dt className="text-content-secondary">{k}</dt>
               <dd className="text-content">{v}</dd>
-            </div>
+            </Fragment>
           ))}
         </dl>
       ) : null}

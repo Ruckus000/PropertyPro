@@ -109,8 +109,9 @@ describe('PackagesStaffPage', () => {
     const { container } = mount();
     expect(screen.getByRole('heading', { name: 'No packages logged yet' })).toBeVisible();
     expect(screen.getByText('Example of a logged package')).toBeVisible();
-    const glance = container.querySelector('[data-source="usePackages"]') as HTMLElement;
-    expect(within(glance).getAllByText('0')[0]).toHaveClass('font-display');
+    expect(screen.queryByRole('heading', { name: 'At a glance' })).toBeNull();
+    expect(container.querySelector('[data-source="usePackages"]')).toBeNull();
+    expect(screen.getByText(ABOUT)).toBeVisible();
     expect(screen.getAllByRole('button', { name: 'Log a package' })).toHaveLength(1);
   });
 

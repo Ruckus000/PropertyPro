@@ -81,6 +81,14 @@ describe('EmergencyDetailPage', () => {
     expect(screen.getByText('Pat Resident')).toBeVisible();
   });
 
+  it('manager: Details values share one grid column', () => {
+    useEmergencyBroadcastMock.mockReturnValue({ data: REPORT, isLoading: false, error: null });
+    const { container } = view(true);
+    const dl = container.querySelector('aside dl')!;
+    expect(dl).toHaveClass('grid', 'grid-cols-[auto_1fr]');
+    expect(Array.from(dl.children).map((c) => c.tagName)).toEqual(['DT', 'DD', 'DT', 'DD']);
+  });
+
   it('non-admin: no Delivery heading and no aside, even if recipients were present', () => {
     useEmergencyBroadcastMock.mockReturnValue({ data: REPORT, isLoading: false, error: null });
     const { container } = view(false);
