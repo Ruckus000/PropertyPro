@@ -419,6 +419,27 @@ describe('POST /api/v1/documents', () => {
     expect(createUploadedDocumentMock).toHaveBeenCalledWith(expect.objectContaining({ draft: false }));
   });
 
+  it('passes the record\'s received date through, as a Date (H-2)', async () => {
+    const receivedAt = '2026-01-15T23:59:59.999Z';
+    await POST(jsonPost({ ...VALID_CREATE_BODY, receivedAt }));
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({ receivedAt: new Date(receivedAt) }),
+    );
+  });
+
+  it('records no received date when none is sent', async () => {
+    await POST(jsonPost(VALID_CREATE_BODY));
+    expect(createUploadedDocumentMock).toHaveBeenCalledWith(expect.objectContaining({ receivedAt: null }));
+  });
+
+  it('refuses a received date in the future (400) and creates nothing', async () => {
+    const res = await POST(
+      jsonPost({ ...VALID_CREATE_BODY, receivedAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString() }),
+    );
+    expect(res.status).toBe(400);
+    expect(createUploadedDocumentMock).not.toHaveBeenCalled();
+  });
+
   it('creates a document and returns the row (no warnings)', async () => {
     const res = await POST(jsonPost(VALID_CREATE_BODY));
 

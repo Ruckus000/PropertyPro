@@ -4,8 +4,10 @@
  * Meeting types are enforced at the application layer via Zod unions.
  * Dates are stored as UTC and displayed in the community timezone (AGENTS #16-19).
  */
-import { bigserial, bigint, boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigserial, bigint, boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
+import { documents } from './documents';
 
 export const meetings = pgTable('meetings', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
@@ -40,8 +42,27 @@ export const meetings = pgTable('meetings', {
   /** Optional metadata for operational workflows */
   noticePostedAt: timestamp('notice_posted_at', { withTimezone: true }),
   minutesApprovedAt: timestamp('minutes_approved_at', { withTimezone: true }),
+  /**
+   * The document that IS this meeting's minutes, set when they are posted (an
+   * authored publish, or "Record minutes" on an uploaded file). A meeting can
+   * have many attached documents; this says which one is the minutes, so the
+   * checklist can read the approval date off it (`documents.received_at`) and
+   * see a deleted or un-posted minutes file. NULL for minutes posted before the
+   * column existed, which are scored without an approval date.
+   */
+  minutesDocumentId: bigint('minutes_document_id', { mode: 'number' }).references(
+    () => documents.id,
+    { onDelete: 'set null' },
+  ),
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  // Deleting a document sets this to NULL through the FK; without an index
+  // each delete scans meetings. Partial: almost every meeting names none.
+  // Mirrors migration 0102.
+  index('meetings_minutes_document_id_idx')
+    .on(table.minutesDocumentId)
+    .where(sql`${table.minutesDocumentId} IS NOT NULL`),
+]);

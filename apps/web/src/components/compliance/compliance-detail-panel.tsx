@@ -9,6 +9,7 @@ import { getTemplateDefaultVisibility } from './compliance-visibility';
 import { resolveComplianceCta } from '@/lib/utils/compliance-cta';
 import { VISIBILITY_LABEL, VISIBILITY_VARIANT, statusLabel, statusVariant } from './compliance-pill-mapping';
 import { MeetingNoticeChecks } from './meeting-notice-checks';
+import { MeetingMinutesChecks } from './meeting-minutes-checks';
 
 export interface ComplianceDetailPanelProps {
   item: ChecklistItemData | null;
@@ -103,10 +104,12 @@ export function ComplianceDetailPanel({
         )}
       </div>
 
-      {/* A meeting-notice row scored from meetings: the document checks below
-          did not decide it, so show what did. */}
+      {/* A meeting-notice or minutes row scored from meetings: the document
+          checks below did not decide it, so show what did. */}
       {selectedItem.meetingNotices ? (
         <MeetingNoticeChecks summary={selectedItem.meetingNotices} communityId={communityId} />
+      ) : selectedItem.meetingMinutes ? (
+        <MeetingMinutesChecks summary={selectedItem.meetingMinutes} communityId={communityId} />
       ) : (
       <ul className="my-4 flex flex-col gap-3 border-y border-edge-subtle py-4" aria-label="Status checks">
         <Check

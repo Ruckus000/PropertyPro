@@ -15,6 +15,7 @@ const detail = vi.hoisted(() => ({
 vi.mock('@/hooks/use-meetings', () => ({
   useMeeting: () => detail.current,
   useDeleteMeeting: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRecordMeetingMinutes: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock('@/components/documents/DocumentViewerModal', () => ({
   DocumentViewerModal: () => null,
@@ -93,4 +94,34 @@ describe('MeetingDetailModal', () => {
     expect(screen.getByText('Clubhouse')).toBeInTheDocument();
     expect(screen.getByText('Attached documents')).toBeInTheDocument();
   });
+
+  // H-5: minutes uploaded as a file are recorded on the held board meeting.
+  describe('Record minutes', () => {
+    const recordButton = () => screen.queryByRole('button', { name: 'Record minutes' });
+
+    it('is offered to a writer on a held board meeting with no minutes', () => {
+      detail.current = { data: MEETING, isLoading: false, isError: false };
+      renderModal(true);
+      expect(recordButton()).toBeInTheDocument();
+    });
+
+    it('is not offered to a reader, before the meeting, on an owner meeting, or once minutes are posted', () => {
+      detail.current = { data: MEETING, isLoading: false, isError: false };
+      const reader = renderModal(false);
+      expect(recordButton()).not.toBeInTheDocument();
+      reader.unmount();
+
+      for (const over of [
+        { startsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() },
+        { meetingType: 'annual' },
+        { minutesApprovedAt: '2026-10-01T12:00:00.000Z' },
+      ]) {
+        detail.current = { data: { ...MEETING, ...over }, isLoading: false, isError: false };
+        const view = renderModal(true);
+        expect(recordButton()).not.toBeInTheDocument();
+        view.unmount();
+      }
+    });
+  });
 });
+

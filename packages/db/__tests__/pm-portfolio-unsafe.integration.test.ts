@@ -9,6 +9,7 @@ import { documents } from '../src/schema/documents';
 import { complianceChecklistItems } from '../src/schema/compliance-checklist-items';
 import { leases } from '../src/schema/leases';
 import { maintenanceRequests } from '../src/schema/maintenance-requests';
+import { meetings } from '../src/schema/meetings';
 import { siteBlocks } from '../src/schema/site-blocks';
 import { sitePages } from '../src/schema/site-pages';
 import { units } from '../src/schema/units';
@@ -145,6 +146,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
   beforeEach(async () => {
     await db.delete(maintenanceRequests).where(inArray(maintenanceRequests.communityId, [communityAId, communityBId, communityCId]));
     await db.delete(complianceChecklistItems).where(inArray(complianceChecklistItems.communityId, [communityAId, communityBId, communityCId]));
+    await db.delete(meetings).where(inArray(meetings.communityId, [communityAId, communityBId, communityCId]));
     // Delete leases before units (FK: leases.unit_id -> units.id)
     await db.delete(leases).where(inArray(leases.communityId, [communityAId, communityBId, communityCId]));
     await db.delete(units).where(inArray(units.communityId, [communityAId, communityBId, communityCId]));
@@ -786,9 +788,87 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
       [posted!.id, draft!.id, deleted!.id].sort(),
     );
 
-    expect(result.documentStates.get(posted!.id)).toEqual({ deletedAt: null, isDraft: false });
-    expect(result.documentStates.get(draft!.id)).toEqual({ deletedAt: null, isDraft: true });
+    expect(result.documentStates.get(posted!.id)).toEqual({
+      deletedAt: null,
+      isDraft: false,
+      postedAt: expect.any(Date),
+      receivedAt: null,
+    });
+    expect(result.documentStates.get(draft!.id)).toEqual({
+      deletedAt: null,
+      isDraft: true,
+      postedAt: null,
+      receivedAt: null,
+    });
     expect(result.documentStates.get(deleted!.id)?.deletedAt).toBeInstanceOf(Date);
+  });
+
+  it('findPortfolioStatusInputsUnscoped returns the minutes fields and reads the minutes documents, never across communities (H-5)', async () => {
+    const docBase = { fileSize: 1024, mimeType: 'application/pdf' };
+    const receivedAt = new Date('2026-10-01T23:59:59.999Z');
+    const [minutesDoc] = await db
+      .insert(documents)
+      .values({
+        ...docBase,
+        communityId: communityAId,
+        title: 'Minutes',
+        filePath: `communities/${communityAId}/documents/minutes.pdf`,
+        fileName: 'minutes.pdf',
+        receivedAt,
+      })
+      .returning({ id: documents.id });
+    // A document in ANOTHER community, wrongly named by community A's meeting.
+    const [foreignDoc] = await db
+      .insert(documents)
+      .values({
+        ...docBase,
+        communityId: communityBId,
+        title: 'Foreign',
+        filePath: `communities/${communityBId}/documents/foreign.pdf`,
+        fileName: 'foreign.pdf',
+      })
+      .returning({ id: documents.id });
+
+    const minutesApprovedAt = new Date('2026-10-20T12:00:00.000Z');
+    await db.insert(meetings).values([
+      {
+        communityId: communityAId,
+        title: 'Board',
+        meetingType: 'board',
+        startsAt: new Date('2026-09-15T22:00:00.000Z'),
+        location: 'Clubhouse',
+        minutesApprovedAt,
+        minutesDocumentId: minutesDoc!.id,
+      },
+      {
+        communityId: communityAId,
+        title: 'Board 2',
+        meetingType: 'board',
+        startsAt: new Date('2026-10-15T22:00:00.000Z'),
+        location: 'Clubhouse',
+        minutesDocumentId: foreignDoc!.id,
+      },
+    ]);
+
+    const { findPortfolioStatusInputsUnscoped } = await import('../src/unsafe');
+    const result = await findPortfolioStatusInputsUnscoped(
+      [communityAId, communityBId],
+      [communityAId],
+      new Date('2026-01-01T00:00:00.000Z'),
+    );
+
+    expect(result.noticeMeetings.get(communityAId)).toEqual([
+      expect.objectContaining({ title: 'Board', minutesApprovedAt, minutesDocumentId: minutesDoc!.id }),
+      expect.objectContaining({ title: 'Board 2', minutesApprovedAt: null, minutesDocumentId: foreignDoc!.id }),
+    ]);
+    expect(result.documentStates.get(minutesDoc!.id)).toEqual({
+      deletedAt: null,
+      isDraft: false,
+      postedAt: expect.any(Date),
+      receivedAt,
+    });
+    // Read only within the checklist communities: the foreign document is not.
+    expect(result.documentStates.has(foreignDoc!.id)).toBe(false);
   });
 
   it('findPortfolioStatusInputsUnscoped reads nothing for an empty set', async () => {

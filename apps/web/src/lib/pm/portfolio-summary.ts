@@ -34,12 +34,13 @@ import {
   type DashboardKpis,
   type PortfolioStatusInputs,
 } from '@propertypro/db/unsafe';
-import { withDerivedStatus } from '@/lib/compliance/derive-checklist-status';
+import { withDerivedStatus, type MeetingScoring } from '@/lib/compliance/derive-checklist-status';
+import { summarizeMeetingNotices } from '@/lib/compliance/meeting-notice-status';
 import {
-  MEETING_NOTICE_WINDOW_MONTHS,
-  summarizeMeetingNotices,
-  type MeetingNoticeSummary,
-} from '@/lib/compliance/meeting-notice-status';
+  MEETING_SCORING_WINDOW_MONTHS,
+  summarizeMeetingMinutes,
+  toMinutesInputs,
+} from '@/lib/compliance/meeting-minutes-status';
 import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 import {
   PORTFOLIO_SORT_KEYS,
@@ -107,14 +108,14 @@ export function deriveCompliance(
   rows: ReadonlyArray<Record<string, unknown>>,
   documentStates: PortfolioStatusInputs['documentStates'],
   clockApplies: boolean,
-  meetingNotices: MeetingNoticeSummary | null = null,
+  meetings: MeetingScoring | null = null,
   now: Date = new Date(),
 ): DerivedCompliance {
   let applicable = 0;
   let satisfied = 0;
   let pastDeadline = 0;
   for (const row of rows) {
-    const status = withDerivedStatus(row, documentStates, clockApplies, meetingNotices, now)['status'];
+    const status = withDerivedStatus(row, documentStates, clockApplies, meetings, now)['status'];
     if (status === 'not_applicable') continue;
     applicable += 1;
     if (status === 'satisfied') satisfied += 1;
@@ -170,20 +171,20 @@ export function deriveAllCompliance(
       communityType: row.communityType,
       unitCount: inputs.facts.get(row.communityId)?.unitCount ?? null,
     });
-    // Same per-meeting notice rule as the Compliance page, or the two scores
-    // would disagree for any community that schedules meetings.
-    const meetingNotices = summarizeMeetingNotices(
-      inputs.noticeMeetings.get(row.communityId) ?? [],
-      row.communityType,
-      now,
-    );
+    // Same per-meeting notice and minutes rules as the Compliance page, or
+    // the two scores would disagree for any community that schedules meetings.
+    const communityMeetings = inputs.noticeMeetings.get(row.communityId) ?? [];
+    const meetings: MeetingScoring = {
+      notices: summarizeMeetingNotices(communityMeetings, row.communityType, now),
+      minutes: summarizeMeetingMinutes(toMinutesInputs(communityMeetings, inputs.documentStates), now),
+    };
     derived.set(
       row.communityId,
       deriveCompliance(
         checklistByCommunity.get(row.communityId) ?? [],
         inputs.documentStates,
         clockApplies,
-        meetingNotices,
+        meetings,
         now,
       ),
     );
@@ -306,7 +307,7 @@ export async function buildPortfolioSummary(
   const inputs = await findPortfolioStatusInputsUnscoped(
     allRows.map((r) => r.communityId),
     allRows.filter((r) => r.communityType !== 'apartment').map((r) => r.communityId),
-    calculateRollingWindowStart(new Date(), MEETING_NOTICE_WINDOW_MONTHS),
+    calculateRollingWindowStart(new Date(), MEETING_SCORING_WINDOW_MONTHS),
   );
   const compliance = deriveAllCompliance(allRows, inputs);
   const enriched = enrichRows(allRows, inputs, compliance);

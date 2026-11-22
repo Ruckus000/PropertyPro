@@ -12,55 +12,85 @@ import {
   type LinkedDocumentState,
 } from '@/lib/services/documents-service';
 import { listComplianceChecklistItems } from '@/lib/services/compliance-service';
-import { listMeetingsForNoticeScoring } from '@/lib/services/meeting-service';
+import { listMeetingsForComplianceScoring } from '@/lib/services/meeting-service';
 import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
-import { withDerivedStatus } from './derive-checklist-status';
+import { withDerivedStatus, type MeetingScoring } from './derive-checklist-status';
+import { MEETING_NOTICE_TEMPLATE_KEYS, summarizeMeetingNotices } from './meeting-notice-status';
 import {
-  MEETING_NOTICE_TEMPLATE_KEYS,
-  MEETING_NOTICE_WINDOW_MONTHS,
-  summarizeMeetingNotices,
-} from './meeting-notice-status';
+  MEETING_MINUTES_TEMPLATE_KEYS,
+  MEETING_SCORING_WINDOW_MONTHS,
+  minutesDocumentIds,
+  summarizeMeetingMinutes,
+  toMinutesInputs,
+} from './meeting-minutes-status';
 
 export { withDerivedStatus };
 
 /**
+ * Add the states of minutes documents not already read for the checklist.
+ * Usually none are missing (a board's newest minutes are also the minutes
+ * row's file), so this is usually no query at all.
+ */
+export async function withMinutesDocumentStates(
+  communityId: number,
+  states: Map<number, LinkedDocumentState>,
+  minutesIds: readonly number[],
+): Promise<Map<number, LinkedDocumentState>> {
+  const missing = [...new Set(minutesIds)].filter((id) => !states.has(id));
+  if (missing.length === 0) return states;
+  const more = await getLinkedDocumentStatesByIds(communityId, missing);
+  return new Map([...states, ...more]);
+}
+
+
+/**
  * List the checklist and derive each row's status.
  *
- * Resolves `documents.deleted_at` / draft state for the linked documents so a
- * soft-deleted or draft document does not silently keep its item satisfied.
- * Targeted inArray lookup over just the linked ids — the compliance route is
- * hot, so this must never become a full-table read.
+ * Resolves `documents.deleted_at` / draft state / posted and received dates
+ * for the linked documents — and for the minutes documents the board meetings
+ * name — so a soft-deleted or draft document does not silently keep its item
+ * satisfied, and each record is judged against its own 30-day clock. Targeted
+ * inArray lookup over just those ids — the compliance route is hot, so this
+ * must never become a full-table read.
  */
 export async function loadChecklistWithStatus(
   communityId: number,
   communityType: CommunityType,
 ): Promise<Record<string, unknown>[]> {
   const rows = await listComplianceChecklistItems(communityId);
-  const linkedDocumentIds = [
-    ...new Set(
-      rows
-        .map((r) => r['documentId'] as number | null)
-        .filter((v): v is number => typeof v === 'number'),
-    ),
-  ];
+  const linkedDocumentIds = rows
+    .map((r) => r['documentId'] as number | null)
+    .filter((v): v is number => typeof v === 'number');
   const now = new Date();
-  // Only a checklist that has a meeting-notice row pays for the meetings read.
-  const scoresMeetings = rows.some((r) => MEETING_NOTICE_TEMPLATE_KEYS.has(r['templateKey'] as string));
-  const [documentStateById, unitCount, noticeMeetings] = await Promise.all([
-    getLinkedDocumentStatesByIds(communityId, linkedDocumentIds),
+  // Only a checklist that has a meeting-notice or minutes row pays for the
+  // meetings read.
+  const scoresNotices = rows.some((r) => MEETING_NOTICE_TEMPLATE_KEYS.has(r['templateKey'] as string));
+  const scoresMinutes = rows.some((r) => MEETING_MINUTES_TEMPLATE_KEYS.has(r['templateKey'] as string));
+  const [linkedStates, unitCount, scoringMeetings] = await Promise.all([
+    getLinkedDocumentStatesByIds(communityId, [...new Set(linkedDocumentIds)]),
     getCommunityUnitCount(communityId),
-    scoresMeetings
-      ? listMeetingsForNoticeScoring(
+    scoresNotices || scoresMinutes
+      ? listMeetingsForComplianceScoring(
         communityId,
-        calculateRollingWindowStart(now, MEETING_NOTICE_WINDOW_MONTHS),
+        calculateRollingWindowStart(now, MEETING_SCORING_WINDOW_MONTHS),
       )
       : Promise.resolve(null),
   ]);
+  const documentStateById = await withMinutesDocumentStates(
+    communityId,
+    linkedStates,
+    minutesDocumentIds(scoringMeetings ?? []),
+  );
   const clockApplies = postingClockApplies({ communityType, unitCount });
-  const meetingNotices = noticeMeetings
-    ? summarizeMeetingNotices(noticeMeetings, communityType, now)
+  const meetings: MeetingScoring | null = scoringMeetings
+    ? {
+      notices: scoresNotices ? summarizeMeetingNotices(scoringMeetings, communityType, now) : null,
+      minutes: scoresMinutes
+        ? summarizeMeetingMinutes(toMinutesInputs(scoringMeetings, documentStateById), now)
+        : null,
+    }
     : null;
   return rows.map((row) =>
-    withDerivedStatus(row, documentStateById, clockApplies, meetingNotices, now),
+    withDerivedStatus(row, documentStateById, clockApplies, meetings, now),
   );
 }

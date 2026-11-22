@@ -20,13 +20,20 @@ import { sendNotification } from '@/lib/services/notification-service';
 import type { ComplianceAlertEvent } from '@/lib/services/notification-service';
 import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 import { getLinkedDocumentStatesByIds } from '@/lib/services/documents-service';
-import { listMeetingsForNoticeScoring } from '@/lib/services/meeting-service';
-import { withDerivedStatus } from '@/lib/compliance/derive-checklist-status';
+import { listMeetingsForComplianceScoring } from '@/lib/services/meeting-service';
+import { withDerivedStatus, type MeetingScoring } from '@/lib/compliance/derive-checklist-status';
+import { withMinutesDocumentStates } from '@/lib/compliance/load-checklist-with-status';
 import {
   MEETING_NOTICE_TEMPLATE_KEYS,
-  MEETING_NOTICE_WINDOW_MONTHS,
   summarizeMeetingNotices,
 } from '@/lib/compliance/meeting-notice-status';
+import {
+  MEETING_MINUTES_TEMPLATE_KEYS,
+  MEETING_SCORING_WINDOW_MONTHS,
+  minutesDocumentIds,
+  summarizeMeetingMinutes,
+  toMinutesInputs,
+} from '@/lib/compliance/meeting-minutes-status';
 
 export interface ComplianceAlertResult {
   communityId: number;
@@ -127,8 +134,8 @@ async function alertExpiringVisitorsForCommunity(
  *
  * Each row's status comes from `withDerivedStatus`, the Compliance page's own
  * rule, so the email and the page agree. Given `communityType`, the
- * meeting-notice row is scored from the meetings as it is there; without it
- * that row keeps its document-based status.
+ * meeting-notice and minutes rows are scored from the meetings as they are
+ * there; without it those rows keep their document-based status.
  */
 export async function checkAndAlertOverdueItems(
   communityId: number,
@@ -150,30 +157,44 @@ export async function checkAndAlertOverdueItems(
         .filter((v): v is number => typeof v === 'number'),
     ),
   ];
-  const documentStateById = await getLinkedDocumentStatesByIds(
+  const linkedStates = await getLinkedDocumentStatesByIds(
     communityId,
     linkedDocumentIds,
   );
 
-  const scoresMeetings =
+  const scoresNotices =
     communityType !== undefined &&
     rows.some((r) => MEETING_NOTICE_TEMPLATE_KEYS.has(r['templateKey'] as string));
-  const meetingNotices = scoresMeetings
-    ? summarizeMeetingNotices(
-      await listMeetingsForNoticeScoring(
+  const scoresMinutes =
+    communityType !== undefined &&
+    rows.some((r) => MEETING_MINUTES_TEMPLATE_KEYS.has(r['templateKey'] as string));
+  const scoringMeetings =
+    scoresNotices || scoresMinutes
+      ? await listMeetingsForComplianceScoring(
         communityId,
-        calculateRollingWindowStart(now, MEETING_NOTICE_WINDOW_MONTHS),
-      ),
-      communityType,
-      now,
-    )
-    : null;
+        calculateRollingWindowStart(now, MEETING_SCORING_WINDOW_MONTHS),
+      )
+      : null;
+  const documentStateById = await withMinutesDocumentStates(
+    communityId,
+    linkedStates,
+    minutesDocumentIds(scoringMeetings ?? []),
+  );
+  const meetings: MeetingScoring | null =
+    scoringMeetings && communityType !== undefined
+      ? {
+        notices: scoresNotices ? summarizeMeetingNotices(scoringMeetings, communityType, now) : null,
+        minutes: scoresMinutes
+          ? summarizeMeetingMinutes(toMinutesInputs(scoringMeetings, documentStateById), now)
+          : null,
+      }
+      : null;
 
   const overdueItems: OverdueItem[] = [];
 
   for (const storedRow of rows) {
     // The caller only reaches here when the posting clock applies.
-    const row = withDerivedStatus(storedRow, documentStateById, true, meetingNotices, now);
+    const row = withDerivedStatus(storedRow, documentStateById, true, meetings, now);
     const deadline = row['deadline'] ? new Date(row['deadline'] as string) : null;
     const documentId = (row['documentId'] as number | null) ?? null;
     const linked = documentId != null ? documentStateById.get(documentId) : undefined;
@@ -182,9 +203,9 @@ export async function checkAndAlertOverdueItems(
       // A draft is as absent to owners as a deleted file.
       const documentDeleted =
         linked != null && (linked.deletedAt != null || linked.isDraft);
-      // A missed meeting notice is late, not missing: it is the meetings that
-      // were scored, not a document.
-      const scoredFromMeetings = row['meetingNotices'] != null;
+      // A missed meeting notice or late minutes are late, not missing: it is
+      // the meetings that were scored, not a document.
+      const scoredFromMeetings = row['meetingNotices'] != null || row['meetingMinutes'] != null;
       overdueItems.push({
         hasNoDocument: !scoredFromMeetings && (documentId == null || documentDeleted),
         title: typeof row['title'] === 'string' ? row['title'] : 'Compliance Item',

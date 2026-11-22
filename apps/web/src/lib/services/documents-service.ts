@@ -41,12 +41,17 @@ export interface LinkedDocumentState {
   deletedAt: Date | null;
   /** `posted_at` is NULL: owners cannot see it, so it is not posted. */
   isDraft: boolean;
+  /** `posted_at`: when owners could first open it. Null for a draft. */
+  postedAt?: Date | null;
+  /** `received_at`: when the association received or created the record. */
+  receivedAt?: Date | null;
 }
 
 /**
- * The two facts compliance needs about the documents its items link to, for a
- * specific set of ids, INCLUDING soft-deleted rows: is it deleted, and is it a
- * draft. Either one means the item is not satisfied.
+ * What compliance needs about the documents its items link to, for a specific
+ * set of ids, INCLUDING soft-deleted rows: is it deleted, is it a draft (either
+ * one means the item is not satisfied), and when it was posted and received
+ * (its own 30-day clock).
  *
  * Compliance needs to distinguish "document is gone" from "document is
  * live": under a normal scoped read a soft-deleted document simply drops
@@ -76,9 +81,13 @@ export async function getLinkedDocumentStatesByIds(
   for (const row of rows) {
     const id = row['id'] as number;
     const deletedAtRaw = row['deletedAt'] as string | Date | null;
+    const postedAtRaw = row['postedAt'] as string | Date | null;
+    const receivedAtRaw = row['receivedAt'] as string | Date | null | undefined;
     result.set(id, {
       deletedAt: deletedAtRaw ? new Date(deletedAtRaw) : null,
-      isDraft: row['postedAt'] === null,
+      isDraft: postedAtRaw === null,
+      postedAt: postedAtRaw ? new Date(postedAtRaw) : null,
+      receivedAt: receivedAtRaw ? new Date(receivedAtRaw) : null,
     });
   }
   return result;

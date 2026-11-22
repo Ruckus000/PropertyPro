@@ -2,6 +2,8 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { X, Search, FileText } from "lucide-react";
+import { ReceivedOnField } from "./received-on-field";
+import { receivedOnToIso, toDateInputValue } from "@/lib/compliance/received-on-input";
 
 interface DocumentRow {
   id: number;
@@ -12,14 +14,34 @@ interface DocumentRow {
 
 interface LinkDocumentModalProps {
   communityId: number;
-  onSelect: (documentId: number) => void;
+  /**
+   * `receivedAt`: when the association received or created the record (H-2).
+   * `dateEdited`: whether the person changed the date from its default, so a
+   * "kept the earlier date" warning is only shown for a date they chose.
+   */
+  onSelect: (documentId: number, receivedAt: string, dateEdited: boolean) => void;
   onClose: () => void;
+  /** The dialog title. */
+  title?: string;
+  /** The date field's label and hint, for a record whose date has its own name. */
+  dateLabel?: string;
+  dateHint?: string;
 }
 
-export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocumentModalProps) {
+export function LinkDocumentModal({
+  communityId,
+  onSelect,
+  onClose,
+  title = "Link Document",
+  dateLabel,
+  dateHint,
+}: LinkDocumentModalProps) {
   const [query, setQuery] = useState("");
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [receivedOn, setReceivedOn] = useState(() => toDateInputValue(new Date()));
+  const [dateEdited, setDateEdited] = useState(false);
+  const receivedAt = receivedOnToIso(receivedOn);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -86,13 +108,14 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
-          <h3 className="text-base font-semibold text-content">Link Document</h3>
+          <h3 className="text-base font-semibold text-content">{title}</h3>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="rounded-[var(--radius-sm)] p-1 hover:bg-surface-hover transition-colors"
           >
-            <X size={16} className="text-content-tertiary" />
+            <X size={16} className="text-content-tertiary" aria-hidden="true" />
           </button>
         </div>
 
@@ -118,6 +141,22 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
           />
         </div>
 
+        <div className="px-4 py-3 border-b border-edge-subtle">
+          <ReceivedOnField
+            id="compliance-link-received-on"
+            value={receivedOn}
+            onChange={(value) => {
+              setReceivedOn(value);
+              setDateEdited(true);
+            }}
+            {...(dateLabel ? { label: dateLabel } : {})}
+            hint={
+              dateHint ??
+              "The 30-day posting window starts on this date. A date can correct one already on the file only to an earlier day."
+            }
+          />
+        </div>
+
         {/* Results */}
         <div className="flex-1 overflow-y-auto min-h-[200px]">
           {loading ? (
@@ -135,7 +174,10 @@ export function LinkDocumentModal({ communityId, onSelect, onClose }: LinkDocume
                 <li key={doc.id}>
                   <button
                     type="button"
-                    onClick={() => onSelect(doc.id)}
+                    onClick={() => {
+                      if (receivedAt) onSelect(doc.id, receivedAt, dateEdited);
+                    }}
+                    disabled={!receivedAt}
                     className="
                       w-full flex items-center gap-3 px-4 py-3
                       text-left transition-colors duration-quick

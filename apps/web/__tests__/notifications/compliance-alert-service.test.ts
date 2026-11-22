@@ -55,11 +55,11 @@ vi.mock('@/lib/services/notification-service', () => ({
   sendNotification: sendNotificationMock,
 }));
 
-const { listMeetingsForNoticeScoringMock } = vi.hoisted(() => ({
-  listMeetingsForNoticeScoringMock: vi.fn(),
+const { listMeetingsForComplianceScoringMock } = vi.hoisted(() => ({
+  listMeetingsForComplianceScoringMock: vi.fn(),
 }));
 vi.mock('@/lib/services/meeting-service', () => ({
-  listMeetingsForNoticeScoring: listMeetingsForNoticeScoringMock,
+  listMeetingsForComplianceScoring: listMeetingsForComplianceScoringMock,
 }));
 
 import {
@@ -72,6 +72,13 @@ const COMMUNITY_ID = 5;
 const NOW = new Date('2026-03-15T12:00:00.000Z');
 const pastDate = new Date('2026-02-01T00:00:00.000Z').toISOString();
 const futureDate = new Date('2026-04-15T00:00:00.000Z').toISOString();
+/** Received Jan 1, posted Feb 10: past its own 30-day clock (H-2). */
+const LATE_DOCUMENT_42 = {
+  id: 42,
+  deletedAt: null,
+  postedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(),
+  receivedAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+};
 
 /**
  * @param rows            checklist rows returned by `scoped.query`
@@ -93,7 +100,7 @@ describe('checkAndAlertOverdueItems', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sendNotificationMock.mockResolvedValue(1);
-    listMeetingsForNoticeScoringMock.mockResolvedValue([]);
+    listMeetingsForComplianceScoringMock.mockResolvedValue([]);
   });
 
   // H-4: the email must agree with the Compliance page, which scores the
@@ -120,7 +127,7 @@ describe('checkAndAlertOverdueItems', () => {
 
     it('alerts on a missed notice even though a document is linked', async () => {
       setupChecklistMock([noticeRow], [{ id: 9, deletedAt: null, postedAt: new Date('2026-03-01') }]);
-      listMeetingsForNoticeScoringMock.mockResolvedValue([missedMeeting]);
+      listMeetingsForComplianceScoringMock.mockResolvedValue([missedMeeting]);
 
       const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW, 'condo_718');
 
@@ -140,7 +147,7 @@ describe('checkAndAlertOverdueItems', () => {
       const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
 
       expect(result.overdueCount).toBe(0);
-      expect(listMeetingsForNoticeScoringMock).not.toHaveBeenCalled();
+      expect(listMeetingsForComplianceScoringMock).not.toHaveBeenCalled();
     });
   });
 
@@ -188,18 +195,23 @@ describe('checkAndAlertOverdueItems', () => {
   it('flags items whose document was posted after the deadline', async () => {
     // A document posted late does not retroactively satisfy the item — the
     // statutory deadline was still missed, so admins must still see the gap.
-    setupChecklistMock([
-      {
-        title: 'Annual Budget',
-        description: 'Must post annual budget',
-        deadline: pastDate,
-        documentId: 42,
-        documentPostedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(),
-        rollingWindow: null,
-        isApplicable: true,
-        statuteReference: '§718.112(2)(f)',
-      },
-    ]);
+    // "Late" is the record's own clock: posted more than 30 days after it was
+    // received (H-2), here received Jan 1 and posted Feb 10.
+    setupChecklistMock(
+      [
+        {
+          title: 'Annual Budget',
+          description: 'Must post annual budget',
+          deadline: pastDate,
+          documentId: 42,
+          documentPostedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(),
+          rollingWindow: null,
+          isApplicable: true,
+          statuteReference: '§718.112(2)(f)',
+        },
+      ],
+      [LATE_DOCUMENT_42],
+    );
 
     const result = await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);
     expect(result.overdueCount).toBe(1);
@@ -238,7 +250,7 @@ describe('checkAndAlertOverdueItems', () => {
         { title: 'Insurance Policy', description: '', deadline: pastDate, documentId: 42, documentPostedAt: new Date('2026-02-10T00:00:00.000Z').toISOString(), rollingWindow: null, isApplicable: true, statuteReference: '§718.111(11)' },
         { title: 'Bylaws', description: '', deadline: pastDate, documentId: 43, documentPostedAt: new Date('2026-01-20T00:00:00.000Z').toISOString(), rollingWindow: null, isApplicable: true, statuteReference: '§718.111(12)' },
       ],
-      [{ id: 43, deletedAt: new Date('2026-03-01T00:00:00.000Z').toISOString() }],
+      [LATE_DOCUMENT_42, { id: 43, deletedAt: new Date('2026-03-01T00:00:00.000Z').toISOString() }],
     );
 
     await checkAndAlertOverdueItems(COMMUNITY_ID, 'system', NOW);

@@ -108,9 +108,9 @@ export function ComplianceCommandCenter({
   // "Re-link or replace" and "Upload current document" put a new file on a
   // record that may already have one: that is a replacement on purpose. The
   // route refuses a file another record already has, and says so.
-  function linkChosen(item: ChecklistItemData, documentId: number) {
+  function linkChosen(item: ChecklistItemData, documentId: number, receivedAt?: string, dateEdited?: boolean) {
     mutations.linkDocument.mutate(
-      { itemId: item.id, documentId, replace: item.documentId != null },
+      { itemId: item.id, documentId, replace: item.documentId != null, receivedAt, dateEdited },
       { onError: (err) => toast.error(err.message) },
     );
   }
@@ -370,8 +370,8 @@ export function ComplianceCommandCenter({
       {linkItem && (
         <LinkDocumentModal
           communityId={communityId}
-          onSelect={(documentId) => {
-            linkChosen(linkItem, documentId);
+          onSelect={(documentId, receivedAt, dateEdited) => {
+            linkChosen(linkItem, documentId, receivedAt, dateEdited);
             setLinkItem(null);
           }}
           onClose={() => setLinkItem(null)}

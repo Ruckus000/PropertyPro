@@ -200,6 +200,30 @@ Today, `public_access` was false for every production row, according to the
 - For HOAs, keep 30 days as a product default, but stop citing it as statutory
   (see M-7).
 
+**Status (2026-11-22):** addressed (fix-order step 5); migration
+`0102_compliance_record_dates` is an expand migration applied ahead of the code.
+
+- `documents.received_at` records when the association received or created a
+  record. The upload and link flows on the Compliance page ask for it
+  ("Received or created on", default today, never later); a picked date is the
+  last moment of that day. Existing documents have none, and no date is guessed.
+- A linked record is judged against its own clock: posted (the document's own
+  `posted_at`, not the time of linking) within 30 days of `received_at`. A late
+  posting is overdue for 12 months after it was posted, then ages out. A record
+  with no received date claims no lateness. The row's setup deadline now only
+  measures a record that is still missing.
+- The annual budget, annual financial report and insurance rows are yearly: a
+  file received (else posted) more than 12 months ago is "out of its window",
+  unsatisfied with no invented deadline, and in "Action needed".
+- Every row carries a `clock` in the design direction's closed state set (open,
+  overdue, met, met late, out of its window, no clock, does not apply) with a
+  basis: `statute`, or `product_default` for HOA document and minutes clocks.
+  The citation change itself is M-7.
+
+Not done: automatic linking still never replaces a linked file, so next year's
+budget is linked from the row ("Upload current document"), not automatically.
+The library upload queue does not ask for the date.
+
 ---
 
 ### H-3 · Required records with no checklist row
@@ -361,6 +385,26 @@ The row is satisfied only when each has posted, approved minutes. Reuse
 
 HOAs have no statutory minutes-posting item, so `720_minutes_rolling_12m` is a
 product default. Label it that way.
+
+**Status (2026-11-22):** addressed (fix-order step 5), in the shape #1501 gave
+meeting notices (`meeting-minutes-status.ts`, read by the Compliance page,
+dashboard, welcome page, PM portfolio and the daily overdue alert).
+
+- The row is scored from the `board` and `budget` meetings held in the past 12
+  months. A meeting's minutes are due once a later board meeting has been held
+  (the statute sets no approval deadline); before that they are "awaiting
+  approval" and no clock applies.
+- Minutes posted more than 30 days after their approval date (the minutes
+  document's `received_at`) make the row overdue, carrying the deadline missed.
+  Missing minutes make it unsatisfied (board action), with no invented deadline.
+  With no held board meeting the row keeps its document-based status.
+- `meetings.minutes_document_id` names the document that is the minutes. The
+  authored-minutes publish sets it; a new "Record minutes" action on a held
+  board meeting records an uploaded file, with its approval date.
+- The HOA row's clock carries `basis: 'product_default'`; the label is M-7.
+
+Not done: `special` and `committee` meetings are not counted (the type cannot
+tell a special board meeting from an owner meeting).
 
 ---
 
@@ -574,7 +618,8 @@ reachable.
 4. **H-4**: an agenda on meetings, shown on the front page, with a 14-day floor.
    Notices scored per meeting.
 5. **H-2 + H-5**: a received/created date and yearly cycles. Minutes scored per
-   meeting. These are the largest changes and touch the score.
+   meeting. These are the largest changes and touch the score. **Done
+   2026-11-22** (see the status notes under H-2 and H-5).
 6. **M-1, M-3, M-7** and the Low items.
 
 ## Not verified

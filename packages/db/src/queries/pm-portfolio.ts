@@ -658,18 +658,25 @@ export interface PortfolioLinkedDocumentState {
   deletedAt: Date | null;
   /** `posted_at` is null: owners cannot see it, so it satisfies nothing. */
   isDraft: boolean;
+  /** `posted_at`: when owners could first open it. */
+  postedAt?: Date | null;
+  /** `received_at`: when the association received or created the record. */
+  receivedAt?: Date | null;
 }
 
 export interface PortfolioStatusInputs {
   facts: Map<number, PortfolioCommunityStatusFacts>;
   /** Live (not soft-deleted) checklist rows of the condo/HOA communities asked for. */
   checklistRows: PortfolioChecklistRow[];
-  /** Every document linked from those rows, soft-deleted ones included. */
+  /**
+   * Every document linked from those rows, and every minutes document those
+   * meetings name, soft-deleted ones included.
+   */
   documentStates: Map<number, PortfolioLinkedDocumentState>;
   /**
    * Per checklist community, its live meetings starting on or after
-   * `noticeMeetingsSince` — what scores the meeting-notice row. Empty when the
-   * caller passed no `noticeMeetingsSince`.
+   * `noticeMeetingsSince` — what scores the meeting-notice and minutes rows.
+   * Empty when the caller passed no `noticeMeetingsSince`.
    */
   noticeMeetings: Map<number, PortfolioNoticeMeeting[]>;
 }
@@ -680,14 +687,18 @@ export interface PortfolioNoticeMeeting {
   meetingType: string;
   startsAt: Date;
   noticePostedAt: Date | null;
+  /** When the minutes went on the record (the posting stamp). */
+  minutesApprovedAt: Date | null;
+  /** The document that is the meeting's minutes, when one is named. */
+  minutesDocumentId: number | null;
 }
 
 /**
  * Everything the Communities page needs to derive each community's status,
  * read in a fixed number of queries however many communities there are:
  * one for the community facts, one for the checklist rows, one for the
- * documents those rows link, and one for the meetings that score the
- * meeting-notice row.
+ * meetings that score the meeting-notice and minutes rows, and one for the
+ * documents those rows and meetings name.
  *
  * The rows are returned raw on purpose. The status rule (`withDerivedStatus`
  * in apps/web) is the one the Compliance page uses; deriving it here in SQL
@@ -746,6 +757,8 @@ export async function findPortfolioStatusInputsUnscoped(
             meetingType: meetings.meetingType,
             startsAt: meetings.startsAt,
             noticePostedAt: meetings.noticePostedAt,
+            minutesApprovedAt: meetings.minutesApprovedAt,
+            minutesDocumentId: meetings.minutesDocumentId,
           })
           .from(meetings)
           .where(
@@ -774,21 +787,39 @@ export async function findPortfolioStatusInputsUnscoped(
 
   const linkedIds = [
     ...new Set(
-      checklistRows
-        .map((row) => row.documentId)
-        .filter((id): id is number => typeof id === 'number'),
+      [
+        ...checklistRows.map((row) => row.documentId),
+        ...meetingRows.map((row) => row.minutesDocumentId),
+      ].filter((id): id is number => typeof id === 'number'),
     ),
   ];
   const documentStates = new Map<number, PortfolioLinkedDocumentState>();
   if (linkedIds.length > 0) {
     // Soft-deleted documents included: a deleted file must read as "not
     // posted", which needs its row.
+    // Limited to the checklist communities too: an id never reaches across
+    // tenants even if a row named another community's document.
     const docRows = await db
-      .select({ id: documents.id, deletedAt: documents.deletedAt, postedAt: documents.postedAt })
+      .select({
+        id: documents.id,
+        deletedAt: documents.deletedAt,
+        postedAt: documents.postedAt,
+        receivedAt: documents.receivedAt,
+      })
       .from(documents)
-      .where(inArray(documents.id, linkedIds));
+      .where(
+        and(
+          inArray(documents.id, linkedIds),
+          inArray(documents.communityId, [...checklistCommunityIds]),
+        ),
+      );
     for (const row of docRows) {
-      documentStates.set(row.id, { deletedAt: row.deletedAt ?? null, isDraft: row.postedAt === null });
+      documentStates.set(row.id, {
+        deletedAt: row.deletedAt ?? null,
+        isDraft: row.postedAt === null,
+        postedAt: row.postedAt ?? null,
+        receivedAt: row.receivedAt ?? null,
+      });
     }
   }
 

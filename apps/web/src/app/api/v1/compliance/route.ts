@@ -28,7 +28,7 @@ import {
   getFeaturesForCommunity,
   type CommunityType,
 } from '@propertypro/shared';
-import { runRoute } from '@propertypro/api-contract';
+import { runRoute, withEnvelope } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { ConflictError, ForbiddenError, ValidationError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
@@ -42,6 +42,10 @@ import { loadChecklistWithStatus, withDerivedStatus } from '@/lib/compliance/loa
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
+import {
+  RECEIVED_DATE_KEPT_WARNING,
+  setDocumentReceivedAt,
+} from '@/lib/services/document-received-at-service';
 import {
   findChecklistLinkConflict,
   insertComplianceChecklistItems,
@@ -171,7 +175,7 @@ export const PATCH = withErrorHandler(
   runRoute(compliancePatchContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    const { id, action: patchAction, documentId, reason, replace } = body;
+    const { id, action: patchAction, documentId, reason, replace, receivedAt } = body;
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
@@ -231,6 +235,32 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('Checklist item not found or does not belong to this community');
     }
 
+    // The record's own clock (H-2): when the association received or created
+    // it. A property of the document, so it is written there, after the link
+    // landed, and audited on the document.
+    const warnings: Array<{ code: string; message: string }> = [];
+    if (patchAction === 'link_document' && receivedAt) {
+      const receivedDate = new Date(receivedAt);
+      // Only ever moves earlier; a later date is kept and the manager told.
+      const result = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
+      // Warn only when the kept date is strictly earlier than the one sent.
+      if (result && !result.written && result.receivedAt.getTime() < receivedDate.getTime()) {
+        warnings.push(RECEIVED_DATE_KEPT_WARNING);
+      }
+      if (result?.written) {
+        await logAuditEvent({
+          userId,
+          action: 'update',
+          resourceType: 'document',
+          resourceId: String(documentId),
+          communityId,
+          oldValues: { receivedAt: result.previous?.toISOString() ?? null },
+          newValues: { receivedAt: receivedDate.toISOString() },
+          metadata: { via: 'compliance_link', checklistItemId: id },
+        });
+      }
+    }
+
     const result = withDerivedStatus(row);
 
     await logAuditEvent({
@@ -253,6 +283,6 @@ export const PATCH = withErrorHandler(
       void tryAutoComplete(communityId, userId, 'review_compliance');
     }
 
-    return result;
+    return withEnvelope(result, { warnings: warnings.length > 0 ? warnings : undefined });
   }),
 );

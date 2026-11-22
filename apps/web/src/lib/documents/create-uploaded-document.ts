@@ -33,6 +33,11 @@ interface CreateUploadedDocumentInput {
   measured?: { byteLength: number; mime: string };
   /** `false` skips the PDF text-extraction job (the row records `not_applicable`). */
   extractText?: boolean;
+  /**
+   * When the association received or created the record; the 30-day posting
+   * clock runs from it (§718.111(12)(g)1.). Omitted = not recorded.
+   */
+  receivedAt?: Date | null;
 }
 
 interface InvalidUploadContext {
@@ -191,6 +196,7 @@ export async function createUploadedDocument(
     extractionStatus: extractPdf ? 'pending' : 'not_applicable',
     // Omitted for a posted upload so the column default stamps it.
     ...(input.draft ? { postedAt: null } : {}),
+    ...(input.receivedAt ? { receivedAt: input.receivedAt } : {}),
   });
 
   const created = insertedRows[0];
@@ -213,6 +219,7 @@ export async function createUploadedDocument(
       mimeType: upload.mime,
       sourceType: input.sourceType,
       ...(input.draft ? { draft: true } : {}),
+      ...(input.receivedAt ? { receivedAt: input.receivedAt.toISOString() } : {}),
     },
   });
 

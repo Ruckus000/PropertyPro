@@ -182,27 +182,27 @@ describe('withDerivedStatus on a meeting-notice row', () => {
   it('a linked "notice" document no longer satisfies the row once a meeting missed its notice', () => {
     // Control: without meetings, the document still satisfies it.
     expect(withDerivedStatus(linkedRow, docs, true, null, NOW)['status']).toBe('satisfied');
-    const derived = withDerivedStatus(linkedRow, docs, true, missed, NOW);
+    const derived = withDerivedStatus(linkedRow, docs, true, { notices: missed, minutes: null }, NOW);
     expect(derived['status']).toBe('overdue');
     expect(derived['meetingNotices']).toBe(missed);
   });
 
   it('leaves every other row alone', () => {
     const other = { ...linkedRow, templateKey: '718_budget' };
-    const derived = withDerivedStatus(other, docs, true, missed, NOW);
+    const derived = withDerivedStatus(other, docs, true, { notices: missed, minutes: null }, NOW);
     expect(derived['status']).toBe('satisfied');
     expect(derived).not.toHaveProperty('meetingNotices');
   });
 
   it('does not override "doesn\'t apply" or a community below the size threshold', () => {
-    expect(withDerivedStatus({ ...linkedRow, isApplicable: false }, docs, true, missed, NOW)['status']).toBe(
+    expect(withDerivedStatus({ ...linkedRow, isApplicable: false }, docs, true, { notices: missed, minutes: null }, NOW)['status']).toBe(
       'not_applicable',
     );
-    expect(withDerivedStatus(linkedRow, docs, false, missed, NOW)['status']).toBe('satisfied');
+    expect(withDerivedStatus(linkedRow, docs, false, { notices: missed, minutes: null }, NOW)['status']).toBe('satisfied');
   });
 
   it('keeps the document status when no meeting notice has come due', () => {
     const quiet = summarizeMeetingNotices([], 'condo_718', NOW);
-    expect(withDerivedStatus(linkedRow, docs, true, quiet, NOW)['status']).toBe('satisfied');
+    expect(withDerivedStatus(linkedRow, docs, true, { notices: quiet, minutes: null }, NOW)['status']).toBe('satisfied');
   });
 });

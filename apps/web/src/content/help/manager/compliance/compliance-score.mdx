@@ -10,7 +10,7 @@ keywords: ["compliance","score","readiness","percentage","calculation","satisfie
 relatedArticles: ["compliance-dashboard","fix-compliance-gaps"]
 featureGates: [hasCompliance]
 contextPaths: ["/communities/*/compliance"]
-updatedAt: "2026-09-30"
+updatedAt: "2026-11-22"
 ---
 
 Readiness is the share of requirements that apply to you and are satisfied. Every requirement counts equally. The card shows it as a percentage and as “X of Y items satisfied”.
@@ -23,12 +23,14 @@ Readiness = Satisfied ÷ every requirement not marked Not applicable, rounded to
 
 ## When a linked record does not count
 
-- It was linked after its deadline. The row stays **Overdue**.
+- It was posted more than 30 days after the date it was received or created. The row is **Overdue** for a year after it was posted.
+- It is a yearly record (the annual budget, the annual financial report, insurance policies) received more than a year ago. The row asks for the current one.
 - It is a rolling 12-month record, such as approved minutes or meeting notices and agendas, and the linked file was posted more than 12 months ago. Keep these current to avoid slow drift.
+
+Meeting notices and approved minutes are checked meeting by meeting once your meetings are in **Meetings**. A board meeting's minutes count once a later board meeting has been held, and are on time when posted within 30 days of the approval date recorded on them.
 
 ## What is not in the score
 
-- The notice timing of each meeting. It is tracked on each meeting in **Meetings**.
 - Financial health, reserve adequacy, and architectural review.
 
 <Callout type="info" title="What 100% means">

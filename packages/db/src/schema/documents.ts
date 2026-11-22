@@ -70,6 +70,17 @@ export const documents = pgTable(
      * Backfilled to `created_at` for rows that existed before the column.
      */
     postedAt: timestamp('posted_at', { withTimezone: true }).defaultNow(),
+    /**
+     * When the association received or created this official record. The
+     * website's 30-day posting clock runs from here (§718.111(12)(g)1.), not
+     * from the upload or from when a checklist row was generated. For approved
+     * minutes it is the approval date.
+     *
+     * NULL = not recorded: every row that predates the column, and the insert
+     * paths that never ask (PM bulk upload, e-sign, violation evidence). A NULL
+     * date makes no lateness claim; nothing guesses one.
+     */
+    receivedAt: timestamp('received_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

@@ -18,6 +18,8 @@ import {
   RedactionAttestationField,
   categoryRequiresRedactionAttestation,
 } from "@/components/documents/redaction-attestation-field";
+import { ReceivedOnField } from "./received-on-field";
+import { receivedOnToIso, toDateInputValue } from "@/lib/compliance/received-on-input";
 
 export interface UploadDocumentModalProps {
   communityId: number;
@@ -46,6 +48,8 @@ export function UploadDocumentModal({
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [redactionAttested, setRedactionAttested] = useState(false);
+  const [receivedOn, setReceivedOn] = useState(() => toDateInputValue(new Date()));
+  const receivedAt = receivedOnToIso(receivedOn);
   const [warnings, setWarnings] = useState<Array<{ code: string; message: string }>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { isUploading, progress, error, uploadDocument } = useDocumentUpload();
@@ -78,6 +82,7 @@ export function UploadDocumentModal({
   async function handleUpload() {
     if (!file || !title.trim() || resolvedCategoryId == null) return;
     if (requiresAttestation && !redactionAttested) return;
+    if (!receivedAt) return;
 
     try {
       const result = await uploadDocument({
@@ -86,6 +91,7 @@ export function UploadDocumentModal({
         categoryId: resolvedCategoryId,
         file,
         redactionAttested,
+        receivedAt,
         ...(skipAutoLink ? { skipAutoLink: true } : {}),
       });
       setWarnings(result.warnings);
@@ -251,6 +257,13 @@ export function UploadDocumentModal({
             disabled={isUploading || isLoadingCategories || resolvedCategoryId == null}
           />
 
+          <ReceivedOnField
+            id="compliance-upload-received-on"
+            value={receivedOn}
+            onChange={setReceivedOn}
+            disabled={isUploading}
+          />
+
           {requiresAttestation && (
             <RedactionAttestationField
               id="compliance-upload-redaction-attested"
@@ -292,6 +305,7 @@ export function UploadDocumentModal({
               || isLoadingCategories
               || resolvedCategoryId == null
               || (requiresAttestation && !redactionAttested)
+              || !receivedAt
             }
           >
             {isUploading ? `Uploading ${progress}%` : "Upload & Link"}

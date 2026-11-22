@@ -193,6 +193,8 @@ describe('enrichRows', () => {
       meetingType: 'annual',
       startsAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
       noticePostedAt: null,
+      minutesApprovedAt: null,
+      minutesDocumentId: null,
     };
 
     const [withoutMeetings] = enrichRows([row({ communityId: 5 })], inputs({ facts, checklistRows: [noticeRow], documentStates }));

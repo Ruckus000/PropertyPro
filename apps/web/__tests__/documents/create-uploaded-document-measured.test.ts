@@ -5,7 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createPresignedDownloadUrlMock, insertMock, validateFileMock, queuePdfExtractionMock } = vi.hoisted(() => ({
+const { createPresignedDownloadUrlMock, insertMock, validateFileMock, queuePdfExtractionMock, logAuditEventMock } = vi.hoisted(() => ({
+  logAuditEventMock: vi.fn(),
   createPresignedDownloadUrlMock: vi.fn(),
   insertMock: vi.fn(),
   validateFileMock: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock('@propertypro/db', () => ({
   createPresignedDownloadUrl: createPresignedDownloadUrlMock,
   createScopedClient: () => ({ insert: insertMock }),
   documents: {},
-  logAuditEvent: vi.fn(),
+  logAuditEvent: logAuditEventMock,
 }));
 vi.mock('@/lib/utils/file-validation', () => ({ validateFile: validateFileMock }));
 vi.mock('@/lib/workers/pdf-extraction', () => ({ queuePdfExtraction: queuePdfExtractionMock }));
@@ -77,4 +78,20 @@ describe('createUploadedDocument', () => {
     expect(queuePdfExtractionMock).not.toHaveBeenCalled();
     expect(insertMock).toHaveBeenCalledWith({}, expect.objectContaining({ extractionStatus: 'not_applicable' }));
   });
+
+  // H-2: the record's received date is stored and, being the date that decides
+  // lateness, is in the create entry of the audit trail.
+  it('stores the received date and records it in the create audit entry', async () => {
+    const receivedAt = new Date('2026-11-03T23:59:59.999Z');
+    await createUploadedDocument({ ...INPUT, measured: { byteLength: 4, mime: 'application/pdf' }, receivedAt });
+
+    expect(insertMock).toHaveBeenCalledWith({}, expect.objectContaining({ receivedAt }));
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'create',
+        newValues: expect.objectContaining({ receivedAt: receivedAt.toISOString() }),
+      }),
+    );
+  });
 });
+
