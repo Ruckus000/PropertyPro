@@ -48,20 +48,33 @@ const { applyCommunityEmailUnsubscribe } = await import(
 
 const SECRET = 'test-unsubscribe-secret';
 
-/** Records the `set()` payload so a test can assert WHICH flags were written. */
+/**
+ * Records the `set()` payload so a test can assert WHICH flags were written.
+ *
+ * The transaction handle `tx` is a DIFFERENT object from `db`, and only `tx`
+ * can read or write: a write or audit row that escaped the transaction (made
+ * on `db` or a fresh client) would show up as a call on `db`, not `tx`.
+ */
 function buildDb(existingRows: unknown[]) {
   const setSpy = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
   const insertValues = vi.fn(() => Promise.resolve([]));
-  const db: Record<string, unknown> = {
+  const tx = {
     select: vi.fn(() => ({
       from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(existingRows)) })),
     })),
     update: vi.fn(() => ({ set: setSpy })),
     insert: vi.fn(() => ({ values: insertValues })),
   };
-  // The write and its audit row share one transaction; the tx is this db.
-  db.transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db));
-  return { setSpy, insertValues, db };
+  const outside = () => {
+    throw new Error('query made outside the transaction');
+  };
+  const db = {
+    select: vi.fn(outside),
+    update: vi.fn(outside),
+    insert: vi.fn(outside),
+    transaction: vi.fn(async (fn: (handle: unknown) => Promise<unknown>) => fn(tx)),
+  };
+  return { setSpy, insertValues, db, tx };
 }
 
 beforeEach(() => {
@@ -302,7 +315,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
   // was confirmed. A system actor, because a token proves who held the link,
   // not who clicked it; never the token itself (the log is append-only).
   it('audits the opt-out in the same transaction, with how it was confirmed and no token', async () => {
-    const { db } = buildDb([{ id: 7 }]);
+    const { db, tx } = buildDb([{ id: 7 }]);
     createUnscopedClientMock.mockReturnValue(db);
 
     await applyCommunityEmailUnsubscribe(
@@ -311,6 +324,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
     );
 
     expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(tx.update).toHaveBeenCalledTimes(1);
     expect(logAuditEventMock).toHaveBeenCalledWith(
       {
         userId: null,
@@ -321,7 +335,9 @@ describe('applyCommunityEmailUnsubscribe', () => {
         newValues: { emailFrequency: 'never' },
         metadata: { source: 'email_unsubscribe', topic: 'notifications', confirmedVia: 'confirmation_page' },
       },
-      db,
+      // The transaction handle, not the client: the row commits or rolls back
+      // with the preference change it records.
+      tx,
     );
     expect(JSON.stringify(logAuditEventMock.mock.calls)).not.toMatch(/token/i);
   });

@@ -78,7 +78,11 @@ function page(
 <style>body{color-scheme:light dark;font-family:system-ui,-apple-system,sans-serif;max-width:32rem;margin:12vh auto;padding:0 1.25rem}h1{font-size:1.4rem}p{font-size:1rem;line-height:1.6;opacity:.75}button{font:inherit;font-size:1rem;min-height:2.75rem;padding:.5rem 1rem;cursor:pointer}</style>
 <h1>Email preferences</h1>
 <p>${message}</p>${form}${link}`;
-  return new Response(html, { status, headers: { 'content-type': 'text/html; charset=utf-8' } });
+  // no-store: the page is per-token, and its form action carries the token.
+  return new Response(html, {
+    status,
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+  });
 }
 
 /**

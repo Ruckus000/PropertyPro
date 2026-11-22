@@ -6,7 +6,7 @@
  * the link, not who clicked it. A mocked builder cannot prove that the audit
  * insert runs inside the transaction or that the table accepts the row.
  */
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { and, eq } from '@propertypro/db/filters';
 import {
   initTestKit,
@@ -22,6 +22,27 @@ import {
 import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
 import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import { applyCommunityEmailUnsubscribe } from '@/lib/services/community-email-unsubscribe-service';
+
+/**
+ * The real `logAuditEvent`, with a switch that makes its INSERT fail in the
+ * database: a null `resource_type` violates NOT NULL. The failure is
+ * Postgres's own, raised on the transaction handle the service passes in.
+ */
+const audit = vi.hoisted(() => ({ failNext: false }));
+vi.mock('@propertypro/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@propertypro/db')>();
+  return {
+    ...actual,
+    logAuditEvent: (
+      params: Parameters<typeof actual.logAuditEvent>[0],
+      executor?: Parameters<typeof actual.logAuditEvent>[1],
+    ) => {
+      if (!audit.failNext) return actual.logAuditEvent(params, executor);
+      audit.failNext = false;
+      return actual.logAuditEvent({ ...params, resourceType: null as unknown as string }, executor);
+    },
+  };
+});
 
 requireDatabaseUrlInCI('community-email-unsubscribe');
 
@@ -48,6 +69,43 @@ describeDb('community email opt-out — preferences and audit row in one transac
 
   afterAll(async () => {
     if (state) await teardownTestKit(state);
+  });
+
+  // Runs first, on a recipient with no preferences row yet: if the audit
+  // insert fails, the opt-out must not land without its record.
+  it('rolls the opt-out back when its audit row cannot be written', async () => {
+    const { notificationPreferences, complianceAuditLog } = state.dbModule;
+    audit.failNext = true;
+
+    const error = await applyCommunityEmailUnsubscribe(
+      { communityId, userId, topic: 'notifications' },
+      { confirmedVia: 'confirmation_page' },
+    ).catch((e: unknown) => e);
+    // Postgres refused the audit INSERT (not_null_violation), inside the tx.
+    const pgError = (error as { cause?: { code?: string } }).cause ?? error;
+    expect((pgError as { code?: string }).code).toBe('23502');
+
+    const prefs = await state.db
+      .select({ id: notificationPreferences.id })
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.communityId, communityId),
+          eq(notificationPreferences.userId, userId),
+        ),
+      );
+    expect(prefs).toEqual([]);
+
+    const auditRows = await state.db
+      .select({ id: complianceAuditLog.id })
+      .from(complianceAuditLog)
+      .where(
+        and(
+          eq(complianceAuditLog.communityId, communityId),
+          eq(complianceAuditLog.resourceId, `${userId}:${communityId}`),
+        ),
+      );
+    expect(auditRows).toEqual([]);
   });
 
   it('a confirmed notifications opt-out sets frequency never and audits it as the system', async () => {

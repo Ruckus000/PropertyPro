@@ -98,11 +98,20 @@ describe('community email unsubscribe route', () => {
       expect(html).toContain('href="/settings?communityId=7#notifications"');
     });
 
-    it('escapes the token it echoes into the form action', async () => {
+    // encodeURIComponent runs before escapeHtml, so a quote in the token is
+    // already %22 by the time it reaches the attribute: this pins the
+    // percent-encoding, which is what keeps the token inside the attribute.
+    it('percent-encodes a quote in the token before echoing it into the form action', async () => {
       verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
       const html = await (await GET(getReq('a%22b'))).text();
       expect(html).toContain('action="/api/v1/notifications/unsubscribe?token=a%22b"');
       expect(html).not.toContain('token=a"b');
+    });
+
+    it('is never cached: the page and its form carry the token', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      expect((await GET(getReq('good'))).headers.get('cache-control')).toBe('no-store');
+      expect((await POST(postReq('good', 'confirm=1'))).headers.get('cache-control')).toBe('no-store');
     });
 
     it('an invalid token neither writes nor shows a form or preferences link', async () => {
@@ -164,6 +173,47 @@ describe('community email unsubscribe route', () => {
         { communityId: 7, userId: 'u1', topic: 'announcements' },
         { confirmedVia: 'one_click' },
       );
+    });
+
+    it('honours one-click for calendar, audited as one-click', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'calendar' });
+      const res = await POST(postReq('good', ONE_CLICK));
+      expect(res.status).toBe(200);
+      expect(applyMock).toHaveBeenCalledWith(
+        { communityId: 7, userId: 'u1', topic: 'calendar' },
+        { confirmedVia: 'one_click' },
+      );
+    });
+
+    it('confirm=1 for announcements and calendar is audited as confirmed on the page', async () => {
+      for (const topic of ['announcements', 'calendar'] as const) {
+        applyMock.mockClear();
+        verifyMock.mockReturnValue({ communityId: 3, userId: 'u1', topic });
+        const res = await POST(postReq('good', 'confirm=1'));
+        expect(res.status).toBe(200);
+        expect(applyMock).toHaveBeenCalledWith(
+          { communityId: 3, userId: 'u1', topic },
+          { confirmedVia: 'confirmation_page' },
+        );
+      }
+    });
+
+    // Only the exact value the form sends counts as a person's confirmation;
+    // anything else is a mail client's one-click.
+    it('confirm=0 and confirm=true take the one-click branch', async () => {
+      for (const value of ['0', 'true']) {
+        applyMock.mockClear();
+        verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+        expect((await POST(postReq('good', `confirm=${value}`))).status).toBe(400);
+        expect(applyMock).not.toHaveBeenCalled();
+
+        verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'announcements' });
+        expect((await POST(postReq('good', `confirm=${value}`))).status).toBe(200);
+        expect(applyMock).toHaveBeenCalledWith(
+          { communityId: 7, userId: 'u1', topic: 'announcements' },
+          { confirmedVia: 'one_click' },
+        );
+      }
     });
 
     it('a topic-specific confirmation keeps its narrow copy', async () => {
