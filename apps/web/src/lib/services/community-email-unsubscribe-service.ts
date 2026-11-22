@@ -12,7 +12,7 @@
  *
  * See docs/audits/2026-08-09-legal-risk-audit.md F-11.
  */
-import { notificationPreferences } from '@propertypro/db';
+import { logAuditEvent, notificationPreferences } from '@propertypro/db';
 import { and, eq } from '@propertypro/db/filters';
 // AUTHZ: no-session token-authorized write; confined to the token's (communityId, userId).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
@@ -43,36 +43,76 @@ export const TOPIC_LABELS: Record<CommunityEmailTopic, string> = {
   calendar: 'event reminder emails',
 };
 
-export async function applyCommunityEmailUnsubscribe(payload: {
-  communityId: number;
-  userId: string;
-  topic: CommunityEmailTopic;
-}): Promise<void> {
-  const db = createUnscopedClient();
+/**
+ * How the opt-out was confirmed — recorded in the audit row.
+ *
+ * - `confirmation_page` — a person pressed the button on the page the email's
+ *   link opens, after it said what would stop.
+ * - `one_click` — a mail client's RFC 8058 POST, for a topic whose opt-out
+ *   stops no statutory notice.
+ */
+export type CommunityEmailUnsubscribeConfirmation = 'confirmation_page' | 'one_click';
+
+/**
+ * Apply the opt-out and audit it, in one transaction so neither lands alone.
+ *
+ * The audit row's actor is the system (`userId: null`): the token proves only
+ * that someone held this recipient's link — a forwarded email works for
+ * anyone — so naming the recipient as the actor would claim more than is
+ * known. The recipient is the resource. The token itself is never logged:
+ * `compliance_audit_log` is append-only and every manager can read it.
+ */
+export async function applyCommunityEmailUnsubscribe(
+  payload: {
+    communityId: number;
+    userId: string;
+    topic: CommunityEmailTopic;
+  },
+  options: { confirmedVia: CommunityEmailUnsubscribeConfirmation },
+): Promise<void> {
   const updates = TOPIC_UPDATES[payload.topic];
 
-  const existing = await db
-    .select({ id: notificationPreferences.id })
-    .from(notificationPreferences)
-    .where(
-      and(
-        eq(notificationPreferences.communityId, payload.communityId),
-        eq(notificationPreferences.userId, payload.userId),
-      ),
+  await createUnscopedClient().transaction(async (tx) => {
+    const existing = await tx
+      .select({ id: notificationPreferences.id })
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.communityId, payload.communityId),
+          eq(notificationPreferences.userId, payload.userId),
+        ),
+      );
+
+    if (existing.length > 0) {
+      await tx
+        .update(notificationPreferences)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(notificationPreferences.id, existing[0]!.id));
+    } else {
+      // Lazily create the prefs row; every other column carries a schema default.
+      await tx.insert(notificationPreferences).values({
+        communityId: payload.communityId,
+        userId: payload.userId,
+        ...updates,
+      } as typeof notificationPreferences.$inferInsert);
+    }
+
+    await logAuditEvent(
+      {
+        userId: null,
+        action: 'settings_changed',
+        resourceType: 'notification_preferences',
+        // Same identity the preferences route uses for its own audit rows.
+        resourceId: `${payload.userId}:${payload.communityId}`,
+        communityId: payload.communityId,
+        newValues: updates,
+        metadata: {
+          source: 'email_unsubscribe',
+          topic: payload.topic,
+          confirmedVia: options.confirmedVia,
+        },
+      },
+      tx,
     );
-
-  if (existing.length > 0) {
-    await db
-      .update(notificationPreferences)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(notificationPreferences.id, existing[0]!.id));
-    return;
-  }
-
-  // Lazily create the prefs row; every other column carries a schema default.
-  await db.insert(notificationPreferences).values({
-    communityId: payload.communityId,
-    userId: payload.userId,
-    ...updates,
-  } as typeof notificationPreferences.$inferInsert);
+  });
 }

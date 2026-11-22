@@ -132,7 +132,8 @@ export function buildCommunityEmailUnsubscribeUrl(params: {
  * mailbox provider's own Unsubscribe button POSTs that opt-out and the owner
  * never sees what it stops. The preference model cannot yet express
  * "everything except statutory notices", so this topic is offered only through
- * the visible link, whose page says what it stops (decision D3).
+ * the visible link, whose page says what it stops and asks for a button press
+ * first (decision D3).
  *
  * `announcements` and `calendar` write their own flags, which no statutory
  * notice reads, so one-click stays on for them.
@@ -145,8 +146,8 @@ export function topicAllowsOneClick(topic: CommunityEmailTopic): boolean {
  * Unsubscribe links for one recipient of a community email.
  *
  * - `linkUrl` — the visible footer link, for a person to click. It opens the
- *   no-login confirmation page, which applies the opt-out and says what it
- *   stopped.
+ *   no-login page, which says what unsubscribing stops and changes nothing
+ *   until the person presses its button (a GET never writes).
  * - `headerUrl` + `oneClick` — what goes in `List-Unsubscribe` and whether
  *   `List-Unsubscribe-Post` is sent. Where one-click is off, the header points
  *   at the preferences page, which changes nothing until the reader chooses:

@@ -73,6 +73,32 @@ describe('sendEmail custom headers', () => {
     expect(testInbox[0]?.headers).not.toHaveProperty('List-Unsubscribe-Post');
   });
 
+  // Header names are case-insensitive, so a lowercase caller header is the
+  // same header. It must not put one-click back, nor sit beside our pair.
+  it('a lowercase caller header cannot re-add one-click or a second List-Unsubscribe', async () => {
+    await sendEmail({
+      to: 'owner@example.com',
+      subject: 'Meeting Notice',
+      category: 'non-transactional',
+      unsubscribeUrl: 'https://example.com/settings?communityId=1#notifications',
+      oneClickUnsubscribe: false,
+      headers: {
+        'list-unsubscribe-post': 'List-Unsubscribe=One-Click',
+        'LIST-UNSUBSCRIBE': '<https://evil.example/hijack>',
+        'In-Reply-To': '<keep-me@mail.example.com>',
+      },
+      react: reply,
+    });
+
+    const names = Object.keys(testInbox[0]?.headers ?? {}).map((n) => n.toLowerCase());
+    expect(names).not.toContain('list-unsubscribe-post');
+    expect(names.filter((n) => n === 'list-unsubscribe')).toHaveLength(1);
+    expect(testInbox[0]?.headers['List-Unsubscribe']).toBe(
+      '<https://example.com/settings?communityId=1#notifications>',
+    );
+    expect(testInbox[0]?.headers['In-Reply-To']).toBe('<keep-me@mail.example.com>');
+  });
+
   it('does NOT let a caller override List-Unsubscribe on a bulk send', async () => {
     await sendEmail({
       to: 'resident@example.com',

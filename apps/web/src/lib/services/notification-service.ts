@@ -209,15 +209,33 @@ const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
  * managers that something is overdue, not a notice to owners).
  *
  * A statutory notice is sent on its own, never folded into a digest: a weekly
- * digest could deliver a 48-hour board meeting notice after the meeting, and
- * the digest email advertises one-click unsubscribe. Its email does not.
+ * digest could deliver a 48-hour board meeting notice after the meeting. Its
+ * email never advertises one-click unsubscribe.
+ *
+ * Both tables are exhaustive `Record`s (like `EVENT_TO_KIND`), so a new event
+ * type or resident-notice topic does not compile until someone decides
+ * whether it is statutory — there is no default to fall through to.
  */
+const STATUTORY_EVENT_TYPES: Record<
+  Exclude<NotificationEvent['type'], 'resident_notice'>,
+  boolean
+> = {
+  meeting_notice: true,
+  maintenance_update: false,
+  compliance_alert: false,
+  document_posted: false,
+};
+
+const STATUTORY_RESIDENT_NOTICE_TOPICS: Record<ResidentNoticeTopic, boolean> = {
+  violation: true,
+  arc: true,
+  package: false,
+  visitor: false,
+};
+
 export function isStatutoryNotice(event: NotificationEvent): boolean {
-  if (event.type === 'meeting_notice') return true;
-  if (event.type === 'resident_notice') {
-    return event.topic === 'violation' || event.topic === 'arc';
-  }
-  return false;
+  if (event.type === 'resident_notice') return STATUTORY_RESIDENT_NOTICE_TOPICS[event.topic];
+  return STATUTORY_EVENT_TYPES[event.type];
 }
 
 export interface InAppNotificationEvent {

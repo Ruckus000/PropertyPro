@@ -57,13 +57,25 @@ export interface SendEmailOptions {
   unsubscribeUrl?: string;
   /**
    * Whether a non-transactional email advertises RFC 8058 one-click
-   * unsubscribe (`List-Unsubscribe-Post`). Defaults to true.
+   * unsubscribe (`List-Unsubscribe-Post`). **Defaults to true** — on for every
+   * non-transactional send that does not pass `false`.
    *
-   * Set false for a statutory notice (an owner or board meeting notice, a
-   * violation notice): with the header, a mailbox provider's own "Unsubscribe"
-   * button POSTs `unsubscribeUrl` with no person ever seeing what it stops.
-   * `List-Unsubscribe` itself is still sent, so `unsubscribeUrl` should then
-   * be a page that changes nothing until the reader chooses.
+   * With the header, a mailbox provider's own "Unsubscribe" button POSTs
+   * `unsubscribeUrl` and no person sees what it stops. Pass `false` whenever
+   * that opt-out could stop a statutory notice: a statutory notice itself (a
+   * meeting, violation or ARC notice), and any email whose opt-out writes the
+   * setting that also gates statutory notices — today every community email
+   * on the `notifications` unsubscribe topic (the notification pipeline, its
+   * digest, shared documents). Web callers get this decided for them by
+   * `buildCommunityEmailUnsubscribeLinks`. `List-Unsubscribe` itself is still
+   * sent, so `unsubscribeUrl` should then be a page that changes nothing
+   * until the reader chooses.
+   *
+   * The default stays on because the remaining non-transactional senders
+   * (announcements, event reminders, the snowbird digest, insurance alerts)
+   * each opt out of their own flag only, and providers expect one-click on
+   * bulk mail. No email category carries statutory content implicitly: the
+   * one sender of statutory notices passes `false` explicitly.
    */
   oneClickUnsubscribe?: boolean;
   /** From address override. Defaults to configured default. */

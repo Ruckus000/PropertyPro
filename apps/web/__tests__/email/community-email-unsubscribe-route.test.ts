@@ -1,12 +1,16 @@
 /**
- * Route tests for the no-login community-email unsubscribe confirmation page.
+ * Route tests for the no-login community-email unsubscribe page.
  *
  * The `notifications` topic writes `emailFrequency: 'never'` — the master
  * switch for the notification pipeline, the digest and announcement delivery —
- * so one click stops every email from that community, not only the kind the
- * link arrived in. The confirmation page must say that (meeting notices and
- * announcements by name) and link to notification preferences, or a resident
- * who meant to silence one maintenance update silently loses meeting notices.
+ * so it stops every email from that community, statutory notices included.
+ *
+ * - A GET must change nothing: mail scanners prefetch links, forwarded mail
+ *   is clicked by others, and clients fetch List-Unsubscribe URLs. It shows
+ *   what would stop and a button.
+ * - The button POSTs `confirm=1`; only that applies the notifications opt-out.
+ * - A bare one-click POST is honoured only for topics that stop no statutory
+ *   notice.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
@@ -33,11 +37,21 @@ vi.mock('@/lib/services/community-email-unsubscribe-service', () => ({
 
 import { GET, POST } from '../../src/app/api/v1/notifications/unsubscribe/route';
 
-const req = (method: 'GET' | 'POST', token?: string) =>
-  new NextRequest(
-    `http://localhost:3000/api/v1/notifications/unsubscribe${token ? `?token=${token}` : ''}`,
-    { method },
-  );
+const url = (token?: string) =>
+  `http://localhost:3000/api/v1/notifications/unsubscribe${token ? `?token=${token}` : ''}`;
+
+const getReq = (token?: string) => new NextRequest(url(token), { method: 'GET' });
+
+/** A POST with a urlencoded body, as the page's form or a mail client sends it. */
+const postReq = (token: string | undefined, body: string) =>
+  new NextRequest(url(token), {
+    method: 'POST',
+    body,
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+  });
+
+/** RFC 8058's one-click body: what a mail client POSTs. */
+const ONE_CLICK = 'List-Unsubscribe=One-Click';
 
 describe('community email unsubscribe route', () => {
   beforeEach(() => {
@@ -45,69 +59,125 @@ describe('community email unsubscribe route', () => {
     applyMock.mockResolvedValue(undefined);
   });
 
-  it('general (notifications) unsubscribe says it stops ALL community email, by name', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
-    const res = await GET(req('GET', 'good'));
-    expect(res.status).toBe(200);
-    expect(applyMock).toHaveBeenCalledWith({ communityId: 7, userId: 'u1', topic: 'notifications' });
+  describe('GET (the link) changes nothing', () => {
+    it('leaves preferences unchanged and renders a confirm form for the notifications topic', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const res = await GET(getReq('good'));
+      expect(res.status).toBe(200);
+      expect(applyMock).not.toHaveBeenCalled();
 
-    const html = await res.text();
-    expect(html).toContain('all email from this community');
-    expect(html).toContain('meeting notices');
-    expect(html).toContain('announcements');
-    // It must not claim the narrow scope the old copy did.
-    expect(html).not.toContain("this community's notification emails");
+      const html = await res.text();
+      expect(html).toContain('<form method="post" action="/api/v1/notifications/unsubscribe?token=good">');
+      expect(html).toContain('<input type="hidden" name="confirm" value="1">');
+      expect(html).toContain('Unsubscribe from all email');
+    });
+
+    it('says, before anything changes, that it stops ALL community email, legal notices by name', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const html = await (await GET(getReq('good'))).text();
+      expect(html).toContain('stops all email from this community');
+      expect(html).toContain('meeting notices');
+      expect(html).toContain('violation notices');
+      expect(html).toContain('decisions on your ARC requests');
+      expect(html).toContain('announcements');
+      expect(html).not.toContain("You're unsubscribed");
+    });
+
+    it('is read-only for announcements and calendar too', async () => {
+      for (const topic of ['announcements', 'calendar'] as const) {
+        verifyMock.mockReturnValue({ communityId: 3, userId: 'u1', topic });
+        const html = await (await GET(getReq('good'))).text();
+        expect(html).toContain('name="confirm"');
+      }
+      expect(applyMock).not.toHaveBeenCalled();
+    });
+
+    it('links to the notification preferences of THAT community', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const html = await (await GET(getReq('good'))).text();
+      expect(html).toContain('href="/settings?communityId=7#notifications"');
+    });
+
+    it('escapes the token it echoes into the form action', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const html = await (await GET(getReq('a%22b'))).text();
+      expect(html).toContain('action="/api/v1/notifications/unsubscribe?token=a%22b"');
+      expect(html).not.toContain('token=a"b');
+    });
+
+    it('an invalid token neither writes nor shows a form or preferences link', async () => {
+      verifyMock.mockReturnValue(null);
+      const res = await GET(getReq('bad'));
+      expect(res.status).toBe(400);
+      expect(applyMock).not.toHaveBeenCalled();
+      const html = await res.text();
+      expect(html).not.toContain('href=');
+      expect(html).not.toContain('<form');
+    });
   });
 
-  it('links to the notification preferences of THAT community', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
-    const html = await (await GET(req('GET', 'good'))).text();
-    expect(html).toContain('href="/settings?communityId=7#notifications"');
-  });
+  describe('POST', () => {
+    // D3: a PERSON who read the page may stop everything, statutory notices included.
+    it('with confirm=1 applies the notifications opt-out, audited as confirmed on the page', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const res = await POST(postReq('good', 'confirm=1'));
+      expect(res.status).toBe(200);
+      expect(applyMock).toHaveBeenCalledWith(
+        { communityId: 7, userId: 'u1', topic: 'notifications' },
+        { confirmedVia: 'confirmation_page' },
+      );
+      const html = await res.text();
+      expect(html).toContain("You're unsubscribed from all email from this community");
+      expect(html).toContain('violation notices');
+      expect(html).toContain('href="/settings?communityId=7#notifications"');
+    });
 
-  it('a topic-specific unsubscribe keeps its narrow copy and the preferences link', async () => {
-    verifyMock.mockReturnValue({ communityId: 3, userId: 'u1', topic: 'announcements' });
-    const html = await (await GET(req('GET', 'good'))).text();
-    expect(html).toContain("this community's announcement emails");
-    expect(html).not.toContain('all email from this community');
-    expect(html).toContain('href="/settings?communityId=3#notifications"');
-  });
+    // A provider one-click on the notifications topic would set email_frequency
+    // to 'never' and stop meeting, violation and ARC notices unseen.
+    it('refuses a bare one-click POST on the notifications topic and writes nothing', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const res = await POST(postReq('good', ONE_CLICK));
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('Use the unsubscribe link in the email');
+      expect(applyMock).not.toHaveBeenCalled();
+    });
 
-  it('an invalid token neither writes nor shows a preferences link', async () => {
-    verifyMock.mockReturnValue(null);
-    const res = await GET(req('GET', 'bad'));
-    expect(res.status).toBe(400);
-    expect(applyMock).not.toHaveBeenCalled();
-    expect(await res.text()).not.toContain('href=');
-  });
+    it('refuses an empty-bodied POST on the notifications topic', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const res = await POST(postReq('good', ''));
+      expect(res.status).toBe(400);
+      expect(applyMock).not.toHaveBeenCalled();
+    });
 
-  it('POST (one-click) still unsubscribes on a valid token', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'announcements' });
-    const res = await POST(req('POST', 'good'));
-    expect(res.status).toBe(200);
-    expect(applyMock).toHaveBeenCalledWith({ communityId: 7, userId: 'u1', topic: 'announcements' });
-  });
+    it('a confirm value other than 1 is not a confirmation', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+      const res = await POST(postReq('good', `${ONE_CLICK}&confirm=yes`));
+      expect(res.status).toBe(400);
+      expect(applyMock).not.toHaveBeenCalled();
+    });
 
-  // A provider POST on the notifications topic would set email_frequency to
-  // 'never' and stop meeting, violation and ARC notices with nobody seeing it.
-  // No email advertises one-click for that topic; a POST anyway changes nothing.
-  it('POST refuses the notifications topic and writes nothing', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
-    const res = await POST(req('POST', 'good'));
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('Use the unsubscribe link in the email');
-    expect(applyMock).not.toHaveBeenCalled();
-  });
+    it('honours one-click for announcements, audited as one-click', async () => {
+      verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'announcements' });
+      const res = await POST(postReq('good', ONE_CLICK));
+      expect(res.status).toBe(200);
+      expect(applyMock).toHaveBeenCalledWith(
+        { communityId: 7, userId: 'u1', topic: 'announcements' },
+        { confirmedVia: 'one_click' },
+      );
+    });
 
-  // Decision D3: a PERSON on the confirmation page may stop everything,
-  // statutory notices included, and the page names them.
-  it('GET (the human path) still applies the notifications opt-out and names the legal notices it stops', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
-    const res = await GET(req('GET', 'good'));
-    expect(res.status).toBe(200);
-    expect(applyMock).toHaveBeenCalledWith({ communityId: 7, userId: 'u1', topic: 'notifications' });
-    const html = await res.text();
-    expect(html).toContain('violation notices');
-    expect(html).toContain('decisions on your ARC requests');
+    it('a topic-specific confirmation keeps its narrow copy', async () => {
+      verifyMock.mockReturnValue({ communityId: 3, userId: 'u1', topic: 'announcements' });
+      const html = await (await POST(postReq('good', 'confirm=1'))).text();
+      expect(html).toContain("You're unsubscribed from this community's announcement emails");
+      expect(html).not.toContain('all email from this community');
+    });
+
+    it('an invalid token writes nothing, confirmed or not', async () => {
+      verifyMock.mockReturnValue(null);
+      expect((await POST(postReq('bad', 'confirm=1'))).status).toBe(400);
+      expect((await POST(postReq('bad', ONE_CLICK))).status).toBe(400);
+      expect(applyMock).not.toHaveBeenCalled();
+    });
   });
 });

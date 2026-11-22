@@ -14,11 +14,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createUnscopedClientMock } = vi.hoisted(() => ({
+const { createUnscopedClientMock, logAuditEventMock } = vi.hoisted(() => ({
   createUnscopedClientMock: vi.fn(),
+  logAuditEventMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
+  logAuditEvent: logAuditEventMock,
   notificationPreferences: {
     id: 'prefs.id',
     communityId: 'prefs.community_id',
@@ -50,17 +52,16 @@ const SECRET = 'test-unsubscribe-secret';
 function buildDb(existingRows: unknown[]) {
   const setSpy = vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) }));
   const insertValues = vi.fn(() => Promise.resolve([]));
-  return {
-    setSpy,
-    insertValues,
-    db: {
-      select: vi.fn(() => ({
-        from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(existingRows)) })),
-      })),
-      update: vi.fn(() => ({ set: setSpy })),
-      insert: vi.fn(() => ({ values: insertValues })),
-    },
+  const db: Record<string, unknown> = {
+    select: vi.fn(() => ({
+      from: vi.fn(() => ({ where: vi.fn(() => Promise.resolve(existingRows)) })),
+    })),
+    update: vi.fn(() => ({ set: setSpy })),
+    insert: vi.fn(() => ({ values: insertValues })),
   };
+  // The write and its audit row share one transaction; the tx is this db.
+  db.transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db));
+  return { setSpy, insertValues, db };
 }
 
 beforeEach(() => {
@@ -234,7 +235,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'notifications',
-    });
+    }, { confirmedVia: 'confirmation_page' });
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({ emailFrequency: 'never' }),
@@ -249,7 +250,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'announcements',
-    });
+    }, { confirmedVia: 'one_click' });
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({ emailAnnouncements: false }),
@@ -262,7 +263,10 @@ describe('applyCommunityEmailUnsubscribe', () => {
     const { db, setSpy } = buildDb([{ id: 7 }]);
     createUnscopedClientMock.mockReturnValue(db);
 
-    await applyCommunityEmailUnsubscribe({ communityId: 42, userId: 'user-1', topic: 'calendar' });
+    await applyCommunityEmailUnsubscribe(
+      { communityId: 42, userId: 'user-1', topic: 'calendar' },
+      { confirmedVia: 'one_click' },
+    );
 
     expect(setSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -283,7 +287,7 @@ describe('applyCommunityEmailUnsubscribe', () => {
       communityId: 42,
       userId: 'user-1',
       topic: 'announcements',
-    });
+    }, { confirmedVia: 'confirmation_page' });
 
     expect(insertValues).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -292,5 +296,33 @@ describe('applyCommunityEmailUnsubscribe', () => {
         emailAnnouncements: false,
       }),
     );
+  });
+
+  // An opt-out from a link leaves a record: what changed, for whom, and how it
+  // was confirmed. A system actor, because a token proves who held the link,
+  // not who clicked it; never the token itself (the log is append-only).
+  it('audits the opt-out in the same transaction, with how it was confirmed and no token', async () => {
+    const { db } = buildDb([{ id: 7 }]);
+    createUnscopedClientMock.mockReturnValue(db);
+
+    await applyCommunityEmailUnsubscribe(
+      { communityId: 42, userId: 'user-1', topic: 'notifications' },
+      { confirmedVia: 'confirmation_page' },
+    );
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      {
+        userId: null,
+        action: 'settings_changed',
+        resourceType: 'notification_preferences',
+        resourceId: 'user-1:42',
+        communityId: 42,
+        newValues: { emailFrequency: 'never' },
+        metadata: { source: 'email_unsubscribe', topic: 'notifications', confirmedVia: 'confirmation_page' },
+      },
+      db,
+    );
+    expect(JSON.stringify(logAuditEventMock.mock.calls)).not.toMatch(/token/i);
   });
 });
