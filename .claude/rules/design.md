@@ -220,8 +220,9 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   paints is a toolbar: left-slot `children`, then `actions` and Help at the right
   edge; when none of those exist, nothing paints (no empty band). Inside a
   `PageLayout` it paints the `<h1>` in the display face, the `description`, a
-  place mark for `navId` (an id in `NAV_ITEMS`, so the sidebar and the title
-  share one icon) and `status`, over a bottom rule.
+  place mark for `icon` (a ready element such as `<Package />` supplied by the
+  caller; PageHeader must not import `nav-config`, which would put ~22 icons into
+  every page's client chunk) and `status`, over a bottom rule.
   `pnpm guard:page-header` fails on any literal `<h1>` in the authenticated app
   (every `(authenticated)/**/*.tsx` plus the page-shell components it lists), so
   a page cannot quietly paint a title the rest of the app no longer has. Escape

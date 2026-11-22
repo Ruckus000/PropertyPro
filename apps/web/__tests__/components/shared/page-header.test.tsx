@@ -66,7 +66,7 @@ describe('PageHeader', () => {
     const { container } = render(
       <PageLayout
         template="list"
-        header={<PageHeader title="Packages" description="Log deliveries as they arrive." navId="packages" />}
+        header={<PageHeader title="Packages" description="Log deliveries as they arrive." icon={<svg data-testid="mark" />} />}
       >
         x
       </PageLayout>,
@@ -74,16 +74,22 @@ describe('PageHeader', () => {
     const h1 = screen.getByRole('heading', { level: 1, name: 'Packages' });
     expect(h1).not.toHaveClass('sr-only');
     expect(screen.getByText('Log deliveries as they arrive.')).toBeVisible();
-    expect(container.querySelector('[data-page-header] svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByTestId('mark').closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-page-header] [aria-hidden="true"] [data-testid="mark"]')).not.toBeNull();
   });
 
-  it('draws no place mark for an id the navigation does not know', () => {
+  it('draws no place mark without an icon', () => {
     const { container } = render(
-      <PageLayout template="list" header={<PageHeader title="X" navId="nope" hideHelpButton />}>
+      <PageLayout template="list" header={<PageHeader title="X" hideHelpButton />}>
         x
       </PageLayout>,
     );
     expect(container.querySelector('[data-page-header] svg')).toBeNull();
+  });
+
+  it('does not render an icon outside a PageLayout', () => {
+    render(<PageHeader title="Packages" icon={<svg data-testid="mark" />} />);
+    expect(screen.queryByTestId('mark')).toBeNull();
   });
 
   it('still hides the title and drops the description outside a PageLayout', () => {
