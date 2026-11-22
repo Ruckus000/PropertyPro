@@ -111,6 +111,17 @@
     "375px. MEASURED against the agent sandbox: red with the fix reverted, all 8",
     "responsive-overflow blocks green with it.",
     "",
+    "2026-11-22: `design-direction-pilot.spec.ts` joins the list (9 blocks), so",
+    "expectedTestCount goes 69 -> 78 (`--list | grep -c chromium` on",
+    "playwright.ci.config.ts: 69 before, 78 after). It proves the five redesigned pilot",
+    "pages (Packages, Emergency list/detail/new, Visitors and its denied tab) hold at",
+    "1280 and 1440 in large text, behind the `pp_design_preview` cookie. MEASURED against",
+    "the agent sandbox: all 9 green; with `isDesignPreviewOn` forced false, 8 go red and",
+    "the no-cookie block stays green. The emergency-detail block self-skips if the seed",
+    "has no alert, which `--refuse-skips` turns red on purpose. The visitors-at-1280",
+    "finding lives in `design-direction-pilot-known-issues.spec.ts` as a fixme and is NOT",
+    "listed here: `--refuse-skips` would fail the job on it.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -133,7 +144,8 @@
     "phase1-roadmap-smoke.spec.ts",
     "responsive-overflow.spec.ts",
     "support-access.spec.ts",
-    "target-size-detector.spec.ts"
+    "target-size-detector.spec.ts",
+    "design-direction-pilot.spec.ts"
   ],
-  "expectedTestCount": 69
+  "expectedTestCount": 78
 }
