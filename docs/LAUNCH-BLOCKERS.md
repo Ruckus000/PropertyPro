@@ -149,6 +149,23 @@ line says where.
   - **Proxy-voting UI.** A proxy holder votes by sending `proxyId`; no screen lets them
     pick an approved proxy and cast the grantor unit's ballot. The vote form should also
     hide itself from tenants, who the API now refuses (only owners or proxy holders vote).
+  - **Where unit ownership is recorded** (found reviewing #1503, 2026-11-22). The vote
+    and proxy checks (`listActorOwnedUnitIds`, `apps/web/src/lib/units/actor-units.ts`)
+    count a unit as owned when `units.owner_user_id` is the actor OR the actor's
+    `resident` row has `is_unit_owner = true`. Two gaps follow from that:
+    - Nothing in the app writes `units.owner_user_id`; only the demo seed does. So an
+      owner who also holds a management role (a self-managed condo's `root_manager`,
+      or an owner promoted to `property_manager`, whose row is forced to
+      `is_unit_owner = false`) owns nothing as far as voting is concerned, and gets
+      "Only unit owners can vote". Decide how a manager's own unit is recorded.
+    - `materializeEligibilitySnapshot` (same service) makes a unit eligible only when
+      `units.owner_user_id IS NOT NULL`, so in a real community the eligibility snapshot
+      is empty and every owner gets "This unit is not eligible to vote". It must read
+      the same ownership sources as the vote check.
+  - **Proxies are not re-checked against ownership.** An approved proxy votes for
+    `grantorUnitId` without checking that the grantor still owns that unit (a sale after
+    approval, or a proxy a tenant created before #1503). Re-check at approval and at vote
+    time.
 - **Reserve transparency** and **storm tools** ship dark by design.
 - **Resident payments** are gated per community (`assessmentPaymentsEnabled`) and are not
   launching. Associations connect through Stripe-hosted onboarding (account links), not
