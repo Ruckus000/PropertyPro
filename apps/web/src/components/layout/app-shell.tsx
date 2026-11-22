@@ -127,9 +127,11 @@ interface AppShellProps {
   isDemo?: boolean;
   freeAccessExpiresAt?: Date | null;
   demoInfo?: DemoDetectionResult | null;
+  /** Served on a community's own subdomain; see `isCommunitySubdomainHost`. */
+  onTenantHost?: boolean;
 }
 
-function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo }: AppShellProps) {
+function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true', children, user, community, role, isUnitOwner, designation, features, resourceAccess, subscriptionStatus, subscriptionCanceledAt, subscriptionCurrentPeriodEndAt, isDemo, freeAccessExpiresAt, demoInfo, onTenantHost = false }: AppShellProps) {
   // `features` is NOT narrowed for a lapsed community — it is the full
   // type-and-plan set, same as any other state. The sidebar therefore cannot
   // infer the lapse from it and needs this flag: its type-gate filter reads raw
@@ -225,6 +227,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
     isLapsed,
     userName: user?.fullName ?? null,
     plan: community?.plan ?? null,
+    onTenantHost,
   };
   // Tabs replace the rail at `lg`+ only in a flag-on build (DesktopNavSlot is null otherwise).
   const tabsAtDesktop = topNav && DesktopNavSlot !== null;

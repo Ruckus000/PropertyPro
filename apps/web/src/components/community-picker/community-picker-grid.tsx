@@ -1,6 +1,7 @@
 import type { UserCommunityRow } from '@/lib/api/user-communities';
 import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
 import { applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 
 const COMMUNITY_TYPE_COLORS: Record<string, string> = {
   condo_718: 'bg-interactive-muted text-content-link',
@@ -41,20 +42,34 @@ interface CommunityPickerGridProps {
    * `/dashboard`. Already validated by `resolveSafeReturnTo`.
    */
   returnTo?: string | null;
+  /**
+   * The page is being served on a community's own subdomain
+   * (`isCommunitySubdomainHost`). There the host wins over `?communityId=`, so
+   * a relative link would reopen the host's community; cards link to the
+   * picked community's subdomain instead. Apex, `www`, localhost and
+   * `*.vercel.app` previews keep relative links.
+   */
+  onTenantHost?: boolean;
 }
 
-export function CommunityPickerGrid({ communities, returnTo = null }: CommunityPickerGridProps) {
-  const buildHref = (communityId: number): string =>
-    returnTo
-      ? applyCommunityIdToReturnTo(returnTo, communityId)
-      : `/dashboard?communityId=${communityId}`;
+export function CommunityPickerGrid({
+  communities,
+  returnTo = null,
+  onTenantHost = false,
+}: CommunityPickerGridProps) {
+  const buildHref = (community: UserCommunityRow): string => {
+    const path = returnTo
+      ? applyCommunityIdToReturnTo(returnTo, community.communityId)
+      : `/dashboard?communityId=${community.communityId}`;
+    return onTenantHost ? buildCommunityUrl(community.slug, path) : path;
+  };
 
   return (
     <ul role="list" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {communities.map((community) => (
         <li key={community.communityId}>
           <a
-            href={buildHref(community.communityId)}
+            href={buildHref(community)}
             className="block rounded-md border border-edge bg-surface-card p-5 shadow-e0 transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
             aria-label={`Open ${community.communityName}`}
           >

@@ -20,6 +20,12 @@
  *     items build `/communities/5/documents` with no query param, and tenant
  *     resolution has no path-based branch — without the injected `?communityId=`
  *     the click would bounce straight back to /select-community.
+ *
+ * On a community's own subdomain (`onTenantHost`) the host wins over
+ * `?communityId=`, so the same relative href would open the HOST's community.
+ * There each row links to the picked community's subdomain instead, via
+ * `buildCommunityUrl`; elsewhere (apex, `www`, localhost, `*.vercel.app`
+ * previews) the href stays relative.
  */
 import { useMemo, useState } from 'react';
 import { COMMUNITY_TYPE_DISPLAY_NAMES } from '@propertypro/shared';
@@ -34,6 +40,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useUserCommunities } from '@/hooks/use-user-communities';
 import { applyCommunityIdToReturnTo } from '@/lib/utils/return-to';
+import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { SEARCH_THRESHOLD } from './sidebar-tenant-switcher';
 import { CommunityAvatar } from './community-avatar';
 
@@ -47,6 +54,11 @@ export interface CommunityPickerDialogProps {
    * Called with the picked community's id to produce that item's real page.
    */
   buildDestination: ((communityId: number) => string) | null;
+  /**
+   * The page is served on a community's own subdomain. Computed server-side
+   * (`isCommunitySubdomainHost`) and passed down from the authenticated layout.
+   */
+  onTenantHost?: boolean;
 }
 
 export function CommunityPickerDialog({
@@ -54,6 +66,7 @@ export function CommunityPickerDialog({
   onOpenChange,
   itemLabel,
   buildDestination,
+  onTenantHost = false,
 }: CommunityPickerDialogProps) {
   // `enabled` is implicit: the dialog only mounts once the sidebar has something
   // to pick for. The query key is shared with SidebarTenantSwitcher, so the list
@@ -71,11 +84,13 @@ export function CommunityPickerDialog({
     return communities.filter((c) => c.name.toLowerCase().includes(q));
   }, [communities, query]);
 
-  const destinationFor = (communityId: number): string =>
-    applyCommunityIdToReturnTo(
-      buildDestination ? buildDestination(communityId) : '/dashboard',
-      communityId,
+  const destinationFor = (community: { id: number; slug: string }): string => {
+    const path = applyCommunityIdToReturnTo(
+      buildDestination ? buildDestination(community.id) : '/dashboard',
+      community.id,
     );
+    return onTenantHost ? buildCommunityUrl(community.slug, path) : path;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -122,7 +137,7 @@ export function CommunityPickerDialog({
                 {filtered.map((community) => (
                   <li key={community.id}>
                     <a
-                      href={destinationFor(community.id)}
+                      href={destinationFor(community)}
                       className="flex items-center justify-between gap-3 rounded-md border border-edge bg-surface-card px-3 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                       aria-label={`Open ${itemLabel ?? 'this page'} for ${community.name}`}
                     >

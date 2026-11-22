@@ -424,6 +424,71 @@ describe('p1-22 session middleware', () => {
     expect(response.headers.get('location')).toContain('/documents');
   });
 
+  // Auth pages are rate-limited per client IP; give each of these requests
+  // its own address so the cases below do not share one bucket.
+  let clientIpSeq = 0;
+  const nextClientIp = () => `203.0.113.${++clientIpSeq}`;
+
+  it('keeps the query string of a returnTo (it is part of the destination)', async () => {
+    // Regression: the whole returnTo was assigned to `pathname`, which encoded
+    // its `?` as `%3F` — `/documents%3FcommunityId%3D5…`, a 404 with the
+    // community lost.
+    mockAuthState({ id: 'user-1', emailVerified: true });
+
+    const response = await middleware(
+      request(
+        `http://localhost:3000/auth/login?returnTo=${encodeURIComponent('/documents?communityId=5&tab=minutes')}`,
+        { 'x-real-ip': nextClientIp() },
+      ),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(
+      'http://localhost:3000/documents?communityId=5&tab=minutes',
+    );
+  });
+
+  it.each([
+    ['protocol-relative', '//evil.example/steal'],
+    ['backslash protocol-relative', '/\\evil.example/steal'],
+    ['an absolute URL', 'https://evil.example/steal'],
+    ['double-encoded slashes', '%2F%2Fevil.example/steal'],
+    ['a tab the URL parser strips', '/\t/evil.example/steal'],
+    ['a newline the URL parser strips', '/\n/evil.example/steal'],
+  ])('refuses a returnTo with %s and falls back on-site', async (_label, returnTo) => {
+    mockAuthState({ id: 'user-1', emailVerified: true });
+
+    const response = await middleware(
+      request(`http://localhost:3000/auth/login?returnTo=${encodeURIComponent(returnTo)}`, {
+        'x-real-ip': nextClientIp(),
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.origin).toBe('http://localhost:3000');
+    expect(location.pathname).toBe('/select-community');
+    expect(location.searchParams.has('returnTo')).toBe(false);
+  });
+
+  it.each([
+    ['encoded slashes inside the path', '/%2F%2Fevil.example/steal'],
+    ['a dot segment before a double slash', '/.//evil.example/steal'],
+  ])('keeps a returnTo with %s on this origin', async (_label, returnTo) => {
+    // These pass the string screen; whatever path they resolve to, the
+    // redirect must stay on the request's own origin.
+    mockAuthState({ id: 'user-1', emailVerified: true });
+
+    const response = await middleware(
+      request(`http://localhost:3000/auth/login?returnTo=${encodeURIComponent(returnTo)}`, {
+        'x-real-ip': nextClientIp(),
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get('location')!).origin).toBe('http://localhost:3000');
+  });
+
   it('keeps unverified users on verify-email route (no redirect loop)', async () => {
     mockAuthState({ id: 'user-1', emailVerified: false });
 

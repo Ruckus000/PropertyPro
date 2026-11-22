@@ -217,3 +217,104 @@ describe('select-community page — support session', () => {
     expect(html).toContain('Other Towers');
   });
 });
+
+/**
+ * D10 — the subdomain loop. On a community's own subdomain middleware takes
+ * the community from the HOST and ignores `?communityId=`, so a relative
+ * `/dashboard?communityId=<other>` reopens the host's community; for a
+ * non-member the authenticated layout sends them back here, and the
+ * single-community auto-redirect fires again, forever. There every way out of
+ * this page must go to the picked community's subdomain. Everywhere else the
+ * query param is honoured and links stay relative.
+ */
+describe('select-community page — tenant host routing', () => {
+  function membership(communityId: number, communityName: string, slug: string) {
+    return {
+      communityId,
+      communityName,
+      slug,
+      communityType: 'condo_718' as const,
+      city: null,
+      state: null,
+      logoPath: null,
+      role: 'resident',
+      isUnitOwner: true,
+      displayTitle: null,
+      subscriptionStatus: 'active',
+      subscriptionPlan: 'professional',
+      freeAccessExpiresAt: null,
+      isDemo: false,
+      trialEndsAt: null,
+      demoExpiresAt: null,
+    };
+  }
+
+  const TWO = [membership(133, 'Breakaway Condos', 'breakaway'), membership(134, 'Sunset Towers', 'sunset-towers')];
+
+  async function renderWith(host: string, searchParams: Record<string, string> = {}): Promise<string> {
+    requestHeaders.current = new Headers({ host });
+    const element = await SelectCommunityPage({ searchParams: Promise.resolve(searchParams) });
+    return renderToStaticMarkup(element);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NEXT_PUBLIC_ROOT_DOMAIN', 'getpropertypro.com');
+    requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
+    listCommunitiesForUserMock.mockResolvedValue(TWO);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    requestHeaders.current = new Headers();
+  });
+
+  it('on a community subdomain, picker cards link to each community’s own subdomain', async () => {
+    const html = await renderWith('sunset-towers.getpropertypro.com');
+
+    expect(html).toContain('href="https://breakaway.getpropertypro.com/dashboard?communityId=133"');
+    expect(html).toContain('href="https://sunset-towers.getpropertypro.com/dashboard?communityId=134"');
+  });
+
+  it('on a community subdomain, the cards keep returnTo (path and query)', async () => {
+    const html = await renderWith('sunset-towers.getpropertypro.com', {
+      returnTo: '/documents?tab=minutes',
+    });
+
+    expect(html).toContain(
+      'href="https://breakaway.getpropertypro.com/documents?tab=minutes&amp;communityId=133"',
+    );
+  });
+
+  it('on a community subdomain, the single-community auto-redirect goes cross-host', async () => {
+    listCommunitiesForUserMock.mockResolvedValue([membership(133, 'Breakaway Condos', 'breakaway')]);
+
+    await expect(renderWith('sunset-towers.getpropertypro.com', { returnTo: '/maintenance' })).rejects.toThrow(
+      'NEXT_REDIRECT',
+    );
+    expect(redirectMock).toHaveBeenCalledWith(
+      'https://breakaway.getpropertypro.com/maintenance?communityId=133',
+    );
+  });
+
+  it.each([
+    ['the apex', 'getpropertypro.com'],
+    ['www', 'www.getpropertypro.com'],
+    ['a reserved label (pm)', 'pm.getpropertypro.com'],
+    ['a Vercel preview', 'propertypro-git-feature-team.vercel.app'],
+    ['localhost', 'localhost:3000'],
+  ])('on %s, picker cards stay relative', async (_label, host) => {
+    const html = await renderWith(host);
+
+    expect(html).toContain('href="/dashboard?communityId=133"');
+    expect(html).toContain('href="/dashboard?communityId=134"');
+    expect(html).not.toContain('https://');
+  });
+
+  it('on the apex, the single-community auto-redirect stays relative', async () => {
+    listCommunitiesForUserMock.mockResolvedValue([membership(133, 'Breakaway Condos', 'breakaway')]);
+
+    await expect(renderWith('www.getpropertypro.com')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirectMock).toHaveBeenCalledWith('/dashboard?communityId=133');
+  });
+});
