@@ -17,7 +17,7 @@
  *   cooling -> cancelled
  *   soft_deleted -> recovered
  */
-import { eq, and, desc, inArray, isNull, isNotNull, lt } from '@propertypro/db/filters';
+import { eq, and, asc, desc, inArray, isNull, isNotNull, lt } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   accessPlans,
@@ -149,6 +149,11 @@ export async function findCoolingCommunityDeletionRequest(
  * Find the user's active `cooling` deletion request, if any. Returns the
  * request id or `null`. Used by the cancel-deletion path.
  *
+ * Oldest first: when duplicates exist, the oldest request's cooling period
+ * ends first, so it is the one the lifecycle cron soft-deletes first. The
+ * cancel path decides success by whether THIS row was cancelled, so it must
+ * be the row most likely to have been soft-deleted under it.
+ *
  * AUTHZ: cross-tenant read of platform-level table; safe for the user to
  * query their own row by `userId`.
  */
@@ -166,6 +171,7 @@ export async function findCoolingDeletionRequestForUser(
         eq(accountDeletionRequests.status, 'cooling'),
       ),
     )
+    .orderBy(asc(accountDeletionRequests.id))
     .limit(1);
   return row?.id ?? null;
 }
@@ -327,21 +333,32 @@ export async function requestUserDeletion(
 }
 
 /**
- * Cancels EVERY cooling deletion request the user has and returns the rows it
- * cancelled. Cancelling only one would leave a duplicate to soft-delete the
- * account after the user was told it stays open.
+ * Cancels EVERY cooling deletion request the user has. Cancelling only one
+ * would leave a duplicate to soft-delete the account after the user was told
+ * it stays open.
  *
  * State-guarded like `executeUserSoftDelete`: only rows still in `cooling` are
- * touched. If the lifecycle cron soft-deleted a request between the caller's
- * lookup and this write, that request is not in the result, and the caller
- * must report that it is too late to cancel. Without the guard the write
- * overwrote `soft_deleted` with `cancelled` while the account stayed deleted.
+ * touched. Without the guard, a cancel that landed just after the lifecycle
+ * cron soft-deleted the request overwrote `soft_deleted` with `cancelled`
+ * while the account stayed deleted.
+ *
+ * `requestId` is the cooling request the caller looked up. The outcome says
+ * what happened to it:
+ * - `cancelled`: this call cancelled it (send the email);
+ * - `already_cancelled`: a concurrent cancel (another tab, a retry, an admin
+ *   intervention) got there first and sent the email; the account is open;
+ * - `too_late`: it left `cooling` some other way, in practice the cron's soft
+ *   delete, so the account is already deleted.
  */
-export async function cancelUserDeletion(userId: string, cancelledBy: string) {
+export async function cancelUserDeletion(
+  userId: string,
+  cancelledBy: string,
+  requestId: number,
+) {
   const now = new Date();
   const db = createUnscopedClient();
 
-  return db
+  const requests = await db
     .update(accountDeletionRequests)
     .set({ status: 'cancelled', cancelledAt: now, cancelledBy })
     .where(
@@ -352,6 +369,22 @@ export async function cancelUserDeletion(userId: string, cancelledBy: string) {
       ),
     )
     .returning();
+  if (requests.some((r) => r.id === requestId)) {
+    return { outcome: 'cancelled' as const, requests };
+  }
+
+  // Keyed on the user as well as the id, so this only reads their own request.
+  const [row] = await db
+    .select({ status: accountDeletionRequests.status })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.id, requestId),
+        eq(accountDeletionRequests.userId, userId),
+      ),
+    );
+  if (row?.status === 'cancelled') return { outcome: 'already_cancelled' as const };
+  return { outcome: 'too_late' as const, status: row?.status ?? null };
 }
 
 /**

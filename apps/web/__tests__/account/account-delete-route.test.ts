@@ -322,7 +322,10 @@ describe('DELETE /api/v1/account/delete', () => {
     vi.clearAllMocks();
     requireAuthenticatedUserIdMock.mockResolvedValue('user-1');
     findCoolingDeletionRequestForUserMock.mockResolvedValue(9);
-    cancelUserDeletionMock.mockResolvedValue([{ id: 9, status: 'cancelled' }]);
+    cancelUserDeletionMock.mockResolvedValue({
+      outcome: 'cancelled',
+      requests: [{ id: 9, status: 'cancelled' }],
+    });
     getUserProfileSnapshotMock.mockResolvedValue({ email: 'marisol@example.com', fullName: 'Marisol' });
     sendEmailMock.mockResolvedValue({ id: 'test_1' });
   });
@@ -349,7 +352,7 @@ describe('DELETE /api/v1/account/delete', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: { cancelled: true } });
-    expect(cancelUserDeletionMock).toHaveBeenCalledWith('user-1', 'user-1');
+    expect(cancelUserDeletionMock).toHaveBeenCalledWith('user-1', 'user-1', 9);
   });
 
   it('cancels the active deletion request', async () => {
@@ -361,14 +364,17 @@ describe('DELETE /api/v1/account/delete', () => {
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json).toEqual({ data: { cancelled: true } });
-    expect(cancelUserDeletionMock).toHaveBeenCalledWith('user-1', 'user-1');
+    expect(cancelUserDeletionMock).toHaveBeenCalledWith('user-1', 'user-1', 9);
   });
 
   it('sends ONE cancelled email when two cooling requests are stopped together', async () => {
-    cancelUserDeletionMock.mockResolvedValueOnce([
-      { id: 9, status: 'cancelled' },
-      { id: 12, status: 'cancelled' },
-    ]);
+    cancelUserDeletionMock.mockResolvedValueOnce({
+      outcome: 'cancelled',
+      requests: [
+        { id: 9, status: 'cancelled' },
+        { id: 12, status: 'cancelled' },
+      ],
+    });
 
     const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
 
@@ -380,7 +386,7 @@ describe('DELETE /api/v1/account/delete', () => {
   // The 04:00 UTC cron soft-deleted the request between the lookup and the
   // cancel. The account is deleted and banned; saying it stays open is false.
   it('returns 409 and sends no email when the request was soft-deleted before the cancel landed', async () => {
-    cancelUserDeletionMock.mockResolvedValueOnce([]);
+    cancelUserDeletionMock.mockResolvedValueOnce({ outcome: 'too_late', status: 'soft_deleted' });
 
     const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
 
@@ -388,6 +394,20 @@ describe('DELETE /api/v1/account/delete', () => {
     const json = await res.json();
     expect(json.error.code).toBe('CONFLICT');
     expect(json.error.message).toMatch(/already been deleted/);
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  // Two DELETEs at once (two tabs, a retry, an admin intervention): both find
+  // request 9, the other one cancels it first, and this one updates nothing.
+  // The account is open and the deletion is cancelled, so this is a success;
+  // the other request already sent the email.
+  it('returns 200 and sends no email when a concurrent cancel got there first', async () => {
+    cancelUserDeletionMock.mockResolvedValueOnce({ outcome: 'already_cancelled' });
+
+    const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: { cancelled: true } });
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 

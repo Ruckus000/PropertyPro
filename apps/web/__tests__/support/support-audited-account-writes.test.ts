@@ -180,7 +180,7 @@ beforeEach(() => {
   h.markOtpFailedMock.mockImplementation(async () => { h.callOrder.push('markOtpFailed'); });
   h.markPhoneVerifiedMock.mockImplementation(async () => { h.callOrder.push('markPhoneVerified'); });
   h.findCoolingDeletionRequestForUserMock.mockResolvedValue(91);
-  h.cancelUserDeletionMock.mockImplementation(async () => { h.callOrder.push('cancelDeletion'); return [{ id: 91 }]; });
+  h.cancelUserDeletionMock.mockImplementation(async () => { h.callOrder.push('cancelDeletion'); return { outcome: 'cancelled', requests: [{ id: 91 }] }; });
 
   process.env.TWILIO_ACCOUNT_SID = 'AC_test';
   process.env.TWILIO_AUTH_TOKEN = 'auth_test';
@@ -671,7 +671,7 @@ describe('DELETE /api/v1/account/delete under a support session', () => {
       after: { status: 'cancelled' },
       target: { deletionRequestId: 91 },
     });
-    expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(TARGET, TARGET);
+    expect(h.cancelUserDeletionMock).toHaveBeenCalledWith(TARGET, TARGET, 91);
   });
 
   it('FAILS CLOSED: a target who is not a member of the consented community → 403, deletion NOT cancelled', async () => {

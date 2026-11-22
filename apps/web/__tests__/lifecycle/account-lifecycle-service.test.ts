@@ -35,6 +35,7 @@ const {
   isNullMock,
   neMock,
   inArrayMock,
+  ascMock,
   accessPlansTable,
   communitiesTable,
   communityExportJobsTable,
@@ -57,6 +58,7 @@ const {
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
     neMock: vi.fn((col: unknown, val: unknown) => ({ _ne: [col, val] })),
     inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
+    ascMock: vi.fn((col: unknown) => ({ _asc: col })),
     accessPlansTable: {
       id: 'access_plans.id',
       communityId: 'access_plans.community_id',
@@ -141,6 +143,7 @@ vi.mock('@propertypro/db/filters', () => ({
   isNull: isNullMock,
   ne: neMock,
   inArray: inArrayMock,
+  asc: ascMock,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
@@ -167,6 +170,7 @@ import {
   requestUserDeletion,
   RootOffboardingAckRequiredError,
   cancelUserDeletion,
+  findCoolingDeletionRequestForUser,
   executeUserSoftDelete,
   purgeUserPII,
   requestCommunityDeletion,
@@ -560,8 +564,8 @@ describe('cancelUserDeletion', () => {
     const dbMock = buildDbMock({ updateReturning: [[updated]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
-    expect(result).toEqual([updated]);
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 1);
+    expect(result).toEqual({ outcome: 'cancelled', requests: [updated] });
     const updateCall = dbMock._calls.find((c) => c.op === 'update');
     expect(updateCall?.values).toMatchObject({ status: 'cancelled', cancelledBy: 'user-uuid-001' });
   });
@@ -577,9 +581,9 @@ describe('cancelUserDeletion', () => {
     const dbMock = buildDbMock({ updateReturning: [rows] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 3);
 
-    expect(result).toEqual(rows);
+    expect(result).toEqual({ outcome: 'cancelled', requests: rows });
     const updates = dbMock._calls.filter((c) => c.op === 'update');
     expect(updates).toHaveLength(1);
     // Keyed on the user, not on one request id.
@@ -595,17 +599,61 @@ describe('cancelUserDeletion', () => {
   // The 04:00 UTC cron can soft-delete between the route's lookup and this
   // write. Unguarded, the write flipped soft_deleted back to cancelled while
   // the account stayed deleted and banned.
-  it('only touches requests still cooling, so a soft-deleted one is left alone', async () => {
-    const dbMock = buildDbMock({ updateReturning: [[]] });
+  it('only touches requests still cooling; a soft-deleted one is reported too_late', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]], selectResults: [[{ status: 'soft_deleted' }]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001');
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 9);
 
-    expect(result).toEqual([]);
+    expect(result).toEqual({ outcome: 'too_late', status: 'soft_deleted' });
     const updateCall = dbMock._calls.find((c) => c.op === 'update');
     expect(updateCall?.where).toEqual({
       _and: expect.arrayContaining([{ _eq: [accountDeletionRequestsTable.status, 'cooling'] }]),
     });
+    // The re-read is the user's own request only.
+    expect(andMock).toHaveBeenCalledWith(
+      { _eq: [accountDeletionRequestsTable.id, 9] },
+      { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+    );
+  });
+
+  // Two DELETEs at once: both looked up request 9, the other one cancelled it
+  // first, and this update matched nothing. The account is open.
+  it('reports already_cancelled when a concurrent cancel got there first', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]], selectResults: [[{ status: 'cancelled' }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 9);
+
+    expect(result).toEqual({ outcome: 'already_cancelled' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findCoolingDeletionRequestForUser
+// ---------------------------------------------------------------------------
+
+describe('findCoolingDeletionRequestForUser', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // With legacy duplicates the oldest request's cooling ends first, so the
+  // cron soft-deletes it first. The cancel route keys success on the row this
+  // returns; an unordered .limit(1) could hand it the newer one instead.
+  it('returns the OLDEST cooling request when there are several', async () => {
+    // Unordered, the database may hand back either row; model it as the newer.
+    const orderByMock = vi.fn(() => ({ limit: () => Promise.resolve([{ id: 3 }]) }));
+    createUnscopedClientMock.mockReturnValue({
+      select: () => ({
+        from: () => ({
+          where: () => ({ orderBy: orderByMock, limit: () => Promise.resolve([{ id: 8 }]) }),
+        }),
+      }),
+    });
+
+    await expect(findCoolingDeletionRequestForUser('user-uuid-001')).resolves.toBe(3);
+    expect(orderByMock).toHaveBeenCalledWith({ _asc: accountDeletionRequestsTable.id });
   });
 });
 
