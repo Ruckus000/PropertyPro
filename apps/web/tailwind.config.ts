@@ -308,6 +308,7 @@ const config: Config = {
       addVariant("cq-sm", "@container cq (min-width: 480px)");
       addVariant("cq-md", "@container cq (min-width: 720px)");
       addVariant("cq-lg", "@container cq (min-width: 960px)");
+      addVariant("cq-xl", "@container cq (min-width: 1280px)");
     }),
   ],
 };
