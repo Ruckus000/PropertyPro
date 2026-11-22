@@ -1,6 +1,6 @@
 /**
  * The `cq` container-query vocabulary: `.cq` declares a container named `cq`,
- * and `cq-sm|md|lg:` respond to its width (480 / 720 / 960px) rather than the
+ * and `cq-sm|md|lg|xl:` respond to its width (480 / 720 / 960 / 1280px) rather than the
  * window. Defined identically in `apps/web` and `apps/admin` Tailwind configs.
  *
  * The sharp edge is the same as `site-frame`: a `cq-*` variant with no `.cq`
@@ -48,13 +48,14 @@ describe.each([
   it('compile to container queries against the named cq container', async () => {
     const css = await compile(
       cfg as typeof config,
-      'cq cq-sm:flex-row cq-md:grid-cols-2 cq-lg:grid-cols-3',
+      'cq cq-sm:flex-row cq-md:grid-cols-2 cq-lg:grid-cols-3 cq-xl:grid-cols-4',
     );
     expect(css).toContain('container-type: inline-size');
     expect(css).toContain('container-name: cq');
     expect(css).toMatch(/@container cq \(min-width: 480px\) \{ \.cq-sm\\:flex-row/);
     expect(css).toMatch(/@container cq \(min-width: 720px\) \{ \.cq-md\\:grid-cols-2/);
     expect(css).toMatch(/@container cq \(min-width: 960px\) \{ \.cq-lg\\:grid-cols-3/);
+    expect(css).toMatch(/@container cq \(min-width: 1280px\) \{ \.cq-xl\\:grid-cols-4/);
   });
 
   it('never targets the public site container', async () => {
@@ -68,7 +69,7 @@ describe.each([
  * (`\bcq\b` would match inside `cq-sm:` — the hyphen is a word boundary —
  * and could never fail), or be listed here as rendered inside a `.cq` parent.
  */
-const CQ_USER = /(?<![\w-])cq-(sm|md|lg):/;
+const CQ_USER = /(?<![\w-])cq-(sm|md|lg|xl):/;
 const CQ_TOKEN = /(^|[\s"'`])cq(?=[\s"'`]|$)/;
 
 /** Files using `cq-*:` without their own `.cq` element, each with the reason. */

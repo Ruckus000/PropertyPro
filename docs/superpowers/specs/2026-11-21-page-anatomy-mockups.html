@@ -1,0 +1,357 @@
+<title>Page Anatomy Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a quiet review bench. Controls on top, one app-frame mockup at a time, notes underneath.
+   Single light theme on purpose: the app being mocked is light-only (Florida Modern sand + coral). */
+:root{
+  color-scheme:light;
+  --page:#FBF7F1; --card:#FFFEFC; --subtle:#FDFBF8; --muted:#F6EFE6;
+  --edge:#EFE7DC; --edge-strong:#E3D8C9;
+  --text:#1B1A18; --text2:#57534E; --text3:#78716C;
+  --coral:#C2533A; --coral-hover:#A8412C; --coral-bg:#FCF1EE;
+  --danger:#B42318; --danger-bg:#FEF3F2; --danger-edge:#FECDCA;
+  --warn:#B45309; --warn-bg:#FFFAEB; --warn-edge:#FDE7B0;
+  --info:#1C5A52; --info-bg:#EFF8F6; --info-edge:#C5E4DE;
+  --ok:#157F3C; --ok-bg:#EFFAF2;
+  --bench:#EEE7DC; --ink:#1B1A18;
+  --sans:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --e1:0 1px 3px rgba(15,23,42,.06),0 1px 2px rgba(15,23,42,.04);
+}
+*{box-sizing:border-box}
+body{background:var(--bench);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3,p{margin:0}
+.top h1{font-size:26px;font-weight:600;letter-spacing:-.02em;text-wrap:balance}
+.top p{color:var(--text2);max-width:66ch;margin-top:6px}
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;flex-wrap:wrap;background:var(--muted);border:1px solid var(--edge-strong);border-radius:10px;padding:3px;gap:2px}
+.seg button{font:inherit;font-size:14px;font-weight:500;color:var(--text2);background:transparent;border:0;border-radius:7px;padding:7px 12px;cursor:pointer;min-height:36px}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--text);box-shadow:var(--e1)}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+.caption{display:flex;flex-direction:column;gap:2px}
+.caption h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+.caption p{color:var(--text2);max-width:80ch}
+.sample{font-family:var(--mono);font-size:12px;color:var(--text3)}
+
+/* app frame */
+.frame{background:var(--page);border:1px solid var(--edge-strong);border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(60,40,20,.10)}
+.shell{display:flex;min-height:560px}
+.rail{width:52px;flex:none;background:var(--muted);border-right:1px solid var(--edge);display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px 0}
+.rail i{width:20px;height:20px;border-radius:6px;background:var(--edge-strong);display:block}
+.rail i.on{background:var(--coral)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.crumbs{font-size:13px;color:var(--text3);padding:12px 24px;border-bottom:1px solid var(--edge)}
+.crumbs b{color:var(--text);font-weight:500}
+.body{padding:20px 24px 32px;display:flex;flex-direction:column;gap:24px;min-width:0}
+@media(max-width:640px){.rail{display:none}.body{padding:16px}.crumbs{padding:10px 16px}}
+
+/* shared bits */
+.btn{font:inherit;font-size:14px;font-weight:500;border-radius:8px;height:32px;padding:0 12px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.primary{background:var(--coral);color:#fff}.btn.primary:hover{background:var(--coral-hover)}
+.btn.outline{background:var(--card);border-color:var(--edge-strong);color:var(--text)}
+.btn.ghost{background:transparent;color:var(--text2)}
+.btn.old{background:var(--danger);color:#fff;border-radius:4px;height:36px;padding:0 16px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;border-radius:999px;padding:2px 8px 2px 6px;border:1px solid;white-space:nowrap}
+.badge svg{width:12px;height:12px;flex:none}
+.sev-emergency{color:var(--danger);background:var(--danger-bg);border-color:var(--danger-edge)}
+.sev-urgent{color:var(--warn);background:var(--warn-bg);border-color:var(--warn-edge)}
+.sev-info{color:var(--info);background:var(--info-bg);border-color:var(--info-edge)}
+.num{font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+th{text-align:left;font-weight:500;color:var(--text3);font-size:12px;padding:0 16px;height:32px;white-space:nowrap}
+td{padding:0 16px;height:44px;border-top:1px solid var(--edge);white-space:nowrap}
+td.t{white-space:normal;font-weight:500}
+.bar{display:inline-block;width:64px;height:6px;border-radius:99px;background:var(--muted);vertical-align:middle;margin-right:8px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--ok);border-radius:99px}
+.link{color:var(--coral-hover);font-weight:500;text-decoration:none}
+
+/* TODAY */
+.old-head{display:flex;justify-content:flex-end}
+.old-box{border:1px solid var(--edge);background:var(--card);border-radius:8px;overflow:hidden;max-width:860px;width:100%;margin:0 auto}
+.old-box thead{background:var(--page)} .old-box th{text-transform:uppercase;height:40px}
+.old-empty{padding:32px;text-align:center;color:var(--text3);font-size:14px}
+.old-wrap{max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+
+/* A — STRUCTURED */
+.a-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-start;justify-content:space-between}
+.a-head h3{font-size:22px;font-weight:600;letter-spacing:-.02em}
+.a-head p{color:var(--text2);font-size:14px;max-width:60ch;margin-top:2px}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.band{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--card);border:1px solid var(--edge);border-radius:8px}
+.band>div{padding:14px 16px;border-left:1px solid var(--edge);min-width:0}
+.band>div:first-child{border-left:0}
+.band .l{font-size:12px;color:var(--text3)}
+.band .v{font-size:22px;font-weight:600;letter-spacing:-.02em;line-height:1.25}
+.band .s{font-size:13px;color:var(--text2)}
+@media(max-width:760px){.band{grid-template-columns:repeat(2,minmax(0,1fr))}.band>div:nth-child(3){border-left:0}.band>div:nth-child(n+3){border-top:1px solid var(--edge)}}
+.sec{background:var(--card);border:1px solid var(--edge);border-radius:8px;overflow:hidden}
+.sec-h{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--edge)}
+.sec-h h4{margin:0;font-size:15px;font-weight:600}
+.sec-h .count{font-weight:400;color:var(--text3);margin-left:6px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.search{font:inherit;font-size:14px;height:32px;border:1px solid var(--edge-strong);border-radius:6px;padding:0 10px;background:var(--card);color:var(--text);width:180px;max-width:100%}
+.chip{font-size:13px;border:1px solid var(--edge-strong);border-radius:999px;padding:3px 10px;color:var(--text2);background:var(--card)}
+.chip.on{background:var(--text);color:#fff;border-color:var(--text)}
+.sec-f{padding:10px 16px;border-top:1px solid var(--edge);background:var(--subtle);font-size:13px;color:var(--text3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.a-empty{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0}
+.a-empty>div{padding:28px 24px;min-width:0}
+.a-empty>div+div{border-left:1px solid var(--edge);background:var(--subtle)}
+.a-empty h5{margin:0 0 4px;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.a-empty p{color:var(--text2);font-size:14px;max-width:44ch}
+.a-empty .acts{margin-top:16px}
+.steps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:12px;counter-reset:s}
+.steps li{display:flex;gap:10px;font-size:14px;counter-increment:s}
+.steps li::before{content:counter(s);flex:none;width:22px;height:22px;border-radius:99px;border:1px solid var(--edge-strong);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--text2);background:var(--card)}
+.steps b{font-weight:500;display:block}.steps span{color:var(--text2);font-size:13px}
+.lab{font-size:12px;color:var(--text3);font-weight:500}
+@media(max-width:760px){.a-empty{grid-template-columns:1fr}.a-empty>div+div{border-left:0;border-top:1px solid var(--edge)}}
+
+/* B — WORKSPACE */
+.b-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.b-bar h3{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.b-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
+@media(max-width:860px){.b-grid{grid-template-columns:1fr}}
+.feed{background:var(--card);border:1px solid var(--edge);border-radius:8px;overflow:hidden}
+.item{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;padding:14px 16px;border-top:1px solid var(--edge);align-items:start}
+.item:first-child{border-top:0}
+.ico{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;border:1px solid}
+.ico svg{width:16px;height:16px}
+.item h5{margin:0;font-size:15px;font-weight:600}
+.item p{font-size:14px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .m{font-size:13px;color:var(--text3);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.item .d{text-align:right;font-size:13px;color:var(--text2)}
+.item .d b{display:block;font-size:15px;color:var(--text);font-weight:600}
+@media(max-width:520px){.item{grid-template-columns:32px minmax(0,1fr)}.item .d{grid-column:2;text-align:left}}
+.side{display:flex;flex-direction:column;gap:12px}
+.pan{background:var(--card);border:1px solid var(--edge);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.pan h4{margin:0;font-size:13px;font-weight:600;color:var(--text2)}
+.big{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+.big small{font-size:14px;font-weight:400;color:var(--text3);letter-spacing:0}
+.meter{height:8px;border-radius:99px;background:var(--muted);overflow:hidden}.meter span{display:block;height:100%;background:var(--info)}
+.kv{display:flex;justify-content:space-between;font-size:14px;gap:12px}.kv span:first-child{color:var(--text2)}
+.tpl{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;padding:8px 10px;border:1px solid var(--edge);border-radius:6px;background:var(--subtle)}
+.b-empty{padding:40px 24px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.b-empty h5{margin:0;font-size:17px;font-weight:600}.b-empty p{color:var(--text2);font-size:14px;max-width:50ch}
+
+/* B2 — WORKSPACE, REVISED */
+.r-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-start;justify-content:space-between}
+.r-head h3{font-size:20px;font-weight:600;letter-spacing:-.02em}
+.r-head p{color:var(--text2);font-size:14px;max-width:60ch;margin-top:2px}
+.r-grid{display:grid;grid-template-columns:minmax(0,1fr) 280px;grid-template-areas:"main top" "main rest";grid-template-rows:auto 1fr;column-gap:20px;align-items:start}
+.r-main{grid-area:main;min-width:0}
+.r-top{grid-area:top;background:var(--card);border:1px solid var(--edge);border-radius:8px 8px 0 0}
+.r-rest{grid-area:rest;background:var(--card);border:1px solid var(--edge);border-top:0;border-radius:0 0 8px 8px}
+@media(max-width:900px){.r-grid{grid-template-columns:1fr;grid-template-areas:"top" "main" "rest";row-gap:16px}.r-top,.r-rest{border-radius:8px;border-top:1px solid var(--edge)}}
+.grp{padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.grp+.grp{border-top:1px solid var(--edge)}
+.grp h4{margin:0;font-size:12px;font-weight:500;color:var(--text3)}
+.attn{display:flex;gap:10px;align-items:flex-start;background:var(--warn-bg);border:1px solid var(--warn-edge);border-radius:6px;padding:10px;font-size:14px}
+.attn svg{width:16px;height:16px;flex:none;color:var(--warn);margin-top:2px}
+.attn b{font-weight:500;display:block}
+.go{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;color:var(--text);text-decoration:none;padding:4px 0}
+.go svg{width:14px;height:14px;color:var(--text3);flex:none}
+.go:hover{color:var(--coral-hover)}
+.about{font-size:13px;color:var(--text2)}
+.r-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--edge)}
+.r-tools .chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip .num{color:inherit;opacity:.7;margin-left:4px}
+.r-item{display:grid;grid-template-columns:32px minmax(0,1fr) auto;gap:12px;padding:12px 16px;border-top:1px solid var(--edge);align-items:center}
+.r-item:first-of-type{border-top:0}
+.r-item h5{margin:0;font-size:15px;font-weight:600}
+.r-item p{font-size:14px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-item .m{font-size:13px;color:var(--text3);margin-top:2px}
+.r-item .m b{font-weight:500}
+.dl{font-size:13px;color:var(--text2);text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.dl .okl{display:inline-flex;align-items:center;gap:4px}.dl .okl svg{width:14px;height:14px;color:var(--ok)}
+.dl .bad{color:var(--warn);font-weight:500}
+@media(max-width:520px){.r-item{grid-template-columns:32px minmax(0,1fr)}.dl{grid-column:2;align-items:flex-start;text-align:left}}
+.r-empty{padding:28px 24px 20px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.r-empty h5{margin:0;font-size:17px;font-weight:600;letter-spacing:-.01em}
+.r-empty p{color:var(--text2);font-size:14px;max-width:52ch}
+.ghost{margin:0 16px 16px;border:1px dashed var(--edge-strong);border-radius:8px;background:var(--subtle);opacity:.85}
+.ghost .tag{font-size:12px;color:var(--text3);padding:8px 16px 0;display:block}
+.ghost .r-item{border-top:0}
+.ghost table{min-width:480px}.ghost td{border-top:0}
+
+/* C — OPEN */
+.c-head{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--edge-strong)}
+.c-head h3{font-size:30px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.c-head p{color:var(--text2);margin-top:6px;max-width:56ch}
+.c-stats{display:flex;flex-wrap:wrap;gap:20px 56px}
+.c-stats .v{font-size:28px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.c-stats .l{font-size:13px;color:var(--text3);margin-top:4px}
+.c-list h4{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--text3)}
+.c-row{display:grid;grid-template-columns:minmax(0,1fr) 110px 150px 130px;gap:16px;align-items:center;padding:14px 0;border-top:1px solid var(--edge);font-size:14px}
+.c-row .t{font-weight:500;font-size:15px}
+.c-row .r{color:var(--text2)}
+@media(max-width:760px){.c-row{grid-template-columns:minmax(0,1fr) auto}.c-row .r{display:none}}
+.c-empty{padding:24px 0;border-top:1px solid var(--edge);display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.c-empty h5{margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em}.c-empty p{color:var(--text2);max-width:52ch}
+
+/* notes */
+.notes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:760px){.notes{grid-template-columns:1fr}}
+.note{border-top:2px solid var(--ink);padding-top:10px}
+.note h3{font-size:13px;font-weight:600;color:var(--text3);margin-bottom:4px}
+.note p{font-size:14px;color:var(--text2)}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <h1>Emergency Alerts, three ways to give a page its shape</h1>
+    <p>The same page in the app's own colours and type. Pick a direction, then switch to the empty state, since that is where pages look like husks today. Whichever one you choose becomes the pattern for every list page.</p>
+  </div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Direction" id="dir">
+      <button data-v="today" aria-pressed="false">Today</button>
+      <button data-v="a" aria-pressed="true">A · Structured</button>
+      <button data-v="b" aria-pressed="false">B · Workspace</button>
+      <button data-v="c" aria-pressed="false">C · Open</button>
+      <button data-v="b2" aria-pressed="false">B revised · Alerts</button>
+      <button data-v="b2p" aria-pressed="false">B revised · Packages</button>
+    </div>
+    <div class="seg" role="group" aria-label="Data" id="state">
+      <button data-v="full" aria-pressed="true">With alerts</button>
+      <button data-v="empty" aria-pressed="false">No alerts yet</button>
+    </div>
+  </div>
+
+  <div class="caption"><h2 id="cap-t"></h2><p id="cap-p"></p><span class="sample">Example data for a 147-resident condo. Not real figures.</span></div>
+
+  <div class="frame">
+    <div class="shell">
+      <div class="rail" aria-hidden="true"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="main">
+        <div class="crumbs">Sunset Condos &nbsp;/&nbsp; <b id="crumb">Emergency Alerts</b></div>
+        <div class="body" id="mock"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes" id="notes"></div>
+</div>
+
+<script>
+const I={
+  emergency:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.2 14.3 13H1.7L8 2.2Z"/><path d="M8 6.5v3M8 11.3v.1"/></svg>',
+  urgent:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.8v3.6M8 10.9v.1"/></svg>',
+  info:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 7.4v3.6M8 5v.1"/></svg>'
+};
+const SEV={emergency:'Emergency',urgent:'Urgent',info:'Info'};
+const rows=[
+ {t:'Hurricane Milton: mandatory evacuation, Zone A',p:'Miami-Dade has ordered Zone A to evacuate by 8 PM tonight. Shutters go up at 4 PM.',s:'emergency',to:147,ok:142,d:'Oct 8, 6:12 PM',ch:'Text + email'},
+ {t:'Water shut-off, Building B, 9 AM to 1 PM',p:'Plumbers are replacing the main riser valve. Fill containers before 9 AM.',s:'urgent',to:48,ok:48,d:'Nov 12, 7:30 AM',ch:'Text + email'},
+ {t:'Elevator 2 out of service',p:'The east elevator is down until the inspector signs off on Thursday.',s:'info',to:147,ok:146,d:'Nov 3, 2:05 PM',ch:'Email'},
+ {t:'Boil-water notice lifted',p:'The county has cleared the notice. Tap water is safe to drink again.',s:'info',to:147,ok:147,d:'Oct 14, 10:40 AM',ch:'Text + email'}
+];
+const badge=s=>`<span class="badge sev-${s}">${I[s]}${SEV[s]}</span>`;
+const pct=r=>Math.round(r.ok/r.to*100);
+const deliv=r=>`<span class="bar"><span style="width:${pct(r)}%"></span></span><span class="num">${r.ok} of ${r.to}</span>`;
+
+const V={
+today:{
+ t:'Today',p:'What ships now: no visible title, a red button, and a hand-built table. With nothing sent, the page is one grey sentence.',
+ notes:[['Title','Hidden. Only the breadcrumb names the page.'],['Context','None. Nothing says who an alert reaches or whether the last one landed.'],['Empty state','A sentence in a box, with no next step.']],
+ full:()=>`<div class="old-wrap"><div class="old-head"><button class="btn old">Send Emergency Alert</button></div>
+  <div class="old-box"><div class="scroll"><table><thead><tr><th>Title</th><th>Severity</th><th>Recipients</th><th>Status</th><th>Date</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="t"><a class="link" href="#">${r.t}</a></td><td>${badge(r.s)}</td><td class="num">${r.to}</td><td style="color:var(--ok);font-weight:500">Completed</td><td style="color:var(--text3)">${r.d}</td></tr>`).join('')}
+  </tbody></table></div></div></div>`,
+ empty:()=>`<div class="old-wrap"><div class="old-head"><button class="btn old">Send Emergency Alert</button></div><div class="old-box"><div class="old-empty">No emergency broadcasts yet.</div></div></div>`
+},
+a:{
+ t:'A · Structured',p:'Every list page gets the same four parts in the same order: a painted header with one main action, a summary band, a section with its own toolbar, and a footer. Closest to Stripe and Geist.',
+ notes:[['What it commits the app to','A visible page title and one-line description on every page, reversing the hidden-title decision.'],['Why it fixes empty pages','The header and summary band always have something true to say, so the page has shape before the first record exists.'],['Cost','Each page needs two to four summary figures. Some pages will need a new small query.']],
+ head:`<div class="a-head"><div><h3>Emergency Alerts</h3><p>Send urgent notices by text and email. Every alert is logged with who received it.</p></div><div class="acts"><button class="btn outline">Send a test</button><button class="btn primary">Send alert</button></div></div>`,
+ band:e=>`<div class="band">
+   <div><div class="l">Residents reachable</div><div class="v num">142 <span style="font-size:14px;font-weight:400;color:var(--text3)">of 147</span></div><div class="s"><a class="link" href="#">5 missing a phone or email</a></div></div>
+   <div><div class="l">Can receive texts</div><div class="v num">118</div><div class="s">Opted in to SMS</div></div>
+   <div><div class="l">Last alert</div><div class="v">${e?'None yet':'Nov 12'}</div><div class="s">${e?'No alert has been sent':'Water shut-off, 48 delivered'}</div></div>
+   <div><div class="l">Delivered, last 90 days</div><div class="v num">${e?'–':'98%'}</div><div class="s">${e?'Shown after the first alert':'483 of 489 messages'}</div></div></div>`,
+ full(){return this.head+this.band(false)+`<div class="sec"><div class="sec-h"><h4>Sent alerts<span class="count num">4</span></h4><div class="tools"><span class="chip on">All</span><span class="chip">Emergency</span><span class="chip">Urgent</span><span class="chip">Info</span><input class="search" id="a-search" placeholder="Search alerts" aria-label="Search alerts"></div></div>
+  <div class="scroll"><table><thead><tr><th>Alert</th><th>Severity</th><th>Delivered</th><th>Sent by</th><th>Date</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td class="t">${r.t}</td><td>${badge(r.s)}</td><td>${deliv(r)}</td><td style="color:var(--text2)">${r.ch}</td><td style="color:var(--text2)" class="num">${r.d}</td></tr>`).join('')}
+  </tbody></table></div><div class="sec-f"><span>Showing 4 of 4</span><span>Alerts are kept in the audit log</span></div></div>`},
+ empty(){return this.head+this.band(true)+`<div class="sec"><div class="sec-h"><h4>Sent alerts<span class="count num">0</span></h4></div><div class="a-empty">
+  <div><h5>You're ready to send your first alert</h5><p>142 residents will get it by text, email or both. Send a test to yourself first to see exactly what they receive.</p><div class="acts"><button class="btn primary">Send a test</button><button class="btn outline">Write an alert</button></div></div>
+  <div><div class="lab">Before the first storm</div><ol class="steps"><li><div><b>Fix 5 missing contacts</b><span>Units 204, 311, 507, 612 and 803 have no phone or email.</span></div></li><li><div><b>Send a test alert</b><span>Goes only to managers.</span></div></li><li><div><b>Save a hurricane template</b><span>So the real one takes thirty seconds.</span></div></li></ol></div></div></div>`}
+},
+b:{
+ t:'B · Workspace',p:'A slim title bar, then two columns: the records on the left as rich rows, and a standing side panel on the right that holds context and shortcuts. Closest to Atlassian and Linear.',
+ notes:[['What it commits the app to','A right-hand panel on every list page, with content written per feature.'],['Why it fixes empty pages','The side panel is useful on day one, so an empty list never stands alone.'],['Cost','The most work per page, and the panel competes with the sidebar for width on laptops. It stacks under the list on phones.']],
+ bar:`<div class="b-bar"><h3>Emergency Alerts</h3><div class="acts"><input class="search" id="b-search" placeholder="Search alerts" aria-label="Search alerts"><button class="btn primary">Send alert</button></div></div>`,
+ side:`<div class="side">
+   <div class="pan"><h4>Reach</h4><div class="big num">142 <small>of 147 residents</small></div><div class="meter"><span style="width:96.6%"></span></div><div class="kv"><span>Text</span><span class="num">118</span></div><div class="kv"><span>Email</span><span class="num">142</span></div><div class="kv"><span>No contact on file</span><a class="link num" href="#">5</a></div></div>
+   <div class="pan"><h4>Send from a template</h4><div class="tpl"><span>Hurricane watch</span>${badge('emergency')}</div><div class="tpl"><span>Water shut-off</span>${badge('urgent')}</div><div class="tpl"><span>Elevator outage</span>${badge('info')}</div></div>
+   <div class="pan"><h4>Who can send</h4><div class="kv"><span>Managers</span><span class="num">3</span></div><div class="kv"><span>Board members</span><span>View only</span></div></div></div>`,
+ full(){return this.bar+`<div class="b-grid"><div class="feed">${rows.map(r=>`<div class="item"><div class="ico sev-${r.s}">${I[r.s]}</div><div style="min-width:0"><h5>${r.t}</h5><p>${r.p}</p><div class="m">${badge(r.s)}<span>${r.d}</span><span>${r.ch}</span></div></div><div class="d"><b class="num">${pct(r)}%</b><span class="num">${r.ok} of ${r.to}</span></div></div>`).join('')}</div>${this.side}</div>`},
+ empty(){return this.bar+`<div class="b-grid"><div class="feed"><div class="b-empty"><h5>No alerts sent yet</h5><p>When you send one, it appears here with who received it and who didn't. Start from a template on the right, or send a test to managers only.</p><div class="acts" style="margin-top:10px"><button class="btn outline">Send a test</button></div></div></div>${this.side}</div>`}
+},
+c:{
+ t:'C · Open',p:'Almost no boxes. A large title, figures set straight on the page, and rows divided by hairlines. Hierarchy comes from type size and whitespace. Closest to Apple and newer Geist pages.',
+ notes:[['What it commits the app to','Removing most card borders app-wide and leaning on type scale and spacing.'],['Why it fixes empty pages','Partly. The large header carries the page, but with no records there is still a lot of blank space.'],['Cost','Hardest to keep consistent: without boxes, every page depends on exact spacing. Dense tables and forms read less clearly.']],
+ head:`<div class="c-head"><div><h3>Emergency Alerts</h3><p>Send urgent notices by text and email. Every alert is logged with who received it.</p></div><div class="acts"><button class="btn ghost">Send a test</button><button class="btn primary">Send alert</button></div></div>`,
+ stats:e=>`<div class="c-stats"><div><div class="v num">142</div><div class="l">of 147 residents reachable</div></div><div><div class="v num">118</div><div class="l">can receive texts</div></div><div><div class="v num">${e?'–':'98%'}</div><div class="l">delivered, last 90 days</div></div></div>`,
+ full(){return this.head+this.stats(false)+`<div class="c-list"><h4>Sent alerts</h4>${rows.map(r=>`<div class="c-row"><div class="t">${r.t}</div><div>${badge(r.s)}</div><div class="r num">${r.ok} of ${r.to} delivered</div><div class="r num">${r.d}</div></div>`).join('')}</div>`},
+ empty(){return this.head+this.stats(true)+`<div class="c-list"><h4>Sent alerts</h4><div class="c-empty"><h5>Nothing sent yet</h5><p>Send a test to yourself to see exactly what residents receive. Five units still have no phone or email on file.</p><div class="acts"><button class="btn outline">Send a test</button><button class="btn ghost">Fix missing contacts</button></div></div></div>`}
+}};
+
+const CHK='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>';
+const CHV='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3.5 4.5 4.5L6 12.5"/></svg>';
+const go=t=>`<a class="go" href="#"><span>${t}</span>${CHV}</a>`;
+const rail=(glance,attn,shortcuts,about)=>`<div class="r-top"><div class="grp"><h4>At a glance</h4>${glance}</div><div class="grp"><h4>Needs attention</h4>${attn}</div></div>
+  <div class="r-rest"><div class="grp"><h4>Shortcuts</h4>${shortcuts.map(go).join('')}</div><div class="grp"><h4>About</h4><p class="about">${about}</p>${go('How this works')}</div></div>`;
+const attn=(t,s)=>`<div class="attn">${I.emergency}<div><b>${t}</b><a class="link" href="#">${s}</a></div></div>`;
+
+V.b2={
+ t:'B revised · Emergency Alerts',p:'The same two-column idea with the weak points fixed: the page says what it is for, the side panel is one quiet column with fixed slots, rows flag only what went wrong, and the filters are back.',
+ notes:[['What changed from B','A one-line description under the title. Filters and search moved into the list. The three side boxes became one panel. Rows no longer repeat the severity twice, and a delivery figure only stands out when someone was missed.'],['Rules that keep every page alike','The side panel always has the same four slots in the same order: At a glance, Needs attention, Shortcuts, About. A page may leave one out but may not invent a fifth.'],['On small screens','At a glance and Needs attention move above the list, and Shortcuts and About drop below it, so context is never buried under a long list.']],
+ head:`<div class="r-head"><div><h3>Emergency Alerts</h3><p>Send urgent notices by text and email. Every alert is logged with who received it.</p></div><div class="acts"><button class="btn outline">Send a test</button><button class="btn primary">Send alert</button></div></div>`,
+ rail:()=>rail(`<div class="big num">142 <small>of 147 residents reachable</small></div><div class="meter"><span style="width:96.6%"></span></div><div class="kv"><span>By text</span><span class="num">118</span></div><div class="kv"><span>By email</span><span class="num">142</span></div>`,
+   attn('5 residents can\'t be reached','Add a phone or email'),['Hurricane watch template','Water shut-off template','Elevator outage template'],'Managers can send alerts. Owners see the alerts that were sent to them.'),
+ row:r=>`<div class="r-item"><div class="ico sev-${r.s}">${I[r.s]}</div><div style="min-width:0"><h5>${r.t}</h5><p>${r.p}</p><div class="m"><b>${SEV[r.s]}</b> · ${r.d} · ${r.ch}</div></div><div class="dl num">${r.ok===r.to?`<span class="okl">${CHK}Delivered to all ${r.to}</span>`:`<span>${r.ok} of ${r.to} delivered</span><span class="bad">${r.to-r.ok} not reached</span>`}</div></div>`,
+ full(){return this.head+`<div class="r-grid"><div class="r-main"><div class="sec"><div class="r-tools"><div class="chips"><span class="chip on">All<span class="num">4</span></span><span class="chip">Emergency<span class="num">1</span></span><span class="chip">Urgent<span class="num">1</span></span><span class="chip">Info<span class="num">2</span></span></div><input class="search" id="r-search" placeholder="Search alerts" aria-label="Search alerts"></div>${rows.map(this.row).join('')}<div class="sec-f"><span>4 alerts</span><span>Kept in the audit log</span></div></div></div>${this.rail()}</div>`},
+ empty(){return this.head+`<div class="r-grid"><div class="r-main"><div class="sec"><div class="r-empty"><h5>No alerts sent yet</h5><p>Send a test to yourself first. It goes only to managers and shows exactly what residents will receive.</p><div class="acts" style="margin-top:10px"><button class="btn primary">Send a test</button><button class="btn outline">Write an alert</button></div></div><div class="ghost"><span class="tag">Example of a sent alert</span>${this.row(rows[1])}</div></div></div>${this.rail()}</div>`}
+};
+
+const pk=[
+ {n:'Maria Delgado',u:'204',c:'UPS',d:'Today, 10:14 AM',w:0},
+ {n:'James Whitfield',u:'311',c:'Amazon',d:'Yesterday, 4:40 PM',w:1},
+ {n:'Priya Nair',u:'507',c:'FedEx',d:'Nov 18',w:3},
+ {n:'Tom Okafor',u:'612',c:'USPS',d:'Nov 14',w:7}
+];
+const pkRow=r=>`<tr><td class="t">${r.n}</td><td class="num" style="color:var(--text2)">${r.u}</td><td style="color:var(--text2)">${r.c}</td><td class="num" style="color:var(--text2)">${r.d}</td><td>${r.w>5?`<span class="badge sev-urgent">${I.urgent}Waiting ${r.w} days</span>`:`<span class="badge sev-info">${I.info}Awaiting pickup</span>`}</td></tr>`;
+const pkTable=list=>`<div class="scroll"><table><thead><tr><th>Resident</th><th>Unit</th><th>Carrier</th><th>Received</th><th>Status</th></tr></thead><tbody>${list.map(pkRow).join('')}</tbody></table></div>`;
+V.b2p={
+ crumb:'Packages',
+ t:'B revised · Packages',p:'The same template on a dense page. Records that are mostly text use rich rows, and records that are mostly columns keep a real table. The header, toolbar and side panel do not change.',
+ notes:[['Why show this page','A template only counts if it holds on a page that is nothing like the first one. Packages is a plain table with a single action.'],['Rows or table','One rule per page: narrative records (alerts, announcements, violations) use rich rows; tabular records (packages, ledger, residents) use the table.'],['What each page must supply','A one-line description, one headline figure, and the condition that counts as needing attention. Those three are what stop a page being a husk.']],
+ head:`<div class="r-head"><div><h3>Packages</h3><p>Log deliveries as they arrive. Residents are told when a package is ready to collect.</p></div><div class="acts"><button class="btn primary">Log a package</button></div></div>`,
+ rail:e=>rail(`<div class="big num">${e?0:7} <small>awaiting pickup</small></div><div class="kv"><span>Arrived today</span><span class="num">${e?0:3}</span></div><div class="kv"><span>Picked up this week</span><span class="num">${e?0:21}</span></div>`,
+   e?`<p class="about">Nothing is waiting. Packages left more than 5 days appear here.</p>`:attn('2 packages waiting over 5 days','Send a reminder'),['Print the pickup list','Notification settings'],'Staff log packages. Residents see only their own and get a notice for each one.'),
+ full(){return this.head+`<div class="r-grid"><div class="r-main"><div class="sec"><div class="r-tools"><div class="chips"><span class="chip on">Awaiting pickup<span class="num">7</span></span><span class="chip">Picked up</span><span class="chip">All</span></div><input class="search" id="p-search" placeholder="Search resident or unit" aria-label="Search packages"></div>${pkTable(pk)}<div class="sec-f"><span>Showing 4 of 7</span><span>Oldest first</span></div></div></div>${this.rail(false)}</div>`},
+ empty(){return this.head+`<div class="r-grid"><div class="r-main"><div class="sec"><div class="r-empty"><h5>No packages logged yet</h5><p>Log the first delivery and the resident gets a notice straight away. It takes about ten seconds per package.</p><div class="acts" style="margin-top:10px"><button class="btn primary">Log a package</button></div></div><div class="ghost"><span class="tag">Example of a logged package</span>${pkTable([pk[0]])}</div></div></div>${this.rail(true)}</div>`}
+};
+
+let dir='b2',st='full';
+try{dir=localStorage.getItem('pa-dir2')||dir;st=localStorage.getItem('pa-st')||st}catch(e){}
+if(!V[dir])dir='b2'; if(st!=='full'&&st!=='empty')st='full';
+function draw(){
+  const v=V[dir];
+  document.getElementById('cap-t').textContent=v.t;
+  document.getElementById('cap-p').textContent=v.p;
+  document.getElementById('crumb').textContent=v.crumb||'Emergency Alerts';
+  document.getElementById('mock').innerHTML=v[st]();
+  document.getElementById('notes').innerHTML=v.notes.map(n=>`<div class="note"><h3>${n[0]}</h3><p>${n[1]}</p></div>`).join('');
+  document.querySelectorAll('#dir button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===dir));
+  document.querySelectorAll('#state button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===st));
+}
+document.getElementById('dir').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;dir=b.dataset.v;try{localStorage.setItem('pa-dir2',dir)}catch(e){}draw()});
+document.getElementById('state').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;st=b.dataset.v;try{localStorage.setItem('pa-st',st)}catch(e){}draw()});
+document.getElementById('mock').addEventListener('click',e=>{if(e.target.closest('a'))e.preventDefault()});
+draw();
+</script>
