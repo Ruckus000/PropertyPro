@@ -18,24 +18,36 @@
  * delay: a stranded `soft_deleted` row cannot purge an open account, nor purge
  * a re-deleted one the night it is deleted again.
  *
- * `purgeUserPII` re-checks before scrubbing, so a recovery that lands after
- * the candidate scan leaves the account untouched.
+ * The purge/recovery lock. The request row's status is the lock: the purge
+ * claims `soft_deleted` → `purged` (with `purged_at` null until it finishes),
+ * a recovery claims `soft_deleted` → `recovered`, and whichever lands first
+ * wins. The recovery side lives in apps/admin and talks PostgREST, which this
+ * suite has no server for, so `recoveryClaim` below issues the same
+ * conditional UPDATE the route sends; the purge side is the real service.
+ * Both interleavings are driven deterministically, plus a crashed purge and
+ * its retry, a reopening landing between the purge's claim and its scrub, and
+ * the community twin.
  *
- * Inserts run-unique users rows and their requests directly; afterAll deletes
- * them (requests first: `user_id` is ON DELETE RESTRICT).
+ * Inserts run-unique users rows, one community and their requests directly;
+ * afterAll deletes them (requests first: `user_id` is ON DELETE RESTRICT).
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { accountDeletionRequests, users } from '@propertypro/db';
-import { eq, inArray } from '@propertypro/db/filters';
-// AUTHZ: Integration test for platform-level tables (users, account_deletion_requests; no community_id).
+import { accountDeletionRequests, communities, users } from '@propertypro/db';
+import { and, eq, inArray } from '@propertypro/db/filters';
+// AUTHZ: Integration test for platform-level tables (users, account_deletion_requests, communities).
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import {
   cancelUserDeletion,
   findPurgeReadyDeletionRequests,
+  purgeCommunityData,
   purgeUserPII,
 } from '../../src/lib/services/account-lifecycle-service';
 import { getDescribeDb, requireDatabaseUrlInCI } from './helpers/multi-tenant-test-kit';
+import {
+  failNextAuthUpdateUserFor,
+  getCapturedAuthUpdateUserIds,
+} from './providers/test-auth-admin-provider';
 
 requireDatabaseUrlInCI('account-deletion-cancel');
 const describeDb = getDescribeDb();
@@ -50,10 +62,16 @@ const USER_IDS = {
   purgeRecovered: randomUUID(),
   purgeRedeleted: randomUUID(),
   purgeRace: randomUUID(),
-  purgeRaceUserOnly: randomUUID(),
   purgeNotSoftDeleted: randomUUID(),
   purgeTooRecent: randomUUID(),
+  lockRecoveryFirst: randomUUID(),
+  lockPurgeFirst: randomUUID(),
+  lockCrashedPurge: randomUUID(),
+  reopenedAfterClaim: randomUUID(),
+  authMissing: randomUUID(),
+  communityRequester: randomUUID(),
 };
+const COMMUNITY_SLUG = `deletion-guards-${USER_IDS.communityRequester}`;
 type Label = keyof typeof USER_IDS;
 const emailOf = (label: Label) => `deletion-guards-${label}-${USER_IDS[label]}@lifecycletest.invalid`;
 const DAY = 24 * 60 * 60 * 1000;
@@ -87,6 +105,52 @@ describeDb('account deletion SQL guards (integration)', () => {
   const markUserDeleted = (userId: string, at: Date = new Date()) =>
     db.update(users).set({ deletedAt: at }).where(eq(users.id, userId));
 
+  /**
+   * The recovery's claim, exactly as apps/admin's recover route sends it:
+   * `soft_deleted` → `recovered` for this id, only while still `soft_deleted`.
+   * True when it matched.
+   */
+  async function recoveryClaim(id: number): Promise<boolean> {
+    const rows = await db
+      .update(accountDeletionRequests)
+      .set({ status: 'recovered', recoveredAt: new Date() })
+      .where(and(eq(accountDeletionRequests.id, id), eq(accountDeletionRequests.status, 'soft_deleted')))
+      .returning({ id: accountDeletionRequests.id });
+    return rows.length === 1;
+  }
+
+  /** Neither users nor auth.users was scrubbed for this user. */
+  async function expectUntouched(label: Label) {
+    const [user] = await db.select().from(users).where(eq(users.id, USER_IDS[label]));
+    expect(user!.email).toBe(emailOf(label));
+    expect(user!.fullName).toBe(`Deletion ${label}`);
+    expect(getCapturedAuthUpdateUserIds()).not.toContain(USER_IDS[label]);
+  }
+
+  async function waitFor(condition: () => Promise<boolean>, timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await condition())) {
+      if (Date.now() > deadline) throw new Error('waitFor: condition never held');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+
+  let communityId = 0;
+  async function communityRequest(status: string, scheduledPurgeAt: Date): Promise<number> {
+    const [row] = await db
+      .insert(accountDeletionRequests)
+      .values({
+        requestType: 'community',
+        userId: USER_IDS.communityRequester,
+        communityId,
+        status,
+        coolingEndsAt: new Date(Date.now() - 2 * DAY),
+        scheduledPurgeAt,
+      })
+      .returning({ id: accountDeletionRequests.id });
+    return row!.id;
+  }
+
   beforeAll(async () => {
     await db.insert(users).values(
       (Object.keys(USER_IDS) as Label[]).map((label) => ({
@@ -95,12 +159,18 @@ describeDb('account deletion SQL guards (integration)', () => {
         fullName: `Deletion ${label}`,
       })),
     );
+    const [community] = await db
+      .insert(communities)
+      .values({ name: 'Deletion Guards', slug: COMMUNITY_SLUG, communityType: 'condo_718', deletedAt: new Date() })
+      .returning({ id: communities.id });
+    communityId = community!.id;
   });
 
   afterAll(async () => {
     const ids = Object.values(USER_IDS);
     await db.delete(accountDeletionRequests).where(inArray(accountDeletionRequests.userId, ids));
     await db.delete(users).where(inArray(users.id, ids));
+    if (communityId) await db.delete(communities).where(eq(communities.id, communityId));
   });
 
   it('cancels every cooling request the user has', async () => {
@@ -202,25 +272,18 @@ describeDb('account deletion SQL guards (integration)', () => {
     const id = await request(userId, 'soft_deleted', past, past);
     expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).toContain(id);
 
-    // The recovery: request recovered, users.deleted_at cleared.
-    await db
-      .update(accountDeletionRequests)
-      .set({ status: 'recovered', recoveredAt: new Date() })
-      .where(eq(accountDeletionRequests.id, id));
+    // The whole recovery: claim, then restore.
+    expect(await recoveryClaim(id)).toBe(true);
     await db.update(users).set({ deletedAt: null }).where(eq(users.id, userId));
 
-    // Returns before the auth.users rewrite (there is no Auth service here, so
-    // reaching it would throw).
     await expect(purgeUserPII(id)).resolves.toBeNull();
 
     expect(await statusOf(id)).toBe('recovered');
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
-    expect(user!.email).toBe(emailOf('purgeRace'));
-    expect(user!.fullName).toBe('Deletion purgeRace');
+    await expectUntouched('purgeRace');
   });
 
   // The account is deleted (long enough ago), so the users-row condition alone
-  // would let these through. Only the re-check of the REQUEST stops them.
+  // would let these through. Only the claim on the REQUEST stops them.
   it('skips a request that is no longer soft_deleted, though its account is deleted', async () => {
     const userId = USER_IDS.purgeNotSoftDeleted;
     const past = new Date(Date.now() - DAY);
@@ -229,8 +292,8 @@ describeDb('account deletion SQL guards (integration)', () => {
 
     await expect(purgeUserPII(id)).resolves.toBeNull();
 
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
-    expect(user!.email).toBe(emailOf('purgeNotSoftDeleted'));
+    expect(await statusOf(id)).toBe('recovered');
+    await expectUntouched('purgeNotSoftDeleted');
   });
 
   it("skips while the account's current deletion is younger than the purge delay", async () => {
@@ -242,23 +305,124 @@ describeDb('account deletion SQL guards (integration)', () => {
     await expect(purgeUserPII(id)).resolves.toBeNull();
 
     expect(await statusOf(id)).toBe('soft_deleted');
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
-    expect(user!.email).toBe(emailOf('purgeTooRecent'));
+    await expectUntouched('purgeTooRecent');
   });
 
-  // Same race, one step later: the request is still soft_deleted but the
-  // account was restored. The users scrub is conditional on deleted_at.
-  it('scrubs nothing when only the users row was restored', async () => {
-    const userId = USER_IDS.purgeRaceUserOnly;
+  // ── The lock: whoever moves the request out of soft_deleted first wins ────
+
+  // Recovery claimed the request but has not restored the account yet (its
+  // users.deleted_at is still set), and the purge runs in that gap.
+  it('a purge loses to a recovery that claimed first, even before the account is restored', async () => {
+    const userId = USER_IDS.lockRecoveryFirst;
     const past = new Date(Date.now() - DAY);
     await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
     const id = await request(userId, 'soft_deleted', past, past);
-    await db.update(users).set({ deletedAt: null }).where(eq(users.id, userId));
 
+    expect(await recoveryClaim(id)).toBe(true);
     await expect(purgeUserPII(id)).resolves.toBeNull();
 
+    expect(await statusOf(id)).toBe('recovered');
+    await expectUntouched('lockRecoveryFirst');
+  });
+
+  // Interleaving A: the purge runs to completion between the recovery's read
+  // and its writes. With the claim, the recovery matches nothing (409).
+  it('a recovery loses to a purge that claimed first', async () => {
+    const userId = USER_IDS.lockPurgeFirst;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+
+    const purged = await purgeUserPII(id);
+
+    expect(purged?.purgedAt).toBeInstanceOf(Date);
+    expect(await recoveryClaim(id)).toBe(false);
+    expect(await statusOf(id)).toBe('purged');
+  });
+
+  // Interleaving B, and the retry window: the purge claimed and scrubbed, then
+  // the auth rewrite failed. Until a later run finishes it, the request reads
+  // `purged` with a null purged_at, and a recovery must refuse.
+  it('refuses recovery while a crashed purge awaits its retry, then the retry finishes it', async () => {
+    const userId = USER_IDS.lockCrashedPurge;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+
+    failNextAuthUpdateUserFor(userId);
+    await expect(purgeUserPII(id)).rejects.toThrow(/Failed to scrub auth user/);
+    expect(await statusOf(id)).toBe('purged');
+    const [scrubbed] = await db.select().from(users).where(eq(users.id, userId));
+    expect(scrubbed!.email).toBe(`deleted-${userId}@redacted`);
+
+    expect(await recoveryClaim(id)).toBe(false);
+
+    // The next run picks the claimed, unfinished request up again.
+    expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).toContain(id);
+    const finished = await purgeUserPII(id);
+    expect(finished?.purgedAt).toBeInstanceOf(Date);
+    expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).not.toContain(id);
+  });
+
+  // The users scrub's own guard (`deleted_at is not null`), reached for real:
+  // the account is reopened by another session after the purge's claim and
+  // before its scrub. A transaction holding the users row makes the scrub wait
+  // until the reopening commits.
+  it('releases its claim and scrubs nothing when the account is reopened after the claim', async () => {
+    const userId = USER_IDS.reopenedAfterClaim;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+
+    let purge: Promise<unknown> = Promise.resolve();
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ deletedAt: null }).where(eq(users.id, userId));
+      purge = purgeUserPII(id);
+      // The claim reads the committed row (still deleted) and lands; the scrub
+      // then blocks on this transaction's row lock.
+      await waitFor(async () => (await statusOf(id)) === 'purged');
+    });
+
+    await expect(purge).resolves.toBeNull();
     expect(await statusOf(id)).toBe('soft_deleted');
-    const [user] = await db.select().from(users).where(eq(users.id, userId));
-    expect(user!.email).toBe(emailOf('purgeRaceUserOnly'));
+    await expectUntouched('reopenedAfterClaim');
+  });
+
+  // A user missing from auth.users has nothing left to scrub there; the purge
+  // used to fail on it every night forever.
+  it('finishes the purge when the auth user no longer exists', async () => {
+    const userId = USER_IDS.authMissing;
+    const past = new Date(Date.now() - DAY);
+    await markUserDeleted(userId, new Date(Date.now() - 7 * MONTH));
+    const id = await request(userId, 'soft_deleted', past, past);
+    failNextAuthUpdateUserFor(userId, { status: 404, code: 'user_not_found', message: 'User not found' });
+
+    const finished = await purgeUserPII(id);
+
+    expect(finished?.purgedAt).toBeInstanceOf(Date);
+  });
+
+  // ── Community requests take the same lock ─────────────────────────────────
+
+  it('a community purge loses to a recovery that claimed first', async () => {
+    const past = new Date(Date.now() - DAY);
+    const id = await communityRequest('soft_deleted', past);
+
+    expect(await recoveryClaim(id)).toBe(true);
+    await expect(purgeCommunityData(id)).resolves.toBeNull();
+
+    expect(await statusOf(id)).toBe('recovered');
+  });
+
+  it('never purges a community that is no longer deleted', async () => {
+    const past = new Date(Date.now() - DAY);
+    const id = await communityRequest('soft_deleted', past);
+    await db.update(communities).set({ deletedAt: null }).where(eq(communities.id, communityId));
+
+    expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).not.toContain(id);
+    await expect(purgeCommunityData(id)).resolves.toBeNull();
+    expect(await statusOf(id)).toBe('soft_deleted');
+
+    await db.update(communities).set({ deletedAt: new Date() }).where(eq(communities.id, communityId));
   });
 });

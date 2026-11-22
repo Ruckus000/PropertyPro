@@ -46,7 +46,53 @@ export function getCapturedAuthCreateUsers(): readonly CapturedAuthCreateUser[] 
   return calls;
 }
 
+/** Clears both the `createUser` and the `updateUserById` call logs and hooks. */
 export function clearCapturedAuthCreateUsers(): void {
   calls.length = 0;
   failNextFor.clear();
+  updateCalls.length = 0;
+  failNextUpdateFor.clear();
+}
+
+// ---------------------------------------------------------------------------
+// updateUserById: succeeds, unless a test made the next call for that id fail.
+// The account-deletion purge rewrites auth.users through it, so this is what
+// lets an integration test drive a purge to completion, or crash it part way.
+// ---------------------------------------------------------------------------
+
+export interface InjectedAuthUpdateError {
+  status: number;
+  code?: string;
+  message: string;
+}
+
+export const INJECTED_AUTH_UPDATE_USER_ERROR: InjectedAuthUpdateError = {
+  status: 500,
+  message: 'injected: auth admin updateUserById failed',
+};
+
+const updateCalls: string[] = [];
+const failNextUpdateFor = new Map<string, InjectedAuthUpdateError>();
+
+export async function authAdminUpdateUserByIdDouble(id: string, _attrs?: unknown) {
+  updateCalls.push(id);
+  const failure = failNextUpdateFor.get(id);
+  if (failure) {
+    failNextUpdateFor.delete(id);
+    return { data: { user: null }, error: { name: 'AuthApiError', ...failure } };
+  }
+  return { data: { user: { id } }, error: null };
+}
+
+/** Make the next `updateUserById` for this user id fail once. */
+export function failNextAuthUpdateUserFor(
+  id: string,
+  error: InjectedAuthUpdateError = INJECTED_AUTH_UPDATE_USER_ERROR,
+): void {
+  failNextUpdateFor.set(id, error);
+}
+
+/** The user ids `updateUserById` was called with, in order. */
+export function getCapturedAuthUpdateUserIds(): readonly string[] {
+  return updateCalls;
 }

@@ -64,8 +64,8 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     purged: { users: 0, communities: 0 },
     // Under `dryRun` the `purged` counts above mean "would have purged". This
     // block is what tells the reader which of the two they are looking at.
-    // `skipped`: user candidates the purge re-check turned away (no longer
-    // soft_deleted, or the account no longer deleted long enough).
+    // `skipped`: candidates whose purge claim matched nothing (recovered after
+    // the scan, target no longer deleted, or finished by an overlapping run).
     purge: { dryRun: purgeDryRun, candidates: 0, cap: PURGE_SAFETY_CAP, skipped: 0 },
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     // "Account deleted" emails to soft-deleted users. `notSent` counts both
@@ -151,15 +151,18 @@ const handler = withErrorHandler(async (req: NextRequest) => {
   for (const req of purgeBatch) {
     try {
       if (req.requestType === 'user') {
-        // null: the purge re-checked and found the request no longer due (for
-        // example recovered after the candidate scan), and touched nothing.
+        // null: the purge's claim matched nothing (for example recovered after
+        // the candidate scan), so it touched nothing. Same for communities.
         if (!purgeDryRun && (await purgeUserPII(req.id)) === null) {
           summary.purge.skipped++;
           continue;
         }
         summary.purged.users++;
       } else {
-        if (!purgeDryRun) await purgeCommunityData(req.id);
+        if (!purgeDryRun && (await purgeCommunityData(req.id)) === null) {
+          summary.purge.skipped++;
+          continue;
+        }
         summary.purged.communities++;
       }
     } catch (err) {
