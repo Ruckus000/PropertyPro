@@ -111,6 +111,28 @@ export interface MaintenanceRequestListResponse {
   meta: { total: number; page: number; limit: number };
 }
 
+/**
+ * `placeholderData` for a list that "Load more" grows by asking for a larger
+ * `limit` (the last segment of every list key below). While the longer list
+ * loads, the rows already on screen stay; any other key change (community,
+ * scope, filter) gets no placeholder, so one list's rows never stand in for
+ * another's.
+ */
+function keepRowsWhileLimitGrows<T>(
+  previousData: T | undefined,
+  previousQuery: { queryKey: readonly unknown[] } | undefined,
+  queryKey: readonly unknown[],
+): T | undefined {
+  if (previousData === undefined || !previousQuery) return undefined;
+  const previousKey = previousQuery.queryKey;
+  if (previousKey.length !== queryKey.length) return undefined;
+  const lastIndex = queryKey.length - 1;
+  const sameListOtherwise = previousKey.every(
+    (part, index) => index === lastIndex || Object.is(part, queryKey[index]),
+  );
+  return sameListOtherwise ? previousData : undefined;
+}
+
 export const OPERATIONS_KEYS = {
   all: ['operations'] as const,
   summary: (communityId: number) => ['operations', 'summary', communityId] as const,
@@ -209,14 +231,19 @@ export function useOperations(
 export function useWorkOrders(
   communityId: number,
   params?: { status?: WorkOrderListItem['status']; unitId?: number; page?: number; limit?: number },
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; keepRowsWhileLoadingMore?: boolean },
 ) {
   const enabled = options?.enabled ?? true;
   const page = params?.page ?? 1;
   const limit = params?.limit ?? 20;
+  const queryKey = WORK_ORDER_KEYS.list(communityId, { ...params, page, limit });
 
-  return useQuery({
-    queryKey: WORK_ORDER_KEYS.list(communityId, { ...params, page, limit }),
+  // Explicit: two context-sensitive callbacks leave the data type inferred as `{}`.
+  return useQuery<WorkOrderListResponse>({
+    queryKey,
+    placeholderData: options?.keepRowsWhileLoadingMore
+      ? (previousData, previousQuery) => keepRowsWhileLimitGrows(previousData, previousQuery, queryKey)
+      : undefined,
     queryFn: ({ signal }): Promise<WorkOrderListResponse> => {
       // Plan B3: route emits the canonical paginated envelope; consumer
       // walks all pages then JS-slices to the requested `page`+`limit`
@@ -245,14 +272,19 @@ export function useMaintenanceRequests(
     scope?: MaintenanceRequestScope;
     params?: ListAllRequestsParams;
     enabled?: boolean;
+    keepRowsWhileLoadingMore?: boolean;
   },
 ) {
   const enabled = options?.enabled ?? true;
   const scope = options?.scope ?? 'mine';
   const params = options?.params;
+  const queryKey = MAINTENANCE_REQUEST_KEYS.list(communityId, scope, params);
 
   return useQuery({
-    queryKey: MAINTENANCE_REQUEST_KEYS.list(communityId, scope, params),
+    queryKey,
+    placeholderData: options?.keepRowsWhileLoadingMore
+      ? (previousData, previousQuery) => keepRowsWhileLimitGrows(previousData, previousQuery, queryKey)
+      : undefined,
     queryFn: async (): Promise<MaintenanceRequestListResponse> => {
       if (scope === 'community') {
         return listAllRequests(communityId, params);
@@ -272,14 +304,18 @@ export function useMaintenanceRequests(
 export function useReservations(
   communityId: number,
   params?: { page?: number; limit?: number },
-  options?: { enabled?: boolean },
+  options?: { enabled?: boolean; keepRowsWhileLoadingMore?: boolean },
 ) {
   const enabled = options?.enabled ?? true;
   const page = params?.page ?? 1;
   const limit = params?.limit ?? 20;
+  const queryKey = RESERVATION_KEYS.list(communityId, { page, limit });
 
   return useQuery({
-    queryKey: RESERVATION_KEYS.list(communityId, { page, limit }),
+    queryKey,
+    placeholderData: options?.keepRowsWhileLoadingMore
+      ? (previousData, previousQuery) => keepRowsWhileLimitGrows(previousData, previousQuery, queryKey)
+      : undefined,
     queryFn: async () => {
       const sp = new URLSearchParams({
         communityId: String(communityId),
