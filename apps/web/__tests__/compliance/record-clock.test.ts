@@ -178,6 +178,8 @@ describe('withDerivedStatus: the record clock in context', () => {
       const derived = withDerivedStatus({ ...budgetRow, templateKey }, oldBudget, true, null, NOW);
       expect(derived['status']).toBe('unsatisfied');
       expect((derived['clock'] as { state: string }).state).toBe('out_of_window');
+      // Not last year's setup clock: no surface may read it as due or overdue.
+      expect(derived['deadline']).toBeNull();
     }
   });
 

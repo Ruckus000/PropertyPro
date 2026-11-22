@@ -141,7 +141,10 @@ export function LinkDocumentModal({
             value={receivedOn}
             onChange={setReceivedOn}
             {...(dateLabel ? { label: dateLabel } : {})}
-            {...(dateHint ? { hint: dateHint } : {})}
+            hint={
+              dateHint ??
+              "The 30-day posting window starts on this date. A date already recorded on the file is kept."
+            }
           />
         </div>
 

@@ -674,15 +674,16 @@ async function handleRecordMinutes(
 
   if (approvedAt) {
     const approvedDate = new Date(approvedAt);
-    const written = await setDocumentReceivedAt(communityId, documentId, approvedDate);
-    if (written) {
+    // First write wins: a date already on the document is kept.
+    const result = await setDocumentReceivedAt(communityId, documentId, approvedDate);
+    if (result?.written) {
       await logAuditEvent({
         userId: actorUserId,
         action: 'update',
         resourceType: 'document',
         resourceId: String(documentId),
         communityId,
-        oldValues: { receivedAt: written.previous?.toISOString() ?? null },
+        oldValues: { receivedAt: null },
         newValues: { receivedAt: approvedDate.toISOString() },
         metadata: { via: 'record_minutes', meetingId },
       });

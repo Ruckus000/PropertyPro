@@ -332,7 +332,7 @@ export function MeetingDetailModal({
                 communityId={communityId}
                 title="Record minutes"
                 dateLabel="Approved on"
-                dateHint="The 30-day posting window for minutes starts when they are approved."
+                dateHint="The 30-day posting window for minutes starts when they are approved. A date already recorded on the file is kept."
                 onSelect={(documentId, approvedAt) => void handleRecordMinutes(documentId, approvedAt)}
                 onClose={() => setPickingMinutes(false)}
               />

@@ -1,5 +1,5 @@
 {
-  "id": "fe4cf881-c089-46e6-97b6-9cb5ff0f7ab1",
+  "id": "a2d1ce56-2f7e-4baf-8e58-17b47bcdd2b2",
   "prevId": "9afffab8-9e43-49a0-9fd4-a1307481d3b0",
   "version": "7",
   "dialect": "postgresql",
@@ -8944,7 +8944,24 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "meetings_minutes_document_id_idx": {
+          "name": "meetings_minutes_document_id_idx",
+          "columns": [
+            {
+              "expression": "minutes_document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"meetings\".\"minutes_document_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "meetings_community_id_communities_id_fk": {
           "name": "meetings_community_id_communities_id_fk",

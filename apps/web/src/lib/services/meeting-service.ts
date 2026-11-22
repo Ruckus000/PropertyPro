@@ -262,7 +262,8 @@ export async function markMeetingMinutesPosted(
 /**
  * Name the document that is a meeting's minutes, once. A meeting's minutes are
  * one document; first write wins, as with the stamps above, so a later call
- * cannot swap the record a deadline was judged against.
+ * cannot swap the record a deadline was judged against. Returns whether this
+ * call named it.
  *
  * AUTHZ: caller MUST have verified the document is a posted document in this
  * community and `requirePermission('meetings', 'write')` (or the documents
@@ -272,13 +273,14 @@ export async function setMeetingMinutesDocument(
   communityId: number,
   meetingId: number,
   documentId: number,
-): Promise<void> {
+): Promise<boolean> {
   const scoped = createScopedClient(communityId);
-  await scoped.update(
+  const updated = (await scoped.update(
     meetings,
     { minutesDocumentId: documentId },
     and(eq(meetings.id, meetingId), isNull(meetings.minutesDocumentId)),
-  );
+  )) as unknown as Array<unknown> | undefined;
+  return (updated?.length ?? 0) > 0;
 }
 
 export type RecordMeetingMinutesResult =
@@ -346,11 +348,26 @@ export async function recordMeetingMinutes(
     return { outcome: 'has_other_minutes' };
   }
 
+  // Name the minutes BEFORE attaching or stamping, and trust the guarded
+  // write over the read above: two concurrent calls with different documents
+  // both pass the read, and only one may win.
+  if (currentDocumentId == null) {
+    const named = await setMeetingMinutesDocument(communityId, meetingId, documentId);
+    if (!named) {
+      const [after] = await scoped.selectFrom<Record<string, unknown>>(
+        meetings,
+        { id: meetings.id, minutesDocumentId: meetings.minutesDocumentId },
+        eq(meetings.id, meetingId),
+      );
+      if (!after) return { outcome: 'meeting_not_found' };
+      if (Number(after['minutesDocumentId']) !== documentId) return { outcome: 'has_other_minutes' };
+    }
+  }
+
   const attached = attachmentRows.length === 0;
   if (attached) {
     await scoped.insert(meetingDocuments, { meetingId, documentId, attachedBy: actorUserId });
   }
-  await setMeetingMinutesDocument(communityId, meetingId, documentId);
   const postedAt = new Date(document['postedAt'] as string | Date);
   const stamp = await stampMeetingColumn(communityId, meetingId, 'minutesApprovedAt', postedAt);
   return {

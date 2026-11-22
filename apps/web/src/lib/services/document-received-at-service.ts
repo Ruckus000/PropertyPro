@@ -5,12 +5,19 @@
  * loading the documents service, whose module scope reads the db package.
  */
 import { createScopedClient, documents } from '@propertypro/db';
-import { eq } from '@propertypro/db/filters';
+import { and, eq, isNull } from '@propertypro/db/filters';
 
 /**
- * Record when the association received or created a document (H-2). Returns
- * the previous value for the audit entry, or `null` when no live document with
- * that id exists in the community.
+ * Record when the association received or created a document (H-2), ONCE.
+ *
+ * The date decides whether a posting was on time, so it is first-write-wins,
+ * like the meeting stamps (`stampMeetingColumn`): re-linking a file or
+ * re-recording minutes cannot move it to turn a late posting into an on-time
+ * one. A date already recorded is kept and reported. A genuine correction is a
+ * data repair, audited as one (.claude/rules/migration-safety.md).
+ *
+ * Returns `null` when no live document with that id exists in the community;
+ * otherwise whether this call wrote, and the date now on the document.
  *
  * AUTHZ: tenant-scoped — caller MUST have verified a write permission on the
  * record (`compliance:write` on the link flow, `meetings:write` on recording
@@ -20,15 +27,20 @@ export async function setDocumentReceivedAt(
   communityId: number,
   documentId: number,
   receivedAt: Date,
-): Promise<{ previous: Date | null } | null> {
+): Promise<{ written: boolean; receivedAt: Date } | null> {
   const scoped = createScopedClient(communityId);
+  const updated = (await scoped.update(
+    documents,
+    { receivedAt },
+    and(eq(documents.id, documentId), isNull(documents.receivedAt)),
+  )) as unknown as Array<unknown>;
+  if (updated.length > 0) return { written: true, receivedAt };
   const rows = (await scoped.selectFrom(
     documents,
     { id: documents.id, receivedAt: documents.receivedAt },
     eq(documents.id, documentId),
   )) as unknown as Array<{ id: number; receivedAt: Date | string | null }>;
   const current = rows[0];
-  if (!current) return null;
-  await scoped.update(documents, { receivedAt }, eq(documents.id, documentId));
-  return { previous: current.receivedAt ? new Date(current.receivedAt) : null };
+  if (!current || current.receivedAt == null) return null;
+  return { written: false, receivedAt: new Date(current.receivedAt) };
 }

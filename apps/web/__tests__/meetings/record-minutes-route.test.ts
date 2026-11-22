@@ -114,12 +114,21 @@ function mockDb({
   meeting = HELD_MEETING as Record<string, unknown> | null,
   document = { id: 30, postedAt: POSTED_AT } as Record<string, unknown> | null,
   attached = false,
+  /** Another request named different minutes between our read and our write. */
+  loseRace = false,
 } = {}) {
   const insertMock = vi.fn().mockResolvedValue([{ id: 1 }]);
-  const updateMock = vi.fn().mockResolvedValue([]);
+  const updateMock = vi.fn(async (_table: unknown, values: Record<string, unknown>) =>
+    loseRace && 'minutesDocumentId' in values ? [] : [{ id: 7 }],
+  );
+  let meetingReads = 0;
   createScopedClientMock.mockReturnValue({
     selectFrom: vi.fn((table: unknown) => {
-      if (table === meetingsTableMock) return rows(meeting ? [meeting] : []);
+      if (table === meetingsTableMock) {
+        meetingReads += 1;
+        if (!meeting) return rows([]);
+        return rows([loseRace && meetingReads > 1 ? { ...meeting, minutesDocumentId: 31 } : meeting]);
+      }
       if (table === documentsTableMock) return rows(document ? [document] : []);
       if (table === meetingDocumentsTableMock) return rows(attached ? [{ id: 3 }] : []);
       return rows([]);
@@ -144,7 +153,7 @@ describe('meetings route — record-minutes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ toFake: ['Date'], now: NOW });
-    setDocumentReceivedAtMock.mockResolvedValue({ previous: null });
+    setDocumentReceivedAtMock.mockResolvedValue({ written: true, receivedAt: new Date() });
     requireCommunityMembershipMock.mockResolvedValue({
       userId: 'user-1',
       communityId: 42,
@@ -216,6 +225,23 @@ describe('meetings route — record-minutes', () => {
     expect(response.status).toBe(409);
     expect(updateMock).not.toHaveBeenCalled();
     expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses (409) when a concurrent request named different minutes first, attaching and stamping nothing', async () => {
+    const { insertMock, updateMock } = mockDb({ loseRace: true });
+    const response = await recordMinutes({ approvedAt: '2026-11-03T23:59:59.999Z' });
+    expect(response.status).toBe(409);
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalledWith(meetingsTableMock, expect.objectContaining({ minutesApprovedAt: expect.anything() }), expect.anything());
+    expect(setDocumentReceivedAtMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps an approval date already on the document, and audits no date change', async () => {
+    mockDb();
+    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: false, receivedAt: new Date('2026-10-01T00:00:00.000Z') });
+    await recordMinutes({ approvedAt: '2026-11-03T23:59:59.999Z' });
+    expect(logAuditEventMock).not.toHaveBeenCalledWith(expect.objectContaining({ resourceType: 'document' }));
   });
 
   it('404s a document that is a draft or not in this community, writing nothing', async () => {

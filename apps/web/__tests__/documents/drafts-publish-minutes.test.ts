@@ -262,6 +262,23 @@ describe('publishing a draft authored from a meeting', () => {
     expect(linkPublishedDocumentToMeetingMock).toHaveBeenCalledWith(42, 13, 900);
   });
 
+  it('audits naming the minutes document even when the posting stamp was already there', async () => {
+    const { updateMock } = mockMeetingRow({ id: 13, minutesApprovedAt: new Date('2026-08-20T15:00:00.000Z') });
+    updateMock.mockResolvedValue([{ id: 13 }]);
+
+    await publish();
+
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update',
+        resourceType: 'meeting',
+        resourceId: '13',
+        newValues: { minutesDocumentId: 900 },
+        metadata: { via: 'minutes_publish' },
+      }),
+    );
+  });
+
   it('stamps nothing when the draft was not authored from a meeting', async () => {
     getDocumentDraftByIdMock.mockResolvedValue({
       id: 5,

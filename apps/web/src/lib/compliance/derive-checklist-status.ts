@@ -142,13 +142,17 @@ export function withDerivedStatus(
     ...(notices ? { meetingNotices: notices } : {}),
     ...(minutes ? { meetingMinutes: minutes } : {}),
     // A row scored from meetings carries the meetings' deadline. A posted
-    // record judged late carries the deadline it missed (#1506); every other
-    // row keeps its stored setup clock.
+    // record judged late carries the deadline it missed (#1506). A yearly
+    // record out of its window has NO deadline: its stored setup clock is
+    // last year's, and every surface reading `deadline` would call it "due"
+    // or "Nd overdue". Every other row keeps its stored setup clock.
     ...(fromMeetings
       ? { deadline: fromMeetings.deadline }
       : document.clock.state === 'met_late' && document.status === 'overdue'
         ? { deadline: document.clock.deadline }
-        : {}),
+        : document.clock.state === 'out_of_window' && document.status === 'unsatisfied'
+          ? { deadline: null }
+          : {}),
     clock: fromMeetings?.clock ?? document.clock,
     status: fromMeetings?.status ?? document.status,
   };

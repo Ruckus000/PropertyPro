@@ -230,7 +230,20 @@ export const POST = withErrorHandler(
           // Name this document as the meeting's minutes, so per-meeting
           // minutes scoring can see it later deleted or taken back to a draft
           // (H-5). First write wins, like the stamp.
-          await setMeetingMinutesDocument(communityId, targetMeetingId, documentId);
+          const namedMinutes = await setMeetingMinutesDocument(communityId, targetMeetingId, documentId);
+          if (namedMinutes && stamp.alreadyStamped) {
+            // The stamp was already there, so the entry below does not run;
+            // naming the minutes document still leaves a trail.
+            await logAuditEvent({
+              userId,
+              action: 'update',
+              resourceType: 'meeting',
+              resourceId: String(targetMeetingId),
+              communityId,
+              newValues: { minutesDocumentId: documentId },
+              metadata: { via: 'minutes_publish' },
+            });
+          }
           if (!stamp.alreadyStamped && stamp.stampedAt) {
             await logAuditEvent({
               userId,
@@ -241,6 +254,7 @@ export const POST = withErrorHandler(
               newValues: {
                 minutesApprovedAt: stamp.stampedAt.toISOString(),
                 documentId,
+                ...(namedMinutes ? { minutesDocumentId: documentId } : {}),
               },
             });
           }

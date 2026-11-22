@@ -4,7 +4,8 @@
  * Meeting types are enforced at the application layer via Zod unions.
  * Dates are stored as UTC and displayed in the community timezone (AGENTS #16-19).
  */
-import { bigserial, bigint, boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { bigserial, bigint, boolean, index, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 import { documents } from './documents';
 
@@ -57,4 +58,11 @@ export const meetings = pgTable('meetings', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  // Deleting a document sets this to NULL through the FK; without an index
+  // each delete scans meetings. Partial: almost every meeting names none.
+  // Mirrors migration 0102.
+  index('meetings_minutes_document_id_idx')
+    .on(table.minutesDocumentId)
+    .where(sql`${table.minutesDocumentId} IS NOT NULL`),
+]);

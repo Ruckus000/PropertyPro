@@ -663,8 +663,8 @@ describe('PATCH /api/v1/compliance', () => {
 
   it('writes the received date to the linked document and audits it on the document (H-2)', async () => {
     updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
-    setDocumentReceivedAtMock.mockResolvedValueOnce({ previous: new Date('2026-01-01T00:00:00.000Z') });
     const receivedAt = '2026-01-15T23:59:59.999Z';
+    setDocumentReceivedAtMock.mockResolvedValueOnce({ written: true, receivedAt: new Date(receivedAt) });
 
     const res = await PATCH(
       bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, receivedAt }),
@@ -678,10 +678,34 @@ describe('PATCH /api/v1/compliance', () => {
         action: 'update',
         resourceType: 'document',
         resourceId: '77',
-        oldValues: { receivedAt: '2026-01-01T00:00:00.000Z' },
+        oldValues: { receivedAt: null },
         newValues: { receivedAt },
         metadata: { via: 'compliance_link', checklistItemId: 5 },
       }),
+    );
+  });
+
+  it('keeps a received date already on the document, and audits no change (first write wins)', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
+    setDocumentReceivedAtMock.mockResolvedValueOnce({
+      written: false,
+      receivedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const res = await PATCH(
+      bodyReq('PATCH', {
+        id: 5,
+        communityId: 42,
+        action: 'link_document',
+        documentId: 77,
+        receivedAt: '2026-01-15T23:59:59.999Z',
+      }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    expect(logAuditEventMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ resourceType: 'document' }),
     );
   });
 

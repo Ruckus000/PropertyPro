@@ -237,15 +237,16 @@ export const PATCH = withErrorHandler(
     // landed, and audited on the document.
     if (patchAction === 'link_document' && receivedAt) {
       const receivedDate = new Date(receivedAt);
-      const written = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
-      if (written) {
+      // First write wins: a date already on the document is kept.
+      const result = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
+      if (result?.written) {
         await logAuditEvent({
           userId,
           action: 'update',
           resourceType: 'document',
           resourceId: String(documentId),
           communityId,
-          oldValues: { receivedAt: written.previous?.toISOString() ?? null },
+          oldValues: { receivedAt: null },
           newValues: { receivedAt: receivedDate.toISOString() },
           metadata: { via: 'compliance_link', checklistItemId: id },
         });

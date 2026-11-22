@@ -219,6 +219,7 @@ export async function createUploadedDocument(
       mimeType: upload.mime,
       sourceType: input.sourceType,
       ...(input.draft ? { draft: true } : {}),
+      ...(input.receivedAt ? { receivedAt: input.receivedAt.toISOString() } : {}),
     },
   });
 
