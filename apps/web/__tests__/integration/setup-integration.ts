@@ -3,6 +3,7 @@ import { beforeEach, vi } from 'vitest';
 import { getTestAuthUserId } from './providers/test-auth-provider';
 import {
   authAdminCreateUserDouble,
+  authAdminUpdateUserByIdDouble,
   clearCapturedAuthCreateUsers,
 } from './providers/test-auth-admin-provider';
 import {
@@ -97,6 +98,9 @@ vi.mock('@propertypro/db/supabase/admin', async (importOriginal) => {
           // fail a check that production passes. See the provider for the
           // call log and the fail-once hook.
           createUser: authAdminCreateUserDouble,
+          // Succeeds unless a test injected a failure for that id. The
+          // account-deletion purge rewrites auth.users through it.
+          updateUserById: authAdminUpdateUserByIdDouble,
         },
       },
       storage: {

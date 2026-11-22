@@ -20,6 +20,7 @@ import {
   RootOffboardingAckRequiredError,
 } from '@/lib/services/account-lifecycle-service';
 import { AppError } from '@/lib/api/errors/AppError';
+import { ConflictError } from '@/lib/api/errors/ConflictError';
 import { recordSupportAction } from '@/lib/support/support-audit';
 import {
   sendDeletionCancelledEmail,
@@ -55,9 +56,9 @@ export const POST = withErrorHandler(
     const userId = await requireAuthenticatedUserId();
     await requireFreshReauth(userId);
 
-    let request: Awaited<ReturnType<typeof requestUserDeletion>>;
+    let result: Awaited<ReturnType<typeof requestUserDeletion>>;
     try {
-      request = await requestUserDeletion(userId, body?.acknowledgeRootOffboarding ?? false);
+      result = await requestUserDeletion(userId, body?.acknowledgeRootOffboarding ?? false);
     } catch (err) {
       // R3-03b: the caller is root somewhere and has not acknowledged it yet.
       // 409 (not 403) — this is a confirmable state, not a refusal; the client
@@ -75,13 +76,17 @@ export const POST = withErrorHandler(
       throw err;
     }
 
-    // Best effort: never throws, so a mail failure cannot turn a committed
-    // request into an error the user retries.
-    await sendDeletionInitiatedEmail({
-      requestId: request.id,
-      userId,
-      coolingEndsAt: request.coolingEndsAt,
-    });
+    const { request, created } = result;
+    // A repeat request returns the pending one unchanged; it was already
+    // announced. Best effort: never throws, so a mail failure cannot turn a
+    // committed request into an error the user retries.
+    if (created) {
+      await sendDeletionInitiatedEmail({
+        requestId: request.id,
+        userId,
+        coolingEndsAt: request.coolingEndsAt,
+      });
+    }
     return request;
   }),
 );
@@ -114,7 +119,18 @@ export const DELETE = withErrorHandler(
       target: { deletionRequestId: activeRequestId },
     });
 
-    await cancelUserDeletion(activeRequestId, userId);
+    const result = await cancelUserDeletion(userId, userId, activeRequestId);
+    if (result.outcome === 'too_late') {
+      // The account is already deleted (the cron got there first), so saying
+      // it stays open would be false. Restoring it is a support action.
+      throw new ConflictError(
+        'Your account has already been deleted, so this request can no longer be cancelled. Contact support to restore it.',
+      );
+    }
+    // `cancelled` or `already_cancelled`: either way the account stays open.
+    // Email on both. A platform admin's intervene sends nothing, and the
+    // provider idempotency key (account-deletion/cancelled/<requestId>) makes
+    // two tabs cancelling the same request deliver one message.
     // Best effort, never throws (see POST).
     await sendDeletionCancelledEmail({ requestId: activeRequestId, userId });
     return { cancelled: true as const };

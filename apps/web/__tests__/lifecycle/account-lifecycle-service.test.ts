@@ -5,8 +5,8 @@
  *
  * Coverage:
  * - computeAccessPlanStatus: all 5 status branches (revoked, converted, active, in_grace, expired)
- * - requestUserDeletion: request created with correct cooling_ends_at
- * - cancelUserDeletion: status set to cancelled
+ * - requestUserDeletion: request created with correct cooling_ends_at; a repeat returns the pending one
+ * - cancelUserDeletion: every cooling request cancelled, state-guarded
  * - executeUserSoftDelete: users.deletedAt set, auth ban called (non-fatal)
  * - purgeUserPII: PII scrubbed, idempotent on second call
  * - requestCommunityDeletion: request created with cooling period
@@ -35,6 +35,8 @@ const {
   isNullMock,
   neMock,
   inArrayMock,
+  ascMock,
+  sqlMock,
   accessPlansTable,
   communitiesTable,
   communityExportJobsTable,
@@ -57,6 +59,11 @@ const {
     isNullMock: vi.fn((col: unknown) => ({ _isNull: col })),
     neMock: vi.fn((col: unknown, val: unknown) => ({ _ne: [col, val] })),
     inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
+    ascMock: vi.fn((col: unknown) => ({ _asc: col })),
+    sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+      _sql: strings.join('?'),
+      values,
+    })),
     accessPlansTable: {
       id: 'access_plans.id',
       communityId: 'access_plans.community_id',
@@ -139,8 +146,11 @@ vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
   and: andMock,
   isNull: isNullMock,
+  isNotNull: (col: unknown) => ({ _isNotNull: col }),
   ne: neMock,
   inArray: inArrayMock,
+  asc: ascMock,
+  sql: sqlMock,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
@@ -167,6 +177,7 @@ import {
   requestUserDeletion,
   RootOffboardingAckRequiredError,
   cancelUserDeletion,
+  findCoolingDeletionRequestForUser,
   executeUserSoftDelete,
   purgeUserPII,
   requestCommunityDeletion,
@@ -371,10 +382,54 @@ describe('requestUserDeletion', () => {
 
     const result = await requestUserDeletion('user-uuid-001');
 
-    expect(result).toEqual(fakeRequest);
+    expect(result).toEqual({ request: fakeRequest, created: true });
     const insertCall = dbMock._calls.find((c) => c.op === 'insert');
     expect((insertCall?.values as Record<string, unknown>)?.requestType).toBe('user');
     expect((insertCall?.values as Record<string, unknown>)?.status).toBe('cooling');
+  });
+
+  // A double POST (two tabs, a retry after a slow response) used to insert a
+  // second cooling row. Cancel stopped only one, so the other soft-deleted the
+  // account 30 days after the user was told it stays open.
+  it('returns the pending cooling request instead of creating a second one', async () => {
+    const pending = { id: 3, requestType: 'user', userId: 'user-uuid-001', status: 'cooling', coolingEndsAt: new Date() };
+    const dbMock = buildDbMock({ selectResults: [[pending]], insertReturning: [[{ id: 4 }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await requestUserDeletion('user-uuid-001');
+
+    expect(result).toEqual({ request: pending, created: false });
+    expect(dbMock._calls.find((c) => c.op === 'insert')).toBeUndefined();
+    expect(andMock).toHaveBeenCalledWith(
+      { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+      { _eq: [accountDeletionRequestsTable.requestType, 'user'] },
+      { _eq: [accountDeletionRequestsTable.status, 'cooling'] },
+    );
+  });
+
+  it('returns the earliest pending request when duplicates already exist', async () => {
+    const older = { id: 3, status: 'cooling' };
+    const newer = { id: 8, status: 'cooling' };
+    createUnscopedClientMock.mockReturnValue(
+      buildDbMock({ selectResults: [[newer, older]], insertReturning: [[{ id: 4 }]] }),
+    );
+
+    const result = await requestUserDeletion('user-uuid-001');
+
+    expect(result).toEqual({ request: older, created: false });
+  });
+
+  it('a root repeating the request gets the pending one back: no prompt, no second audit', async () => {
+    // Nothing is written on a repeat, so there is nothing to acknowledge, and
+    // the rootless flags were already recorded against the pending request.
+    const pending = { id: 3, requestType: 'user', userId: 'root-user', status: 'cooling', coolingEndsAt: new Date() };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ selectResults: [[pending]] }));
+    findRootOffboardingImpactMock.mockResolvedValue([impact(42, 'Sunset Condos')]);
+
+    const result = await requestUserDeletion('root-user');
+
+    expect(result).toEqual({ request: pending, created: false });
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('does not emit a root_pending_deletion audit event when the user is root of no community', async () => {
@@ -440,7 +495,7 @@ describe('requestUserDeletion', () => {
 
     const result = await requestUserDeletion('root-user', true);
 
-    expect(result).toEqual(fakeRequest);
+    expect(result).toEqual({ request: fakeRequest, created: true });
     expect(findRootOffboardingImpactMock).toHaveBeenCalledWith('root-user');
     expect(logAuditEventMock).toHaveBeenCalledTimes(2);
     const calls = logAuditEventMock.mock.calls.map((c) => c[0]);
@@ -495,7 +550,10 @@ describe('requestUserDeletion', () => {
 
     // The request is already committed and the user consented — a logging
     // failure must not surface to them as an error.
-    await expect(requestUserDeletion('root-user-4', true)).resolves.toEqual(fakeRequest);
+    await expect(requestUserDeletion('root-user-4', true)).resolves.toEqual({
+      request: fakeRequest,
+      created: true,
+    });
   });
 });
 
@@ -513,16 +571,145 @@ describe('cancelUserDeletion', () => {
     const dbMock = buildDbMock({ updateReturning: [[updated]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await cancelUserDeletion(1, 'user-uuid-001');
-    expect(result).toEqual(updated);
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 1);
+    expect(result).toEqual({ outcome: 'cancelled', requests: [updated] });
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    expect(updateCall?.values).toMatchObject({ status: 'cancelled', cancelledBy: 'user-uuid-001' });
   });
 
-  it('throws when request is not found', async () => {
-    const dbMock = buildDbMock({ updateReturning: [[]] });
+  // Two cooling rows (a double request made before the fix, or one that beat
+  // the check-then-insert): stopping only one left the other to soft-delete
+  // the account after the user was told it stays open.
+  it('cancels every cooling request the user has, not one of them', async () => {
+    const rows = [
+      { id: 3, status: 'cancelled' },
+      { id: 8, status: 'cancelled' },
+    ];
+    const dbMock = buildDbMock({ updateReturning: [rows] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    await expect(cancelUserDeletion(999, 'user-uuid-001')).rejects.toThrow(
-      'Deletion request 999 not found',
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 3);
+
+    expect(result).toEqual({ outcome: 'cancelled', requests: rows });
+    const updates = dbMock._calls.filter((c) => c.op === 'update');
+    expect(updates).toHaveLength(1);
+    // Keyed on the user, not on one request id.
+    expect(updates[0]?.where).toEqual({
+      _and: expect.arrayContaining([
+        { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+        { _eq: [accountDeletionRequestsTable.requestType, 'user'] },
+      ]),
+    });
+    expect(eqMock).not.toHaveBeenCalledWith(accountDeletionRequestsTable.id, expect.anything());
+  });
+
+  // The 04:00 UTC cron can soft-delete between the route's lookup and this
+  // write. Unguarded, the write flipped soft_deleted back to cancelled while
+  // the account stayed deleted and banned.
+  it('only touches requests still cooling; a soft-deleted one is reported too_late', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]], selectResults: [[{ status: 'soft_deleted' }]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 9);
+
+    expect(result).toEqual({ outcome: 'too_late', status: 'soft_deleted' });
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    expect(updateCall?.where).toEqual({
+      _and: expect.arrayContaining([{ _eq: [accountDeletionRequestsTable.status, 'cooling'] }]),
+    });
+    // The re-read is the user's own request only.
+    expect(andMock).toHaveBeenCalledWith(
+      { _eq: [accountDeletionRequestsTable.id, 9] },
+      { _eq: [accountDeletionRequestsTable.userId, 'user-uuid-001'] },
+    );
+  });
+
+  // Two DELETEs at once: both looked up request 9, the other one cancelled it
+  // first, and this update matched nothing. The account is open.
+  it('reports already_cancelled when a concurrent cancel got there first', async () => {
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cancelled', accountDeleted: false }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 9);
+
+    expect(result).toEqual({ outcome: 'already_cancelled' });
+  });
+
+  // Legacy duplicate pair: request 9 (earlier) and 12. The cron soft-deleted 9
+  // and the account is deleted and banned; 12 is still cooling. A later cancel
+  // finds 12 as the oldest cooling row. Cancelling it would report success and
+  // email "your account stays open" to a deleted account.
+  it('refuses once the ACCOUNT is deleted, even when the looked-up request is still cooling', async () => {
+    // The UPDATE carries the account guard, so the database matches nothing.
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cooling', accountDeleted: true }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 12);
+
+    expect(result).toEqual({ outcome: 'too_late', status: 'cooling' });
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    // `not <users.deleted_at set>`, keyed on the user. Not on a soft_deleted
+    // request row: a recovered account can still carry one.
+    expect(updateCall?.where).toEqual({
+      _and: expect.arrayContaining([
+        {
+          _sql: 'not ?',
+          values: [
+            expect.objectContaining({
+              _sql: expect.stringMatching(/^exists \(select 1 from \? u where u\.id = \? and u\.deleted_at is not null\)$/),
+              values: expect.arrayContaining(['user-uuid-001']),
+            }),
+          ],
+        },
+      ]),
+    });
+  });
+
+  it('does not report already_cancelled for a cancelled request on a deleted account', async () => {
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cancelled', accountDeleted: true }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 12);
+
+    expect(result).toEqual({ outcome: 'too_late', status: 'cancelled' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findCoolingDeletionRequestForUser
+// ---------------------------------------------------------------------------
+
+describe('findCoolingDeletionRequestForUser', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // With duplicates, return the request the cron reaches first (earliest
+  // coolingEndsAt, then id); an unordered .limit(1) could return either.
+  it('returns the cooling request the cron reaches first when there are several', async () => {
+    // Unordered, the database may hand back either row; model it as the newer.
+    const orderByMock = vi.fn(() => ({ limit: () => Promise.resolve([{ id: 3 }]) }));
+    createUnscopedClientMock.mockReturnValue({
+      select: () => ({
+        from: () => ({
+          where: () => ({ orderBy: orderByMock, limit: () => Promise.resolve([{ id: 8 }]) }),
+        }),
+      }),
+    });
+
+    await expect(findCoolingDeletionRequestForUser('user-uuid-001')).resolves.toBe(3);
+    expect(orderByMock).toHaveBeenCalledWith(
+      { _asc: accountDeletionRequestsTable.coolingEndsAt },
+      { _asc: accountDeletionRequestsTable.id },
     );
   });
 });
@@ -693,23 +880,26 @@ describe('purgeUserPII', () => {
     vi.clearAllMocks();
   });
 
-  it('scrubs PII from user record', async () => {
-    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
-    const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
+  const request = { id: 1, userId: 'user-uuid-001', status: 'purged', purgedAt: null };
+  const finished = { id: 1, status: 'purged', purgedAt: new Date() };
+  const authOk = () => {
+    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
+    createAdminClientMock.mockReturnValue({ auth: { admin: { updateUserById: updateUserByIdMock } } });
+    return updateUserByIdMock;
+  };
+  const updates = (dbMock: ReturnType<typeof buildDbMock>) => dbMock._calls.filter((c) => c.op === 'update');
+
+  it('claims the request, scrubs users and auth.users, then sets purged_at', async () => {
     const dbMock = buildDbMock({
-      selectResults: [[request]], // found, not yet purged
-      // Only the request update calls .returning(); user update does not
-      updateReturning: [[updatedRequest]],
+      // claim, users scrub, purged_at
+      updateReturning: [[request], [{ id: 'user-uuid-001' }], [finished]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
-    const updateUserByIdMock = vi.fn().mockResolvedValue({ data: {}, error: null });
-    createAdminClientMock.mockReturnValue({
-      auth: { admin: { updateUserById: updateUserByIdMock } },
-    });
+    const updateUserByIdMock = authOk();
 
     const result = await purgeUserPII(1);
 
-    expect(result).toEqual(updatedRequest);
+    expect(result).toEqual(finished);
     // auth.users holds the real email and name too; scrubbing only public.users
     // left them there forever.
     expect(updateUserByIdMock).toHaveBeenCalledWith('user-uuid-001', {
@@ -717,43 +907,127 @@ describe('purgeUserPII', () => {
       email_confirm: true,
       user_metadata: { full_name: null, fullName: null, external_user_id: null, soft_deleted: true },
     });
-    // Verify user PII was scrubbed
-    const updateCalls = dbMock._calls.filter((c) => c.op === 'update');
-    expect(updateCalls).toHaveLength(2);
-    const userUpdateValues = updateCalls[0]!.values as Record<string, unknown>;
+    const [claim, scrub, finish] = updates(dbMock);
+    expect(claim!.values).toEqual({ status: 'purged' });
+    const userUpdateValues = scrub!.values as Record<string, unknown>;
     expect(userUpdateValues.email).toBe('deleted-user-uuid-001@redacted');
     expect(userUpdateValues.fullName).toBe('Deleted User');
     expect(userUpdateValues.phone).toBeNull();
     expect(userUpdateValues.avatarUrl).toBeNull();
+    expect(Object.keys(finish!.values!)).toEqual(['purgedAt']);
   });
 
-  it('returns null when already purged (idempotent)', async () => {
-    const dbMock = buildDbMock({
-      selectResults: [[]], // not found (purgedAt was set, so AND filter excludes it)
-    });
+  // The request's status is the lock between purge and recovery: whichever
+  // moves it out of soft_deleted first wins. The claim is that move.
+  it('claims only a soft_deleted (or own-claimed, unfinished) user request whose account is due', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
-    const result = await purgeUserPII(1);
-    expect(result).toBeNull();
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+
+    expect(updates(dbMock)[0]!.where).toEqual({
+      _and: [
+        {
+          _and: [
+            { _eq: [accountDeletionRequestsTable.id, 1] },
+            { _inArray: [accountDeletionRequestsTable.status, ['soft_deleted', 'purged']] },
+            { _isNull: accountDeletionRequestsTable.purgedAt },
+          ],
+        },
+        { _eq: [accountDeletionRequestsTable.requestType, 'user'] },
+        expect.objectContaining({ _sql: expect.stringContaining('u.deleted_at <= ?::timestamptz') }),
+      ],
+    });
   });
 
-  it('does not mark the request purged when the auth scrub fails, so the next run retries', async () => {
-    const request = { id: 1, userId: 'user-uuid-001', status: 'soft_deleted' };
-    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [[{}]] });
+  it('touches nothing else when the claim matches nothing (recovered, or already purged)', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = authOk();
+
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+
+    expect(updates(dbMock)).toHaveLength(1);
+    expect(updateUserByIdMock).not.toHaveBeenCalled();
+  });
+
+  it('leaves purged_at null when the auth scrub fails, so the next run retries', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[request], [{ id: 'user-uuid-001' }]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
     createAdminClientMock.mockReturnValue({
       auth: {
         admin: {
-          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'GoTrue down' } }),
+          updateUserById: vi.fn().mockResolvedValue({ data: null, error: { message: 'GoTrue down', status: 500 } }),
         },
       },
     });
 
     await expect(purgeUserPII(1)).rejects.toThrow(/GoTrue down/);
-    const statusUpdates = dbMock._calls.filter(
-      (c) => c.op === 'update' && (c.values as Record<string, unknown>).status === 'purged',
+    expect(updates(dbMock).filter((c) => c.values?.purgedAt !== undefined)).toHaveLength(0);
+  });
+
+  // A user missing from auth has nothing to scrub there; without this the
+  // purge failed every night forever.
+  it('treats a user missing from auth as already scrubbed, logging only the id', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[request], [{ id: 'user-uuid-001' }], [finished]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    createAdminClientMock.mockReturnValue({
+      auth: {
+        admin: {
+          updateUserById: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: 'User not found', status: 404, code: 'user_not_found' },
+          }),
+        },
+      },
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(purgeUserPII(1)).resolves.toEqual(finished);
+
+    expect(warn).toHaveBeenCalledWith(
+      '[account-lifecycle] auth user user-uuid-001 not found; treating auth as already scrubbed',
     );
-    expect(statusUpdates).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it('releases the claim, and leaves auth.users alone, when the account was reopened after the claim', async () => {
+    // The users scrub is conditional on deleted_at still being set; it matches nothing.
+    const dbMock = buildDbMock({ updateReturning: [[request], []] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    const updateUserByIdMock = authOk();
+
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+
+    expect(updateUserByIdMock).not.toHaveBeenCalled();
+    const [, scrub, release] = updates(dbMock);
+    expect(scrub!.where).toEqual({
+      _and: [{ _eq: [usersTable.id, 'user-uuid-001'] }, { _isNotNull: usersTable.deletedAt }],
+    });
+    expect(release!.values).toEqual({ status: 'soft_deleted' });
+    expect(release!.where).toEqual({
+      _and: [
+        { _eq: [accountDeletionRequestsTable.id, 1] },
+        { _eq: [accountDeletionRequestsTable.status, 'purged'] },
+        { _isNull: accountDeletionRequestsTable.purgedAt },
+      ],
+    });
+  });
+
+  // A double-fired cron: the other run set purged_at first. A clean skip.
+  it('returns null when an overlapping run already finished the request', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[request], [{ id: 'user-uuid-001' }], []] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+    authOk();
+
+    await expect(purgeUserPII(1)).resolves.toBeNull();
+    expect(updates(dbMock)[2]!.where).toEqual({
+      _and: [
+        { _eq: [accountDeletionRequestsTable.id, 1] },
+        { _eq: [accountDeletionRequestsTable.status, 'purged'] },
+        { _isNull: accountDeletionRequestsTable.purgedAt },
+      ],
+    });
   });
 });
 
@@ -810,6 +1084,23 @@ describe('interveneCommunityDeletion', () => {
     expect((updateCall?.values as Record<string, unknown>)?.interventionNotes).toBe(
       'Retained by admin review',
     );
+  });
+
+  // Unguarded, a cancel racing the cron overwrote `soft_deleted` with
+  // `cancelled`: a deleted community that could be neither purged nor recovered.
+  it('only cancels a request that is still cooling', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    await expect(
+      interveneCommunityDeletion(1, { adminUserId: 'platform-admin-001' }),
+    ).rejects.toThrow(/not found or no longer cooling/);
+    expect(dbMock._calls.find((c) => c.op === 'update')?.where).toEqual({
+      _and: [
+        { _eq: [accountDeletionRequestsTable.id, 1] },
+        { _eq: [accountDeletionRequestsTable.status, 'cooling'] },
+      ],
+    });
   });
 
   it('audits the cancellation against the community', async () => {
@@ -973,8 +1264,7 @@ describe('purgeCommunityData', () => {
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[updatedRequest]],
+      updateReturning: [[request], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -983,7 +1273,7 @@ describe('purgeCommunityData', () => {
   });
 
   it('returns null when already purged (idempotent)', async () => {
-    const dbMock = buildDbMock({ selectResults: [[]] });
+    const dbMock = buildDbMock({ updateReturning: [[]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
     const result = await purgeCommunityData(1);
@@ -1002,8 +1292,7 @@ describe('purgeCommunityData', () => {
     // pointed at the wrong prefix.
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+      updateReturning: [[request], [{ id: 1, status: 'purged', purgedAt: new Date() }]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
     purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 3 });
@@ -1022,13 +1311,14 @@ describe('purgeCommunityData', () => {
     // request already marked 'purged', so a sweep that throws MUST stop the
     // flip — otherwise the objects it failed to delete are stranded forever.
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
-    const dbMock = buildDbMock({ selectResults: [[request]] });
+    const dbMock = buildDbMock({ updateReturning: [[request]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
     purgeCommunityAdminAssetsMock.mockRejectedValueOnce(new Error('storage offline'));
 
     await expect(purgeCommunityData(1)).rejects.toThrow(/storage offline/);
 
-    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
+    // Only the claim: purged_at stays null, so the next run retries.
+    expect(dbMock._calls.filter((c) => c.op === 'update' && c.values?.purgedAt !== undefined)).toHaveLength(0);
   });
 
   it('does NOT sweep the maintenance or documents buckets', async () => {
@@ -1039,8 +1329,7 @@ describe('purgeCommunityData', () => {
     // third would contradict a live policy rather than close a gap.
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+      updateReturning: [[request], [{ id: 1, status: 'purged', purgedAt: new Date() }]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1059,8 +1348,7 @@ describe('purgeCommunityData', () => {
     // not keep.
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+      updateReturning: [[request], [{ id: 1, status: 'purged', purgedAt: new Date() }]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
     purgeCommunitySiteAssetsMock.mockResolvedValue({ deletedCount: 7 });
@@ -1101,8 +1389,7 @@ describe('purgeCommunityData', () => {
     // admin_user_id, and this is a cron with no actor. Both doors are shut.
     const request = { id: 2, communityId: null, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[{ id: 2, status: 'purged', purgedAt: new Date() }]],
+      updateReturning: [[request], [{ id: 2, status: 'purged', purgedAt: new Date() }]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1121,8 +1408,7 @@ describe('purgeCommunityData', () => {
     // a success.
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[{ id: 1, status: 'purged', purgedAt: new Date() }]],
+      updateReturning: [[request], [{ id: 1, status: 'purged', purgedAt: new Date() }]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
     logAuditEventMock.mockRejectedValueOnce(new Error('audit down'));
@@ -1130,15 +1416,15 @@ describe('purgeCommunityData', () => {
     await expect(purgeCommunityData(1)).rejects.toThrow(/audit down/);
 
     const updates = dbMock._calls.filter((c: { op: string }) => c.op === 'update');
-    expect(updates).toHaveLength(1);
+    // The claim, then purged_at.
+    expect(updates).toHaveLength(2);
   });
 
   it('calls purgeCommunitySiteAssets when communityId is set', async () => {
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[updatedRequest]],
+      updateReturning: [[request], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1152,8 +1438,7 @@ describe('purgeCommunityData', () => {
     const request = { id: 2, communityId: null, status: 'soft_deleted' };
     const updatedRequest = { id: 2, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[updatedRequest]],
+      updateReturning: [[request], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1165,15 +1450,14 @@ describe('purgeCommunityData', () => {
   it('aborts status update when purgeCommunitySiteAssets throws', async () => {
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [],
+      updateReturning: [[request]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
     purgeCommunitySiteAssetsMock.mockRejectedValueOnce(new Error('storage offline'));
 
     await expect(purgeCommunityData(1)).rejects.toThrow('storage offline');
     // Verify no DB update was attempted
-    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
+    expect(dbMock._calls.filter((c) => c.op === 'update' && c.values?.purgedAt !== undefined)).toHaveLength(0);
   });
 
   // ── Export archives must be purged too ────────────────────────────────────
@@ -1187,8 +1471,7 @@ describe('purgeCommunityData', () => {
     const request = { id: 1, communityId: 100, status: 'soft_deleted' };
     const updatedRequest = { id: 1, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[updatedRequest]],
+      updateReturning: [[request], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1202,8 +1485,7 @@ describe('purgeCommunityData', () => {
     const request = { id: 2, communityId: null, status: 'soft_deleted' };
     const updatedRequest = { id: 2, status: 'purged', purgedAt: new Date() };
     const dbMock = buildDbMock({
-      selectResults: [[request]],
-      updateReturning: [[updatedRequest]],
+      updateReturning: [[request], [updatedRequest]],
     });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
@@ -1216,13 +1498,58 @@ describe('purgeCommunityData', () => {
     // Same failure posture as site assets: the request must stay retryable
     // rather than being marked purged with a full dataset still in the bucket.
     const request = { id: 3, communityId: 100, status: 'soft_deleted' };
-    const dbMock = buildDbMock({ selectResults: [[request]], updateReturning: [] });
+    const dbMock = buildDbMock({ updateReturning: [[request]] });
     createUnscopedClientMock.mockReturnValue(dbMock);
     purgeCommunityExportArchivesMock.mockRejectedValueOnce(new Error('storage down'));
 
     await expect(purgeCommunityData(3)).rejects.toThrow('storage down');
-    expect(dbMock._calls.filter((c: { op: string }) => c.op === 'update')).toHaveLength(0);
+    expect(dbMock._calls.filter((c) => c.op === 'update' && c.values?.purgedAt !== undefined)).toHaveLength(0);
   });
 
+  // The request's status is the lock between purge and recovery. Without the
+  // claim, a recovery racing the scan (or one whose final step failed) let the
+  // next cron delete a live community's assets and overwrite `recovered`.
+  it('claims only a soft_deleted (or own-claimed) community request whose community is still deleted', async () => {
+    const dbMock = buildDbMock({ updateReturning: [[]] });
+    createUnscopedClientMock.mockReturnValue(dbMock);
 
+    await expect(purgeCommunityData(1)).resolves.toBeNull();
+
+    const [claim] = dbMock._calls.filter((c) => c.op === 'update');
+    expect(claim!.values).toEqual({ status: 'purged' });
+    expect(claim!.where).toEqual({
+      _and: [
+        {
+          _and: [
+            { _eq: [accountDeletionRequestsTable.id, 1] },
+            { _inArray: [accountDeletionRequestsTable.status, ['soft_deleted', 'purged']] },
+            { _isNull: accountDeletionRequestsTable.purgedAt },
+          ],
+        },
+        { _eq: [accountDeletionRequestsTable.requestType, 'community'] },
+        expect.objectContaining({ _sql: expect.stringContaining('c.deleted_at is not null') }),
+      ],
+    });
+  });
+
+  it('destroys nothing when the claim matches nothing', async () => {
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ updateReturning: [[]] }));
+
+    await expect(purgeCommunityData(1)).resolves.toBeNull();
+
+    expect(purgeCommunitySiteAssetsMock).not.toHaveBeenCalled();
+    expect(purgeCommunityAdminAssetsMock).not.toHaveBeenCalled();
+    expect(purgeCommunityExportArchivesMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  // A double-fired cron: the other run set purged_at (and audited) first.
+  it('returns null, without a second audit row, when an overlapping run finished first', async () => {
+    const request = { id: 1, communityId: 100, status: 'purged' };
+    createUnscopedClientMock.mockReturnValue(buildDbMock({ updateReturning: [[request], []] }));
+
+    await expect(purgeCommunityData(1)).resolves.toBeNull();
+
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
 });
