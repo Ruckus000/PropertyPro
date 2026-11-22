@@ -120,6 +120,48 @@ describeDb('overlap exclusion constraints (DB integration)', () => {
     });
   });
 
+  // Boundary cases: the end date and the move-out day are the LAST day the
+  // lease holds the unit (the app's dateRangesOverlap uses <=), so a lease may
+  // start the day after but not on that day.
+  it('refuses a lease starting on the previous lease\'s last day', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const ids = await communityWithUnit(tx);
+      await insertLease(tx, ids, { start: '2027-01-01', end: '2027-12-31' });
+      await expect(insertLease(tx, ids, { start: '2027-12-31', end: '2028-06-30' })).rejects.toMatchObject({
+        code: '23P01',
+      });
+    });
+  });
+
+  it('holds the unit through the move-out day and frees it the day after', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const ids = await communityWithUnit(tx);
+      await insertLease(tx, ids, { start: '2026-01-01', end: '2026-12-31', moveOutOn: '2026-09-15' });
+      await expect(insertLease(tx, ids, { start: '2026-09-15', end: '2027-09-14' })).rejects.toMatchObject({
+        code: '23P01',
+      });
+      await expect(insertLease(tx, ids, { start: '2026-09-16', end: '2027-09-15' })).resolves.toHaveLength(1);
+    });
+  });
+
+  it('ends a month-to-month lease (no end date) at its scheduled move-out', async () => {
+    await inRolledBackTransaction(async (tx) => {
+      const ids = await communityWithUnit(tx);
+      await insertLease(tx, ids, { start: '2026-01-01', end: null, moveOutOn: '2026-06-30' });
+      await expect(insertLease(tx, ids, { start: '2026-07-01', end: null })).resolves.toHaveLength(1);
+    });
+  });
+
+  it.each(['expired', 'renewed'])('still counts a %s lease as holding its dates', async (status) => {
+    await inRolledBackTransaction(async (tx) => {
+      const ids = await communityWithUnit(tx);
+      await insertLease(tx, ids, { start: '2025-01-01', end: '2025-12-31', status });
+      await expect(insertLease(tx, ids, { start: '2025-06-01', end: '2026-05-31' })).rejects.toMatchObject({
+        code: '23P01',
+      });
+    });
+  });
+
   it('refuses two confirmed bookings of one amenity that overlap, and allows back-to-back ones', async () => {
     await inRolledBackTransaction(async (tx) => {
       const { communityId } = await communityWithUnit(tx);
