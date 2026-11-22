@@ -45,6 +45,10 @@ const DEMO_RESET_TABLE_DELETION_ORDER = [
   'violation_fines',
 
   // Phase 2 — parent tables
+  // After violation_fines, which points at it. The balance a resident sees is
+  // the sum of these rows, so a row the demo's users posted (a payment, an
+  // adjustment) must not outlive the line items the seed re-creates.
+  'ledger_entries',
   'emergency_broadcasts',
   'esign_consent',
   'esign_submissions',

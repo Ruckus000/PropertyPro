@@ -10,6 +10,7 @@ import {
   announcements,
   communities,
   documents,
+  ledgerEntries,
   meetings,
   siteBlocks,
   sitePages,
@@ -57,6 +58,10 @@ function assertLoopbackDatabaseOrCI(label: string): void {
  *     transparency state.
  *   - sunset-ridge-apartments: rules, move-in instructions, resident handbook.
  */
+/** A real (is_demo=false) association beside the demos, as in production. */
+const CONTROL_SLUG = 'reset-demo-ledger-control';
+const STRAY_LEDGER_DESCRIPTION = 'reset-demo test: posted between resets';
+
 const EXPECTED_DOCS_PER_SLUG: Record<string, number> = {
   'sunset-condos': 30,
   'palm-shores-hoa': 2,
@@ -88,8 +93,40 @@ describeDb('demo reset integration', () => {
 
     await runDemoReset();
     await putDemosOnLegacySites();
+    await postLedgerRowsBetweenResets();
     await runDemoReset();
   }, 300_000);
+
+  /**
+   * A ledger row a demo user posted between resets, in a demo the seed's
+   * assessment step never touches (palm-shores-hoa), so only the reset's own
+   * deletion can remove it. And the same row in a real association, which the
+   * reset must leave alone: it runs nightly against production.
+   */
+  async function postLedgerRowsBetweenResets(): Promise<void> {
+    await db.delete(communities).where(eq(communities.slug, CONTROL_SLUG));
+    const [control] = await db
+      .insert(communities)
+      .values({ name: 'Reset Ledger Control', slug: CONTROL_SLUG, communityType: 'condo_718' })
+      .returning({ id: communities.id, isDemo: communities.isDemo });
+    if (!control || control.isDemo) throw new Error('control community must be a real (non-demo) community');
+
+    const [palm] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(eq(communities.slug, 'palm-shores-hoa'));
+    if (!palm) throw new Error('palm-shores-hoa was not seeded');
+
+    for (const communityId of [palm.id, control.id]) {
+      await db.insert(ledgerEntries).values({
+        communityId,
+        entryType: 'adjustment',
+        amountCents: -1234,
+        description: STRAY_LEDGER_DESCRIPTION,
+        sourceType: 'manual',
+      });
+    }
+  }
 
   /**
    * The state production's seeded demos were in before the seed gave them a
@@ -114,6 +151,8 @@ describeDb('demo reset integration', () => {
   }
 
   afterAll(async () => {
+    // Cascades to its ledger row.
+    if (db) await db.delete(communities).where(eq(communities.slug, CONTROL_SLUG));
     await sql?.end();
     // Guarded: when beforeAll throws before the double starts, `double?.server`
     // is undefined, `resolve` is never called, and the hook would hang until
@@ -185,6 +224,28 @@ describeDb('demo reset integration', () => {
       expect(expected, `No expected doc count for slug "${community.slug}"`).toBeDefined();
       expect(docs.length).toBe(expected);
     }
+  }, 30_000);
+
+  it('deletes ledger rows in demo communities only', async () => {
+    const [palm] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(eq(communities.slug, 'palm-shores-hoa'));
+    const palmLedger = await db
+      .select({ id: ledgerEntries.id })
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.communityId, palm!.id));
+    expect(palmLedger, 'a ledger row in a demo survived the reset').toEqual([]);
+
+    const [control] = await db
+      .select({ id: communities.id })
+      .from(communities)
+      .where(eq(communities.slug, CONTROL_SLUG));
+    const controlLedger = await db
+      .select({ description: ledgerEntries.description, amountCents: ledgerEntries.amountCents })
+      .from(ledgerEntries)
+      .where(eq(ledgerEntries.communityId, control!.id));
+    expect(controlLedger).toEqual([{ description: STRAY_LEDGER_DESCRIPTION, amountCents: -1234 }]);
   }, 30_000);
 
   it('puts every demo on its suggested look, replacing a legacy site', async () => {

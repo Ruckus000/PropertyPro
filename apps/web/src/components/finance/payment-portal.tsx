@@ -175,8 +175,8 @@ function OfflinePaymentGuidance({
       description={
         <>
           <span>
-            Your balance is current — it just can&rsquo;t be paid through
-            PropertyPro. Contact {who} to arrange payment.
+            The balance above can&rsquo;t be paid through PropertyPro.
+            Contact {who} to arrange payment.
           </span>
           {(email || phone) && (
             <span className="mt-1 block">
