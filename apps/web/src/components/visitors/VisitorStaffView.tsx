@@ -1,26 +1,14 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus } from 'lucide-react';
-import { toast } from 'sonner';
-import {
-  useVisitors,
-  useCheckinVisitor,
-  useCheckoutVisitor,
-  useRevokeVisitor,
-  type VisitorListItem,
-} from '@/hooks/use-visitors';
-import { fetchDeniedMatches, type DeniedMatchItem } from '@/hooks/use-denied-visitors';
+import { useVisitors } from '@/hooks/use-visitors';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { DataTable } from '@/components/shared/data-table';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  getVisitorColumns,
-  type VisitorColumnActions,
-  getVisitorStatus,
-  isOnTodayList,
-} from './visitor-columns';
+import { getVisitorColumns } from './visitor-columns';
+import { filterVisitors, VISITOR_FILTER_TABS } from './visitor-filters';
 import { VisitorRegistrationForm } from './VisitorRegistrationForm';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,36 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
 import { DeniedVisitorsTab } from './DeniedVisitorsTab';
-import { DeniedMatchWarning } from './DeniedMatchWarning';
+import { useVisitorStaffActions } from './use-visitor-staff-actions';
 
 interface VisitorStaffViewProps {
   communityId: number;
-}
-
-const FILTER_TABS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Expected', value: 'expected' },
-  { label: 'Checked In', value: 'checked_in' },
-  { label: 'All', value: 'all' },
-];
-
-/** A refused check-in (expired, not yet valid, wrong day) must say why at the gate. */
-function showMutationError(error: unknown) {
-  toast.error(
-    error instanceof Error && error.message
-      ? error.message
-      : "We couldn't update this visitor. Please try again.",
-  );
 }
 
 export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
@@ -67,89 +30,16 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
   const [activeFilter, setActiveFilter] = useState('today');
   const [guestTypeFilter, setGuestTypeFilter] = useState('all');
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [pendingMatches, setPendingMatches] = useState<DeniedMatchItem[]>([]);
-  const [matchWarningOpen, setMatchWarningOpen] = useState(false);
-  const [pendingCheckIn, setPendingCheckIn] = useState<VisitorListItem | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<VisitorListItem | null>(null);
-  const [revokeReason, setRevokeReason] = useState('');
 
   const { data: visitors, isLoading, isError } = useVisitors(
     communityId,
     guestTypeFilter === 'all' ? undefined : { guestType: guestTypeFilter },
   );
-  const checkinMutation = useCheckinVisitor(communityId);
-  const checkoutMutation = useCheckoutVisitor(communityId);
-  const revokeMutation = useRevokeVisitor(communityId);
+  const { actions, dialogs } = useVisitorStaffActions(communityId);
 
-  const filteredVisitors = useMemo(() => {
-    if (!visitors) return [];
-    switch (activeFilter) {
-      case 'today':
-        return visitors.filter((v) => isOnTodayList(v));
-      case 'expected':
-        return visitors.filter((visitor) => getVisitorStatus(visitor) === 'expected');
-      case 'checked_in':
-        return visitors.filter((visitor) => {
-          const status = getVisitorStatus(visitor);
-          return status === 'checked_in' || status === 'overstayed' || status === 'revoked_on_site';
-        });
-      default:
-        return visitors;
-    }
-  }, [visitors, activeFilter]);
-
-  const handleCheckIn = useCallback(
-    async (visitor: VisitorListItem) => {
-      let matches: DeniedMatchItem[] = [];
-      try {
-        matches = await fetchDeniedMatches(
-          communityId,
-          visitor.visitorName,
-          visitor.vehiclePlate,
-        );
-      } catch {
-        // Denied-match check is best-effort — proceed with check-in on failure
-      }
-
-      if (matches.length > 0) {
-        setPendingMatches(matches);
-        setPendingCheckIn(visitor);
-        setMatchWarningOpen(true);
-        return;
-      }
-
-      await checkinMutation.mutateAsync(visitor.id).catch(showMutationError);
-    },
-    [checkinMutation, communityId],
-  );
-
-  const handleCheckOut = useCallback(
-    async (visitor: VisitorListItem) => {
-      await checkoutMutation.mutateAsync(visitor.id).catch(showMutationError);
-    },
-    [checkoutMutation],
-  );
-
-  const handleConfirmDeniedMatch = useCallback(async () => {
-    if (!pendingCheckIn) return;
-    await checkinMutation.mutateAsync(pendingCheckIn.id).catch(showMutationError);
-    setPendingCheckIn(null);
-    setPendingMatches([]);
-    setMatchWarningOpen(false);
-  }, [checkinMutation, pendingCheckIn]);
-
-  const handleRevoke = useCallback((visitor: VisitorListItem) => {
-    setRevokeTarget(visitor);
-    setRevokeReason('');
-  }, []);
-
-  const actions: VisitorColumnActions = useMemo(
-    () => ({
-      onCheckIn: handleCheckIn,
-      onCheckOut: handleCheckOut,
-      onRevoke: handleRevoke,
-    }),
-    [handleCheckIn, handleCheckOut, handleRevoke],
+  const filteredVisitors = useMemo(
+    () => (visitors ? filterVisitors(visitors, activeFilter) : []),
+    [visitors, activeFilter],
   );
 
   const columns = useMemo(() => getVisitorColumns(actions), [actions]);
@@ -166,7 +56,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
               <QuickFilterTabs
-                tabs={FILTER_TABS}
+                tabs={VISITOR_FILTER_TABS}
                 active={activeFilter}
                 onChange={setActiveFilter}
               />
@@ -224,65 +114,7 @@ export function VisitorStaffView({ communityId }: VisitorStaffViewProps) {
         onOpenChange={setRegisterOpen}
       />
 
-      <DeniedMatchWarning
-        open={matchWarningOpen}
-        onOpenChange={setMatchWarningOpen}
-        matches={pendingMatches}
-        visitorName={pendingCheckIn?.visitorName ?? 'This visitor'}
-        onConfirm={handleConfirmDeniedMatch}
-      />
-
-      <Dialog
-        open={Boolean(revokeTarget)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRevokeTarget(null);
-            setRevokeReason('');
-          }
-        }}
-      >
-        <DialogContent size="md">
-          <DialogHeader>
-            <DialogTitle>Revoke Visitor Pass</DialogTitle>
-            <DialogDescription>
-              Add a reason for revoking {revokeTarget?.visitorName}&apos;s pass.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            value={revokeReason}
-            onChange={(event) => setRevokeReason(event.target.value)}
-            placeholder="Required reason"
-            rows={4}
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setRevokeTarget(null);
-                setRevokeReason('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={!revokeReason.trim() || revokeMutation.isPending}
-              onClick={async () => {
-                if (!revokeTarget) return;
-                await revokeMutation.mutateAsync({
-                  visitorId: revokeTarget.id,
-                  reason: revokeReason.trim(),
-                });
-                setRevokeTarget(null);
-                setRevokeReason('');
-              }}
-            >
-              {revokeMutation.isPending ? 'Revoking...' : 'Revoke Pass'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dialogs}
     </>
   );
 }
