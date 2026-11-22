@@ -4,7 +4,7 @@
  * Meeting types are enforced at the application layer via Zod unions.
  * Dates are stored as UTC and displayed in the community timezone (AGENTS #16-19).
  */
-import { bigserial, bigint, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigserial, bigint, boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { communities } from './communities';
 
 export const meetings = pgTable('meetings', {
@@ -28,6 +28,14 @@ export const meetings = pgTable('meetings', {
    * Meetings block shows it beside the meeting. Null when none was entered.
    */
   agenda: text('agenda'),
+  /**
+   * Whether the agenda shows on the PUBLIC association website. Default on,
+   * because the statute posts it with the notice. A manager turns it off for a
+   * meeting whose agenda must not be public (a closed session with the
+   * association's attorney, a personnel matter). Signed-in members still see
+   * it in the portal; the meeting itself stays listed either way.
+   */
+  agendaPublished: boolean('agenda_published').notNull().default(true),
 
   /** Optional metadata for operational workflows */
   noticePostedAt: timestamp('notice_posted_at', { withTimezone: true }),

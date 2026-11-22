@@ -65,6 +65,13 @@ describe('export table registry — column references', () => {
     expect(columnCount).toBeGreaterThan(100);
   });
 
+  // A manager's choice to keep an agenda off the website is part of the
+  // meeting record, so the archive carries it.
+  it('exports whether each meeting agenda is on the public website', () => {
+    const spec = EXPORT_TABLES.find((t) => t.tableName === 'meetings');
+    expect(spec?.columns.find((c) => c.key === 'agendaPublished')).toMatchObject({ label: 'Agenda On Website' });
+  });
+
   it('exports posted documents only — drafts are managers-only and not records yet', () => {
     const spec = EXPORT_TABLES.find((t) => t.tableName === 'documents');
     expect(spec?.rowFilter, 'documents export has no draft filter').toBeDefined();

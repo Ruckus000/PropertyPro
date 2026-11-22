@@ -21,6 +21,7 @@ const UPCOMING: MeetingListItem = {
   endsAt: null,
   location: 'Clubhouse',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -38,6 +39,7 @@ const AUGUST_OWED: MeetingListItem = {
   endsAt: null,
   location: 'Clubhouse',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: '2026-08-10T14:00:00.000Z',
   minutesApprovedAt: null,
   deadlines: {

@@ -142,6 +142,7 @@ const COMPLIANT = {
   startsAt: new Date('2026-12-01T23:00:00.000Z'),
   endsAt: new Date('2026-12-02T01:00:00.000Z'),
   location: 'Clubhouse',
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
 };
@@ -153,6 +154,7 @@ const COMPLIANT_JSON = {
   endsAt: '2026-12-02T01:00:00.000Z',
   location: 'Clubhouse',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -170,6 +172,7 @@ const LATE = {
   startsAt: new Date('2026-09-05T22:00:00.000Z'),
   endsAt: null,
   location: 'Pool deck',
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
 };
@@ -181,6 +184,7 @@ const LATE_JSON = {
   endsAt: null,
   location: 'Pool deck',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -420,13 +424,14 @@ describe('POST /api/v1/meetings — create', () => {
       endsAt: new Date('2026-12-02T01:00:00.000Z'),
       location: 'Clubhouse',
       agenda: null,
+      agendaPublished: true,
     });
     expect(getMeetingDetailMock).toHaveBeenCalledWith(42, 7);
     expect(logAuditEventMock).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(logAuditEventMock.mock.calls[0]![0])).toBe(
       '{"userId":"user-actor-1","action":"create","resourceType":"meeting","resourceId":"7",' +
         '"communityId":42,"newValues":{"title":"sunset-condos Annual Owners Meeting","meetingType":"annual",' +
-        '"startsAt":"2026-12-01T23:00:00.000Z","endsAt":"2026-12-02T01:00:00.000Z","location":"Clubhouse","agenda":null}}',
+        '"startsAt":"2026-12-01T23:00:00.000Z","endsAt":"2026-12-02T01:00:00.000Z","location":"Clubhouse","agenda":null,"agendaPublished":true}}',
     );
     expect(queueNotificationMock).toHaveBeenCalledWith(
       42,
@@ -479,7 +484,7 @@ describe('POST /api/v1/meetings — create', () => {
     expect(JSON.stringify(logAuditEventMock.mock.calls[0]![0])).toBe(
       '{"userId":"user-actor-1","action":"create","resourceType":"meeting","resourceId":"8",' +
         '"communityId":42,"newValues":{"title":"Budget Meeting","meetingType":"budget",' +
-        '"startsAt":"2026-09-05T22:00:00.000Z","endsAt":null,"location":"Pool deck","agenda":null}}',
+        '"startsAt":"2026-09-05T22:00:00.000Z","endsAt":null,"location":"Pool deck","agenda":null,"agendaPublished":true}}',
     );
   });
 

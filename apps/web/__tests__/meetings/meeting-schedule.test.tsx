@@ -21,6 +21,7 @@ const SEPTEMBER_BOARD: MeetingListItem = {
   endsAt: null,
   location: 'Clubhouse',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: null,
   minutesApprovedAt: null,
   deadlines: {
@@ -38,6 +39,7 @@ const ANNUAL: MeetingListItem = {
   endsAt: '2026-10-21T01:00:00.000Z',
   location: 'Ballroom',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: '2026-08-20T14:00:00.000Z',
   minutesApprovedAt: null,
   deadlines: {
@@ -55,6 +57,7 @@ const AUGUST_BOARD: MeetingListItem = {
   endsAt: null,
   location: 'Clubhouse',
   agenda: null,
+  agendaPublished: true,
   noticePostedAt: '2026-08-10T14:00:00.000Z',
   minutesApprovedAt: null,
   deadlines: {
