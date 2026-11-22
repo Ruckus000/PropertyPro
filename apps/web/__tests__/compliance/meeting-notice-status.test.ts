@@ -99,6 +99,51 @@ describe('meetingNoticeStatus', () => {
     expect(meetingNoticeStatus(summary, NOW)?.status).toBe('overdue');
   });
 
+  // The row's deadline drives "Nd overdue" on the Compliance page and the date
+  // in the daily alert email. An overdue row must carry a deadline that has
+  // passed — the missed one — never the next meeting's future post-by.
+  it('carries the most recent missed deadline when overdue, not the next upcoming one', () => {
+    const summary = summarizeMeetingNotices(
+      [
+        onTime,
+        meeting({ id: 2, startsAt: daysFromNow(-60) }),
+        meeting({ id: 3, meetingType: 'board', startsAt: daysFromNow(-5) }),
+        meeting({ id: 4, startsAt: daysFromNow(30) }),
+      ],
+      'condo_718',
+      NOW,
+    );
+    expect(summary.nextDue?.postBy).toBe(daysFromNow(16).toISOString());
+    expect(meetingNoticeStatus(summary, NOW)).toEqual({
+      status: 'overdue',
+      deadline: daysFromNow(-7).toISOString(),
+    });
+  });
+
+  it('picks the latest missed deadline, not the latest missed meeting', () => {
+    // The annual meeting is later (day -4) but its 14-day deadline (day -18)
+    // is earlier than the board meeting's 48-hour one (day -7).
+    const summary = summarizeMeetingNotices(
+      [
+        meeting({ id: 2, startsAt: daysFromNow(-4) }),
+        meeting({ id: 3, meetingType: 'board', startsAt: daysFromNow(-5) }),
+      ],
+      'condo_718',
+      NOW,
+    );
+    expect(summary.missed[0]?.meetingId).toBe(2);
+    expect(meetingNoticeStatus(summary, NOW)?.deadline).toBe(daysFromNow(-7).toISOString());
+  });
+
+  it('keeps a missed deadline when overdue and nothing is coming up', () => {
+    const summary = summarizeMeetingNotices([meeting({ startsAt: daysFromNow(-20) })], 'condo_718', NOW);
+    expect(summary.nextDue).toBeNull();
+    expect(meetingNoticeStatus(summary, NOW)).toEqual({
+      status: 'overdue',
+      deadline: daysFromNow(-34).toISOString(),
+    });
+  });
+
   it('is unsatisfied, with the deadline, when the next notice is due within 7 days', () => {
     const summary = summarizeMeetingNotices(
       [onTime, meeting({ id: 2, meetingType: 'board', startsAt: daysFromNow(6) })],
