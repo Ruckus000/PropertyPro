@@ -9,10 +9,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { FilePlus2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDeleteMeeting, useMeeting } from '@/hooks/use-meetings';
+import { useDeleteMeeting, useMeeting, useRecordMeetingMinutes } from '@/hooks/use-meetings';
 import { MEETING_TYPE_TOKENS, resolveEndsAt } from '@/lib/calendar/event-types';
 import { deadlineEscalation } from '@/lib/meetings/meeting-status';
 import { DocumentViewerModal } from '@/components/documents/DocumentViewerModal';
+import { LinkDocumentModal } from '@/components/compliance/link-document-modal';
+import { MINUTES_MEETING_TYPES } from '@/lib/compliance/meeting-minutes-status';
 
 interface MeetingDetailModalProps {
   communityId: number;
@@ -35,12 +37,25 @@ export function MeetingDetailModal({
 }: MeetingDetailModalProps) {
   const detailQuery = useMeeting(communityId, meetingId);
   const deleteMutation = useDeleteMeeting(communityId);
+  const recordMinutes = useRecordMeetingMinutes(communityId);
+  const [pickingMinutes, setPickingMinutes] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [viewerDocument, setViewerDocument] = useState<{
     id: number;
     title: string;
     fileName: string;
   } | null>(null);
+
+  async function handleRecordMinutes(documentId: number, approvedAt: string) {
+    setPickingMinutes(false);
+    setErrorMessage(null);
+    try {
+      await recordMinutes.mutateAsync({ meetingId, documentId, approvedAt });
+      toast.success('Minutes recorded.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to record minutes.');
+    }
+  }
 
   async function handleDelete() {
     const confirmed = window.confirm('Delete this meeting?');
@@ -63,6 +78,15 @@ export function MeetingDetailModal({
   const meetingToken = meeting ? MEETING_TYPE_TOKENS[meeting.meetingType as keyof typeof MEETING_TYPE_TOKENS] : null;
   const startsAt = meeting ? new Date(meeting.startsAt) : null;
   const endsAt = meeting && startsAt ? resolveEndsAt(startsAt, meeting.endsAt) : null;
+  // A held board meeting with no minutes on the record: its uploaded minutes
+  // can be recorded here, so the Compliance page counts them (H-5).
+  const canRecordMinutes =
+    canWrite &&
+    meeting != null &&
+    startsAt != null &&
+    startsAt.getTime() <= Date.now() &&
+    MINUTES_MEETING_TYPES.has(meeting.meetingType) &&
+    !meeting.minutesApprovedAt;
 
   return (
     <Dialog.Root
@@ -274,6 +298,15 @@ export function MeetingDetailModal({
               <FilePlus2 size={16} aria-hidden="true" />
               Author Minutes
             </Link>
+            {canRecordMinutes ? (
+              <Button
+                variant="outline"
+                onClick={() => setPickingMinutes(true)}
+                loading={recordMinutes.isPending}
+              >
+                Record minutes
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={() => onEdit(meetingId)}>
               Edit
             </Button>
@@ -282,6 +315,31 @@ export function MeetingDetailModal({
       </Card>
         </Dialog.Content>
       </Dialog.Portal>
+
+      {/* Its own Radix layer: the meeting dialog is modal, so a plain overlay
+          beside it would be inert to the pointer and outside its focus trap. */}
+      {pickingMinutes ? (
+        <Dialog.Root
+          open
+          onOpenChange={(open) => {
+            if (!open) setPickingMinutes(false);
+          }}
+        >
+          <Dialog.Portal>
+            <Dialog.Content aria-describedby={undefined} className="contents">
+              <Dialog.Title className="sr-only">Record minutes</Dialog.Title>
+              <LinkDocumentModal
+                communityId={communityId}
+                title="Record minutes"
+                dateLabel="Approved on"
+                dateHint="The 30-day posting window for minutes starts when they are approved."
+                onSelect={(documentId, approvedAt) => void handleRecordMinutes(documentId, approvedAt)}
+                onClose={() => setPickingMinutes(false)}
+              />
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      ) : null}
 
       <DocumentViewerModal
         open={viewerDocument !== null}

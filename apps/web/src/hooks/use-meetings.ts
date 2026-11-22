@@ -5,6 +5,7 @@ import type { CalendarEvent } from '@/lib/calendar/event-types';
 import type { MeetingDeadlines } from '@/lib/meetings/meeting-response';
 import type { NoticeWarning } from '@/lib/compliance/notice-window';
 import { ApiRequestError, requestJson, requestJsonEnvelope } from '@/lib/api/request-json';
+import { COMPLIANCE_QUERY_KEY } from './use-compliance-checklist';
 
 export interface MeetingListItem {
   id: number;
@@ -183,6 +184,36 @@ export function usePostMeetingNotice(communityId: number) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: MEETING_KEYS.all });
+    },
+  });
+}
+
+/**
+ * Record a posted document as a held meeting's minutes (H-5). `approvedAt` is
+ * the approval date, written to the document as its received/created date.
+ * Invalidates compliance too: the minutes row is scored from the meetings.
+ */
+export function useRecordMeetingMinutes(communityId: number) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (vars: { meetingId: number; documentId: number; approvedAt: string }) =>
+      requestJson<MeetingListItem>('/api/v1/meetings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'record-minutes',
+          communityId,
+          meetingId: vars.meetingId,
+          documentId: vars.documentId,
+          approvedAt: vars.approvedAt,
+        }),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: MEETING_KEYS.all }),
+        queryClient.invalidateQueries({ queryKey: [COMPLIANCE_QUERY_KEY] }),
+      ]);
     },
   });
 }

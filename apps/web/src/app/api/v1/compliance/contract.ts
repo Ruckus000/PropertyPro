@@ -96,6 +96,7 @@
  * `reason`).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { receivedAtSchema } from '@/lib/compliance/received-at';
 
 export const complianceGetContract = defineRoute({
   method: 'GET',
@@ -144,6 +145,11 @@ export const compliancePatchContract = defineRoute({
          * Without it, linking a record that already has a different file is a 409.
          */
         replace: z.boolean().optional(),
+        /**
+         * `link_document` only: when the association received or created the
+         * record. Written to the document; its 30-day clock runs from it (H-2).
+         */
+        receivedAt: receivedAtSchema.optional(),
       })
       .strict()
       .refine(
@@ -153,6 +159,10 @@ export const compliancePatchContract = defineRoute({
       .refine(
         (d) => d.action !== 'mark_not_applicable' || d.reason != null,
         { message: 'reason is required when action is mark_not_applicable', path: ['reason'] },
+      )
+      .refine(
+        (d) => d.action === 'link_document' || d.receivedAt == null,
+        { message: 'receivedAt is only accepted with link_document', path: ['receivedAt'] },
       ),
   },
   response: z.unknown(),

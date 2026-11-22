@@ -42,6 +42,7 @@ import { loadChecklistWithStatus, withDerivedStatus } from '@/lib/compliance/loa
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
 import { assertDocumentInCommunity } from '@/lib/services/scoped-fk-validators';
+import { setDocumentReceivedAt } from '@/lib/services/document-received-at-service';
 import {
   findChecklistLinkConflict,
   insertComplianceChecklistItems,
@@ -171,7 +172,7 @@ export const PATCH = withErrorHandler(
   runRoute(compliancePatchContract, async ({ body, req }) => {
     const userId = await requireAuthenticatedUserId();
 
-    const { id, action: patchAction, documentId, reason, replace } = body;
+    const { id, action: patchAction, documentId, reason, replace, receivedAt } = body;
     const communityId = resolveEffectiveCommunityId(req, body.communityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, userId);
@@ -229,6 +230,26 @@ export const PATCH = withErrorHandler(
     const row = await updateComplianceChecklistItem(communityId, id, updateData);
     if (!row) {
       throw new ValidationError('Checklist item not found or does not belong to this community');
+    }
+
+    // The record's own clock (H-2): when the association received or created
+    // it. A property of the document, so it is written there, after the link
+    // landed, and audited on the document.
+    if (patchAction === 'link_document' && receivedAt) {
+      const receivedDate = new Date(receivedAt);
+      const written = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
+      if (written) {
+        await logAuditEvent({
+          userId,
+          action: 'update',
+          resourceType: 'document',
+          resourceId: String(documentId),
+          communityId,
+          oldValues: { receivedAt: written.previous?.toISOString() ?? null },
+          newValues: { receivedAt: receivedDate.toISOString() },
+          metadata: { via: 'compliance_link', checklistItemId: id },
+        });
+      }
     }
 
     const result = withDerivedStatus(row);

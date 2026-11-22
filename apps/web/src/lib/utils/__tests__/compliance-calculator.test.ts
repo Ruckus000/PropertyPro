@@ -5,6 +5,7 @@ import {
 } from '@/lib/utils/compliance-calculator';
 
 const ms = (iso: string) => new Date(iso);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('calculateComplianceStatus', () => {
   const now = ms('2026-05-04T12:00:00Z');
@@ -74,24 +75,26 @@ describe('calculateComplianceStatus', () => {
   });
 
   describe('late posting demotes to overdue', () => {
-    it('returns overdue when a document was posted past the deadline (does not retroactively satisfy)', () => {
+    // The record's own clock: posted within 30 days of being received (H-2).
+    const receivedAt = ms('2026-03-31T00:00:00Z'); // + 30 days = 2026-04-30T00:00:00Z
+
+    it('returns overdue when a document was posted past its record deadline (does not retroactively satisfy)', () => {
       expect(
         calculateComplianceStatus({
           documentId: 42,
-          documentPostedAt: ms('2026-05-02T00:00:00Z'),
-          deadline: ms('2026-04-30T00:00:00Z'),
+          documentPublishedAt: ms('2026-05-02T00:00:00Z'),
+          documentReceivedAt: receivedAt,
           now,
         }),
       ).toBe('overdue');
     });
 
-    it('returns satisfied when posted-at exactly equals deadline (not strictly after)', () => {
-      const deadline = ms('2026-04-30T00:00:00Z');
+    it('returns satisfied when posted-at exactly equals the record deadline (not strictly after)', () => {
       expect(
         calculateComplianceStatus({
           documentId: 42,
-          documentPostedAt: deadline,
-          deadline,
+          documentPublishedAt: ms('2026-04-30T00:00:00Z'),
+          documentReceivedAt: receivedAt,
           now,
         }),
       ).toBe('satisfied');
@@ -209,8 +212,8 @@ describe('calculateComplianceStatus', () => {
       expect(
         calculateComplianceStatus({
           documentId: 42,
-          documentPostedAt: easternMidnight,
-          deadline: easternMidnight,
+          documentPublishedAt: easternMidnight,
+          documentReceivedAt: new Date(easternMidnight.getTime() - 30 * DAY_MS),
           now,
         }),
       ).toBe('satisfied');
@@ -223,8 +226,8 @@ describe('calculateComplianceStatus', () => {
       expect(
         calculateComplianceStatus({
           documentId: 42,
-          documentPostedAt: postedAt,
-          deadline,
+          documentPublishedAt: postedAt,
+          documentReceivedAt: new Date(deadline.getTime() - 30 * DAY_MS),
           now,
         }),
       ).toBe('overdue');

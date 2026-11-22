@@ -63,14 +63,18 @@ function itemStatus(item: ChecklistItemData): RecordsStatus {
   // A saved draft is the same next step whatever the clock says: post it.
   if (item.documentState === 'draft') return 'not_posted';
   if (item.documentState === 'posted') {
-    // Posted, yet overdue: either the rolling window has passed (a newer record
+    // Posted, yet not satisfied: either the record aged out of its window (a
+    // yearly record over a year old, or a rolling-window record — a newer one
     // is owed) or it went up after its deadline. Only the first is something
-    // to do now; a late posting is still on the website.
-    const stale =
-      item.rollingWindow != null &&
-      item.documentPostedAt != null &&
-      new Date(item.documentPostedAt) <
-        calculateRollingWindowStart(new Date(), item.rollingWindow.months);
+    // to do now; a late posting is still on the website. The clock says which
+    // (`calculateComplianceClock`); the rolling-window arithmetic stays for an
+    // item that arrives without one.
+    const stale = item.clock
+      ? item.clock.state === 'out_of_window'
+      : item.rollingWindow != null &&
+        item.documentPostedAt != null &&
+        new Date(item.documentPostedAt) <
+          calculateRollingWindowStart(new Date(), item.rollingWindow.months);
     return stale ? 'out_of_date' : 'up_to_date';
   }
   // Nothing linked, or the linked file was deleted.

@@ -20,6 +20,8 @@ interface PatchPayload {
   reason?: string;
   /** `link_document` only: replace the record's current file on purpose. */
   replace?: boolean;
+  /** `link_document` only: when the record was received or created (H-2). */
+  receivedAt?: string;
 }
 
 export async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
@@ -87,13 +89,14 @@ export function useComplianceMutations(communityId: number) {
   // `replace`: only the Compliance page's re-link flow sends it. Without it the
   // route refuses (409) to swap a record's file, or to give one file to two records.
   const linkDocument = useMutation({
-    mutationFn: (vars: { itemId: number; documentId: number; replace?: boolean }) =>
+    mutationFn: (vars: { itemId: number; documentId: number; replace?: boolean; receivedAt?: string }) =>
       patchChecklistItem({
         id: vars.itemId,
         communityId,
         action: "link_document",
         documentId: vars.documentId,
         ...(vars.replace ? { replace: true } : {}),
+        ...(vars.receivedAt ? { receivedAt: vars.receivedAt } : {}),
       }),
     onMutate: (vars) =>
       optimisticUpdate(vars.itemId, () => ({

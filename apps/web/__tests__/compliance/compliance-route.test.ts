@@ -48,6 +48,7 @@ const {
   scopedQueryByIdMock,
   getCommunityUnitCountMock,
   documentsTable,
+  setDocumentReceivedAtMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -67,6 +68,7 @@ const {
   createScopedClientMock: vi.fn(),
   scopedQueryByIdMock: vi.fn(),
   getCommunityUnitCountMock: vi.fn(),
+  setDocumentReceivedAtMock: vi.fn(),
   documentsTable: Symbol('documents'),
 }));
 
@@ -109,10 +111,22 @@ vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
 }));
 
-vi.mock('@/lib/utils/compliance-calculator', () => ({
-  calculateComplianceStatus: calculateComplianceStatusMock,
-  calculatePostingDeadline: calculatePostingDeadlineMock,
-}));
+vi.mock('@/lib/utils/compliance-calculator', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/utils/compliance-calculator')>(
+    '@/lib/utils/compliance-calculator',
+  );
+  return {
+    ...actual,
+    calculateComplianceStatus: calculateComplianceStatusMock,
+    // The route derives through `calculateComplianceClock`; route tests drive
+    // the status through the same mock they always have.
+    calculateComplianceClock: (input: Parameters<typeof actual.calculateComplianceClock>[0]) => ({
+      status: calculateComplianceStatusMock(input),
+      clock: { state: 'open', deadline: null, postedAt: null, basis: 'statute' },
+    }),
+    calculatePostingDeadline: calculatePostingDeadlineMock,
+  };
+});
 
 vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
@@ -120,7 +134,12 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
 
 // load-checklist-with-status reads meetings for the meeting-notice row (H-4).
 vi.mock('@/lib/services/meeting-service', () => ({
-  listMeetingsForNoticeScoring: vi.fn().mockResolvedValue([]),
+  listMeetingsForComplianceScoring: vi.fn().mockResolvedValue([]),
+}));
+
+// The link flow writes the record's received date to the document (H-2).
+vi.mock('@/lib/services/document-received-at-service', () => ({
+  setDocumentReceivedAt: setDocumentReceivedAtMock,
 }));
 
 vi.mock('@/lib/services/community-profile-service', () => ({
@@ -640,6 +659,57 @@ describe('PATCH /api/v1/compliance', () => {
         newValues: { documentId: 77 },
       }),
     );
+  });
+
+  it('writes the received date to the linked document and audits it on the document (H-2)', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
+    setDocumentReceivedAtMock.mockResolvedValueOnce({ previous: new Date('2026-01-01T00:00:00.000Z') });
+    const receivedAt = '2026-01-15T23:59:59.999Z';
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, receivedAt }),
+      undefined,
+    );
+
+    expect(res.status).toBe(200);
+    expect(setDocumentReceivedAtMock).toHaveBeenCalledWith(42, 77, new Date(receivedAt));
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update',
+        resourceType: 'document',
+        resourceId: '77',
+        oldValues: { receivedAt: '2026-01-01T00:00:00.000Z' },
+        newValues: { receivedAt },
+        metadata: { via: 'compliance_link', checklistItemId: 5 },
+      }),
+    );
+  });
+
+  it('leaves the document date alone when no received date is sent', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
+    await PATCH(bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77 }), undefined);
+    expect(setDocumentReceivedAtMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a received date in the future, or on any action but link_document (400)', async () => {
+    const future = await PATCH(
+      bodyReq('PATCH', {
+        id: 5,
+        communityId: 42,
+        action: 'link_document',
+        documentId: 77,
+        receivedAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      }),
+      undefined,
+    );
+    expect(future.status).toBe(400);
+    const unlink = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'unlink_document', receivedAt: '2026-01-15T00:00:00.000Z' }),
+      undefined,
+    );
+    expect(unlink.status).toBe(400);
+    expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+    expect(setDocumentReceivedAtMock).not.toHaveBeenCalled();
   });
 
   it('completes the manager onboarding step on a decision about an item, not on unlink', async () => {

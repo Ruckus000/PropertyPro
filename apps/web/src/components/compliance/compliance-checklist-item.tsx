@@ -3,8 +3,9 @@
 import React, { useState, type ReactNode } from "react";
 import { Badge } from "@propertypro/ui";
 import { ChevronDown, ChevronRight, Info } from "lucide-react";
-import type { ComplianceStatus } from "@/lib/utils/compliance-calculator";
+import type { ChecklistClock, ComplianceStatus } from "@/lib/utils/compliance-calculator";
 import type { MeetingNoticeSummary } from "@/lib/compliance/meeting-notice-status";
+import type { MeetingMinutesSummary } from "@/lib/compliance/meeting-minutes-status";
 
 export interface ChecklistItemData {
   id: number;
@@ -40,6 +41,14 @@ export interface ChecklistItemData {
    * yet and the row kept its document-based status.
    */
   meetingNotices?: MeetingNoticeSummary | null;
+  /**
+   * Minutes rows only: the per-board-meeting result that decided `status`
+   * (see `meeting-minutes-status.ts`). Absent when no board meeting was held
+   * in the window and the row kept its document-based status.
+   */
+  meetingMinutes?: MeetingMinutesSummary | null;
+  /** The item's clock in the closed state set; see `calculateComplianceClock`. */
+  clock?: ChecklistClock;
   status: ComplianceStatus;
 }
 

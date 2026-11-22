@@ -74,7 +74,7 @@
  *
  * ---------------------------------------------------------------------------
  * POST — action dispatch: create (default) | update | delete | post-notice |
- *        attach | detach
+ *        attach | detach | record-minutes
  * ---------------------------------------------------------------------------
  * No `tenantScope`. The legacy handler already parsed `communityId` out of the
  * body BEFORE auth (`parseCommunityIdFromBody`), so a body scope would not move
@@ -99,7 +99,7 @@
  * input with `UnprocessableEntityError` — **422** `UNPROCESSABLE_ENTITY`, with a
  * per-action message ('Invalid meeting data' / 'Invalid update data' /
  * 'Invalid notice data' / 'Invalid delete data' / 'Invalid attachment data' /
- * 'Invalid detach data') and `formatZodErrors` details — and all of it runs
+ * 'Invalid detach data' / 'Invalid minutes data') and `formatZodErrors` details — and all of it runs
  * after auth. A runner-level schema would answer **400** `VALIDATION_ERROR`
  * with one generic message and move it ahead of the 401, so none of that
  * validation lives here. The same goes for the endsAt-after-startsAt refusal

@@ -50,6 +50,7 @@ const {
   meetingsTableMock: {
     id: Symbol('meetings.id'),
     minutesApprovedAt: Symbol('meetings.minutesApprovedAt'),
+    minutesDocumentId: Symbol('meetings.minutesDocumentId'),
     noticePostedAt: Symbol('meetings.noticePostedAt'),
   },
   filtersMock: {
@@ -59,6 +60,8 @@ const {
     gte: vi.fn((left: unknown, right: unknown) => ({ type: 'gte', left, right })),
     inArray: vi.fn((left: unknown, right: unknown) => ({ type: 'inArray', left, right })),
     lt: vi.fn((left: unknown, right: unknown) => ({ type: 'lt', left, right })),
+    isNull: vi.fn((value: unknown) => ({ type: 'isNull', value })),
+    isNotNull: vi.fn((value: unknown) => ({ type: 'isNotNull', value })),
   },
 }));
 
@@ -211,6 +214,18 @@ describe('publishing a draft authored from a meeting', () => {
     );
   });
 
+  it('names the published document as the meeting\'s minutes, only if none is named yet (H-5)', async () => {
+    const { updateMock } = mockMeetingRow({ id: 13, minutesApprovedAt: null });
+
+    await publish();
+
+    expect(updateMock).toHaveBeenCalledWith(
+      meetingsTableMock,
+      { minutesDocumentId: 900 },
+      { type: 'and', parts: [expect.objectContaining({ type: 'eq' }), { type: 'isNull', value: meetingsTableMock.minutesDocumentId }] },
+    );
+  });
+
   it('logs the meeting_minutes_approved audit action that nothing has ever emitted', async () => {
     mockMeetingRow({ id: 13, minutesApprovedAt: null });
 
@@ -235,7 +250,11 @@ describe('publishing a draft authored from a meeting', () => {
 
     expect(response.status).toBe(200);
     // The first posting is what the 30-day window measures.
-    expect(updateMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalledWith(
+      meetingsTableMock,
+      expect.objectContaining({ minutesApprovedAt: expect.anything() }),
+      expect.anything(),
+    );
     expect(logAuditEventMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ action: 'meeting_minutes_approved' }),
     );

@@ -39,7 +39,7 @@ import {
   linkPublishedDocumentToMeeting,
   softDeleteDocumentDraft,
 } from '@/lib/services/document-draft-service';
-import { markMeetingMinutesPosted } from '@/lib/services/meeting-service';
+import { markMeetingMinutesPosted, setMeetingMinutesDocument } from '@/lib/services/meeting-service';
 import { linkMinutesDocumentToChecklist } from '@/lib/services/compliance-service';
 import { completeDocumentSteps } from '@/lib/services/onboarding-checklist-service';
 import { autoLinkDocument } from '@/lib/services/record-auto-link-service';
@@ -227,6 +227,10 @@ export const POST = withErrorHandler(
             targetMeetingId,
             new Date(),
           );
+          // Name this document as the meeting's minutes, so per-meeting
+          // minutes scoring can see it later deleted or taken back to a draft
+          // (H-5). First write wins, like the stamp.
+          await setMeetingMinutesDocument(communityId, targetMeetingId, documentId);
           if (!stamp.alreadyStamped && stamp.stampedAt) {
             await logAuditEvent({
               userId,

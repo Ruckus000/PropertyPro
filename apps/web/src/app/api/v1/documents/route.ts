@@ -158,6 +158,7 @@ export const POST = withErrorHandler(
       fileSize: body.fileSize,
       sourceType: 'library',
       draft: body.draft === true,
+      receivedAt: body.receivedAt ? new Date(body.receivedAt) : null,
     });
 
     void completeDocumentSteps(effectiveCommunityId, userId, body.categoryId);

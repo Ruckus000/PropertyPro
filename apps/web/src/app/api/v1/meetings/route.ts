@@ -13,7 +13,7 @@ import { withEnvelope } from '@propertypro/api-contract';
 import { logAuditEvent } from '@propertypro/db';
 import { withErrorHandler } from '@/lib/api/error-handler';
 import { runRoute } from '@/lib/api/run-route';
-import { BadRequestError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
+import { BadRequestError, ConflictError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { requireAuthenticatedUserId } from '@/lib/api/auth';
 import { requireCommunityMembership } from '@/lib/api/community-membership';
 import { parseCommunityIdFromBody as sharedParseCommunityIdFromBody } from '@/lib/finance/request';
@@ -36,9 +36,12 @@ import {
   getMeetingDocumentTargets,
   listMeetingsForCommunity,
   markMeetingNoticePosted,
+  recordMeetingMinutes,
   softDeleteMeetingForCommunity,
   updateMeetingForCommunity,
 } from '@/lib/services/meeting-service';
+import { setDocumentReceivedAt } from '@/lib/services/document-received-at-service';
+import { receivedAtSchema } from '@/lib/compliance/received-at';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { meetingsActionContract, meetingsListContract } from './contract';
@@ -120,6 +123,15 @@ const attachDocSchema = z.object({
   communityId: z.number().int().positive(),
   meetingId: z.number().int().positive(),
   documentId: z.number().int().positive(),
+});
+
+const recordMinutesSchema = z.object({
+  action: z.literal('record-minutes'),
+  communityId: z.number().int().positive(),
+  meetingId: z.number().int().positive(),
+  documentId: z.number().int().positive(),
+  /** When the board approved the minutes: the document's received/created date (H-2). */
+  approvedAt: receivedAtSchema.optional(),
 });
 
 const detachDocSchema = z.object({
@@ -248,6 +260,9 @@ export const POST = withErrorHandler(
     }
     if (action === 'detach') {
       return handleDetach(normalizedBody, actorUserId);
+    }
+    if (action === 'record-minutes') {
+      return handleRecordMinutes(normalizedBody, actorUserId, membership.communityType);
     }
 
     return handleCreate(normalizedBody, actorUserId, membership.communityType);
@@ -595,6 +610,90 @@ async function handleAttach(
   });
 
   return attachment;
+}
+
+/**
+ * Record an uploaded, posted document as a held meeting's minutes (H-5), so
+ * the per-meeting minutes score can count minutes a board uploads as a file,
+ * not only minutes written in the app. `approvedAt`, when given, is written to
+ * the document as its received/created date: the minutes' 30-day clock runs
+ * from their approval.
+ */
+async function handleRecordMinutes(
+  body: Record<string, unknown>,
+  actorUserId: string,
+  communityType: Awaited<ReturnType<typeof requireCommunityMembership>>['communityType'],
+): Promise<unknown> {
+  const parsed = recordMinutesSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new UnprocessableEntityError('Invalid minutes data', {
+      fields: formatZodErrors(parsed.error),
+    });
+  }
+
+  const { communityId, meetingId, documentId, approvedAt } = parsed.data;
+  const result = await recordMeetingMinutes(communityId, meetingId, documentId, actorUserId);
+  switch (result.outcome) {
+    case 'meeting_not_found':
+      throw new NotFoundError('Meeting not found');
+    case 'document_not_found':
+      throw new NotFoundError('Document not found');
+    case 'meeting_not_held':
+      throw new UnprocessableEntityError('Minutes can be recorded once the meeting has been held', {
+        fields: { meetingId: ['This meeting has not been held yet'] },
+      });
+    case 'has_other_minutes':
+      throw new ConflictError('This meeting already has a different minutes document.');
+    case 'recorded':
+      break;
+  }
+
+  if (result.attached) {
+    await logAuditEvent({
+      userId: actorUserId,
+      action: 'update',
+      resourceType: 'meeting_document',
+      resourceId: `${meetingId}:${documentId}`,
+      communityId,
+      newValues: { meetingId, documentId },
+      metadata: { subAction: 'attach', via: 'record_minutes' },
+    });
+  }
+  await logAuditEvent({
+    userId: actorUserId,
+    action: 'meeting_minutes_approved',
+    resourceType: 'meeting',
+    resourceId: String(meetingId),
+    communityId,
+    newValues: {
+      minutesDocumentId: documentId,
+      ...(result.alreadyStamped ? {} : { minutesApprovedAt: result.stampedAt.toISOString() }),
+    },
+    metadata: { via: 'record_minutes' },
+  });
+
+  if (approvedAt) {
+    const approvedDate = new Date(approvedAt);
+    const written = await setDocumentReceivedAt(communityId, documentId, approvedDate);
+    if (written) {
+      await logAuditEvent({
+        userId: actorUserId,
+        action: 'update',
+        resourceType: 'document',
+        resourceId: String(documentId),
+        communityId,
+        oldValues: { receivedAt: written.previous?.toISOString() ?? null },
+        newValues: { receivedAt: approvedDate.toISOString() },
+        metadata: { via: 'record_minutes', meetingId },
+      });
+    }
+  }
+
+  const meeting = await getMeetingDetail(communityId, meetingId);
+  if (!meeting) {
+    throw new NotFoundError('Meeting not found');
+  }
+  return serializeMeetingResponse(meeting, communityType);
 }
 
 async function handleDetach(

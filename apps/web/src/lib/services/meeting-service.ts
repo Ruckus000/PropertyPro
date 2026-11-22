@@ -16,9 +16,9 @@ import {
   meetings,
   type DocumentAccessContext,
 } from '@propertypro/db';
-import { and, asc, eq, gte, inArray, isNotNull, lt } from '@propertypro/db/filters';
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lt } from '@propertypro/db/filters';
 import type { MeetingResponseRecord } from '@/lib/meetings/meeting-response';
-import type { MeetingNoticeInput } from '@/lib/compliance/meeting-notice-status';
+import type { ComplianceScoringMeeting } from '@/lib/compliance/meeting-minutes-status';
 
 const meetingColumns = {
   id: meetings.id,
@@ -77,20 +77,20 @@ export async function listMeetingsForCommunity(
 }
 
 /**
- * The meetings that score the meeting-notice checklist row: every live meeting
- * starting on or after `since`, upcoming ones included (a notice can fall due
- * before its meeting starts).
+ * The meetings that score the meeting-notice and minutes checklist rows: every
+ * live meeting starting on or after `since`, upcoming ones included (a notice
+ * can fall due before its meeting starts).
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
  * community membership; the compliance loaders gate on `compliance:read`.
  */
-export async function listMeetingsForNoticeScoring(
+export async function listMeetingsForComplianceScoring(
   communityId: number,
   since: Date,
-): Promise<MeetingNoticeInput[]> {
+): Promise<ComplianceScoringMeeting[]> {
   const scoped = createScopedClient(communityId);
   return scoped
-    .selectFrom<MeetingNoticeInput & { [key: string]: unknown }>(
+    .selectFrom<ComplianceScoringMeeting & { [key: string]: unknown }>(
       meetings,
       {
         id: meetings.id,
@@ -98,6 +98,8 @@ export async function listMeetingsForNoticeScoring(
         meetingType: meetings.meetingType,
         startsAt: meetings.startsAt,
         noticePostedAt: meetings.noticePostedAt,
+        minutesApprovedAt: meetings.minutesApprovedAt,
+        minutesDocumentId: meetings.minutesDocumentId,
       },
       gte(meetings.startsAt, since),
     )
@@ -255,6 +257,108 @@ export async function markMeetingMinutesPosted(
   postedAt: Date,
 ): Promise<MeetingStampResult> {
   return stampMeetingColumn(communityId, meetingId, 'minutesApprovedAt', postedAt);
+}
+
+/**
+ * Name the document that is a meeting's minutes, once. A meeting's minutes are
+ * one document; first write wins, as with the stamps above, so a later call
+ * cannot swap the record a deadline was judged against.
+ *
+ * AUTHZ: caller MUST have verified the document is a posted document in this
+ * community and `requirePermission('meetings', 'write')` (or the documents
+ * publish path).
+ */
+export async function setMeetingMinutesDocument(
+  communityId: number,
+  meetingId: number,
+  documentId: number,
+): Promise<void> {
+  const scoped = createScopedClient(communityId);
+  await scoped.update(
+    meetings,
+    { minutesDocumentId: documentId },
+    and(eq(meetings.id, meetingId), isNull(meetings.minutesDocumentId)),
+  );
+}
+
+export type RecordMeetingMinutesResult =
+  | { outcome: 'meeting_not_found' }
+  | { outcome: 'document_not_found' }
+  | { outcome: 'meeting_not_held' }
+  | { outcome: 'has_other_minutes' }
+  | { outcome: 'recorded'; stampedAt: Date; alreadyStamped: boolean; attached: boolean };
+
+/**
+ * Record an uploaded, posted document as a held meeting's minutes: attach it
+ * to the meeting (unless it already is), name it as the minutes, and stamp
+ * `minutes_approved_at` — the posting stamp — with the document's own
+ * `posted_at`, the moment owners could first open it. A stamp already present
+ * is kept (first write wins).
+ *
+ * The authored-minutes publish path does the same for minutes written in the
+ * app; this is the path for minutes uploaded as a file (audit 2026-11-05, H-5).
+ *
+ * AUTHZ: caller MUST have verified `requirePermission('meetings', 'write')`.
+ * Both rows are read through the scoped client, so a document or meeting in
+ * another community is "not found".
+ */
+export async function recordMeetingMinutes(
+  communityId: number,
+  meetingId: number,
+  documentId: number,
+  actorUserId: string,
+  now: Date = new Date(),
+): Promise<RecordMeetingMinutesResult> {
+  const scoped = createScopedClient(communityId);
+  const [meetingRows, documentRows, attachmentRows] = await Promise.all([
+    scoped.selectFrom<Record<string, unknown>>(
+      meetings,
+      {
+        id: meetings.id,
+        startsAt: meetings.startsAt,
+        minutesApprovedAt: meetings.minutesApprovedAt,
+        minutesDocumentId: meetings.minutesDocumentId,
+      },
+      eq(meetings.id, meetingId),
+    ),
+    // A draft is not posted, so it cannot be posted minutes.
+    scoped.selectFrom<Record<string, unknown>>(
+      documents,
+      { id: documents.id, postedAt: documents.postedAt },
+      and(eq(documents.id, documentId), isNotNull(documents.postedAt)),
+    ),
+    scoped.selectFrom<Record<string, unknown>>(
+      meetingDocuments,
+      { id: meetingDocuments.id },
+      and(eq(meetingDocuments.meetingId, meetingId), eq(meetingDocuments.documentId, documentId)),
+    ),
+  ]);
+
+  const meeting = meetingRows[0];
+  if (!meeting) return { outcome: 'meeting_not_found' };
+  const document = documentRows[0];
+  if (!document) return { outcome: 'document_not_found' };
+  if (new Date(meeting['startsAt'] as string | Date).getTime() > now.getTime()) {
+    return { outcome: 'meeting_not_held' };
+  }
+  const currentDocumentId = meeting['minutesDocumentId'] as number | null;
+  if (currentDocumentId != null && Number(currentDocumentId) !== documentId) {
+    return { outcome: 'has_other_minutes' };
+  }
+
+  const attached = attachmentRows.length === 0;
+  if (attached) {
+    await scoped.insert(meetingDocuments, { meetingId, documentId, attachedBy: actorUserId });
+  }
+  await setMeetingMinutesDocument(communityId, meetingId, documentId);
+  const postedAt = new Date(document['postedAt'] as string | Date);
+  const stamp = await stampMeetingColumn(communityId, meetingId, 'minutesApprovedAt', postedAt);
+  return {
+    outcome: 'recorded',
+    stampedAt: stamp.stampedAt ?? postedAt,
+    alreadyStamped: stamp.alreadyStamped,
+    attached,
+  };
 }
 
 /**

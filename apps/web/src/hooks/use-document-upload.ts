@@ -22,6 +22,8 @@ export interface UploadRequest {
    * document itself to the record a person chose.
    */
   skipAutoLink?: boolean;
+  /** ISO instant the association received or created the record (H-2). */
+  receivedAt?: string;
 }
 
 export interface ReplaceFileRequest {
@@ -169,6 +171,7 @@ export async function uploadDocumentFile(
       redactionAttested: request.redactionAttested ?? false,
       ...(request.draft ? { draft: true } : {}),
       ...(request.skipAutoLink ? { skipAutoLink: true } : {}),
+      ...(request.receivedAt ? { receivedAt: request.receivedAt } : {}),
     }),
   });
 

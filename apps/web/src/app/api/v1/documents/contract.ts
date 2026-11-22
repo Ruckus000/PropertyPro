@@ -66,6 +66,7 @@
  * `write`.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { receivedAtSchema } from '@/lib/compliance/received-at';
 
 const listQuerySchema = z.object({
   /** Board's Deleted column: soft-deleted rows ONLY. Requires documents:write. */
@@ -115,6 +116,11 @@ export const createDocumentBodySchema = z.object({
    * both stand. Only `true` means anything.
    */
   skipAutoLink: z.literal(true).optional(),
+  /**
+   * When the association received or created the record. The 30-day posting
+   * clock runs from it (§718.111(12)(g)1., audit H-2). Omitted = not recorded.
+   */
+  receivedAt: receivedAtSchema.optional(),
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
