@@ -5,6 +5,7 @@
 import type { CommunityFeatures } from '@propertypro/shared';
 import type { DashboardAudience } from '@/lib/dashboard/attention-queue';
 import type { CalendarMeetingRecord } from '@/lib/services/calendar-data-service';
+import { operationsHubHref } from '@/lib/operations/routes';
 
 export interface QuickAction {
   id: string;
@@ -35,7 +36,14 @@ export function buildQuickActions(input: {
     href: '#documents-to-sign',
     icon: 'pen',
   };
-  const askRepair: QuickAction = { id: 'ask-repair', label: 'Ask for a repair', href: `/maintenance/submit${cid}`, icon: 'wrench' };
+  // Straight to the new-request sheet. /maintenance/submit reaches it too, but
+  // through a redirect that shows the "redirected from a legacy page" banner.
+  const askRepair: QuickAction = {
+    id: 'ask-repair',
+    label: 'Ask for a repair',
+    href: operationsHubHref(input.communityId, 'requests', { create: 'request' }),
+    icon: 'wrench',
+  };
   const findDocument: QuickAction = { id: 'find-document', label: 'Find a document', href: `/documents${cid}`, icon: 'file' };
   const reportProblem: QuickAction = { id: 'report-problem', label: 'Report a problem', href: `/violations/report${cid}`, icon: 'alert' };
   const updateContact: QuickAction = { id: 'update-contact', label: 'Update my contact info', href: `/settings/account${cid}`, icon: 'user' };
