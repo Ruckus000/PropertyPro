@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { addDays, endOfMonth, format, startOfMonth } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import {
   assessmentLineItems,
   assessments,
@@ -39,7 +39,7 @@ import { getStripeClient } from '@/lib/services/stripe-service';
 import { markViolationFinePaidForLineItem } from '@/lib/services/violations-service';
 import { BadRequestError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '@/lib/api/errors';
 import { centsToDollars, parseDateOnly } from '@/lib/finance/common';
-import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
+import { assessmentMonthOutOfRange, recurringDueDate } from '@/lib/finance/date-only';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import { formatUnitLabel } from '@/lib/units/format-unit-label';
 import { withUnitLabels } from '@/lib/units/unit-labels';
@@ -371,25 +371,21 @@ async function communityToday(scoped: ScopedClient, communityId: number): Promis
   return dateOnlyInTimeZone(new Date(), resolveTimezone(community?.timezone));
 }
 
+/** `today` is the community's 'yyyy-MM-dd' (communityToday); a recurring period is its month. */
 function computeDueDate(
   assessment: Pick<AssessmentRecord, 'frequency' | 'dueDay' | 'startDate'>,
-  dueDateOverride?: string | null,
+  dueDateOverride: string | null | undefined,
+  today: string,
 ): string {
   if (dueDateOverride) {
     return parseDateOnly(dueDateOverride, 'dueDate');
   }
 
-  const today = new Date();
   if (assessment.frequency === 'one_time') {
     return assessment.startDate;
   }
 
-  const monthStart = startOfMonth(today);
-  const monthEnd = endOfMonth(today);
-  const day = assessment.dueDay ?? 1;
-  const clampedDay = Math.max(1, Math.min(day, monthEnd.getDate()));
-  const candidate = new Date(monthStart.getFullYear(), monthStart.getMonth(), clampedDay);
-  return format(candidate, 'yyyy-MM-dd');
+  return recurringDueDate(assessment.dueDay, today.slice(0, 7));
 }
 
 /** 'yyyy-MM-dd' → months since year 0 (0-based month), read from the string. */
@@ -727,12 +723,12 @@ export async function generateAssessmentLineItemsForCommunity(
     throw new NotFoundError('Assessment not found');
   }
 
-  const dueDate = computeDueDate(assessment, dueDateOverride);
+  const today = await communityToday(scoped, communityId);
+  const dueDate = computeDueDate(assessment, dueDateOverride, today);
   // A one-time charge due before today is overdue on the next cron run, and
   // past its grace days it takes a late fee on every unit at once. Recurring
   // overrides may still back-date a missed period.
   if (assessment.frequency === 'one_time') {
-    const today = await communityToday(scoped, communityId);
     if (dueDate < today) {
       throw new UnprocessableEntityError(
         `The due date can’t be before today, ${formatDateOnly(today)}. Choose today or a later date.`,

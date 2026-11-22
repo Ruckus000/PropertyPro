@@ -112,7 +112,7 @@ export const CRON_JOBS: Record<CronJobSlug, CronJobDefinition> = {
   },
   'generate-assessments': {
     path: '/api/v1/internal/generate-assessments',
-    schedule: '0 5 1 * *',
+    schedule: '0 12 1 * *',
     maxAgeMinutes: MONTHLY,
   },
   'inbox-spam-scan': {

@@ -62,7 +62,7 @@
     },
     {
       "path": "/api/v1/internal/generate-assessments",
-      "schedule": "0 5 1 * *"
+      "schedule": "0 12 1 * *"
     },
     {
       "path": "/api/v1/internal/expire-demos",

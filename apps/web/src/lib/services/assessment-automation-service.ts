@@ -9,13 +9,12 @@
  * 2. processLateFees() — Daily at 07:00 UTC (after overdue transitions)
  *    Applies late fees to overdue items based on assessment rules.
  *
- * 3. processRecurringAssessments() — Monthly on the 1st at 05:00 UTC
+ * 3. processRecurringAssessments() — Monthly on the 1st at 12:00 UTC
  *    Auto-generates line items for active recurring assessments.
  *
  * All three use createUnscopedClient() because they scan across communities.
  * Each uses createScopedClient() for tenant-scoped mutations.
  */
-import { format } from 'date-fns';
 import {
   assessmentLineItems,
   assessments,
@@ -29,7 +28,7 @@ import {
 import { and, eq, inArray, isNull, lt, lte, ne } from '@propertypro/db/filters';
 // AUTHZ: Phase 1A: Assessment automation cron — cross-community overdue/late-fee processing
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { assessmentMonthOutOfRange } from '@/lib/finance/date-only';
+import { assessmentMonthOutOfRange, recurringDueDate } from '@/lib/finance/date-only';
 import { generateAssessmentLineItemsForCommunity } from '@/lib/services/finance-service';
 import type { AssessmentFrequency } from '@/lib/services/finance-service';
 import { getBaseUrl } from '@/lib/utils/url';
@@ -322,6 +321,12 @@ export interface RecurringAssessmentSummary {
  * Annual: only generates in month 1 (or the assessment's start month).
  * One-time: skipped (handled manually).
  *
+ * The period is the community's month at `now`, decided once here and handed
+ * to the generator as an explicit due date, so the cadence gate, the start/end
+ * bounds and the charge all use one month. The 12:00 UTC schedule makes that
+ * month the UTC month in every US zone; a re-run at another hour still bills
+ * the community's own month.
+ *
  * Uses the existing generateAssessmentLineItemsForCommunity() which has
  * built-in skip logic for already-generated periods.
  */
@@ -329,13 +334,9 @@ export async function processRecurringAssessments(
   now: Date = new Date(),
 ): Promise<RecurringAssessmentSummary> {
   const db = createUnscopedClient();
-  const currentMonth = now.getMonth() + 1; // 1-12
-  // The billing period this run generates, as 'yyyy-MM' — same clock as
-  // currentMonth, so the month gate and the start/end bounds agree.
-  const periodMonth = format(now, 'yyyy-MM');
 
   const activeCommunities = await db
-    .select({ id: communities.id })
+    .select({ id: communities.id, timezone: communities.timezone })
     .from(communities)
     .where(isNull(communities.deletedAt));
 
@@ -350,11 +351,14 @@ export async function processRecurringAssessments(
   for (const community of activeCommunities) {
     try {
       const scoped = createScopedClient(community.id);
+      const periodMonth = dateOnlyInTimeZone(now, resolveTimezone(community.timezone)).slice(0, 7);
+      const currentMonth = Number(periodMonth.slice(5, 7));
 
       // Get active recurring assessments (exclude one_time)
       const activeAssessments = await scoped.selectFrom<{
         id: number;
         frequency: string;
+        dueDay: number | null;
         startDate: string;
         endDate: string | null;
         isActive: boolean;
@@ -363,6 +367,7 @@ export async function processRecurringAssessments(
         {
           id: assessments.id,
           frequency: assessments.frequency,
+          dueDay: assessments.dueDay,
           startDate: assessments.startDate,
           endDate: assessments.endDate,
           isActive: assessments.isActive,
@@ -389,6 +394,7 @@ export async function processRecurringAssessments(
             community.id,
             assessment.id,
             null,
+            recurringDueDate(assessment.dueDay, periodMonth),
           );
           summary.assessmentsProcessed += 1;
           summary.totalInserted += result.insertedCount;

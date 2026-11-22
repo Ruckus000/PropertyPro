@@ -164,7 +164,7 @@ describe('assessment-automation-service', () => {
       // Community exists but has no active recurring assessments
       mockSelectFrom.mockResolvedValueOnce([]);
 
-      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+      const summary = await processRecurringAssessments(new Date('2026-03-01T12:00:00Z'));
 
       expect(summary.communitiesScanned).toBe(1);
       expect(summary.assessmentsProcessed).toBe(0);
@@ -194,14 +194,14 @@ describe('assessment-automation-service', () => {
         dueDate: '2026-03-01',
       });
 
-      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+      const summary = await processRecurringAssessments(new Date('2026-03-01T12:00:00Z'));
 
       expect(summary.communitiesScanned).toBe(1);
       expect(summary.assessmentsProcessed).toBe(1);
       expect(summary.totalInserted).toBe(4);
       expect(summary.totalSkipped).toBe(0);
       expect(summary.errors).toBe(0);
-      expect(generateAssessmentLineItemsForCommunity).toHaveBeenCalledWith(1, 5, null);
+      expect(generateAssessmentLineItemsForCommunity).toHaveBeenCalledWith(1, 5, null, '2026-03-01');
     });
 
     it('skips assessments that already have line items for current period (idempotency)', async () => {
@@ -223,7 +223,7 @@ describe('assessment-automation-service', () => {
         dueDate: '2026-03-01',
       });
 
-      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+      const summary = await processRecurringAssessments(new Date('2026-03-01T12:00:00Z'));
 
       expect(summary.assessmentsProcessed).toBe(1);
       expect(summary.totalInserted).toBe(0);
@@ -258,7 +258,7 @@ describe('assessment-automation-service', () => {
         dueDate: '2026-03-01',
       });
 
-      const summary = await processRecurringAssessments(new Date('2026-03-01'));
+      const summary = await processRecurringAssessments(new Date('2026-03-01T12:00:00Z'));
 
       expect(summary.communitiesScanned).toBe(2);
       expect(summary.errors).toBe(1);
