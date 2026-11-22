@@ -120,17 +120,17 @@ export const DELETE = withErrorHandler(
     });
 
     const result = await cancelUserDeletion(userId, userId, activeRequestId);
-    // A concurrent cancel (another tab, a retry, an admin intervention) got
-    // there first and already sent the email. The account is open: same answer.
-    if (result.outcome === 'already_cancelled') return { cancelled: true as const };
     if (result.outcome === 'too_late') {
-      // The cron soft-deleted the request after the lookup above. The account
-      // is already deleted, so saying it stays open would be false. Restoring
-      // it from here on is a support action.
+      // The account is already deleted (the cron got there first), so saying
+      // it stays open would be false. Restoring it is a support action.
       throw new ConflictError(
         'Your account has already been deleted, so this request can no longer be cancelled. Contact support to restore it.',
       );
     }
+    // `cancelled` or `already_cancelled`: either way the account stays open.
+    // Email on both. A platform admin's intervene sends nothing, and the
+    // provider idempotency key (account-deletion/cancelled/<requestId>) makes
+    // two tabs cancelling the same request deliver one message.
     // Best effort, never throws (see POST).
     await sendDeletionCancelledEmail({ requestId: activeRequestId, userId });
     return { cancelled: true as const };

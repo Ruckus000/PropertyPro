@@ -17,7 +17,7 @@
  *   cooling -> cancelled
  *   soft_deleted -> recovered
  */
-import { eq, and, asc, desc, inArray, isNull, isNotNull, lt } from '@propertypro/db/filters';
+import { eq, and, asc, desc, inArray, isNull, isNotNull, lt, sql } from '@propertypro/db/filters';
 import { ADMIN_TIER_DB_ROLES } from '@propertypro/shared';
 import {
   accessPlans,
@@ -149,10 +149,11 @@ export async function findCoolingCommunityDeletionRequest(
  * Find the user's active `cooling` deletion request, if any. Returns the
  * request id or `null`. Used by the cancel-deletion path.
  *
- * Oldest first: when duplicates exist, the oldest request's cooling period
- * ends first, so it is the one the lifecycle cron soft-deletes first. The
- * cancel path decides success by whether THIS row was cancelled, so it must
- * be the row most likely to have been soft-deleted under it.
+ * Ordered the way the lifecycle cron reaches requests (earliest
+ * `coolingEndsAt`, then id), so with duplicates the row returned is the one the
+ * cron soft-deletes first. That only matters for a lookup made BEFORE the cron
+ * runs. Once a sibling is soft-deleted this returns the later one, which is
+ * why `cancelUserDeletion` refuses on the account's state, not this row's.
  *
  * AUTHZ: cross-tenant read of platform-level table; safe for the user to
  * query their own row by `userId`.
@@ -171,7 +172,7 @@ export async function findCoolingDeletionRequestForUser(
         eq(accountDeletionRequests.status, 'cooling'),
       ),
     )
-    .orderBy(asc(accountDeletionRequests.id))
+    .orderBy(asc(accountDeletionRequests.coolingEndsAt), asc(accountDeletionRequests.id))
     .limit(1);
   return row?.id ?? null;
 }
@@ -337,18 +338,23 @@ export async function requestUserDeletion(
  * would leave a duplicate to soft-delete the account after the user was told
  * it stays open.
  *
- * State-guarded like `executeUserSoftDelete`: only rows still in `cooling` are
- * touched. Without the guard, a cancel that landed just after the lifecycle
- * cron soft-deleted the request overwrote `soft_deleted` with `cancelled`
- * while the account stayed deleted.
+ * Two guards, both in the UPDATE itself:
+ * - only rows still in `cooling` are touched (like `executeUserSoftDelete`).
+ *   Without it, a cancel that landed just after the lifecycle cron
+ *   soft-deleted the request overwrote `soft_deleted` with `cancelled`.
+ * - nothing is touched once the ACCOUNT is deleted: the user has a
+ *   `soft_deleted` user request, or `users.deleted_at` is set. With a legacy
+ *   duplicate pair the cron soft-deletes the earlier row while the later one is
+ *   still cooling; cancelling that one would report success and send the
+ *   "cancelled" email to an account that stays deleted and banned.
  *
- * `requestId` is the cooling request the caller looked up. The outcome says
- * what happened to it:
- * - `cancelled`: this call cancelled it (send the email);
- * - `already_cancelled`: a concurrent cancel (another tab, a retry, an admin
- *   intervention) got there first and sent the email; the account is open;
- * - `too_late`: it left `cooling` some other way, in practice the cron's soft
- *   delete, so the account is already deleted.
+ * `requestId` is the cooling request the caller looked up. The outcome:
+ * - `cancelled`: this call cancelled it;
+ * - `already_cancelled`: another cancel got there first (a second tab, a
+ *   retry, or a platform admin's intervene, which sends no email of its own),
+ *   and the account is open;
+ * - `too_late`: the account is already deleted, or the request left `cooling`
+ *   some other way.
  */
 export async function cancelUserDeletion(
   userId: string,
@@ -357,6 +363,8 @@ export async function cancelUserDeletion(
 ) {
   const now = new Date();
   const db = createUnscopedClient();
+  // True once the account is deleted, whichever request did it.
+  const accountDeleted = sql<boolean>`(exists (select 1 from ${accountDeletionRequests} sib where sib.user_id = ${userId} and sib.request_type = 'user' and sib.status = 'soft_deleted') or exists (select 1 from ${users} u where u.id = ${userId} and u.deleted_at is not null))`;
 
   const requests = await db
     .update(accountDeletionRequests)
@@ -366,6 +374,7 @@ export async function cancelUserDeletion(
         eq(accountDeletionRequests.userId, userId),
         eq(accountDeletionRequests.requestType, 'user'),
         eq(accountDeletionRequests.status, 'cooling'),
+        sql`not ${accountDeleted}`,
       ),
     )
     .returning();
@@ -375,7 +384,7 @@ export async function cancelUserDeletion(
 
   // Keyed on the user as well as the id, so this only reads their own request.
   const [row] = await db
-    .select({ status: accountDeletionRequests.status })
+    .select({ status: accountDeletionRequests.status, accountDeleted })
     .from(accountDeletionRequests)
     .where(
       and(
@@ -383,7 +392,9 @@ export async function cancelUserDeletion(
         eq(accountDeletionRequests.userId, userId),
       ),
     );
-  if (row?.status === 'cancelled') return { outcome: 'already_cancelled' as const };
+  if (row?.status === 'cancelled' && !row.accountDeleted) {
+    return { outcome: 'already_cancelled' as const };
+  }
   return { outcome: 'too_late' as const, status: row?.status ?? null };
 }
 

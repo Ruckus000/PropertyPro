@@ -36,6 +36,7 @@ const {
   neMock,
   inArrayMock,
   ascMock,
+  sqlMock,
   accessPlansTable,
   communitiesTable,
   communityExportJobsTable,
@@ -59,6 +60,10 @@ const {
     neMock: vi.fn((col: unknown, val: unknown) => ({ _ne: [col, val] })),
     inArrayMock: vi.fn((col: unknown, vals: unknown[]) => ({ _inArray: [col, vals] })),
     ascMock: vi.fn((col: unknown) => ({ _asc: col })),
+    sqlMock: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+      _sql: strings.join('?'),
+      values,
+    })),
     accessPlansTable: {
       id: 'access_plans.id',
       communityId: 'access_plans.community_id',
@@ -144,6 +149,7 @@ vi.mock('@propertypro/db/filters', () => ({
   ne: neMock,
   inArray: inArrayMock,
   asc: ascMock,
+  sql: sqlMock,
 }));
 
 vi.mock('@propertypro/db/supabase/admin', () => ({
@@ -620,12 +626,59 @@ describe('cancelUserDeletion', () => {
   // Two DELETEs at once: both looked up request 9, the other one cancelled it
   // first, and this update matched nothing. The account is open.
   it('reports already_cancelled when a concurrent cancel got there first', async () => {
-    const dbMock = buildDbMock({ updateReturning: [[]], selectResults: [[{ status: 'cancelled' }]] });
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cancelled', accountDeleted: false }]],
+    });
     createUnscopedClientMock.mockReturnValue(dbMock);
 
     const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 9);
 
     expect(result).toEqual({ outcome: 'already_cancelled' });
+  });
+
+  // Legacy duplicate pair: request 9 (earlier) and 12. The cron soft-deleted 9
+  // and the account is deleted and banned; 12 is still cooling. A later cancel
+  // finds 12 as the oldest cooling row. Cancelling it would report success and
+  // email "your account stays open" to a deleted account.
+  it('refuses once the ACCOUNT is deleted, even when the looked-up request is still cooling', async () => {
+    // The UPDATE carries the account guard, so the database matches nothing.
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cooling', accountDeleted: true }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 12);
+
+    expect(result).toEqual({ outcome: 'too_late', status: 'cooling' });
+    const updateCall = dbMock._calls.find((c) => c.op === 'update');
+    // `not (<soft_deleted sibling exists> or <users.deleted_at set>)`, keyed on the user.
+    expect(updateCall?.where).toEqual({
+      _and: expect.arrayContaining([
+        {
+          _sql: 'not ?',
+          values: [
+            expect.objectContaining({
+              _sql: expect.stringMatching(/sib\.status = 'soft_deleted'.*u\.deleted_at is not null/s),
+              values: expect.arrayContaining(['user-uuid-001']),
+            }),
+          ],
+        },
+      ]),
+    });
+  });
+
+  it('does not report already_cancelled for a cancelled request on a deleted account', async () => {
+    const dbMock = buildDbMock({
+      updateReturning: [[]],
+      selectResults: [[{ status: 'cancelled', accountDeleted: true }]],
+    });
+    createUnscopedClientMock.mockReturnValue(dbMock);
+
+    const result = await cancelUserDeletion('user-uuid-001', 'user-uuid-001', 12);
+
+    expect(result).toEqual({ outcome: 'too_late', status: 'cancelled' });
   });
 });
 
@@ -638,10 +691,9 @@ describe('findCoolingDeletionRequestForUser', () => {
     vi.clearAllMocks();
   });
 
-  // With legacy duplicates the oldest request's cooling ends first, so the
-  // cron soft-deletes it first. The cancel route keys success on the row this
-  // returns; an unordered .limit(1) could hand it the newer one instead.
-  it('returns the OLDEST cooling request when there are several', async () => {
+  // With duplicates, return the request the cron reaches first (earliest
+  // coolingEndsAt, then id); an unordered .limit(1) could return either.
+  it('returns the cooling request the cron reaches first when there are several', async () => {
     // Unordered, the database may hand back either row; model it as the newer.
     const orderByMock = vi.fn(() => ({ limit: () => Promise.resolve([{ id: 3 }]) }));
     createUnscopedClientMock.mockReturnValue({
@@ -653,7 +705,10 @@ describe('findCoolingDeletionRequestForUser', () => {
     });
 
     await expect(findCoolingDeletionRequestForUser('user-uuid-001')).resolves.toBe(3);
-    expect(orderByMock).toHaveBeenCalledWith({ _asc: accountDeletionRequestsTable.id });
+    expect(orderByMock).toHaveBeenCalledWith(
+      { _asc: accountDeletionRequestsTable.coolingEndsAt },
+      { _asc: accountDeletionRequestsTable.id },
+    );
   });
 });
 

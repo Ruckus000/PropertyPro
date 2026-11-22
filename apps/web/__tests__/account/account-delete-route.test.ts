@@ -399,16 +399,19 @@ describe('DELETE /api/v1/account/delete', () => {
 
   // Two DELETEs at once (two tabs, a retry, an admin intervention): both find
   // request 9, the other one cancels it first, and this one updates nothing.
-  // The account is open and the deletion is cancelled, so this is a success;
-  // the other request already sent the email.
-  it('returns 200 and sends no email when a concurrent cancel got there first', async () => {
+  // The account is open and the deletion is cancelled, so this is a success.
+  // It emails too: an admin's intervene sends nothing, and when the winner was
+  // another tab the shared idempotency key makes the provider deliver once.
+  it('returns 200 and emails under the same key when a concurrent cancel got there first', async () => {
     cancelUserDeletionMock.mockResolvedValueOnce({ outcome: 'already_cancelled' });
 
     const res = await DELETE(new NextRequest(URL, { method: 'DELETE' }));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ data: { cancelled: true } });
-    expect(sendEmailMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    // The same key the winning tab used, so the two collapse to one delivery.
+    expect(lastSentEmail().idempotencyKey).toBe('account-deletion/cancelled/9');
   });
 
   it('returns 404 when no active request and does not cancel', async () => {
