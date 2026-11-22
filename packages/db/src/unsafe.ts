@@ -165,8 +165,8 @@ export {
  * community). See the ops file for the lock they share with the purge cron.
  *
  * **Authorization contract:** these act on any request by id and check nothing
- * about the caller. Recovery (`claimDeletionRecoveryOp`, `finishUserRecoveryOp`,
- * `releaseUserRecoveryOp`) is platform-admin only: callers MUST hold a verified
+ * about the caller. Recovery (`claimDeletionRecoveryOp`,
+ * `completeUserRecoveryOp`) is platform-admin only: callers MUST hold a verified
  * platform-admin session (apps/admin `requirePlatformAdmin`). Intervene
  * (`interveneDeletionRequestOp`) is platform-admin, or, for a community
  * request, the community's root manager (apps/web `requireRootManager`), who
@@ -174,11 +174,12 @@ export {
  */
 export {
   claimDeletionRecoveryOp,
-  finishUserRecoveryOp,
-  releaseUserRecoveryOp,
+  completeUserRecoveryOp,
   interveneDeletionRequestOp,
   RECOVERY_SOFT_DELETE_SETTLE_MS,
   type DeletionRecoveryClaim,
+  type RecoveryAuthCalls,
+  type UserRecoveryCompletion,
   type DeletionInterveneResult,
   type DeletionRequestRecord,
 } from './ops/deletion-request-ops';

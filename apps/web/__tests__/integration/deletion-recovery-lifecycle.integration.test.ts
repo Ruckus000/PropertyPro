@@ -1,8 +1,9 @@
 /**
  * Deletion lifecycle follow-ups to #1510, against a real database.
  *
- * Recovery (`claimDeletionRecoveryOp` / `finishUserRecoveryOp` /
- * `releaseUserRecoveryOp`, the database half of apps/admin's recover route):
+ * Recovery (`claimDeletionRecoveryOp` / `completeUserRecoveryOp`, the database
+ * half of apps/admin's recover route; the Supabase Auth ban calls are passed in
+ * as callbacks, so the tests see exactly when each runs):
  * - a claim stamps nothing in `recovered_at` until the recovery finishes, so a
  *   recovery that stops part way is visible, never purged, and resumable;
  * - a lifted-ban failure gives the claim back and the account is purgeable on
@@ -34,9 +35,8 @@ import { eq, inArray, sql } from '@propertypro/db/filters';
 import {
   claimDeletionRecoveryOp,
   createUnscopedClient,
-  finishUserRecoveryOp,
+  completeUserRecoveryOp,
   interveneDeletionRequestOp,
-  releaseUserRecoveryOp,
 } from '@propertypro/db/unsafe';
 import {
   executeUserSoftDelete,
@@ -79,6 +79,9 @@ const LABELS = [
   'softDeleteDupes',
   'authBare404',
   'lockOrder',
+  'unbanAndRebanFail',
+  'concurrentRelease',
+  'concurrentFinish',
 ] as const;
 type Label = (typeof LABELS)[number];
 const USER_IDS = Object.fromEntries(LABELS.map((l) => [l, randomUUID()])) as Record<Label, string>;
@@ -149,12 +152,33 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
     }
   }
 
+  /** Until some session waits on a row lock of account_deletion_requests. */
+  const waitForLockWait = () =>
+    waitFor(async () => {
+      const rows = await db.execute(
+        sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query ilike '%account_deletion_requests%'`,
+      );
+      return (rows as unknown[]).length > 0;
+    });
+
   const markUserDeleted = (label: Label, at: Date | null) =>
     db.update(users).set({ deletedAt: at }).where(eq(users.id, USER_IDS[label]));
   const markCommunityDeleted = (label: CommunityLabel, at: Date | null) =>
     db.update(communities).set({ deletedAt: at }).where(eq(communities.id, communityIds[label]));
 
   const adminUserId = () => USER_IDS.admin;
+
+  /** Ban callbacks for completeUserRecoveryOp that record each call. */
+  function authCalls(liftBan = true, reapplyBan = true) {
+    const calls: string[] = [];
+    return {
+      calls,
+      auth: {
+        liftBan: async () => (calls.push('lift'), liftBan),
+        reapplyBan: async () => (calls.push('reapply'), reapplyBan),
+      },
+    };
+  }
 
   beforeAll(async () => {
     kit = await initTestKit();
@@ -206,9 +230,11 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       expect((await rowOf(cooling)).status).toBe('cancelled');
       expect((await userOf('fresh')).deletedAt).not.toBeNull();
 
-      const finished = await finishUserRecoveryOp(USER_IDS.fresh);
+      const { auth, calls } = authCalls();
+      const finished = await completeUserRecoveryOp(USER_IDS.fresh, auth);
 
       expect(finished).toEqual({ outcome: 'recovered', finishedRequestIds: [chosen, duplicate] });
+      expect(calls).toEqual(['lift']);
       expect((await rowOf(chosen)).recoveredAt).toBeInstanceOf(Date);
       expect((await rowOf(duplicate)).recoveredAt).toBeInstanceOf(Date);
       expect((await userOf('fresh')).deletedAt).toBeNull();
@@ -233,24 +259,103 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       // Recovering the same request again resumes it.
       const again = await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() });
       expect(again).toMatchObject({ outcome: 'claimed', claimedRequestIds: [id], resumed: true });
-      expect((await finishUserRecoveryOp(USER_IDS.crash)).outcome).toBe('recovered');
+      expect((await completeUserRecoveryOp(USER_IDS.crash, authCalls().auth)).outcome).toBe('recovered');
       expect((await userOf('crash')).deletedAt).toBeNull();
       expect((await rowOf(id)).recoveredAt).toBeInstanceOf(Date);
       expect(await findUnfinishedRecoveryRequestIds()).not.toContain(id);
     });
 
-    it('gives the claim back when lifting the ban fails, so the account is purgeable on schedule again', async () => {
+    it('re-applies the ban and gives the claim back when lifting the ban fails, so the account is purgeable on schedule again', async () => {
       await markUserDeleted('unbanFails', longAgo());
       const id = await userRequest('unbanFails', 'soft_deleted', past(), past());
       const claim = await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() });
       expect(claim.outcome).toBe('claimed');
 
-      const released = await releaseUserRecoveryOp(USER_IDS.unbanFails, [id]);
+      const { auth, calls } = authCalls(false, true);
+      const result = await completeUserRecoveryOp(USER_IDS.unbanFails, auth);
 
-      expect(released).toBe(1);
+      expect(result).toEqual({ outcome: 'unban_failed', banReapplied: true, released: true, releasedRequestIds: [id] });
+      expect(calls).toEqual(['lift', 'reapply']);
       expect(await rowOf(id)).toMatchObject({ status: 'soft_deleted', recoveredAt: null });
       expect((await userOf('unbanFails')).deletedAt).not.toBeNull();
       expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).toContain(id);
+    });
+
+    // A failed unban can still have landed. Without the ban confirmed back on,
+    // giving the claim back would make the account purgeable while its owner
+    // can sign in; it stays an unfinished recovery instead.
+    it('keeps the claim when the ban cannot be re-applied either', async () => {
+      await markUserDeleted('unbanAndRebanFail', longAgo());
+      const id = await userRequest('unbanAndRebanFail', 'soft_deleted', past(), past());
+      expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
+
+      const result = await completeUserRecoveryOp(USER_IDS.unbanAndRebanFail, authCalls(false, false).auth);
+
+      expect(result).toEqual({ outcome: 'unban_failed', banReapplied: false, released: false, releasedRequestIds: [] });
+      expect(await rowOf(id)).toMatchObject({ status: 'recovered', recoveredAt: null });
+      expect(await findUnfinishedRecoveryRequestIds()).toContain(id);
+      expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).not.toContain(id);
+    });
+
+    // Two recoveries of one account at once (a second tab, a retry after a
+    // timeout). The first holds the user's rows locked across its ban calls;
+    // the second waits, then finds the claim settled and makes NO ban call, so
+    // it cannot leave a stale ban (or a lifted one) behind.
+    it('a second completion waits for the first and changes nothing after the first gives the claim back', async () => {
+      await markUserDeleted('concurrentRelease', longAgo());
+      const id = await userRequest('concurrentRelease', 'soft_deleted', past(), past());
+      expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
+
+      let failUnban!: (ok: boolean) => void;
+      const firstCalls: string[] = [];
+      const first = completeUserRecoveryOp(USER_IDS.concurrentRelease, {
+        liftBan: () => (firstCalls.push('lift'), new Promise<boolean>((resolve) => (failUnban = resolve))),
+        reapplyBan: async () => (firstCalls.push('reapply'), true),
+      });
+      await waitFor(async () => firstCalls.length === 1);
+      const second = authCalls();
+      let secondDone: Promise<unknown> = Promise.resolve();
+      try {
+        secondDone = completeUserRecoveryOp(USER_IDS.concurrentRelease, second.auth);
+        await waitForLockWait();
+      } finally {
+        // Always let the first finish, or its open transaction would block
+        // the cleanup and hang the suite instead of failing it.
+        failUnban(false);
+      }
+
+      await expect(first).resolves.toMatchObject({ outcome: 'unban_failed', released: true });
+      await expect(secondDone).resolves.toEqual({ outcome: 'not_claimed' });
+      expect(second.calls).toEqual([]);
+      expect(await rowOf(id)).toMatchObject({ status: 'soft_deleted' });
+      expect((await userOf('concurrentRelease')).deletedAt).not.toBeNull();
+    });
+
+    it('a second completion waits for the first and changes nothing after the first finishes', async () => {
+      await markUserDeleted('concurrentFinish', longAgo());
+      const id = await userRequest('concurrentFinish', 'soft_deleted', past(), past());
+      expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
+
+      let liftOk!: (ok: boolean) => void;
+      const firstCalls: string[] = [];
+      const first = completeUserRecoveryOp(USER_IDS.concurrentFinish, {
+        liftBan: () => (firstCalls.push('lift'), new Promise<boolean>((resolve) => (liftOk = resolve))),
+        reapplyBan: async () => (firstCalls.push('reapply'), true),
+      });
+      await waitFor(async () => firstCalls.length === 1);
+      const second = authCalls();
+      let secondDone: Promise<unknown> = Promise.resolve();
+      try {
+        secondDone = completeUserRecoveryOp(USER_IDS.concurrentFinish, second.auth);
+        await waitForLockWait();
+      } finally {
+        liftOk(true);
+      }
+
+      await expect(first).resolves.toEqual({ outcome: 'recovered', finishedRequestIds: [id] });
+      await expect(secondDone).resolves.toEqual({ outcome: 'not_claimed' });
+      expect(second.calls).toEqual([]);
+      expect((await userOf('concurrentFinish')).deletedAt).toBeNull();
     });
 
     it('refuses a stale soft_deleted row on an open account, and leaves the newer live request cooling', async () => {
@@ -295,7 +400,7 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
     // resumed claim (an operator's second click) holds the request row and then
     // wants the users row; a finish that took the users row first would
     // deadlock with it, and Postgres would abort one of the two.
-    it('finish takes the request rows before the users row, so it waits on a resumed claim instead of deadlocking', async () => {
+    it('completion takes the request rows before the users row, so it waits on a resumed claim instead of deadlocking', async () => {
       await markUserDeleted('lockOrder', longAgo());
       const id = await userRequest('lockOrder', 'soft_deleted', past(), past());
       expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
@@ -304,7 +409,7 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       await db.transaction(async (tx) => {
         // What the resumed claim holds first ...
         await tx.select().from(accountDeletionRequests).where(eq(accountDeletionRequests.id, id)).for('update');
-        finish = finishUserRecoveryOp(USER_IDS.lockOrder);
+        finish = completeUserRecoveryOp(USER_IDS.lockOrder, authCalls().auth);
         // ... the finish now waits on it ...
         await waitFor(async () => {
           const rows = await db.execute(
@@ -320,7 +425,7 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       expect((await userOf('lockOrder')).deletedAt).toBeNull();
     });
 
-    it('finish restores nothing on a scrubbed row', async () => {
+    it('completion restores nothing on a scrubbed row', async () => {
       await db
         .update(users)
         .set({ deletedAt: longAgo(), email: `deleted-${USER_IDS.scrubbed}@redacted` })
@@ -328,7 +433,10 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       const id = await userRequest('scrubbed', 'recovered', past(), past());
       await db.update(accountDeletionRequests).set({ recoveredAt: null }).where(eq(accountDeletionRequests.id, id));
 
-      expect(await finishUserRecoveryOp(USER_IDS.scrubbed)).toEqual({ outcome: 'purged' });
+      const scrubbedAuth = authCalls();
+      expect(await completeUserRecoveryOp(USER_IDS.scrubbed, scrubbedAuth.auth)).toEqual({ outcome: 'purged' });
+      // Nothing to restore, so the ban is never touched.
+      expect(scrubbedAuth.calls).toEqual([]);
       expect((await userOf('scrubbed')).deletedAt).not.toBeNull();
       expect((await rowOf(id)).recoveredAt).toBeNull();
       // And the claim refuses it outright.
@@ -470,7 +578,7 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       expect(purged?.purgedAt).toBeInstanceOf(Date);
     });
 
-    it('stops before its first deletion when the community is restored during the first sweep', async () => {
+    it('stops before the next sweep when the community is restored during the first (site-assets) sweep', async () => {
       await markCommunityDeleted('restoredMidPurge', longAgo());
       const id = await communityRequest('restoredMidPurge', 'soft_deleted', past(), past());
       const cid = communityIds.restoredMidPurge;

@@ -35,7 +35,10 @@
  * Each transaction locks the target's request rows (ordered by id) before the
  * target's `users` / `communities` row. The lifecycle cron's soft delete and
  * purge take the same order (request rows, then the target row), so they wait
- * on each other rather than deadlock.
+ * on each other rather than deadlock. The cron's soft delete and the user's own
+ * cancel lock their request rows with one multi-row UPDATE, in scan order
+ * rather than by id, so with legacy duplicate rows two of these can still
+ * deadlock; Postgres aborts one, nothing is half written, and it is retryable.
  */
 import { and, eq, inArray, isNull, notLike, sql } from 'drizzle-orm';
 import { db } from '../drizzle';
@@ -126,9 +129,8 @@ export type DeletionRecoveryClaim =
   /** Soft-deleted under `RECOVERY_SOFT_DELETE_SETTLE_MS` ago; try again later. */
   | { outcome: 'too_recent'; request: DeletionRequestRecord; retryAfter: Date }
   /**
-   * A user's requests are claimed and still deleted. The caller lifts the
-   * sign-in ban, then calls `finishUserRecoveryOp`, or on failure
-   * `releaseUserRecoveryOp`.
+   * A user's requests are claimed and still deleted. The caller then calls
+   * `completeUserRecoveryOp`, which lifts the sign-in ban and restores.
    */
   | {
       outcome: 'claimed';
@@ -161,8 +163,7 @@ export type DeletionRecoveryClaim =
  *
  * A community is then restored and its claimed requests finished in the same
  * transaction, so a community recovery cannot stop half way. A user's restore
- * waits for the caller to lift the auth ban (an HTTP call that cannot join the
- * transaction): see `finishUserRecoveryOp`.
+ * also needs the auth ban lifted (an HTTP call): see `completeUserRecoveryOp`.
  */
 export async function claimDeletionRecoveryOp(
   requestId: number,
@@ -267,91 +268,124 @@ export async function claimDeletionRecoveryOp(
   });
 }
 
+export type UserRecoveryCompletion =
+  /**
+   * No unfinished claim for this user: another attempt finished or gave it
+   * back while this one waited for the lock. Nothing written, no auth call.
+   */
+  | { outcome: 'not_claimed' }
+  /** The users row is scrubbed: nothing written, no auth call. */
+  | { outcome: 'purged' }
+  | { outcome: 'recovered'; finishedRequestIds: number[] }
+  /**
+   * Lifting the ban failed. When the ban could be put back on, the claim was
+   * given back (`soft_deleted`, so deleted and purgeable exactly as before);
+   * otherwise the claim stays, as an unfinished recovery.
+   */
+  | { outcome: 'unban_failed'; banReapplied: boolean; released: boolean; releasedRequestIds: number[] };
+
+/** The Supabase Auth calls a user recovery makes; each resolves true on success, never rejects. */
+export interface RecoveryAuthCalls {
+  liftBan: () => Promise<boolean>;
+  reapplyBan: () => Promise<boolean>;
+}
+
 /**
- * Finishes a user's recovery, in one transaction: clears `users.deleted_at`
- * and stamps `recovered_at` on every claimed, unfinished request of the user.
+ * Completes a user's recovery after its claim: lifts the sign-in ban, then
+ * restores the row and stamps `recovered_at`, all while holding the user's
+ * request rows and `users` row locked.
  *
- * Call it only after the sign-in ban is lifted. Restoring first would leave,
- * on an unban failure, an account that is neither deleted nor purgeable and
- * still cannot sign in; this way a failure before here leaves it deleted and
- * claimed, which a retry resumes.
+ * The auth calls run INSIDE the transaction on purpose. They are HTTP calls,
+ * so they cannot be part of it, but holding the locks around them serialises
+ * every ban change for this user with the database state it must match. A
+ * second recovery of the same user (a second tab, a retry after a timeout)
+ * waits here, then finds the claim finished or given back and makes no auth
+ * call of its own. Without that, one attempt could re-apply the ban after the
+ * other restored the account (open, but locked out, with nothing reporting
+ * it), or give the claim back after the other lifted the ban (purgeable while
+ * its owner can still sign in). The locks are held for one GoTrue round trip,
+ * on a rare operator action.
+ *
+ * Unban first, restore second: an unban failure then leaves the account
+ * deleted, and the ban is re-applied (a failed call can still have landed, and
+ * an earlier attempt may have lifted it) before the claim is given back. If
+ * the ban cannot be re-applied the claim stays, as an unfinished recovery:
+ * never purged, shown on the Dashboard, reported by the nightly cron.
  *
  * The restore is conditional on the row being unscrubbed. The claim already
- * refused a target with any purged request, so this is a second line, not the
- * arbiter: `purged` here means a purge reached the row by a path the claim
- * did not see, and nothing is written.
+ * refused a target with any purged request, so `purged` here means a purge
+ * reached the row by a path the claim did not see.
  */
-export async function finishUserRecoveryOp(
+export async function completeUserRecoveryOp(
   userId: string,
+  auth: RecoveryAuthCalls,
   params: { now?: Date } = {},
-): Promise<{ outcome: 'recovered'; finishedRequestIds: number[] } | { outcome: 'purged' }> {
+): Promise<UserRecoveryCompletion> {
   const now = params.now ?? new Date();
-  return db.transaction(async (tx) => {
-    // Request rows first, then `users`: the lock order every other deletion
-    // transaction takes (see the file header). Restoring first would hold the
-    // users row while waiting on a request row a concurrent resumed claim holds.
+  return db.transaction(async (tx): Promise<UserRecoveryCompletion> => {
     const unfinished = and(
       eq(accountDeletionRequests.requestType, 'user'),
       eq(accountDeletionRequests.userId, userId),
       eq(accountDeletionRequests.status, 'recovered'),
       isNull(accountDeletionRequests.recoveredAt),
     );
-    await tx
+    // Request rows first, then `users`: the order the claim and the cron take.
+    const claimed = await tx
       .select({ id: accountDeletionRequests.id })
       .from(accountDeletionRequests)
       .where(unfinished)
       .orderBy(accountDeletionRequests.id)
       .for('update');
+    if (claimed.length === 0) return { outcome: 'not_claimed' };
+    const claimedIds = claimed.map((r) => r.id);
 
-    const restored = await tx
-      .update(users)
-      .set({ deletedAt: null })
-      .where(and(eq(users.id, userId), notLike(users.email, SCRUBBED_EMAIL_PATTERN)))
-      .returning({ id: users.id });
-    if (restored.length === 0) return { outcome: 'purged' as const };
+    const [user] = await tx
+      .select({ email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .for('update');
+    if (!user || isScrubbedEmail(user.email)) return { outcome: 'purged' };
 
-    const finished = await tx
-      .update(accountDeletionRequests)
-      .set({ recoveredAt: now })
-      .where(unfinished)
-      .returning({ id: accountDeletionRequests.id });
-    return {
-      outcome: 'recovered' as const,
-      finishedRequestIds: finished.map((r) => r.id).sort((a, b) => a - b),
-    };
+    if (!(await auth.liftBan())) {
+      const banReapplied = await auth.reapplyBan();
+      if (!banReapplied) {
+        return { outcome: 'unban_failed', banReapplied, released: false, releasedRequestIds: [] };
+      }
+      const released = await tx
+        .update(accountDeletionRequests)
+        .set({ status: 'soft_deleted' })
+        .where(and(unfinished, inArray(accountDeletionRequests.id, claimedIds)))
+        .returning({ id: accountDeletionRequests.id });
+      return {
+        outcome: 'unban_failed',
+        banReapplied,
+        released: released.length > 0,
+        releasedRequestIds: released.map((r) => r.id).sort((a, b) => a - b),
+      };
+    }
+
+    try {
+      await tx
+        .update(users)
+        .set({ deletedAt: null })
+        .where(and(eq(users.id, userId), notLike(users.email, SCRUBBED_EMAIL_PATTERN)));
+      const finished = await tx
+        .update(accountDeletionRequests)
+        .set({ recoveredAt: now })
+        .where(and(unfinished, inArray(accountDeletionRequests.id, claimedIds)))
+        .returning({ id: accountDeletionRequests.id });
+      return {
+        outcome: 'recovered',
+        finishedRequestIds: finished.map((r) => r.id).sort((a, b) => a - b),
+      };
+    } catch (err) {
+      // The transaction rolls back, so the account reads deleted again: put
+      // the ban back to match. Best effort; the claim stays unfinished either
+      // way, and the cron reports it.
+      await auth.reapplyBan();
+      throw err;
+    }
   });
-}
-
-/**
- * Gives back a user recovery's claim when lifting the ban failed, so the
- * account reads deleted and purgeable again: `recovered` (unfinished) →
- * `soft_deleted` for exactly the ids claimed. Requests the claim cancelled stay
- * cancelled. Returns how many it gave back.
- *
- * Call it only once the sign-in ban is known to be ON. A failed unban can
- * still have landed, and an earlier attempt of a resumed recovery may have
- * lifted it, so the caller re-applies the ban first; releasing an unbanned
- * account would leave it purgeable while its owner can still sign in.
- */
-export async function releaseUserRecoveryOp(
-  userId: string,
-  claimedRequestIds: number[],
-): Promise<number> {
-  if (claimedRequestIds.length === 0) return 0;
-  const released = await db
-    .update(accountDeletionRequests)
-    .set({ status: 'soft_deleted' })
-    .where(
-      and(
-        inArray(accountDeletionRequests.id, claimedRequestIds),
-        eq(accountDeletionRequests.requestType, 'user'),
-        eq(accountDeletionRequests.userId, userId),
-        eq(accountDeletionRequests.status, 'recovered'),
-        isNull(accountDeletionRequests.recoveredAt),
-      ),
-    )
-    .returning({ id: accountDeletionRequests.id });
-  return released.length;
 }
 
 // ---------------------------------------------------------------------------

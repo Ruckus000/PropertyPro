@@ -970,7 +970,9 @@ export async function purgeCommunityData(requestId: number) {
    * Re-read before each irreversible sweep. A recovery refuses while any
    * request of the community is `purged`, so the claim already shuts it out;
    * this catches the community being restored any other way (by hand) after
-   * the claim. Gives the claim back exactly as it was taken and stops.
+   * the claim. Gives the claim back exactly as it was taken and stops before
+   * the NEXT sweep; a sweep already listing and removing runs to its end, so
+   * a restore landing mid-sweep can still lose that one bucket.
    */
   const stillDeleted = async () => {
     if (communityId === null || (await communityStillDeleted(db, communityId))) return true;

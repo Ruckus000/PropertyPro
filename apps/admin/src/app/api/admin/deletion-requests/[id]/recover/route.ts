@@ -25,16 +25,19 @@
  *    a newer live request) or when the user was soft-deleted moments ago (the
  *    cron's ban may still be in flight).
  *    A community is restored and finished in that same transaction: done.
- * 2. For a user: lift the sign-in ban.
- * 3. For a user: restore the row and stamp `recovered_at`, in one transaction.
+ * 2. For a user: lift the sign-in ban, then restore the row and stamp
+ *    `recovered_at`, all while holding the user's rows locked
+ *    (`completeUserRecoveryOp`). A second recovery of the same account waits
+ *    there and then changes nothing, so the ban always matches the final
+ *    state.
  *
- * A failure in 2 re-applies the ban and then gives the claim back
+ * A failed unban re-applies the ban and then gives the claim back
  * (`soft_deleted` again, so the account is deleted, banned and purgeable
- * exactly as before). A crash anywhere, a failure in 3, or a failure to
- * re-apply the ban leaves the requests `recovered` with a null `recovered_at`:
- * the account stays deleted, the purge never touches it, the Dashboard shows
- * the recovery as unfinished, the lifecycle cron reports it every night, and
- * recovering the same request again resumes it.
+ * exactly as before). A crash, a failed restore, or a failure to re-apply the
+ * ban leaves the requests `recovered` with a null `recovered_at`: the account
+ * stays deleted, the purge never touches it, the Dashboard shows the recovery
+ * as unfinished, the lifecycle cron reports it every night, and recovering the
+ * same request again resumes it.
  */
 import { createElement } from 'react';
 import { NextRequest, NextResponse } from 'next/server';
@@ -43,11 +46,7 @@ import { formatErrorForLog } from '@propertypro/shared/observability';
 import { requirePlatformAdmin } from '@/lib/auth/platform-admin';
 import { createAdminTypedClient } from '@propertypro/db/supabase/admin';
 // AUTHZ: platform-admin-only recovery (requirePlatformAdmin is the first call in POST); the ops act on the request's own target only.
-import {
-  claimDeletionRecoveryOp,
-  finishUserRecoveryOp,
-  releaseUserRecoveryOp,
-} from '@propertypro/db/unsafe';
+import { claimDeletionRecoveryOp, completeUserRecoveryOp } from '@propertypro/db/unsafe';
 import { withAdminErrorHandler } from '@/lib/api/with-error-handler';
 import { logAdminAction } from '@/lib/audit/log-admin-action';
 
@@ -220,67 +219,33 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     ...extra,
   });
 
-  // 2. The lifecycle cron banned the login at soft delete (876600h). Without
-  // this the user is "recovered" but still cannot sign in.
-  let unbanError: unknown = null;
-  try {
-    const { error } = await createAdminTypedClient().auth.admin.updateUserById(userId, {
-      ban_duration: 'none',
-      user_metadata: { soft_deleted: null },
-    });
-    unbanError = error;
-  } catch (err) {
-    unbanError = err;
-  }
-  if (unbanError) {
-    // Give the claim back, so the account reads deleted and purgeable on
-    // schedule exactly as before. But only with the ban known to be ON: a
-    // failed unban can still have landed (a timeout after GoTrue applied it),
-    // and on a resumed recovery an earlier attempt may have lifted it. Released
-    // without its ban, the account would be purgeable while its owner can
-    // still sign in. If the ban cannot be confirmed, the claim stays: an
-    // unfinished recovery, never purged, shown on the Dashboard, resumable.
-    let rebanned = false;
+  /** One GoTrue ban change; true on success, never throws. */
+  const setBan = async (ban_duration: string, soft_deleted: true | null) => {
     try {
       const { error } = await createAdminTypedClient().auth.admin.updateUserById(userId, {
-        ban_duration: SOFT_DELETE_BAN,
-        user_metadata: { soft_deleted: true },
+        ban_duration,
+        user_metadata: { soft_deleted },
       });
-      rebanned = !error;
+      return !error;
     } catch {
-      rebanned = false;
+      return false;
     }
-    let released = false;
-    if (rebanned) {
-      try {
-        released = (await releaseUserRecoveryOp(userId, claimedRequestIds)) > 0;
-      } catch {
-        released = false;
-      }
-    }
-    await auditFailure(
-      null,
-      failureMetadata('unban_user', 'USER_UNBAN_FAILED', { ban_reapplied: rebanned, claim_released: released }),
-    );
-    return NextResponse.json(
-      {
-        error: {
-          code: 'USER_UNBAN_FAILED',
-          message: released
-            ? 'Lifting the sign-in ban failed. Nothing was restored; retry the recovery.'
-            : 'Lifting the sign-in ban failed, and the recovery could not be undone. The account is still deleted and shows as an unfinished recovery; retry the recovery.',
-        },
-      },
-      { status: 500 },
-    );
-  }
-  completed.push('unban_user');
+  };
 
-  // 3. Restore and finish.
+  // 2 + 3. Lift the ban, then restore and finish, under the user's row locks
+  // (see completeUserRecoveryOp). The lifecycle cron banned the login at soft
+  // delete; without lifting it the user is "recovered" but cannot sign in.
   const recoveredAt = new Date();
-  let finished: Awaited<ReturnType<typeof finishUserRecoveryOp>>;
+  let completion: Awaited<ReturnType<typeof completeUserRecoveryOp>>;
   try {
-    finished = await finishUserRecoveryOp(userId, { now: recoveredAt });
+    completion = await completeUserRecoveryOp(
+      userId,
+      {
+        liftBan: () => setBan('none', null),
+        reapplyBan: () => setBan(SOFT_DELETE_BAN, true),
+      },
+      { now: recoveredAt },
+    );
   } catch (err) {
     console.error(`[deletion-requests] finishing recovery of request ${requestId} failed`, {
       err: formatErrorForLog(err),
@@ -290,17 +255,49 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
       {
         error: {
           code: 'USER_RESTORE_FAILED',
-          message: 'The sign-in ban is lifted, but clearing the account’s deletion flag failed. The account still reads deleted and shows as an unfinished recovery; retry the recovery.',
+          message: 'Restoring the account failed. It still reads deleted and shows as an unfinished recovery; retry the recovery.',
         },
       },
       { status: 500 },
     );
   }
-  if (finished.outcome === 'purged') {
+
+  if (completion.outcome === 'not_claimed') {
+    // Another attempt on the same account finished this recovery, or gave it
+    // back, while this one waited. That attempt made the ban match; this one
+    // changed nothing.
+    return conflict(
+      'RECOVERY_CONCURRENT',
+      'Another recovery of this account finished or was undone while this one waited. Reload to see where it stands.',
+    );
+  }
+  if (completion.outcome === 'purged') {
     await auditFailure(null, failureMetadata('restore_user', 'ALREADY_PURGED'));
     return conflict('ALREADY_PURGED', 'This account’s data has already been purged, so it cannot be recovered.');
   }
-  completed.push('restore_user');
+  if (completion.outcome === 'unban_failed') {
+    await auditFailure(
+      null,
+      failureMetadata('unban_user', 'USER_UNBAN_FAILED', {
+        ban_reapplied: completion.banReapplied,
+        claim_released: completion.released,
+        released_request_ids: completion.releasedRequestIds,
+      }),
+    );
+    return NextResponse.json(
+      {
+        error: {
+          code: 'USER_UNBAN_FAILED',
+          message: completion.released
+            ? 'Lifting the sign-in ban failed. Nothing was restored; retry the recovery.'
+            : 'Lifting the sign-in ban failed, and the recovery could not be undone. The account is still deleted and shows as an unfinished recovery; retry the recovery.',
+        },
+      },
+      { status: 500 },
+    );
+  }
+  const finished = completion;
+  completed.push('unban_user', 'restore_user');
 
   await logAdminAction({
     admin,

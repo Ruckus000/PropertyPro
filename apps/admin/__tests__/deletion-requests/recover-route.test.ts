@@ -12,8 +12,7 @@ const requirePlatformAdmin = vi.fn();
 const updateUserById = vi.fn();
 const sendEmail = vi.fn();
 const claimDeletionRecoveryOp = vi.fn();
-const finishUserRecoveryOp = vi.fn();
-const releaseUserRecoveryOp = vi.fn();
+const completeUserRecoveryOp = vi.fn();
 const emailLookup = vi.fn();
 // The order the account-changing calls happened in.
 const writes: string[] = [];
@@ -27,13 +26,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
     writes.push('claim');
     return claimDeletionRecoveryOp(...args);
   },
-  finishUserRecoveryOp: (...args: unknown[]) => {
-    writes.push('finish');
-    return finishUserRecoveryOp(...args);
-  },
-  releaseUserRecoveryOp: (...args: unknown[]) => {
-    writes.push('release');
-    return releaseUserRecoveryOp(...args);
+  completeUserRecoveryOp: (...args: unknown[]) => {
+    writes.push('complete');
+    return completeUserRecoveryOp(...args);
   },
 }));
 
@@ -99,6 +94,11 @@ interface AuditCall {
 
 const audits = () => logAdminAction.mock.calls.map((c) => c[0] as AuditCall);
 
+interface AuthCalls {
+  liftBan: () => Promise<boolean>;
+  reapplyBan: () => Promise<boolean>;
+}
+
 async function callRecover(id: string) {
   const mod = await import('@/app/api/admin/deletion-requests/[id]/recover/route');
   return mod.POST(new Request(`http://localhost/${id}`, { method: 'POST' }) as never, {
@@ -132,8 +132,15 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     sendEmail.mockResolvedValue({ id: 'test_1' });
     updateUserById.mockResolvedValue({ data: {}, error: null });
     claimDeletionRecoveryOp.mockResolvedValue(USER_CLAIM);
-    finishUserRecoveryOp.mockResolvedValue({ outcome: 'recovered', finishedRequestIds: [42, 43] });
-    releaseUserRecoveryOp.mockResolvedValue(2);
+    // Stands in for the op's own control flow (tested on a real database):
+    // lift the ban; on failure re-apply it, and give the claim back only then.
+    completeUserRecoveryOp.mockImplementation(async (_userId: string, auth: AuthCalls) => {
+      if (!(await auth.liftBan())) {
+        const banReapplied = await auth.reapplyBan();
+        return { outcome: 'unban_failed', banReapplied, released: banReapplied, releasedRequestIds: banReapplied ? [42, 43] : [] };
+      }
+      return { outcome: 'recovered', finishedRequestIds: [42, 43] };
+    });
     emailResult = { data: { email: 'marisol@example.com', full_name: 'Marisol' }, error: null };
   });
 
@@ -148,19 +155,36 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect(writes).toEqual([]);
   });
 
-  it('claims as the platform admin, lifts the ban, then restores: in that order', async () => {
+  it('claims as the platform admin, then completes with ban calls that lift and re-apply the right ban', async () => {
     const response = await callRecover('42');
 
     expect(response.status).toBe(200);
     expect(claimDeletionRecoveryOp).toHaveBeenCalledWith(42, { adminUserId: 'admin-1' });
-    // Unban BEFORE the restore: a failed unban must leave the account deleted
-    // (and its claim given back), never restored but unable to sign in.
-    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
+    expect(writes).toEqual(['claim', 'complete', 'auth:unban']);
+    expect(completeUserRecoveryOp).toHaveBeenCalledWith('user-uuid', expect.any(Object), { now: expect.any(Date) });
     expect(updateUserById).toHaveBeenCalledWith('user-uuid', {
       ban_duration: 'none',
       user_metadata: { soft_deleted: null },
     });
-    expect(finishUserRecoveryOp).toHaveBeenCalledWith('user-uuid', { now: expect.any(Date) });
+
+    // The re-apply callback puts back exactly the cron's soft-delete ban.
+    const auth = completeUserRecoveryOp.mock.calls[0]![1] as AuthCalls;
+    updateUserById.mockClear();
+    await expect(auth.reapplyBan()).resolves.toBe(true);
+    expect(updateUserById).toHaveBeenCalledWith('user-uuid', {
+      ban_duration: '876600h',
+      user_metadata: { soft_deleted: true },
+    });
+  });
+
+  it('the ban callbacks report failure as false, never as a throw', async () => {
+    await callRecover('42');
+    const auth = completeUserRecoveryOp.mock.calls[0]![1] as AuthCalls;
+
+    updateUserById.mockResolvedValueOnce({ data: null, error: { message: 'GoTrue down' } });
+    await expect(auth.liftBan()).resolves.toBe(false);
+    updateUserById.mockRejectedValueOnce(new Error('fetch failed'));
+    await expect(auth.reapplyBan()).resolves.toBe(false);
   });
 
   it('audits every request it recovered and cancelled, best effort once the recovery has committed', async () => {
@@ -205,7 +229,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     const response = await callRecover('42');
 
     expect(response.status).toBe(200);
-    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
+    expect(writes).toEqual(['claim', 'complete', 'auth:unban']);
     expect(audits()[0]).toMatchObject({ oldValues: { status: 'recovered' }, newValues: { resumed: true } });
   });
 
@@ -272,11 +296,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     expect((await (await callRecover('42')).json()).error.message).toMatch(/^The community this request names/);
   });
 
-  // A failed unban can still have landed (a timeout after GoTrue applied it),
-  // and a resumed recovery's earlier attempt may have lifted the ban. So the
-  // ban goes back ON before the claim is given back: a released account must
-  // never be purgeable while its owner can sign in.
-  it('re-applies the ban, then gives the claim back, when lifting the ban fails', async () => {
+  it('reports a failed unban whose claim was given back, after the ban was re-applied', async () => {
     updateUserById
       .mockResolvedValueOnce({ data: null, error: { message: 'GoTrue down' } })
       .mockResolvedValueOnce({ data: {}, error: null });
@@ -287,12 +307,7 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
     const body = await response.json();
     expect(body.error.code).toBe('USER_UNBAN_FAILED');
     expect(body.error.message).toMatch(/Nothing was restored/);
-    expect(writes).toEqual(['claim', 'auth:unban', 'auth:ban:876600h', 'release']);
-    expect(updateUserById).toHaveBeenLastCalledWith('user-uuid', {
-      ban_duration: '876600h',
-      user_metadata: { soft_deleted: true },
-    });
-    expect(releaseUserRecoveryOp).toHaveBeenCalledWith('user-uuid', [42, 43]);
+    expect(writes).toEqual(['claim', 'complete', 'auth:unban', 'auth:ban:876600h']);
     expect(audits()[0]).toMatchObject({
       action: 'deletion_request_recover_failed',
       metadata: {
@@ -300,70 +315,55 @@ describe('POST /api/admin/deletion-requests/[id]/recover', () => {
         code: 'USER_UNBAN_FAILED',
         ban_reapplied: true,
         claim_released: true,
+        released_request_ids: [42, 43],
         completed: ['claim'],
       },
       bestEffort: true,
     });
   });
 
-  it('keeps the claim (an unfinished recovery) when the ban cannot be re-applied either', async () => {
+  it('says the recovery is unfinished and resumable when the claim could not be given back', async () => {
     updateUserById.mockResolvedValue({ data: null, error: { message: 'GoTrue down' } });
 
     const response = await callRecover('42');
 
     expect(response.status).toBe(500);
     expect((await response.json()).error.message).toMatch(/unfinished recovery; retry/);
-    expect(writes).toEqual(['claim', 'auth:unban', 'auth:ban:876600h']);
-    expect(releaseUserRecoveryOp).not.toHaveBeenCalled();
     expect(audits()[0]!.metadata).toMatchObject({ ban_reapplied: false, claim_released: false });
   });
 
-  it('treats a thrown unban like a failed one', async () => {
-    updateUserById.mockRejectedValueOnce(new Error('fetch failed')).mockResolvedValueOnce({ data: {}, error: null });
+  // Another attempt on the same account held the lock and settled it; this
+  // one must change nothing and say so, not report a recovery or a failure.
+  it('returns 409 RECOVERY_CONCURRENT, auditing nothing, when another attempt settled the claim first', async () => {
+    completeUserRecoveryOp.mockResolvedValue({ outcome: 'not_claimed' });
 
     const response = await callRecover('42');
 
-    expect(response.status).toBe(500);
-    expect(writes).toEqual(['claim', 'auth:unban', 'auth:ban:876600h', 'release']);
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('RECOVERY_CONCURRENT');
+    expect(logAdminAction).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it('says the recovery is unfinished and resumable when giving the claim back fails', async () => {
-    updateUserById
-      .mockResolvedValueOnce({ data: null, error: { message: 'GoTrue down' } })
-      .mockResolvedValueOnce({ data: {}, error: null });
-    releaseUserRecoveryOp.mockRejectedValue(new Error('db down'));
-
-    const response = await callRecover('42');
-
-    expect(response.status).toBe(500);
-    const body = await response.json();
-    expect(body.error.code).toBe('USER_UNBAN_FAILED');
-    expect(body.error.message).toMatch(/unfinished recovery; retry/);
-    expect(audits()[0]!.metadata).toMatchObject({ ban_reapplied: true, claim_released: false });
-  });
-
-  // After the unban the claim is NOT given back: the account would read
-  // deleted and purgeable while its owner can sign in. It stays an unfinished
-  // recovery, which the purge never touches and a retry resumes.
-  it('keeps the claim and reports an unfinished recovery when the restore fails after the unban', async () => {
-    finishUserRecoveryOp.mockRejectedValue(new Error('db down'));
+  it('reports an unfinished recovery when completing throws', async () => {
+    completeUserRecoveryOp.mockRejectedValue(new Error('db down'));
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const response = await callRecover('42');
     consoleErrorSpy.mockRestore();
 
     expect(response.status).toBe(500);
-    expect((await response.json()).error.code).toBe('USER_RESTORE_FAILED');
-    expect(writes).toEqual(['claim', 'auth:unban', 'finish']);
-    expect(releaseUserRecoveryOp).not.toHaveBeenCalled();
+    const body = await response.json();
+    expect(body.error.code).toBe('USER_RESTORE_FAILED');
+    expect(body.error.message).toMatch(/unfinished recovery; retry/);
     expect(audits()[0]).toMatchObject({
       action: 'deletion_request_recover_failed',
-      metadata: { stage: 'restore_user', completed: ['claim', 'unban_user'] },
+      metadata: { stage: 'restore_user', completed: ['claim'] },
     });
   });
 
-  it('returns 409 when the finish finds the row scrubbed', async () => {
-    finishUserRecoveryOp.mockResolvedValue({ outcome: 'purged' });
+  it('returns 409 when completing finds the row scrubbed', async () => {
+    completeUserRecoveryOp.mockResolvedValue({ outcome: 'purged' });
 
     const response = await callRecover('42');
 
