@@ -25,7 +25,7 @@
 A part is built in the plan that first uses it. These have no user among the pilot pages, so do not build them here:
 
 - **`daysLeft`, `formatTimeLeft`, `TimeLeft` (Plan B).** No pilot page shows a deadline. They arrive with "Next deadline", in the same pull request that moves `compliance-checklist-item.tsx` and `meeting-status.ts` onto the one formatter, so the app never holds a fourth rounding rule. Plan B must also decide where `TimeLeft` lives: `packages/ui` depends only on `@propertypro/tokens` today, and `EscalationTier` already exists in `packages/ui/src/tokens/compliance.ts`.
-- **`Icon`, the icon registry and `guard:icons` (Plan B).** Web imports 124 distinct `lucide-react` icons across 232 files. A single registry map would put every one of them in each page's bundle, and `perf-check` has about 31 KiB of headroom. Plan B designs this with the shell. Here the page title's icon comes from `nav-config.ts`, which already holds one icon per section.
+- **`Icon`, the icon registry and `guard:icons` (Plan B).** Web imports 124 distinct `lucide-react` icons across 232 files. A single registry map would put every one of them in each page's bundle, and `perf-check` has about 31 KiB of headroom. Plan B designs this with the shell. Here each pilot page passes the icon `nav-config.ts` already uses for its section.
 - **`SectionRow`, `SectionGroup`, `SectionLinkRow` (Plan C).** They are the Settings shapes. Plan C re-points `apps/web/src/components/settings/settings-layout.tsx` onto the Section kit and deletes its six bodies in the same pull request, so the app does not keep two kits.
 - **`PageTabs`.** Not built. Radix `Tabs` (`apps/web/src/components/ui/tabs.tsx`) already has the keyboard behaviour and the 44px floor; the Visitors pilot styles it.
 - **`guard:panel-copy`.** Replaced by a type: a panel's "About" accepts only the value `describeAccess` returns (Tasks 7 and 10).
@@ -457,9 +457,9 @@ describe('PageLayout', () => {
 
 **Interfaces:**
 - Consumes: `useInPageLayout` (Task 8).
-- Produces: `PageHeaderProps` gains `navId?: string` and `status?: React.ReactNode`. Outside a `PageLayout` the component behaves exactly as today. `navId` is a string, not an icon component, because server pages render `PageHeader` and a function cannot cross from a server component to a client one. `PageHeader` looks the icon up itself with `NAV_ITEMS.find((i) => i.id === navId)?.icon`, so a page title and the sidebar cannot show different icons for one section; an unknown id renders no place mark.
+- Produces: `PageHeaderProps` gains `icon?: React.ReactNode` and `status?: React.ReactNode`. Outside a `PageLayout` the component behaves exactly as today. The icon is a ready element (`<Package />`), not a component and not a nav id: an element can cross from a server page to this client component, and looking the icon up in `nav-config.ts` put that file in every page's client chunk (+5.7 KiB on the Settings route, 0.6 KiB under the hard budget). The caller passes the same icon `nav-config.ts` uses for that section; a `ponytail:` marker in the file hands single-sourcing to Plan B's icon design.
 
-Rules (§5.2): inside a layout the `<h1>` is `font-display text-3xl font-medium tracking-tight text-content` with no `sr-only`; `description` renders as `text-sm text-content-secondary` under it; `navId` renders the place mark before the title: a `size-9 rounded-md bg-surface-inverse text-content-inverse` tile holding the icon at `size-5` with `strokeWidth={1.6}` and `aria-hidden`; `status` renders after the title; the block has `border-b border-edge-strong pb-4`. `children`, `actions` and the Help button keep their current positions. `data-page-header="true"` stays on the root: `shell-breadcrumbs.tsx:58` reads the title through it.
+Rules (§5.2): inside a layout the `<h1>` is `font-display text-3xl font-medium tracking-tight text-content` with no `sr-only`; `description` renders as `text-sm text-content-secondary` under it; `icon` renders the place mark before the title: a `size-9 rounded-md bg-surface-inverse text-content-inverse` tile holding the icon at `size-5` with `strokeWidth={1.6}` and `aria-hidden`; `status` renders after the title; the block has `border-b border-edge-strong pb-4`. `children`, `actions` and the Help button keep their current positions. `data-page-header="true"` stays on the root: `shell-breadcrumbs.tsx:58` reads the title through it.
 
 - [ ] **Step 1: Pre-check.** `sed -n 40,78p apps/web/src/components/shared/page-header.tsx` shows `'use client'`, an `h1.sr-only`, `_description` unused, and a toolbar of `children`, `actions` and Help; `grep -n "export const NAV_ITEMS\|^import" apps/web/src/components/layout/nav-config.ts` finds the list and shows the file imports nothing server-only (the client sidebar already imports it); `grep -n "does not paint" .claude/rules/design.md` finds the paragraph.
 - [ ] **Step 2: Add the failing tests** (below the existing ones)
@@ -468,14 +468,14 @@ Rules (§5.2): inside a layout the `<h1>` is `font-display text-3xl font-medium 
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 
 it('paints the title, description and place mark inside a PageLayout', () => {
-  const { container } = render(<PageLayout template="list" header={<PageHeader title="Packages" description="Log deliveries as they arrive." navId="packages" />}>x</PageLayout>);
+  const { container } = render(<PageLayout template="list" header={<PageHeader title="Packages" description="Log deliveries as they arrive." icon={<svg data-testid="mark" />} />}>x</PageLayout>);
   const h1 = screen.getByRole('heading', { level: 1, name: 'Packages' });
   expect(h1).not.toHaveClass('sr-only');
   expect(screen.getByText('Log deliveries as they arrive.')).toBeVisible();
   expect(container.querySelector('[data-page-header] svg')).toHaveAttribute('aria-hidden', 'true');
 });
-it('draws no place mark for an id the navigation does not know', () => {
-  const { container } = render(<PageLayout template="list" header={<PageHeader title="X" navId="nope" hideHelpButton />}>x</PageLayout>);
+it('draws no place mark without an icon', () => {
+  const { container } = render(<PageLayout template="list" header={<PageHeader title="X" hideHelpButton />}>x</PageLayout>);
   expect(container.querySelector('[data-page-header] svg')).toBeNull();
 });
 it('still hides the title and drops the description outside a PageLayout', () => {
@@ -703,7 +703,7 @@ Decisions (§5, §14.1):
 
 - **Extract first.** The "Mark as Picked Up" dialog, its name field and `handlePickup` live inline in `PackageStaffView.tsx:107-145`. Move them, unchanged, into `PackagePickupDialog` (it owns the name state and calls `usePickupPackage`), and make `PackageStaffView` render it. Both views then share one dialog.
 - `PageLayout template="list" records="table"`.
-- Header: title "Packages", `navId="packages"`, description "Log deliveries as they arrive. Residents are told when a package is ready to collect.", one primary "Log a package" opening the existing `PackageLogForm`.
+- Header: title "Packages", `icon={<Package />}` (the icon `nav-config.ts` uses for `packages`), description "Log deliveries as they arrive. Residents are told when a package is ready to collect.", one primary "Log a package" opening the existing `PackageLogForm`.
 - Toolbar filters: the existing three, relabelled "Awaiting pickup" (`pending`), "Picked up" (`picked_up`), "All", with counts from the loaded list. No search: the current view has none.
 - Footer: "Showing N". No "of M".
 - Panel position 1: figure = count of packages whose `status !== 'picked_up'`, unit "awaiting pickup", `source="usePackages"`, from the same query result as the table. One line: "Picked up" with the count of `picked_up`.
@@ -773,7 +773,7 @@ Decisions (§5.8): `PageLayout template="list" records="rows"` with **no panel**
 
 Decisions. The page states only what `BroadcastHistoryTable` states today: a title, a severity, a recipient count and one of three statuses. It adds no delivery or reach figure.
 
-- `PageLayout template="list" records="rows"`. Title "Emergency Alerts", `navId="emergency"`, description "Send urgent notices to residents. Every alert is logged with who it went to."
+- `PageLayout template="list" records="rows"`. Title "Emergency Alerts", `icon={<Siren />}` (as `nav-config.ts`), description "Send urgent notices to residents. Every alert is logged with who it went to."
 - **Manager view.** Primary "Send alert" linking to `/emergency/new?communityId=…`, only when `canWrite`. Each alert is a `RecordRow` whose title links to `/emergency/{id}?communityId=…`:
   - status word and glyph, by the same precedence as `getStatusLabel` in `BroadcastHistoryTable.tsx`: `canceledAt` → `not-started` "Canceled"; `completedAt` → `done` "Sent"; otherwise `in-progress` "Draft";
   - meta: the severity word, capitalised, then the date and time of `initiatedAt` formatted with `Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone })`;
@@ -826,7 +826,7 @@ Three small pages that prove the detail and form templates and tabs. 16a and 16b
 - Files: create `apps/web/src/components/visitors/visitors-staff-page.tsx`; modify `apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx`; test `apps/web/__tests__/visitors/visitors-staff-page.test.tsx`.
 - `PageLayout template="list" records="table"`, wrapped in the existing Radix `<Tabs>` root so the list and the panels can sit in different slots: the `tabs` slot holds `<TabsList>` with "Visitors" and "Denied list"; the main column holds the two `<TabsContent>`, each rendering that tab's existing table (`DataTable` with its `QuickFilterTabs`, and `DeniedVisitorsTab`) inside a `Section`. The selected trigger is marked with `data-[state=active]:border-b-2 data-[state=active]:border-content` (ink, not coral); pass it by `className` and do not edit `components/ui/tabs.tsx`.
 - The selected tab starts from `?tab=` (default `visitors`) and each change calls `window.history.replaceState`, the way `components/meetings/meetings-page-shell.tsx` does. No navigation, so no server round trip.
-- Header: title "Visitors", `navId="visitors"`, description "Expected visitors and the people who may not be let in." The header primary is the selected tab's existing action. Every dialog and mutation the staff view has today is reused by importing it; if one is inline in `VisitorStaffView.tsx`, extract it to its own file first, unchanged, exactly as Task 13 does for the pickup dialog.
+- Header: title "Visitors", `icon={<Users />}` (as `nav-config.ts`), description "Expected visitors and the people who may not be let in." The header primary is the selected tab's existing action. Every dialog and mutation the staff view has today is reused by importing it; if one is inline in `VisitorStaffView.tsx`, extract it to its own file first, unchanged, exactly as Task 13 does for the pickup dialog.
 - Panel position 1: only if `VisitorStaffView` already computes a count from its loaded list, show that count with `source` naming the hook; otherwise no glance. Position 4: `describeAccess(membership.communityType, 'visitors', 'own')`, built in `page.tsx`.
 - Pre-check: `sed -n 60,220p apps/web/src/components/visitors/VisitorStaffView.tsx` for the tabs, tables, actions and any inline dialog; `grep -n "replaceState" apps/web/src/components/meetings/meetings-page-shell.tsx` for the pattern; `grep -n "listActorUnitIds" "apps/web/src/app/(authenticated)/dashboard/visitors/page.tsx"` confirms residents are scoped to their own units, which is what `'own'` claims.
 - Tests: two elements with `role="tab"`; the selected one has `aria-selected="true"` and no class containing `interactive`; rendering with `?tab=denied` shows the denied table and the denied-list action as the primary; selecting the other tab calls `history.replaceState` with a URL containing `tab=visitors`; axe passes.
