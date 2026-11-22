@@ -29,10 +29,11 @@ export function useDemoSelfServiceUpgrade() {
   >({
     // As of B1 Slice 3, this route returns the canonical
     // `{ data: { checkoutUrl } }` envelope. The hook unwraps `.data`
-    // manually rather than adopting `requestJson` so the bespoke error
-    // parsing (handles a top-level `error: string` shape, NOT the
-    // canonical `error: { message }`) and bespoke `Request failed (<status>)`
-    // fallback literal stay preserved — migration to `requestJson` is B6 work.
+    // manually rather than adopting `requestJson` so the bespoke
+    // `Request failed (<status>)` fallback literal stays preserved —
+    // migration to `requestJson` is B6 work. Errors arrive as a top-level
+    // `error: string` or the canonical `error: { message }` (the route's
+    // AppErrors and the middleware's 401), so both are read.
     mutationFn: async ({ slug, planId, customerEmail, customerName }) => {
       const res = await fetch(`/api/v1/demo/${slug}/self-service-upgrade`, {
         method: 'POST',
@@ -45,12 +46,13 @@ export function useDemoSelfServiceUpgrade() {
       });
 
       const json = (await res.json().catch(() => null)) as {
-        error?: string;
+        error?: string | { message?: string };
         data?: { checkoutUrl?: string };
       } | null;
 
       if (!res.ok) {
-        throw new Error(json?.error ?? `Request failed (${res.status})`);
+        const message = typeof json?.error === 'string' ? json.error : json?.error?.message;
+        throw new Error(message ?? `Request failed (${res.status})`);
       }
 
       // The original inline code did `const { checkoutUrl } = await

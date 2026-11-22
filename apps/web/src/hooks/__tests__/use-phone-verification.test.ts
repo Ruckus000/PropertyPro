@@ -4,8 +4,9 @@
  *
  * Documented exception to the requestJson rule: the SMS consent form renders
  * the thrown error's `.message` verbatim, and the endpoints return a
- * non-standard error body `{ error: '<string>' }`. The hooks keep a manual
- * fetch + non-OK throw with the exact literals from the original component.
+ * non-standard error body `{ error: '<string>' }`, while the middleware's 401
+ * and the routes' AppErrors send `{ error: { message } }`. The hooks keep a
+ * manual fetch + non-OK throw with the exact literals from the original component.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -62,6 +63,20 @@ describe('useSendPhoneVerification', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
 
+  it('throws the message of a structured error, such as the expired-session 401', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: { code: 'UNAUTHORIZED', message: 'Your session has ended. Sign in again to continue.' },
+      }),
+    });
+    const { result } = renderHook(() => useSendPhoneVerification(), { wrapper });
+
+    await expect(
+      result.current.mutateAsync({ phone: '+13055551234' }),
+    ).rejects.toThrow('Your session has ended. Sign in again to continue.');
+  });
+
   it('falls back to the exact send literal when error is absent', async () => {
     fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
     const { result } = renderHook(() => useSendPhoneVerification(), { wrapper });
@@ -116,6 +131,22 @@ describe('useConfirmPhoneVerification', () => {
     await expect(
       result.current.mutateAsync({ phone: '+13055551234', code: '000000' }),
     ).rejects.toThrow('Too many attempts. Try again later.');
+  });
+
+  it('throws the message of a structured error, such as a route ValidationError', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        error: { code: 'VALIDATION_ERROR', message: 'Invalid verification request' },
+      }),
+    });
+    const { result } = renderHook(() => useConfirmPhoneVerification(), {
+      wrapper,
+    });
+
+    await expect(
+      result.current.mutateAsync({ phone: '+13055551234', code: 'abc' }),
+    ).rejects.toThrow('Invalid verification request');
   });
 
   it('falls back to the exact confirm literal when error is absent', async () => {

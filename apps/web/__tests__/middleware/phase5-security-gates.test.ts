@@ -107,8 +107,8 @@ describe('WS72 middleware rate-limit and spoofing hardening', () => {
     );
 
     expect(response.status).toBe(401);
-    const payload = await response.json() as { error: string };
-    expect(payload.error).toBe('Unauthorized');
+    const payload = await response.json() as { error: { code: string } };
+    expect(payload.error.code).toBe('UNAUTHORIZED');
   });
 
   /**

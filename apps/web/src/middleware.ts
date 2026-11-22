@@ -23,6 +23,7 @@ import {
 import {
   buildSupportSessionClearCookie,
   resolveSupportCookieHostname,
+  UnauthorizedError,
 } from '@propertypro/shared/http';
 import { UNKNOWN_SUBDOMAIN_REASON } from './lib/middleware/unknown-subdomain-reason';
 import {
@@ -968,7 +969,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       if (isApiPath(pathname)) {
         return finaliseResponse(
           response as unknown as NextResponse,
-          NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+          // The route envelope, so requestJson callers show this message, not "Request failed".
+          NextResponse.json(
+            new UnauthorizedError('Your session has ended. Sign in again to continue.').toJSON(),
+            { status: 401 },
+          ),
           requestId,
           origin,
           isApi,
