@@ -97,6 +97,19 @@ vi.mock('@/lib/services/site-look-service', () => ({
   fillDemoCommunitySite: fillDemoCommunitySiteMock,
 }));
 
+// Pass-through to the real screen. `bypassScreen` lets one test prove the
+// route's own same-origin assertion holds even if the screen were to wave a
+// hostile value through.
+const returnToControl = vi.hoisted(() => ({ bypassScreen: false }));
+vi.mock('@/lib/utils/return-to', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/utils/return-to')>();
+  return {
+    ...actual,
+    isSafeReturnPath: (value: string) =>
+      returnToControl.bypassScreen || actual.isSafeReturnPath(value),
+  };
+});
+
 vi.mock('@propertypro/db/filters', () => ({
   eq: eqMock,
 }));
@@ -347,4 +360,119 @@ describe('demo-login route hardening', () => {
     const html = await response.text();
     expect(html).toContain('https://getpropertypro.com/mobile?communityId=42&amp;preview=true');
   });
+});
+
+describe('demo-login ?redirect= override', () => {
+  const BASE = 'https://getpropertypro.com';
+  const DEFAULT_RESIDENT = `${BASE}/mobile?communityId=42`;
+
+  // Each starts with one `/`. The old
+  // `startsWith('/') && !startsWith('//') && !includes('://')` screen let the
+  // first three (the reported payloads) through, and `new URL(value, base)`
+  // resolved each of them to https://evil.com/.
+  const HOSTILE_REDIRECTS: Array<[string, string]> = [
+    ['backslash', '/\\evil.com'],
+    ['tab', '/\t/evil.com'],
+    ['newline', '/\n/evil.com'],
+    ['carriage return', '/\r/evil.com'],
+    ['dot segment', '/.//evil.com'],
+    ['protocol-relative', '//evil.com'],
+    ['absolute', 'https://evil.com/'],
+  ];
+
+  const LEGITIMATE_REDIRECTS: Array<[string, string]> = [
+    ['/dashboard?communityId=42', `${BASE}/dashboard?communityId=42`],
+    ['/documents?communityId=42&tab=minutes', `${BASE}/documents?communityId=42&tab=minutes`],
+    ['/mobile', `${BASE}/mobile`],
+  ];
+
+  function demoLoginUrl(redirect: string, preview = false): string {
+    const params = new URLSearchParams({ token: 'test', redirect });
+    if (preview) params.set('preview', 'true');
+    return `${BASE}/api/v1/auth/demo-login?${params.toString()}`;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', BASE);
+    vi.stubEnv('DEMO_TOKEN_ENCRYPTION_KEY_HEX', '');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'test-anon-key');
+    returnToControl.bypassScreen = false;
+    state.rows = [{ ...BASE_INSTANCE, authTokenSecret: 'plaintext-secret' }];
+    state.communityRows = [{ demoExpiresAt: null }];
+    queryCounter.count = 0;
+    extractDemoIdFromTokenMock.mockReturnValue(101);
+    decryptDemoTokenSecretMock.mockReturnValue('decrypted-secret');
+    validateDemoTokenMock.mockReturnValue({
+      demoId: 101,
+      userId: 'user-1',
+      role: 'resident',
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    generateLinkMock.mockResolvedValue({
+      data: { properties: { hashed_token: HASHED_TOKEN } },
+      error: null,
+    });
+    verifyOtpMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  });
+
+  afterEach(() => {
+    returnToControl.bypassScreen = false;
+    vi.unstubAllEnvs();
+  });
+
+  it.each(HOSTILE_REDIRECTS)(
+    '307 branch: a %s redirect falls back to the default page',
+    async (_label, redirect) => {
+      const response = await GET(makeRequest(demoLoginUrl(redirect)));
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe(DEFAULT_RESIDENT);
+    },
+  );
+
+  it.each(HOSTILE_REDIRECTS)(
+    'preview branch: a %s redirect falls back to the default page',
+    async (_label, redirect) => {
+      const response = await GET(makeRequest(demoLoginUrl(redirect, true)));
+
+      expect(response.status).toBe(200);
+      const html = await response.text();
+      expect(html).not.toContain('evil.com');
+      expect(html).toContain(
+        `window.location.replace(${JSON.stringify(`${DEFAULT_RESIDENT}&preview=true`)})`,
+      );
+    },
+  );
+
+  it.each(LEGITIMATE_REDIRECTS)('307 branch: honours %s', async (redirect, expected) => {
+    const response = await GET(makeRequest(demoLoginUrl(redirect)));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe(expected);
+  });
+
+  it.each(LEGITIMATE_REDIRECTS)('preview branch: honours %s', async (redirect, expected) => {
+    const response = await GET(makeRequest(demoLoginUrl(redirect, true)));
+
+    expect(response.status).toBe(200);
+    const target = new URL(expected);
+    target.searchParams.set('preview', 'true');
+    const html = await response.text();
+    expect(html).toContain(`window.location.replace(${JSON.stringify(target.toString())})`);
+  });
+
+  it.each(HOSTILE_REDIRECTS.slice(0, 3))(
+    'the same-origin assertion alone refuses a %s redirect when the screen is bypassed',
+    async (_label, redirect) => {
+      returnToControl.bypassScreen = true;
+
+      const response = await GET(makeRequest(demoLoginUrl(redirect)));
+
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe(DEFAULT_RESIDENT);
+    },
+  );
 });
