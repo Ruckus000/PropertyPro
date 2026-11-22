@@ -338,55 +338,113 @@ panel. The guard checks the file, so both branches must use `PageLayout`.
 
 ## 6. Visual language
 
-Structure alone makes pages consistent, not good-looking. This section is the
-craft layer. It uses the existing tokens only: no new colours, no dark theme.
-It is the "Refined look" in the every-page mockup; "Structure only" shows the
-same pages without it.
+**(owner)** found the first refined look "still too bland" and asked for
+research into how large companies keep design consistent and memorable, and
+for the broken components in the mockup to be corrected. This section is the
+result. In the every-page mockup it is the "Signature" look; "Refined" and
+"Structure only" remain for comparison.
 
-Type
-- Three families by job: Geist for interface text, Geist Mono for anything a
-  person compares or copies (amounts, counts, unit numbers, dates in tables,
-  identifiers), Fraunces stays out of the signed-in app.
-- Page title `text-2xl font-semibold` with tight tracking; description one
-  step larger than body-small. Record titles are medium weight, not semibold:
-  only the page title and section titles are heavy.
-- Numbers are tabular everywhere. Numeric table columns are right-aligned.
+### 6.1 What the research says
 
-Colour
-- Neutral first. The accent (coral) appears in three places only: the one
-  primary button, the selected page tab, and links. Selected filters use the
-  ink colour, not the accent.
-- Status colours are used only for status, always with icon and text.
-- No tinted section backgrounds except the "Needs attention" item.
+Primary sources read: Stripe (accessible colour systems, Stripe Apps style and
+patterns), Linear (UI redesign, "invisible details"), Apple HIG design
+principles, Atlassian token naming, Vercel Geist and its design guidelines,
+Shopify's admin redesign, Carbon (2x grid, data table, empty states), Material
+theming, Primer empty states, and Karri Saarinen on Airbnb's DLS. Not verified
+from a primary source: anything about Stripe's internal system, Polaris
+density pages, and inline charts in tables (that one is our inference).
 
-Surfaces
+Five practices recur, and each maps to a decision here:
+
+| Practice | Who | Decision in this design |
+|---|---|---|
+| A few signature elements, rationed, on a mostly neutral product | Linear, Vercel, Shopify, Primer | 6.2: three signatures, each with a rule for where it may appear |
+| Put the character in the data, where people spend their time | Vercel, Carbon, Stripe | 6.3: time-left chip, progress bars, tabular numbers, status glyphs |
+| De-layer: remove containers and let type and keylines carry hierarchy | Shopify, Linear | 6.4: unboxed side panel, no card inside a card |
+| Named page patterns, not only components | Stripe, Carbon, Primer, Polaris | Section 5 templates and the guard |
+| Make the wrong thing hard to write | Stripe, Atlassian, Airbnb | Closed slot names, token-only styling, guards (section 7) |
+
+Apple's caution applies throughout: delight is not decoration. Every item
+below has to tell the user something.
+
+### 6.2 The three signatures
+
+Everything else stays neutral so these stay recognisable.
+
+1. **Display face.** Fraunces, the brand serif already used on the marketing
+   site and in the admin console's page titles. Allowed in exactly three
+   places: the page title, the headline figure in "At a glance", and the title
+   of a first-run empty state. Nowhere else: not section titles, not cards, not
+   tables. This also brings web and admin titles into line.
+2. **Time-left chip.** The product is about statutory deadlines, so time is
+   the one thing only this app shows this way. One component everywhere a
+   record has a deadline: four pips, a count ("9d left", "2d overdue") and the
+   date or action. Four levels using the existing compliance escalation
+   (calm over 30 days, aware 8 to 30, urgent 1 to 7, critical overdue). The
+   level is carried by the pip count and the words, not colour alone.
+3. **Status glyphs.** One drawn family of five ring glyphs replaces generic
+   icons wherever status appears (rows, badges, timelines): dashed ring (not
+   started or closed), half-filled (in progress), ring with mark (needs
+   attention), solid with mark (overdue or severe), solid with check (done).
+   A row shows the bare glyph, with no tile behind it.
+
+### 6.3 Character in the data
+
+- **Statute chip.** A statute or bill reference in text (§718.111(12)(g),
+  HB 1203) renders as a small mono chip that links to its plain-language guide.
+- **Progress in cells.** "6 of 9 signed" renders with a thin bar; complete is
+  green, partial is teal.
+- **People** get a neutral initials avatar. **Numbers** are tabular and
+  right-aligned, except in the first column.
+- **Row actions** in an Actions column are links or small buttons, never plain
+  text.
+- **Timelines.** Activity, history and reply lists on detail pages render as a
+  connected timeline using the status glyphs.
+- **Keyboard.** The search field shows its shortcut key. The existing command
+  palette is surfaced the same way.
+
+### 6.4 De-layering and surfaces
+
 - Sand page, white sections, hairline borders, no shadows at rest.
-- The side panel has no box. It sits on the page behind a single hairline at
-  its left edge, so the main column is the only "object" on the page and the
-  panel reads as context. On narrow layouts the hairline moves to the top.
-- The header is separated from the body by one hairline (or by the tab strip).
+- The side panel has no box: one hairline at its left edge. "Needs attention"
+  is a single left rule in the warning colour, not a tinted box.
+- No card inside a card: a section that holds card records loses its own
+  border and background.
+- The header is separated from the body by one hairline, or by the tab strip.
 
-Records
-- People are shown with an initials avatar (neutral, no categorical colours).
-- Status icon tiles on rows are round and small; the row title carries the
-  weight.
-- Table header on the subtle surface, 34px; body rows 42px; row hover on the
-  subtle surface.
-- A headline figure that is a ratio ("142 of 147") gets a thin proportion bar.
-  Label/value lines in the panel are hairline-separated with mono values.
+### 6.5 Type, colour, motion
 
-Motion
-- 120ms colour transitions on hover for rows, cards, buttons and links; a 1px
-  press on buttons. Nothing moves on load. All of it is disabled under
-  `prefers-reduced-motion`.
+- Geist for interface text; Geist Mono for counts in chips and statute
+  references; Fraunces per 6.2. Page title 30px, headline figure 42px.
+  Record titles are medium weight; only page and section titles are heavy.
+- The accent (coral) appears on the one primary button, the selected page
+  tab, and links. Selected filters use ink. Status colours are for status only.
+- 120ms colour transitions on hover; a 1px press on buttons; nothing moves on
+  load; all off under `prefers-reduced-motion`.
 
-Icons
-- One stroke weight and one size (16px, 14px inside 28px tiles). Icons carry
-  status or mark an action; they are never decoration on headings.
+### 6.6 Component corrections made in the mockup
 
-**(call)** All of the above is the author's proposal, shown for the owner to
-judge in the mockup. Sizes are given at a 16px root and are written on the rem
-scale in code.
+Found by rendering all 55 templated pages and reading them, plus automated
+checks for overflow, over-wide tables and duplicated controls.
+
+| Problem | Correction, now a rule |
+|---|---|
+| Dropdown fields drew a giant arrow | Select has a fixed 14px chevron |
+| Option pickers collapsed into tiny underlined text | Radio options are their own bordered control, not filter chips |
+| Page tabs repeated as filters, and again as shortcuts | Tabs appear once; counts sit on the tab |
+| Filter bars wrapped to a second line; search squeezed | Filters scroll sideways; search keeps a fixed width |
+| "Save" actions in section footers shown as plain text | Footer actions are buttons |
+| Row actions shown as plain text | Links or small buttons |
+| First table column wrapped into a tall stack | First column has a minimum width; tables over five columns drop their lowest-priority column |
+| Two steps of a flow drawn at once | One step at a time |
+| "About" text described the interface or the plan | About says who can do what, nothing else |
+| Card footer link "Open" beside a status badge "Open" | Card action is "View" |
+
+**(call)** The signatures in 6.2 and the items in 6.3 are the author's
+proposal from the research, for the owner to judge in the mockup. Sizes are at
+a 16px root and are written on the rem scale in code. Fraunces must be added
+to the web app's fonts (`next/font/local`, as admin does), which has a small
+font-loading cost on every signed-in page.
 
 ## 7. Enforcement
 
