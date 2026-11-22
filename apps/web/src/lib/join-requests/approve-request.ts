@@ -277,6 +277,14 @@ export interface JoinRequestResult {
   status: 'approved' | 'denied';
 }
 
+/** An approval also says what was asked for and what was granted, for the audit log. */
+export interface ApproveJoinRequestResult extends JoinRequestResult {
+  /** The type on the request as filed. */
+  requestedResidentType: string;
+  /** The membership created: an apartment owner request is granted as tenant. */
+  grantedResidentType: 'owner' | 'tenant';
+}
+
 /**
  * Approve a pending join request:
  * - inserts a user_roles row (role='resident', isUnitOwner reflects residentType)
@@ -288,7 +296,7 @@ export interface JoinRequestResult {
  */
 export async function approveJoinRequest(
   input: ApproveInput,
-): Promise<JoinRequestResult> {
+): Promise<ApproveJoinRequestResult> {
   const db = createUnscopedClient();
 
   const [req] = await db
@@ -312,7 +320,8 @@ export async function approveJoinRequest(
   const displayTitle = isOwner ? 'Owner' : 'Tenant';
   // The request row records what was granted, so the requester's list and the
   // admin list say Tenant rather than the Owner that was asked for.
-  const convertedToTenant = req.residentType === 'owner' && !isOwner;
+  const requestedResidentType = req.residentType;
+  const convertedToTenant = requestedResidentType === 'owner' && !isOwner;
 
   await db.transaction(async (tx) => {
     // Conditional update: only transition pending → approved. Ensures atomicity
@@ -395,6 +404,8 @@ export async function approveJoinRequest(
     communityId: req.communityId,
     userId: req.userId,
     status: 'approved',
+    requestedResidentType,
+    grantedResidentType: isOwner ? 'owner' : 'tenant',
   };
 }
 

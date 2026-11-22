@@ -22,8 +22,9 @@
  *     → approveJoinRequest({ requestId, reviewerUserId, notes })
  *     → logAuditEvent({ action: 'join_request.approved', ... })
  *
- * Audit log preserved post-service-call (drain #73 precedent). Metadata
- * `{ notes: body?.notes ?? null }` keeps persisted shape byte-identical.
+ * Audit log written post-service-call (drain #73 precedent). Metadata is
+ * `{ notes, requestedResidentType, grantedResidentType }`: the pair differs
+ * when an apartment owner request is approved as a tenant.
  */
 import { runRoute } from '@propertypro/api-contract';
 import { withErrorHandler } from '@/lib/api/error-handler';
@@ -54,19 +55,21 @@ export const POST = withErrorHandler(
       throw new ForbiddenError('Request belongs to a different community');
     }
 
-    const result = await approveJoinRequest({
+    const { requestedResidentType, grantedResidentType, ...result } = await approveJoinRequest({
       requestId: params.id,
       reviewerUserId: userId,
       notes: body?.notes,
     });
 
+    // The requested/granted pair records an apartment owner request approved
+    // as a tenant; the response body is unchanged.
     await logAuditEvent({
       userId,
       communityId,
       action: 'join_request.approved',
       resourceType: 'community_join_request',
       resourceId: String(params.id),
-      metadata: { notes: body?.notes ?? null },
+      metadata: { notes: body?.notes ?? null, requestedResidentType, grantedResidentType },
     });
 
     return result;

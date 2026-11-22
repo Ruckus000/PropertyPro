@@ -221,6 +221,8 @@ describe('approveJoinRequest', () => {
       communityId: 42,
       userId: 'user-111',
       status: 'approved',
+      requestedResidentType: 'owner',
+      grantedResidentType: 'owner',
     });
     expect(dbState.joinRequests[0]!.status).toBe('approved');
     expect(dbState.joinRequests[0]!.reviewedBy).toBe('admin-222');
@@ -309,9 +311,11 @@ describe('approveJoinRequest', () => {
     const req = seedRequest({ residentType: 'owner' });
     mockSelectReturnsRequest(req, 'apartment');
 
-    await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
+    const result = await approveJoinRequest({ requestId: 1, reviewerUserId: 'admin-222' });
 
     expect(dbState.joinRequests[0]!.residentType).toBe('tenant');
+    // The caller's audit entry records both sides of the conversion.
+    expect(result).toMatchObject({ requestedResidentType: 'owner', grantedResidentType: 'tenant' });
   });
 
   it('control: an owner request to a condo still approves as an owner', async () => {

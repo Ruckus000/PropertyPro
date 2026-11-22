@@ -95,6 +95,7 @@ vi.mock('@/lib/services/notification-digest-queue', () => ({
 import { canAccessCategory, type CommunityRole, type CommunityType } from '@propertypro/shared';
 import {
   createNotificationsForEvent,
+  isStatutoryNotice,
   sendNotification,
   resolveRecipients,
 } from '../../src/lib/services/notification-service';
@@ -575,6 +576,8 @@ describe('notification-service', () => {
         url: string;
         actionLabel: string;
         digestSourceType: string;
+        /** A statutory notice: never folded into a digest (isStatutoryNotice). */
+        statutory: boolean;
       }> = [
         {
           name: 'package',
@@ -583,6 +586,7 @@ describe('notification-service', () => {
           url: `https://app.example.test/dashboard/packages?communityId=${COMMUNITY_ID}`,
           actionLabel: 'View my packages',
           digestSourceType: 'package',
+          statutory: false,
         },
         {
           name: 'visitor',
@@ -591,6 +595,7 @@ describe('notification-service', () => {
           url: `https://app.example.test/dashboard/visitors?communityId=${COMMUNITY_ID}`,
           actionLabel: 'View my visitors',
           digestSourceType: 'visitor',
+          statutory: false,
         },
         {
           name: 'violation',
@@ -599,6 +604,7 @@ describe('notification-service', () => {
           url: `https://app.example.test/violations/77?communityId=${COMMUNITY_ID}`,
           actionLabel: 'View violation',
           digestSourceType: 'violation',
+          statutory: true,
         },
         {
           name: 'ARC decision',
@@ -607,6 +613,7 @@ describe('notification-service', () => {
           url: `https://app.example.test/arc-requests?communityId=${COMMUNITY_ID}`,
           actionLabel: 'View my ARC requests',
           digestSourceType: 'arc',
+          statutory: true,
         },
       ];
 
@@ -626,6 +633,18 @@ describe('notification-service', () => {
           expect(emailArgs.react.props.actionUrl).toBe(c.url);
           expect(emailArgs.react.props.actionLabel).toBe(c.actionLabel);
         });
+
+        if (c.statutory) {
+          it(`sends a ${c.name} notice on its own, never in a digest`, async () => {
+            setupMock(residentRoles, residentUsers, digestPrefs);
+
+            await sendNotification(COMMUNITY_ID, c.event, { type: 'specific_user', userId: 'u-tenant' }, 'actor-1');
+
+            expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+            expect(sendEmailMock).toHaveBeenCalledTimes(1);
+          });
+          continue;
+        }
 
         it(`queues a ${c.name} digest entry linking to the same page`, async () => {
           vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
@@ -955,6 +974,136 @@ describe('notification-service', () => {
   // -------------------------------------------------------------------------
   // createNotificationsForEvent — in-app channel
   // -------------------------------------------------------------------------
+
+  // -------------------------------------------------------------------------
+  // Statutory notices and one-click unsubscribe
+  // -------------------------------------------------------------------------
+
+  describe('statutory notices', () => {
+    const ownerOnly = [{ userId: 'u-owner', role: 'resident', isAdmin: false, isUnitOwner: true, displayTitle: 'Owner' }];
+    const ownerUser = [{ id: 'u-owner', email: 'owner@example.com', fullName: 'Owner', deletedAt: null }];
+    const prefs = (overrides: Record<string, unknown>) => [
+      { userId: 'u-owner', emailFrequency: 'immediate', emailAnnouncements: true, emailMeetings: true, inAppEnabled: true, ...overrides },
+    ];
+    const boardMeeting: MeetingNoticeEvent = {
+      type: 'meeting_notice',
+      meetingTitle: 'Board Meeting',
+      meetingDate: 'March 15, 2026',
+      meetingTime: '7:00 PM EST',
+      location: 'Clubhouse',
+      meetingType: 'board',
+      sourceType: 'meeting',
+      sourceId: 'meeting-1',
+    };
+    const maintenance: MaintenanceUpdateEvent = {
+      type: 'maintenance_update',
+      requestTitle: 'Leaky faucet',
+      previousStatus: 'open',
+      newStatus: 'in_progress',
+      requestId: '12',
+    };
+
+    beforeEach(() => {
+      vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://app.example.test');
+      vi.stubEnv('COMMUNITY_EMAIL_UNSUBSCRIBE_SECRET', 'statutory-test-secret');
+    });
+
+    it('classifies meeting, violation and ARC notices as statutory, and nothing else', () => {
+      const resident = (topic: ResidentNoticeEvent['topic']): ResidentNoticeEvent => ({
+        type: 'resident_notice', topic, title: 't', description: 'd', severity: 'info', recordId: '1',
+      });
+      for (const meetingType of ['board', 'owner', 'special'] as const) {
+        expect(isStatutoryNotice({ ...boardMeeting, meetingType })).toBe(true);
+      }
+      expect(isStatutoryNotice(resident('violation'))).toBe(true);
+      expect(isStatutoryNotice(resident('arc'))).toBe(true);
+      expect(isStatutoryNotice(resident('package'))).toBe(false);
+      expect(isStatutoryNotice(resident('visitor'))).toBe(false);
+      expect(isStatutoryNotice(maintenance)).toBe(false);
+      expect(isStatutoryNotice({ type: 'document_posted', documentTitle: 'x', uploadedByName: 'y', documentId: '1' })).toBe(false);
+      expect(isStatutoryNotice({ type: 'compliance_alert', alertTitle: 'x', alertDescription: 'y', severity: 'info' })).toBe(false);
+    });
+
+    it('a meeting notice email carries no List-Unsubscribe-Post and a header that acts on nothing', async () => {
+      setupMock(ownerOnly, ownerUser, []);
+
+      await sendNotification(COMMUNITY_ID, boardMeeting, 'all', 'actor-1');
+
+      const payload = sendEmailMock.mock.calls[0]![0] as {
+        oneClickUnsubscribe?: boolean;
+        unsubscribeUrl: string;
+        react: { props: { branding: { unsubscribeUrl: string } } };
+      };
+      expect(payload.oneClickUnsubscribe).toBe(false);
+      expect(payload.unsubscribeUrl).toBe(`https://app.example.test/settings?communityId=${COMMUNITY_ID}#notifications`);
+      // The visible footer link is still the no-login page a person can use (D3).
+      expect(payload.react.props.branding.unsubscribeUrl).toContain('/api/v1/notifications/unsubscribe?token=');
+    });
+
+    it('a violation notice email carries no List-Unsubscribe-Post', async () => {
+      setupMock(ownerOnly, ownerUser, []);
+
+      await sendNotification(
+        COMMUNITY_ID,
+        { type: 'resident_notice', topic: 'violation', title: 'Violation Notice Issued', description: 'x', severity: 'warning', recordId: '77', sourceId: '77' },
+        { type: 'specific_user', userId: 'u-owner' },
+        'actor-1',
+      );
+
+      expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({ oneClickUnsubscribe: false }));
+    });
+
+    it('sends a meeting notice on its own to a digest reader, so a weekly digest cannot make it late', async () => {
+      setupMock(ownerOnly, ownerUser, prefs({ emailFrequency: 'weekly_digest' }));
+
+      await sendNotification(COMMUNITY_ID, boardMeeting, 'all', 'actor-1');
+
+      expect(enqueueDigestItemsMock).not.toHaveBeenCalled();
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    });
+
+    // A maintenance email's unsubscribe would set email_frequency to 'never',
+    // which would also stop meeting notices, so it offers a provider nothing
+    // to one-click: meeting notices keep flowing whatever the mail app does.
+    it('a maintenance email offers no one-click either, so a provider button cannot stop meeting notices', async () => {
+      setupMock(ownerOnly, ownerUser, []);
+
+      await sendNotification(COMMUNITY_ID, maintenance, 'all', 'actor-1');
+
+      expect(sendEmailMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oneClickUnsubscribe: false,
+          unsubscribeUrl: `https://app.example.test/settings?communityId=${COMMUNITY_ID}#notifications`,
+        }),
+      );
+    });
+
+    // The announcements one-click writes email_announcements = false and
+    // nothing else (pinned in community-email-unsubscribe.test.ts).
+    it('meeting notices still send after a one-click unsubscribe from an announcement email', async () => {
+      setupMock(ownerOnly, ownerUser, prefs({ emailAnnouncements: false }));
+
+      await sendNotification(COMMUNITY_ID, boardMeeting, 'all', 'actor-1');
+
+      expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    });
+
+    // D3: the confirmation page a PERSON opens writes email_frequency 'never',
+    // and that does stop statutory notices.
+    it('the human opt-out (frequency never) stops meeting and violation notices', async () => {
+      setupMock(ownerOnly, ownerUser, prefs({ emailFrequency: 'never' }));
+
+      await sendNotification(COMMUNITY_ID, boardMeeting, 'all', 'actor-1');
+      await sendNotification(
+        COMMUNITY_ID,
+        { type: 'resident_notice', topic: 'violation', title: 'Violation Notice Issued', description: 'x', severity: 'warning', recordId: '77' },
+        { type: 'specific_user', userId: 'u-owner' },
+        'actor-1',
+      );
+
+      expect(sendEmailMock).not.toHaveBeenCalled();
+    });
+  });
 
   describe('createNotificationsForEvent', () => {
     const inAppEvent = {

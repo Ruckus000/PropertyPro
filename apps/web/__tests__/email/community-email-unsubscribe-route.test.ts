@@ -16,7 +16,10 @@ const { verifyMock, applyMock } = vi.hoisted(() => ({
   applyMock: vi.fn(),
 }));
 
-vi.mock('@/lib/services/community-email-unsubscribe-token', () => ({
+// The real `topicAllowsOneClick`, so the POST refusal is tested against the
+// rule the senders use, not a copy of it.
+vi.mock('@/lib/services/community-email-unsubscribe-token', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/services/community-email-unsubscribe-token')>()),
   verifyCommunityEmailUnsubscribeToken: verifyMock,
 }));
 vi.mock('@/lib/services/community-email-unsubscribe-service', () => ({
@@ -79,9 +82,32 @@ describe('community email unsubscribe route', () => {
   });
 
   it('POST (one-click) still unsubscribes on a valid token', async () => {
-    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'announcements' });
     const res = await POST(req('POST', 'good'));
     expect(res.status).toBe(200);
+    expect(applyMock).toHaveBeenCalledWith({ communityId: 7, userId: 'u1', topic: 'announcements' });
+  });
+
+  // A provider POST on the notifications topic would set email_frequency to
+  // 'never' and stop meeting, violation and ARC notices with nobody seeing it.
+  // No email advertises one-click for that topic; a POST anyway changes nothing.
+  it('POST refuses the notifications topic and writes nothing', async () => {
+    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+    const res = await POST(req('POST', 'good'));
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Use the unsubscribe link in the email');
+    expect(applyMock).not.toHaveBeenCalled();
+  });
+
+  // Decision D3: a PERSON on the confirmation page may stop everything,
+  // statutory notices included, and the page names them.
+  it('GET (the human path) still applies the notifications opt-out and names the legal notices it stops', async () => {
+    verifyMock.mockReturnValue({ communityId: 7, userId: 'u1', topic: 'notifications' });
+    const res = await GET(req('GET', 'good'));
+    expect(res.status).toBe(200);
     expect(applyMock).toHaveBeenCalledWith({ communityId: 7, userId: 'u1', topic: 'notifications' });
+    const html = await res.text();
+    expect(html).toContain('violation notices');
+    expect(html).toContain('decisions on your ARC requests');
   });
 });

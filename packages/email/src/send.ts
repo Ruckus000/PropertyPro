@@ -104,7 +104,13 @@ function buildHeaders(options: SendEmailOptions): Record<string, string> {
     }
 
     headers['List-Unsubscribe'] = `<${options.unsubscribeUrl}>`;
-    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    if (options.oneClickUnsubscribe === false) {
+      // A statutory notice: no provider one-click. Delete, not merely skip, so
+      // a caller header cannot put the advertisement back.
+      delete headers['List-Unsubscribe-Post'];
+    } else {
+      headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    }
   }
 
   return headers;

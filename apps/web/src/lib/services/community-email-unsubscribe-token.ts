@@ -121,3 +121,56 @@ export function buildCommunityEmailUnsubscribeUrl(params: {
   }
   return `${params.baseUrl}/api/v1/notifications/unsubscribe?token=${encodeURIComponent(token)}`;
 }
+
+/**
+ * Whether an email with this unsubscribe topic may advertise RFC 8058 one-click
+ * (`List-Unsubscribe-Post`).
+ *
+ * `notifications` may not. Its opt-out writes `email_frequency = 'never'`, the
+ * master switch that also stops statutory notices: owner and board meeting
+ * notices, violation notices and ARC decisions. With one-click advertised, a
+ * mailbox provider's own Unsubscribe button POSTs that opt-out and the owner
+ * never sees what it stops. The preference model cannot yet express
+ * "everything except statutory notices", so this topic is offered only through
+ * the visible link, whose page says what it stops (decision D3).
+ *
+ * `announcements` and `calendar` write their own flags, which no statutory
+ * notice reads, so one-click stays on for them.
+ */
+export function topicAllowsOneClick(topic: CommunityEmailTopic): boolean {
+  return topic !== 'notifications';
+}
+
+/**
+ * Unsubscribe links for one recipient of a community email.
+ *
+ * - `linkUrl` — the visible footer link, for a person to click. It opens the
+ *   no-login confirmation page, which applies the opt-out and says what it
+ *   stopped.
+ * - `headerUrl` + `oneClick` — what goes in `List-Unsubscribe` and whether
+ *   `List-Unsubscribe-Post` is sent. Where one-click is off, the header points
+ *   at the preferences page, which changes nothing until the reader chooses:
+ *   RFC 8058 section 1 notes that link checkers and anti-spam software fetch
+ *   List-Unsubscribe URLs, so a header URL that acts on a plain GET could stop
+ *   statutory notices with no person involved.
+ *
+ * `statutory` marks a statutory notice, which never advertises one-click
+ * whatever its topic.
+ */
+export function buildCommunityEmailUnsubscribeLinks(params: {
+  baseUrl: string;
+  communityId: number;
+  userId: string;
+  topic: CommunityEmailTopic;
+  statutory?: boolean;
+}): { linkUrl: string; headerUrl: string; oneClick: boolean } {
+  const linkUrl = buildCommunityEmailUnsubscribeUrl(params);
+  const oneClick = topicAllowsOneClick(params.topic) && params.statutory !== true;
+  return {
+    linkUrl,
+    headerUrl: oneClick
+      ? linkUrl
+      : `${params.baseUrl}/settings?communityId=${params.communityId}#notifications`,
+    oneClick,
+  };
+}

@@ -55,6 +55,17 @@ export interface SendEmailOptions {
   category: EmailCategory;
   /** Required for non-transactional emails. mailto: or https: URI. */
   unsubscribeUrl?: string;
+  /**
+   * Whether a non-transactional email advertises RFC 8058 one-click
+   * unsubscribe (`List-Unsubscribe-Post`). Defaults to true.
+   *
+   * Set false for a statutory notice (an owner or board meeting notice, a
+   * violation notice): with the header, a mailbox provider's own "Unsubscribe"
+   * button POSTs `unsubscribeUrl` with no person ever seeing what it stops.
+   * `List-Unsubscribe` itself is still sent, so `unsubscribeUrl` should then
+   * be a page that changes nothing until the reader chooses.
+   */
+  oneClickUnsubscribe?: boolean;
   /** From address override. Defaults to configured default. */
   from?: string;
   /** Reply-to address. */

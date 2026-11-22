@@ -34,7 +34,9 @@ vi.mock('@propertypro/db/unsafe', () => ({
 }));
 
 const {
+  buildCommunityEmailUnsubscribeLinks,
   buildCommunityEmailUnsubscribeUrl,
+  topicAllowsOneClick,
   signCommunityEmailUnsubscribeToken,
   verifyCommunityEmailUnsubscribeToken,
 } = await import('@/lib/services/community-email-unsubscribe-token');
@@ -163,6 +165,60 @@ describe('buildCommunityEmailUnsubscribeUrl', () => {
     expect(
       signCommunityEmailUnsubscribeToken({ communityId: 1, userId: 'u', topic: 'calendar' }),
     ).toBeNull();
+  });
+});
+
+// The `notifications` opt-out sets email_frequency to 'never', which also stops
+// meeting, violation and ARC notices. A mailbox provider's one-click button
+// must never be able to do that, so that topic never advertises one-click.
+describe('one-click unsubscribe per topic', () => {
+  it('is never offered for the notifications topic', () => {
+    expect(topicAllowsOneClick('notifications')).toBe(false);
+  });
+
+  it('stays on for announcements and calendar, whose flags no statutory notice reads', () => {
+    expect(topicAllowsOneClick('announcements')).toBe(true);
+    expect(topicAllowsOneClick('calendar')).toBe(true);
+  });
+
+  it('an announcement email puts the acting token URL in the header, with one-click', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'announcements',
+    });
+
+    expect(links.oneClick).toBe(true);
+    expect(links.headerUrl).toBe(links.linkUrl);
+    expect(links.linkUrl).toContain('/api/v1/notifications/unsubscribe?token=');
+  });
+
+  it('a notifications email keeps the token link in the body but puts the preferences page in the header', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'notifications',
+    });
+
+    expect(links.oneClick).toBe(false);
+    expect(links.linkUrl).toContain('/api/v1/notifications/unsubscribe?token=');
+    // Link checkers fetch header URLs (RFC 8058 section 1); this one acts on nothing.
+    expect(links.headerUrl).toBe('https://app.example/settings?communityId=42#notifications');
+  });
+
+  it('a statutory notice never offers one-click, whatever its topic', () => {
+    const links = buildCommunityEmailUnsubscribeLinks({
+      baseUrl: 'https://app.example',
+      communityId: 42,
+      userId: 'user-1',
+      topic: 'announcements',
+      statutory: true,
+    });
+
+    expect(links.oneClick).toBe(false);
+    expect(links.headerUrl).toBe('https://app.example/settings?communityId=42#notifications');
   });
 });
 

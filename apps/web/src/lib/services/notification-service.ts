@@ -55,7 +55,7 @@ import {
 } from './notification-digest-queue';
 import { getBaseUrl } from '@/lib/utils/url';
 import { loadEmailBranding } from './email-branding';
-import { buildCommunityEmailUnsubscribeUrl } from './community-email-unsubscribe-token';
+import { buildCommunityEmailUnsubscribeLinks } from './community-email-unsubscribe-token';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -188,6 +188,37 @@ const EVENT_TO_KIND: Record<NotificationEvent['type'], NotificationKind> = {
   // Mirrored in notification-digest-processor.ts `mapEventTypeToKind`.
   resident_notice: 'maintenance',
 };
+
+/**
+ * A statutory notice: one Florida law requires the association to give, so a
+ * mail client or provider must never be able to stop it on its own.
+ *
+ * - `meeting_notice` — every meeting type. Board meetings need 48 hours'
+ *   notice and owner meetings 14 days (§718.112(2)(c)-(d), §720.303(2)); a
+ *   special meeting is one or the other.
+ * - `resident_notice` / `violation` — the written notice of a violation, and
+ *   with it the opportunity for a hearing, that §718.303(3)(b) and
+ *   §720.305(2)(b) require before a fine or suspension.
+ * - `resident_notice` / `arc` — the decision on an owner's ARC application. A
+ *   denial must give its written reasons and cite the rule or covenant
+ *   (HB 1203, §720.3035); an approval is the same decision record.
+ *
+ * Not statutory: maintenance updates, document-posted notices (the statute
+ * requires POSTING to the website, not an email), package and visitor
+ * notices, and compliance alerts (an internal reminder to the board and
+ * managers that something is overdue, not a notice to owners).
+ *
+ * A statutory notice is sent on its own, never folded into a digest: a weekly
+ * digest could deliver a 48-hour board meeting notice after the meeting, and
+ * the digest email advertises one-click unsubscribe. Its email does not.
+ */
+export function isStatutoryNotice(event: NotificationEvent): boolean {
+  if (event.type === 'meeting_notice') return true;
+  if (event.type === 'resident_notice') {
+    return event.topic === 'violation' || event.topic === 'arc';
+  }
+  return false;
+}
 
 export interface InAppNotificationEvent {
   category: NotificationCategory;
@@ -675,7 +706,8 @@ async function dispatchNotification(
   actorUserId?: string,
 ): Promise<NotificationDispatchResult> {
   const notificationKind = EVENT_TO_KIND[event.type];
-  const digestPayload = buildDigestPayload(event, communityId);
+  const statutory = isStatutoryNotice(event);
+  const digestPayload = statutory ? null : buildDigestPayload(event, communityId);
   const deliveries = await resolveRecipientDeliveries(
     communityId,
     recipientFilter,
@@ -742,14 +774,16 @@ async function dispatchNotification(
     const outgoing: Array<{ userId: string; payload: SendEmailOptions }> = [];
     for (const recipient of immediateRecipients) {
       try {
-        // Per-recipient and reachable with no session — the previous
-        // `/settings?communityId=` URL was login-walled, which defeats
-        // one-click List-Unsubscribe (F-11).
-        const unsubscribeUrl = buildCommunityEmailUnsubscribeUrl({
+        // The footer link is per-recipient and reachable with no session (the
+        // old `/settings?communityId=` URL was login-walled, F-11). The header
+        // never offers one-click: this topic's opt-out also stops statutory
+        // notices, and a statutory notice never offers it at all.
+        const links = buildCommunityEmailUnsubscribeLinks({
           baseUrl,
           communityId,
           userId: recipient.userId,
           topic: 'notifications',
+          statutory,
         });
 
         const { subject, react } = renderEmailForEvent(
@@ -757,7 +791,7 @@ async function dispatchNotification(
           recipient,
           {
             ...branding,
-            unsubscribeUrl,
+            unsubscribeUrl: links.linkUrl,
             unsubscribeLabel: 'Unsubscribe from these emails',
           },
           communityId,
@@ -765,7 +799,14 @@ async function dispatchNotification(
 
         outgoing.push({
           userId: recipient.userId,
-          payload: { to: recipient.email, subject, category: 'non-transactional', unsubscribeUrl, react },
+          payload: {
+            to: recipient.email,
+            subject,
+            category: 'non-transactional',
+            unsubscribeUrl: links.headerUrl,
+            oneClickUnsubscribe: links.oneClick,
+            react,
+          },
         });
       } catch (error) {
         logFailure(recipient.userId, error);

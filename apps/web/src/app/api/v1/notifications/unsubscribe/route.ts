@@ -7,8 +7,13 @@
  * `/settings?communityId=…` URL sat behind a login wall, which defeats Gmail's
  * one-click List-Unsubscribe and CAN-SPAM's no-account-required expectation.
  *
- * - POST is the RFC 8058 one-click target named by List-Unsubscribe-Post.
- * - GET backs the visible "unsubscribe" link a human clicks, and confirms.
+ * - POST is the RFC 8058 one-click target named by List-Unsubscribe-Post. It
+ *   refuses the `notifications` topic, whose opt-out also stops statutory
+ *   notices (meeting, violation and ARC notices): no email advertises one-click
+ *   for that topic (`topicAllowsOneClick`), so a POST for it is a mail client
+ *   acting with no person reading what it would stop.
+ * - GET backs the visible "unsubscribe" link a human clicks, applies the
+ *   opt-out and says what it stopped (decision D3).
  *
  * Mirrors `insurance-alerts/unsubscribe` exactly, including the deliberate
  * plain-HTML response — this page is rendered by a mail client's browser with
@@ -18,6 +23,7 @@
  */
 import type { NextRequest } from 'next/server';
 import {
+  topicAllowsOneClick,
   verifyCommunityEmailUnsubscribeToken,
   type CommunityEmailTopic,
 } from '@/lib/services/community-email-unsubscribe-token';
@@ -45,17 +51,21 @@ function page(message: string, status: number, preferencesHref?: string): Respon
  * The confirmation shown after a human-clicked unsubscribe.
  *
  * The `notifications` topic writes `emailFrequency: 'never'`, the master switch
- * that the notification pipeline, the digest AND announcement delivery all
- * read — so it stops far more than the one email the link came in. The copy
- * says so plainly (meeting notices and announcements included) and names what
- * still arrives: critical mail (emergency alerts, sign-in and invitation
- * emails) bypasses the frequency, and event reminders, the community digest
- * and insurance alerts have their own preference and unsubscribe link.
+ * that the notification pipeline, the digest, shared documents AND
+ * announcement delivery all read — so it stops far more than the one email the
+ * link came in. That includes the statutory notices the pipeline carries
+ * (meeting notices, violation notices, ARC decisions); decision D3 lets a
+ * person choose that here, and the copy names them so the choice is informed.
+ * It also names what still arrives: critical mail (emergency alerts, sign-in
+ * and invitation emails) bypasses the frequency, and event reminders, the
+ * community digest and insurance alerts have their own preference and
+ * unsubscribe link.
  */
 function confirmationMessage(topic: CommunityEmailTopic): string {
   if (topic === 'notifications') {
     return (
-      "You're unsubscribed from all email from this community, including meeting notices and announcements. " +
+      "You're unsubscribed from all email from this community, including meeting notices, violation notices, " +
+      'decisions on your ARC requests and announcements. ' +
       'Emergency alerts and account emails, such as sign-in links, still reach you. ' +
       'Event reminders, the community digest and insurance alerts each have their own unsubscribe link. ' +
       'To get some email back, choose what you want in your notification preferences.'
@@ -71,6 +81,13 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const payload = verifyCommunityEmailUnsubscribeToken(token);
   if (!payload) return new Response('Invalid token', { status: 400 });
+
+  if (!topicAllowsOneClick(payload.topic)) {
+    return new Response(
+      'One-click unsubscribe is not offered for this email. Use the unsubscribe link in the email.',
+      { status: 400 },
+    );
+  }
 
   await applyCommunityEmailUnsubscribe(payload);
   return new Response('Unsubscribed', { status: 200 });

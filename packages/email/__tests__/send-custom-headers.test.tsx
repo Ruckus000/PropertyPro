@@ -54,6 +54,25 @@ describe('sendEmail custom headers', () => {
     expect(testInbox[0]?.headers).toEqual({});
   });
 
+  // A statutory notice must not advertise RFC 8058 one-click: a mailbox
+  // provider's Unsubscribe button would POST it with nobody seeing what stops.
+  it('omits List-Unsubscribe-Post, even a caller-supplied one, when one-click is off', async () => {
+    await sendEmail({
+      to: 'owner@example.com',
+      subject: 'Meeting Notice',
+      category: 'non-transactional',
+      unsubscribeUrl: 'https://example.com/settings?communityId=1#notifications',
+      oneClickUnsubscribe: false,
+      headers: { 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+      react: reply,
+    });
+
+    expect(testInbox[0]?.headers['List-Unsubscribe']).toBe(
+      '<https://example.com/settings?communityId=1#notifications>',
+    );
+    expect(testInbox[0]?.headers).not.toHaveProperty('List-Unsubscribe-Post');
+  });
+
   it('does NOT let a caller override List-Unsubscribe on a bulk send', async () => {
     await sendEmail({
       to: 'resident@example.com',

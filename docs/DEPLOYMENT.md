@@ -210,12 +210,16 @@ surfaced:
   unsubscribe links. **These are the quietest failure in this section.** The
   signers return `null` instead of throwing (deliberately: an unset variable
   must not take down every association's mail), so the send still succeeds and
-  the email still carries a `List-Unsubscribe-Post: List-Unsubscribe=One-Click` header — while
-  the URL it points at falls back to `/settings?communityId=…`, which is
+  announcement, event-reminder, snowbird-digest and insurance-alert emails
+  still carry a `List-Unsubscribe-Post: List-Unsubscribe=One-Click` header —
+  while the URL it points at falls back to `/settings?communityId=…`, which is
   login-walled. The mail therefore *advertises* RFC 8058 one-click unsubscribe
   and cannot honour it. Gmail and Yahoo's bulk-sender rules treat that as a
   failed unsubscribe, so it is a deliverability problem and not only a
-  compliance one.
+  compliance one. (Notification-pipeline emails — meeting, violation and ARC
+  notices, maintenance updates, documents, the notification digest — never
+  advertise one-click: their opt-out sets `email_frequency` to `never`, which
+  would also stop statutory notices. See `topicAllowsOneClick`.)
 
 `SUPPORT_SESSION_JWT_SECRET` belongs to this set too; it has its own section
 above (§4.1) because it must carry the identical value on **both** Vercel
