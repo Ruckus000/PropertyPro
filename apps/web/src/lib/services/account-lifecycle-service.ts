@@ -1134,6 +1134,29 @@ export async function findPurgeReadyDeletionRequests(
 }
 
 /**
+ * Requests a recovery claimed and did not finish: `recovered` with a null
+ * `recovered_at` (see packages/db `deletion-request-ops.ts`). The purge never
+ * touches them, so an account stopped half way through recovery would keep its
+ * personal data past the purge date with nobody told. A recovery takes
+ * seconds, so one still unfinished when the nightly cron runs almost always
+ * crashed. Ids only, earliest first.
+ */
+export async function findUnfinishedRecoveryRequestIds(): Promise<number[]> {
+  const db = createUnscopedClient();
+  const rows = await db
+    .select({ id: accountDeletionRequests.id })
+    .from(accountDeletionRequests)
+    .where(
+      and(
+        eq(accountDeletionRequests.status, 'recovered'),
+        isNull(accountDeletionRequests.recoveredAt),
+      ),
+    )
+    .orderBy(asc(accountDeletionRequests.id));
+  return rows.map((r) => r.id);
+}
+
+/**
  * List every active access plan (not revoked, not converted). Cron uses
  * this as the input to per-plan expiry-notification dispatch.
  */

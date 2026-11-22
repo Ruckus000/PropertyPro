@@ -29,7 +29,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { accountDeletionRequests, communities, users } from '@propertypro/db';
-import { eq, inArray } from '@propertypro/db/filters';
+import { eq, inArray, sql } from '@propertypro/db/filters';
 // AUTHZ: Integration test for platform-level tables (users, communities, account_deletion_requests) and the deletion-request ops.
 import {
   claimDeletionRecoveryOp,
@@ -41,6 +41,7 @@ import {
 import {
   executeUserSoftDelete,
   findPurgeReadyDeletionRequests,
+  findUnfinishedRecoveryRequestIds,
   interveneCommunityDeletion,
   purgeCommunityData,
   purgeUserPII,
@@ -77,6 +78,7 @@ const LABELS = [
   'communityRequester',
   'softDeleteDupes',
   'authBare404',
+  'lockOrder',
 ] as const;
 type Label = (typeof LABELS)[number];
 const USER_IDS = Object.fromEntries(LABELS.map((l) => [l, randomUUID()])) as Record<Label, string>;
@@ -137,6 +139,14 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       .from(communities)
       .where(eq(communities.id, communityIds[label]));
     return row!.deletedAt;
+  }
+
+  async function waitFor(condition: () => Promise<boolean>, timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await condition())) {
+      if (Date.now() > deadline) throw new Error('waitFor: condition never held');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
   }
 
   const markUserDeleted = (label: Label, at: Date | null) =>
@@ -212,6 +222,9 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
       // ... and the route died here: no unban, no finish.
 
+      // The nightly cron reports it, so it cannot sit past its purge date unseen.
+      expect(await findUnfinishedRecoveryRequestIds()).toContain(id);
+
       // The purge leaves it alone, though the account is deleted and due.
       expect((await findPurgeReadyDeletionRequests(new Date())).map((r) => r.id)).not.toContain(id);
       await expect(purgeUserPII(id)).resolves.toBeNull();
@@ -223,6 +236,7 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
       expect((await finishUserRecoveryOp(USER_IDS.crash)).outcome).toBe('recovered');
       expect((await userOf('crash')).deletedAt).toBeNull();
       expect((await rowOf(id)).recoveredAt).toBeInstanceOf(Date);
+      expect(await findUnfinishedRecoveryRequestIds()).not.toContain(id);
     });
 
     it('gives the claim back when lifting the ban fails, so the account is purgeable on schedule again', async () => {
@@ -275,6 +289,35 @@ describeDb('deletion recovery and community lifecycle (integration)', () => {
 
       expect(claim.outcome).toBe('too_recent');
       expect((await rowOf(id)).status).toBe('soft_deleted');
+    });
+
+    // Every deletion transaction locks request rows before the users row. A
+    // resumed claim (an operator's second click) holds the request row and then
+    // wants the users row; a finish that took the users row first would
+    // deadlock with it, and Postgres would abort one of the two.
+    it('finish takes the request rows before the users row, so it waits on a resumed claim instead of deadlocking', async () => {
+      await markUserDeleted('lockOrder', longAgo());
+      const id = await userRequest('lockOrder', 'soft_deleted', past(), past());
+      expect((await claimDeletionRecoveryOp(id, { adminUserId: adminUserId() })).outcome).toBe('claimed');
+
+      let finish: Promise<unknown> = Promise.resolve();
+      await db.transaction(async (tx) => {
+        // What the resumed claim holds first ...
+        await tx.select().from(accountDeletionRequests).where(eq(accountDeletionRequests.id, id)).for('update');
+        finish = finishUserRecoveryOp(USER_IDS.lockOrder);
+        // ... the finish now waits on it ...
+        await waitFor(async () => {
+          const rows = await db.execute(
+            sql`select 1 from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query ilike '%account_deletion_requests%'`,
+          );
+          return (rows as unknown[]).length > 0;
+        });
+        // ... and the claim's next lock is the users row.
+        await tx.select().from(users).where(eq(users.id, USER_IDS.lockOrder)).for('update');
+      });
+
+      await expect(finish).resolves.toMatchObject({ outcome: 'recovered', finishedRequestIds: [id] });
+      expect((await userOf('lockOrder')).deletedAt).toBeNull();
     });
 
     it('finish restores nothing on a scrubbed row', async () => {

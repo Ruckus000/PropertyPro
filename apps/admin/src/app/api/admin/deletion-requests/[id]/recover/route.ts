@@ -28,11 +28,13 @@
  * 2. For a user: lift the sign-in ban.
  * 3. For a user: restore the row and stamp `recovered_at`, in one transaction.
  *
- * A failure in 2 gives the claim back (`soft_deleted` again, so the account is
- * deleted and purgeable exactly as before). A crash anywhere, or a failure in 3,
- * leaves the requests `recovered` with a null `recovered_at`: the account stays
- * deleted, the purge never touches it, the Dashboard shows the recovery as
- * unfinished, and recovering the same request again resumes it.
+ * A failure in 2 re-applies the ban and then gives the claim back
+ * (`soft_deleted` again, so the account is deleted, banned and purgeable
+ * exactly as before). A crash anywhere, a failure in 3, or a failure to
+ * re-apply the ban leaves the requests `recovered` with a null `recovered_at`:
+ * the account stays deleted, the purge never touches it, the Dashboard shows
+ * the recovery as unfinished, the lifecycle cron reports it every night, and
+ * recovering the same request again resumes it.
  */
 import { createElement } from 'react';
 import { NextRequest, NextResponse } from 'next/server';
@@ -52,6 +54,13 @@ import { logAdminAction } from '@/lib/audit/log-admin-action';
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
+
+/**
+ * The lifecycle cron's soft-delete ban (`PERMANENT_BAN` in apps/web
+ * account-lifecycle-service.ts): ~100 years. Re-applied before a claim is
+ * given back, so a released account is never purgeable while it can sign in.
+ */
+const SOFT_DELETE_BAN = '876600h';
 
 /** The web app's sign-in page, or undefined when WEB_APP_ORIGIN is unusable. */
 function resolveSignInUrl(): string | undefined {
@@ -160,7 +169,12 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
           : 'This account is not deleted, so there is nothing to recover. The request is left over from an earlier deletion.',
       );
     case 'target_missing':
-      return conflict('TARGET_MISSING', 'The community this request names no longer exists, so it cannot be recovered.');
+      return conflict(
+        'TARGET_MISSING',
+        claim.request.requestType === 'community'
+          ? 'The community this request names no longer exists, so it cannot be recovered.'
+          : 'The account this request names no longer exists, so it cannot be recovered.',
+      );
     case 'too_recent':
       return conflict(
         'RECENTLY_DELETED',
@@ -219,16 +233,35 @@ export const POST = withAdminErrorHandler(async (_request: NextRequest, { params
     unbanError = err;
   }
   if (unbanError) {
-    // Give the claim back: the account is still deleted and banned, so it is
-    // exactly as before (and purgeable on schedule). If that fails too, the
-    // requests read as an unfinished recovery, which a retry resumes.
-    let released = false;
+    // Give the claim back, so the account reads deleted and purgeable on
+    // schedule exactly as before. But only with the ban known to be ON: a
+    // failed unban can still have landed (a timeout after GoTrue applied it),
+    // and on a resumed recovery an earlier attempt may have lifted it. Released
+    // without its ban, the account would be purgeable while its owner can
+    // still sign in. If the ban cannot be confirmed, the claim stays: an
+    // unfinished recovery, never purged, shown on the Dashboard, resumable.
+    let rebanned = false;
     try {
-      released = (await releaseUserRecoveryOp(userId, claimedRequestIds)) > 0;
+      const { error } = await createAdminTypedClient().auth.admin.updateUserById(userId, {
+        ban_duration: SOFT_DELETE_BAN,
+        user_metadata: { soft_deleted: true },
+      });
+      rebanned = !error;
     } catch {
-      released = false;
+      rebanned = false;
     }
-    await auditFailure(null, failureMetadata('unban_user', 'USER_UNBAN_FAILED', { claim_released: released }));
+    let released = false;
+    if (rebanned) {
+      try {
+        released = (await releaseUserRecoveryOp(userId, claimedRequestIds)) > 0;
+      } catch {
+        released = false;
+      }
+    }
+    await auditFailure(
+      null,
+      failureMetadata('unban_user', 'USER_UNBAN_FAILED', { ban_reapplied: rebanned, claim_released: released }),
+    );
     return NextResponse.json(
       {
         error: {

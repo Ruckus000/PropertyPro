@@ -287,6 +287,22 @@ export async function finishUserRecoveryOp(
 ): Promise<{ outcome: 'recovered'; finishedRequestIds: number[] } | { outcome: 'purged' }> {
   const now = params.now ?? new Date();
   return db.transaction(async (tx) => {
+    // Request rows first, then `users`: the lock order every other deletion
+    // transaction takes (see the file header). Restoring first would hold the
+    // users row while waiting on a request row a concurrent resumed claim holds.
+    const unfinished = and(
+      eq(accountDeletionRequests.requestType, 'user'),
+      eq(accountDeletionRequests.userId, userId),
+      eq(accountDeletionRequests.status, 'recovered'),
+      isNull(accountDeletionRequests.recoveredAt),
+    );
+    await tx
+      .select({ id: accountDeletionRequests.id })
+      .from(accountDeletionRequests)
+      .where(unfinished)
+      .orderBy(accountDeletionRequests.id)
+      .for('update');
+
     const restored = await tx
       .update(users)
       .set({ deletedAt: null })
@@ -297,14 +313,7 @@ export async function finishUserRecoveryOp(
     const finished = await tx
       .update(accountDeletionRequests)
       .set({ recoveredAt: now })
-      .where(
-        and(
-          eq(accountDeletionRequests.requestType, 'user'),
-          eq(accountDeletionRequests.userId, userId),
-          eq(accountDeletionRequests.status, 'recovered'),
-          isNull(accountDeletionRequests.recoveredAt),
-        ),
-      )
+      .where(unfinished)
       .returning({ id: accountDeletionRequests.id });
     return {
       outcome: 'recovered' as const,
@@ -318,6 +327,11 @@ export async function finishUserRecoveryOp(
  * account reads deleted and purgeable again: `recovered` (unfinished) →
  * `soft_deleted` for exactly the ids claimed. Requests the claim cancelled stay
  * cancelled. Returns how many it gave back.
+ *
+ * Call it only once the sign-in ban is known to be ON. A failed unban can
+ * still have landed, and an earlier attempt of a resumed recovery may have
+ * lifted it, so the caller re-applies the ban first; releasing an unbanned
+ * account would leave it purgeable while its owner can still sign in.
  */
 export async function releaseUserRecoveryOp(
   userId: string,

@@ -61,6 +61,7 @@ vi.mock('@/lib/services/account-lifecycle-service', () => ({
   executeUserSoftDelete: vi.fn(async () => []),
   findCoolingExpiredDeletionRequests: vi.fn(async () => []),
   findPurgeReadyDeletionRequests: findPurgeReadyDeletionRequestsMock,
+  findUnfinishedRecoveryRequestIds: vi.fn(async () => []),
   getCommunityNameForLifecycleEmail: vi.fn(async () => 'Test Community'),
   listActiveAccessPlansForLifecycleCron: vi.fn(async () => []),
   lookupLifecycleAdminRecipients: vi.fn(async () => []),

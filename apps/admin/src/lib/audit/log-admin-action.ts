@@ -31,7 +31,9 @@
  * grant is worse than a failed one — if we cannot write the audit entry, the
  * caller should not report success. Callers that genuinely prefer availability
  * over the record pass `bestEffort: true`, which downgrades to a Sentry
- * capture; today that is only the file upload.
+ * capture naming the actor and the target by id. Today that is the file upload
+ * and a deletion-request recovery that has already committed (a 500 there
+ * would read as "not recovered").
  *
  * Call this AFTER the mutation succeeds, so a failed mutation is never recorded
  * as done. The one exception is the demo hard-delete, which destroys the
@@ -230,9 +232,17 @@ export async function logAdminAction(params: LogAdminActionParams): Promise<void
   if (!failure) return;
 
   if (params.bestEffort) {
+    // This event is then the only record of who did what, so it carries the
+    // actor and the target. Ids only: no email, no values.
     Sentry.captureException(new AdminAuditLogError(params.action, failure), {
       level: 'warning',
       tags: { audit_action: params.action },
+      extra: {
+        admin_user_id: params.admin.id,
+        resource_type: params.resourceType,
+        resource_id: normalizeResourceId(params.resourceId),
+        community_id: params.communityId ?? null,
+      },
     });
     return;
   }

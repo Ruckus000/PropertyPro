@@ -33,6 +33,7 @@ import {
   executeUserSoftDelete,
   findCoolingExpiredDeletionRequests,
   findPurgeReadyDeletionRequests,
+  findUnfinishedRecoveryRequestIds,
   getCommunityNameForLifecycleEmail,
   listActiveAccessPlansForLifecycleCron,
   lookupLifecycleAdminRecipients,
@@ -68,6 +69,9 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     // `skipped`: candidates whose purge claim matched nothing (recovered after
     // the scan, target no longer deleted, or finished by an overlapping run).
     purge: { dryRun: purgeDryRun, candidates: 0, cap: PURGE_SAFETY_CAP, skipped: 0 },
+    // Recoveries that claimed their requests and never finished. The purge
+    // skips them forever, so each one is reported in `errors` until resumed.
+    unfinishedRecoveries: 0,
     notifications: { sent14d: 0, sent7d: 0, sentExpired: 0 },
     // "Account deleted" emails to soft-deleted users. `notSent` counts both
     // failures and rows with no deliverable address; failures are logged by
@@ -172,6 +176,21 @@ const handler = withErrorHandler(async (req: NextRequest) => {
     } catch (err) {
       summary.errors.push(`purge ${req.requestType} ${req.id}: ${String(err)}`);
     }
+  }
+
+  // Unfinished recoveries: deleted accounts the purge will never reach, so
+  // their personal data would outlive the purge date silently. Reported every
+  // night until an operator resumes them from the Deletion Requests Dashboard.
+  try {
+    const unfinished = await findUnfinishedRecoveryRequestIds();
+    summary.unfinishedRecoveries = unfinished.length;
+    if (unfinished.length > 0) {
+      summary.errors.push(
+        `unfinished recovery: deletion request(s) ${unfinished.join(', ')} were claimed by a recovery that did not finish; resume them from the Deletion Requests Dashboard`,
+      );
+    }
+  } catch (err) {
+    summary.errors.push(`check unfinished recoveries: ${String(err)}`);
   }
 
   // -------------------------------------------------------------------------

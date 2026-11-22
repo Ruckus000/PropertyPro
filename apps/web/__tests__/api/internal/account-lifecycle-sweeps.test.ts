@@ -22,6 +22,7 @@ const {
   findCoolingExpiredDeletionRequestsMock,
   executeUserSoftDeleteMock,
   findPurgeReadyDeletionRequestsMock,
+  findUnfinishedRecoveryRequestIdsMock,
   purgeUserPIIMock,
   sendEmailMock,
 } = vi.hoisted(() => ({
@@ -31,6 +32,7 @@ const {
   findCoolingExpiredDeletionRequestsMock: vi.fn(),
   executeUserSoftDeleteMock: vi.fn(),
   findPurgeReadyDeletionRequestsMock: vi.fn(),
+  findUnfinishedRecoveryRequestIdsMock: vi.fn(),
   purgeUserPIIMock: vi.fn(),
   sendEmailMock: vi.fn(),
 }));
@@ -54,6 +56,7 @@ vi.mock('@/lib/services/account-lifecycle-service', () => ({
   executeUserSoftDelete: executeUserSoftDeleteMock,
   findCoolingExpiredDeletionRequests: findCoolingExpiredDeletionRequestsMock,
   findPurgeReadyDeletionRequests: findPurgeReadyDeletionRequestsMock,
+  findUnfinishedRecoveryRequestIds: findUnfinishedRecoveryRequestIdsMock,
   getCommunityNameForLifecycleEmail: vi.fn(async () => 'Test Community'),
   listActiveAccessPlansForLifecycleCron: vi.fn(async () => []),
   lookupLifecycleAdminRecipients: vi.fn(async () => []),
@@ -111,6 +114,7 @@ beforeEach(() => {
   findCoolingExpiredDeletionRequestsMock.mockResolvedValue([]);
   executeUserSoftDeleteMock.mockResolvedValue([]);
   findPurgeReadyDeletionRequestsMock.mockResolvedValue([]);
+  findUnfinishedRecoveryRequestIdsMock.mockResolvedValue([]);
   purgeUserPIIMock.mockResolvedValue(undefined);
   sendEmailMock.mockResolvedValue({ id: 'test_1' });
 });
@@ -312,5 +316,41 @@ describe('account-lifecycle cron — deletion emails at soft delete', () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
     expect(summary.softDeleted.users).toBe(3);
     expect(summary.deletionEmails).toEqual({ sent: 0, notSent: 3 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unfinished recoveries
+// ---------------------------------------------------------------------------
+
+describe('account-lifecycle cron — unfinished recoveries', () => {
+  // The purge skips a recovery that claimed its requests and never finished,
+  // so without a report its personal data would outlive the purge date with
+  // nobody told.
+  it('reports every unfinished recovery as an error, by request id', async () => {
+    findUnfinishedRecoveryRequestIdsMock.mockResolvedValue([12, 15]);
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect((summary as unknown as { unfinishedRecoveries: number }).unfinishedRecoveries).toBe(2);
+    expect(summary.errors).toEqual([expect.stringMatching(/^unfinished recovery: deletion request\(s\) 12, 15 /)]);
+  });
+
+  it('reports nothing when there are none', async () => {
+    const { summary } = await runCron();
+
+    expect(summary.errors).toEqual([]);
+  });
+
+  it('records a failed check without stopping the later phases', async () => {
+    findUnfinishedRecoveryRequestIdsMock.mockRejectedValue(new Error('db down'));
+    pruneSitePublishSnapshotsMock.mockResolvedValue({ pruned: 1 });
+
+    const { status, summary } = await runCron();
+
+    expect(status).toBe(200);
+    expect(summary.errors).toEqual(['check unfinished recoveries: Error: db down']);
+    expect(summary.sitePublishSnapshotsPruned).toBe(1);
   });
 });
