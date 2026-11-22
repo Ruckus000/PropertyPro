@@ -40,6 +40,11 @@ describe('Section kit', () => {
     expect(screen.getByText('Example of a logged package')).toBeVisible();
     expect(screen.getByText('FedEx box').closest('[aria-hidden="true"]')).not.toBeNull();
   });
+  it('renders the first-run title as h2 when asked', () => {
+    render(<SectionFirstRun title="T2" description="D" headingLevel={2} />);
+    expect(screen.getByRole('heading', { level: 2, name: 'T2' })).toBeVisible();
+    expect(screen.queryByRole('heading', { level: 3 })).toBeNull();
+  });
   it('announces an error and retries', () => {
     const onRetry = vi.fn();
     render(<SectionError message="We couldn't load packages." onRetry={onRetry} />);

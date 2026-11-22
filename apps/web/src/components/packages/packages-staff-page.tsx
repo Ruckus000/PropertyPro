@@ -148,7 +148,8 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
     body = (
       <SectionFirstRun
         title="No packages logged yet"
-        description="Log the first delivery and the resident gets a notice straight away."
+        headingLevel={2}
+        description="Log the first delivery and the resident gets a notice."
         action={logButton}
         exampleLabel="Example of a logged package"
         example={<ExampleRow headers={headers} />}

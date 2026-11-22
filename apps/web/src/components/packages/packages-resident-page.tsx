@@ -2,7 +2,6 @@
 
 import { Package } from 'lucide-react';
 import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { RecordList, RecordRow } from '@propertypro/ui/components/shared/record-row';
 import {
@@ -11,6 +10,7 @@ import {
   SectionFirstRun,
 } from '@propertypro/ui/components/shared/section';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
+import { formatDatetime } from '@/components/packages/package-columns';
 import { useMyPackages, type PackageListItem } from '@/hooks/use-packages';
 import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
 import { PageHeader } from '@/components/shared/page-header';
@@ -21,22 +21,12 @@ interface PackagesResidentPageProps {
   communityId: number;
 }
 
-// Same format and fallback as the current resident view, so the date reads alike.
-function formatDatetime(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  try {
-    return format(parseISO(dateStr), 'MMM d, yyyy h:mm a');
-  } catch {
-    return dateStr;
-  }
-}
-
 function PackageRow({ pkg }: { pkg: PackageListItem }) {
-  const collected = pkg.status === 'picked_up';
-  const word = collected ? 'Picked up' : 'Ready to collect';
+  // The API returns only packages not yet picked up, so every row is ready to collect.
+  const word = 'Ready to collect';
   return (
     <RecordRow
-      lead={<StatusGlyph kind={collected ? 'done' : 'in-progress'} label={word} hideLabel />}
+      lead={<StatusGlyph kind="in-progress" label={word} hideLabel />}
       title={pkg.carrier}
       preview={pkg.trackingNumber ?? undefined}
       statusWord={word}
@@ -62,6 +52,7 @@ export function PackagesResidentPage({ communityId }: PackagesResidentPageProps)
     body = (
       <SectionFirstRun
         title="Your account isn't linked to a unit yet"
+        headingLevel={2}
         description="Packages are logged per unit. Once your manager links your account to your unit, packages delivered to it will show here."
         action={
           <Button asChild variant="outline">
@@ -80,7 +71,8 @@ export function PackagesResidentPage({ communityId }: PackagesResidentPageProps)
   } else if (!packages || packages.length === 0) {
     body = (
       <SectionFirstRun
-        title="No packages for you yet"
+        title="No packages waiting for you"
+        headingLevel={2}
         description="When staff log a delivery for your unit it appears here and you get a notice."
       />
     );
@@ -102,7 +94,7 @@ export function PackagesResidentPage({ communityId }: PackagesResidentPageProps)
         <PageHeader
           title="My packages"
           icon={<Package />}
-          description="Packages logged for your unit, and whether they are ready to collect."
+          description="Packages waiting for you to collect."
         />
       }
     >

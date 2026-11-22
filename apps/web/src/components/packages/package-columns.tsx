@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatDatetime(dateStr: string | null): string {
+export function formatDatetime(dateStr: string | null): string {
   if (!dateStr) return '\u2014';
   try {
     return format(parseISO(dateStr), 'MMM d, yyyy h:mm a');

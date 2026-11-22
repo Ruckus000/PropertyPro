@@ -26,7 +26,7 @@ function pkg(id: number, status: PackageListItem['status']): PackageListItem {
     trackingNumber: id === 1 ? '1Z999' : null,
     status,
     receivedByStaffId: null,
-    pickedUpAt: status === 'picked_up' ? '2026-03-02T10:00:00.000Z' : null,
+    pickedUpAt: null,
     pickedUpByName: null,
     notes: null,
     createdAt: '2026-03-01T10:00:00.000Z',
@@ -38,7 +38,7 @@ function result(over: Record<string, unknown>) {
   return { data: undefined, isLoading: false, isError: false, error: null, refetch, ...over };
 }
 
-const two = [pkg(1, 'received'), pkg(2, 'picked_up')];
+const two = [pkg(1, 'received'), pkg(2, 'notified')];
 
 describe('PackagesResidentPage', () => {
   beforeEach(() => {
@@ -54,11 +54,11 @@ describe('PackagesResidentPage', () => {
     expect(screen.queryByText(/awaiting pickup/i)).toBeNull();
   });
 
-  it('says Ready to collect for a received package and Picked up for a collected one', () => {
+  it('says Ready to collect for both received and notified packages', () => {
     render(<PackagesResidentPage communityId={1} />);
     const [first, second] = screen.getAllByRole('listitem');
     expect(first).toHaveTextContent(/Ready to collect · Received Mar 1, 2026/);
-    expect(second).toHaveTextContent(/Picked up · Received Mar 1, 2026/);
+    expect(second).toHaveTextContent(/Ready to collect · Received Mar 1, 2026/);
     expect(screen.getByText('UPS')).toBeInTheDocument();
     expect(screen.getByText('1Z999')).toBeInTheDocument();
   });
@@ -66,7 +66,7 @@ describe('PackagesResidentPage', () => {
   it('shows the first-run heading and no button when there are no packages', () => {
     useMyPackagesMock.mockReturnValue(result({ data: [] }));
     render(<PackagesResidentPage communityId={1} />);
-    expect(screen.getByRole('heading', { name: 'No packages for you yet' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 2, name: 'No packages waiting for you' })).toBeVisible();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
@@ -97,6 +97,12 @@ describe('PackagesResidentPage', () => {
       '/help/contact?communityId=7',
     );
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('has no axe violations on the empty state', async () => {
+    useMyPackagesMock.mockReturnValue(result({ data: [] }));
+    const { container } = render(<PackagesResidentPage communityId={1} />);
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it('has no axe violations', async () => {

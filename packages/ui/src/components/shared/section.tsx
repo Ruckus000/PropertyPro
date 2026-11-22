@@ -82,6 +82,7 @@ export function SectionFirstRun({
   action,
   example,
   exampleLabel,
+  headingLevel = 3,
 }: {
   title: string;
   description: string;
@@ -89,11 +90,17 @@ export function SectionFirstRun({
   /** Rendered aria-hidden; must contain nothing focusable. */
   example?: React.ReactNode;
   exampleLabel?: string;
+  /** h2 when no section header above supplies one; default h3 sits under a SectionHeader. */
+  headingLevel?: 2 | 3;
 }) {
   return (
     <div className="flex flex-col items-start gap-3 px-4 py-6">
       <div className="space-y-1">
-        <h3 className="text-base font-semibold text-content">{title}</h3>
+        {headingLevel === 2 ? (
+          <h2 className="text-base font-semibold text-content">{title}</h2>
+        ) : (
+          <h3 className="text-base font-semibold text-content">{title}</h3>
+        )}
         <p className="text-sm text-content-secondary">{description}</p>
       </div>
       {action}
