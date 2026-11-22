@@ -164,6 +164,20 @@ export function calculateComplianceClock(input: ComplianceStatusInput): Complian
     const postedAt = input.documentPublishedAt ?? input.documentPostedAt ?? null;
     const receivedAt = input.documentReceivedAt ?? null;
 
+    // Late first: a posting that missed its own deadline stays overdue for a
+    // year whatever else is true of the record. Checked before the yearly
+    // cycle, so moving a received date EARLIER (the only direction it may
+    // move) can never turn "posted late" into a quieter "out of date".
+    const recordDeadline = receivedAt ? calculatePostingDeadline(receivedAt) : null;
+    // Exact milliseconds: posting AT the deadline is on time.
+    const postedLate = recordDeadline !== null && postedAt !== null && isAfter(postedAt, recordDeadline);
+    const lateStillCounts =
+      postedLate && !isBefore(postedAt!, calculateRollingWindowStart(now, LATE_POSTING_COUNTS_MONTHS));
+    if (lateStillCounts) {
+      // A late posting does not retroactively satisfy the item.
+      return { status: 'overdue', clock: clock('met_late', recordDeadline, postedAt) };
+    }
+
     // A yearly record over a year old: next year's is owed. No deadline is
     // invented for it — when next year's was adopted is unknown until it is
     // uploaded — so it is unsatisfied, not "N days overdue".
@@ -180,22 +194,12 @@ export function calculateComplianceClock(input: ComplianceStatusInput): Complian
       }
     }
 
-    if (receivedAt && postedAt) {
-      const recordDeadline = calculatePostingDeadline(receivedAt);
-      // Exact milliseconds: posting AT the deadline is on time.
-      if (isAfter(postedAt, recordDeadline)) {
-        // A late posting does not retroactively satisfy the item. It counts
-        // as overdue for a year after the late posting, then ages out.
-        const stillCounts = !isBefore(
-          postedAt,
-          calculateRollingWindowStart(now, LATE_POSTING_COUNTS_MONTHS),
-        );
-        return {
-          status: stillCounts ? 'overdue' : 'satisfied',
-          clock: clock('met_late', recordDeadline, postedAt),
-        };
-      }
-      return { status: 'satisfied', clock: clock('met', recordDeadline, postedAt) };
+    if (recordDeadline !== null && postedAt !== null) {
+      // Late more than a year ago: still a fact, no longer in the score.
+      return {
+        status: 'satisfied',
+        clock: clock(postedLate ? 'met_late' : 'met', recordDeadline, postedAt),
+      };
     }
 
     // No received date: the record is on the website, and nothing says when

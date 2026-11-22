@@ -14,8 +14,12 @@ interface DocumentRow {
 
 interface LinkDocumentModalProps {
   communityId: number;
-  /** `receivedAt`: when the association received or created the record (H-2). */
-  onSelect: (documentId: number, receivedAt: string) => void;
+  /**
+   * `receivedAt`: when the association received or created the record (H-2).
+   * `dateEdited`: whether the person changed the date from its default, so a
+   * "kept the earlier date" warning is only shown for a date they chose.
+   */
+  onSelect: (documentId: number, receivedAt: string, dateEdited: boolean) => void;
   onClose: () => void;
   /** The dialog title. */
   title?: string;
@@ -36,6 +40,7 @@ export function LinkDocumentModal({
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [receivedOn, setReceivedOn] = useState(() => toDateInputValue(new Date()));
+  const [dateEdited, setDateEdited] = useState(false);
   const receivedAt = receivedOnToIso(receivedOn);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,7 +145,10 @@ export function LinkDocumentModal({
           <ReceivedOnField
             id="compliance-link-received-on"
             value={receivedOn}
-            onChange={setReceivedOn}
+            onChange={(value) => {
+              setReceivedOn(value);
+              setDateEdited(true);
+            }}
             {...(dateLabel ? { label: dateLabel } : {})}
             hint={
               dateHint ??
@@ -167,7 +175,7 @@ export function LinkDocumentModal({
                   <button
                     type="button"
                     onClick={() => {
-                      if (receivedAt) onSelect(doc.id, receivedAt);
+                      if (receivedAt) onSelect(doc.id, receivedAt, dateEdited);
                     }}
                     disabled={!receivedAt}
                     className="

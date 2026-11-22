@@ -24,7 +24,10 @@ interface PatchPayload {
   receivedAt?: string;
 }
 
-export async function patchChecklistItem(payload: PatchPayload): Promise<ChecklistItemData> {
+export async function patchChecklistItem(
+  payload: PatchPayload,
+  options: { announceWarnings?: boolean } = {},
+): Promise<ChecklistItemData> {
   const res = await fetch("/api/v1/compliance", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -49,7 +52,7 @@ export async function patchChecklistItem(payload: PatchPayload): Promise<Checkli
   const json = (await res.json()) as { data: ChecklistItemData; warnings?: unknown };
   // `received_date_kept`: the file already had an earlier date, which was kept.
   // Said out loud, so a date the person typed is never dropped silently.
-  if (Array.isArray(json.warnings)) {
+  if (options.announceWarnings !== false && Array.isArray(json.warnings)) {
     for (const warning of json.warnings) {
       const message = (warning as { message?: unknown })?.message;
       if (typeof message === "string") toast.warning(message);
@@ -97,15 +100,26 @@ export function useComplianceMutations(communityId: number) {
   // `replace`: only the Compliance page's re-link flow sends it. Without it the
   // route refuses (409) to swap a record's file, or to give one file to two records.
   const linkDocument = useMutation({
-    mutationFn: (vars: { itemId: number; documentId: number; replace?: boolean; receivedAt?: string }) =>
-      patchChecklistItem({
-        id: vars.itemId,
-        communityId,
-        action: "link_document",
-        documentId: vars.documentId,
-        ...(vars.replace ? { replace: true } : {}),
-        ...(vars.receivedAt ? { receivedAt: vars.receivedAt } : {}),
-      }),
+    // `dateEdited` false: the date was the untouched default, so a "kept the
+    // earlier date" warning would be noise about a date nobody chose.
+    mutationFn: (vars: {
+      itemId: number;
+      documentId: number;
+      replace?: boolean;
+      receivedAt?: string;
+      dateEdited?: boolean;
+    }) =>
+      patchChecklistItem(
+        {
+          id: vars.itemId,
+          communityId,
+          action: "link_document",
+          documentId: vars.documentId,
+          ...(vars.replace ? { replace: true } : {}),
+          ...(vars.receivedAt ? { receivedAt: vars.receivedAt } : {}),
+        },
+        { announceWarnings: vars.dateEdited !== false },
+      ),
     onMutate: (vars) =>
       optimisticUpdate(vars.itemId, () => ({
         documentId: vars.documentId,

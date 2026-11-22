@@ -680,7 +680,10 @@ async function handleRecordMinutes(
     const approvedDate = new Date(approvedAt);
     // Only ever moves earlier; a later date is kept and the manager told.
     const result = await setDocumentReceivedAt(communityId, documentId, approvedDate);
-    if (result && !result.written) warnings.push(RECEIVED_DATE_KEPT_WARNING);
+    // Warn only when the kept date is strictly earlier than the one sent.
+      if (result && !result.written && result.receivedAt.getTime() < approvedDate.getTime()) {
+        warnings.push(RECEIVED_DATE_KEPT_WARNING);
+      }
     if (result?.written) {
       await logAuditEvent({
         userId: actorUserId,

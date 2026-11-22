@@ -46,14 +46,15 @@ export function MeetingDetailModal({
     fileName: string;
   } | null>(null);
 
-  async function handleRecordMinutes(documentId: number, approvedAt: string) {
+  async function handleRecordMinutes(documentId: number, approvedAt: string, dateEdited: boolean) {
     setPickingMinutes(false);
     setErrorMessage(null);
     try {
       const { warnings } = await recordMinutes.mutateAsync({ meetingId, documentId, approvedAt });
       toast.success('Minutes recorded.');
-      // The file already had an earlier date: say so, never drop it silently.
-      for (const warning of warnings) toast.warning(warning.message);
+      // The file already had an earlier date: say so, never drop a date the
+      // person chose silently. An untouched default is not worth a warning.
+      if (dateEdited) for (const warning of warnings) toast.warning(warning.message);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to record minutes.');
     }
@@ -348,7 +349,9 @@ export function MeetingDetailModal({
                 title="Record minutes"
                 dateLabel="Approved on"
                 dateHint="The 30-day posting window for minutes starts when they are approved. A date can correct one already on the file only to an earlier day."
-                onSelect={(documentId, approvedAt) => void handleRecordMinutes(documentId, approvedAt)}
+                onSelect={(documentId, approvedAt, dateEdited) =>
+                  void handleRecordMinutes(documentId, approvedAt, dateEdited)
+                }
                 onClose={() => setPickingMinutes(false)}
               />
             </Dialog.Content>

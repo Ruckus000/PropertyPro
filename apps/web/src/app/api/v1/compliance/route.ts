@@ -243,7 +243,10 @@ export const PATCH = withErrorHandler(
       const receivedDate = new Date(receivedAt);
       // Only ever moves earlier; a later date is kept and the manager told.
       const result = await setDocumentReceivedAt(communityId, documentId!, receivedDate);
-      if (result && !result.written) warnings.push(RECEIVED_DATE_KEPT_WARNING);
+      // Warn only when the kept date is strictly earlier than the one sent.
+      if (result && !result.written && result.receivedAt.getTime() < receivedDate.getTime()) {
+        warnings.push(RECEIVED_DATE_KEPT_WARNING);
+      }
       if (result?.written) {
         await logAuditEvent({
           userId,

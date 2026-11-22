@@ -103,6 +103,20 @@ describe('calculateComplianceClock: yearly records', () => {
     expect(result.clock).toMatchObject({ state: 'out_of_window', deadline: null });
   });
 
+  it('a yearly record posted late stays overdue (met late), even when its received date is over a year old', () => {
+    // Received 13 months ago, posted 2 months ago: late. Moving a received
+    // date earlier must never trade "overdue" for a quieter "out of date".
+    const result = calculateComplianceClock({
+      documentId: 1,
+      documentReceivedAt: daysFromNow(-395),
+      documentPublishedAt: daysFromNow(-60),
+      yearlyCycle: true,
+      now: NOW,
+    });
+    expect(result.status).toBe('overdue');
+    expect(result.clock.state).toBe('met_late');
+  });
+
   it('control: the same record without a yearly cycle stays met', () => {
     expect(
       calculateComplianceClock({

@@ -717,6 +717,21 @@ describe('PATCH /api/v1/compliance', () => {
     );
   });
 
+  it('sends no warning when the kept date is the same as the one sent', async () => {
+    updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
+    const same = '2026-01-15T23:59:59.999Z';
+    setDocumentReceivedAtMock.mockResolvedValueOnce({
+      written: false,
+      previous: new Date(same),
+      receivedAt: new Date(same),
+    });
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 5, communityId: 42, action: 'link_document', documentId: 77, receivedAt: same }),
+      undefined,
+    );
+    expect(await res.json()).not.toHaveProperty('warnings');
+  });
+
   it('sends no warnings when the received date was used', async () => {
     updateComplianceChecklistItemMock.mockResolvedValueOnce({ id: 5, title: 'Budget', documentId: 77 });
     setDocumentReceivedAtMock.mockResolvedValueOnce({ written: true, previous: null, receivedAt: new Date() });
