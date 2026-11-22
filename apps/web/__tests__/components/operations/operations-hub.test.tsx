@@ -542,6 +542,44 @@ describe('OperationsHub', () => {
       renderHub();
       expect(useReservationsMock).toHaveBeenLastCalledWith(42, { page: 1, limit: 100 }, expect.anything());
     });
+
+    const CAP_NOTE = 'Showing 100 of 150 reservations, latest dates first.';
+
+    it('says the reservations list is capped when more exist past the 100 shown', async () => {
+      searchParamsMock.mockReturnValue('tab=reservations&page=5');
+      reservationsWithTotal(150, 100);
+      renderHub();
+
+      expect(await screen.findByText(CAP_NOTE)).toBeInTheDocument();
+    });
+
+    it('shows no cap note below the cap, or at the cap with nothing past it', async () => {
+      searchParamsMock.mockReturnValue('tab=reservations&page=4');
+      reservationsWithTotal(150, 80);
+      const { unmount } = renderHub();
+      expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+      expect(screen.queryByText(/reservations, latest dates first/)).not.toBeInTheDocument();
+      unmount();
+
+      searchParamsMock.mockReturnValue('tab=reservations&page=5');
+      reservationsWithTotal(100, 100);
+      renderHub();
+      expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+      expect(screen.queryByText(/reservations, latest dates first/)).not.toBeInTheDocument();
+    });
+
+    it('keeps Load more in its loading state while the last step to 100 loads', async () => {
+      // The URL already asks for 100; the rows on screen are the limit-80 placeholder.
+      searchParamsMock.mockReturnValue('tab=reservations&page=5');
+      reservationsWithTotal(150, 80);
+      useReservationsMock.mockReturnValue({ ...useReservationsMock(), isFetching: true });
+      renderHub();
+
+      expect(useReservationsMock).toHaveBeenLastCalledWith(42, { page: 1, limit: 100 }, expect.anything());
+      expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled();
+      expect(screen.queryByText(/reservations, latest dates first/)).not.toBeInTheDocument();
+    });
   });
 
   it('still renders the legacy-redirect banner when legacyNotice is set', () => {

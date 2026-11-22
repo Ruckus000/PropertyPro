@@ -931,6 +931,13 @@ describe('PaymentPortal', () => {
         await screen.findByText(/online payments aren't available for this community/i),
       ).toBeInTheDocument();
       expect(screen.getByText(/contact sunset management llc to arrange payment/i)).toBeInTheDocument();
+      // The body names no figure on the page: "the balance above" pointed at the
+      // ledger-based Current Balance card, which can read $0.00 while line items
+      // make Total Due non-zero, so the banner could contradict the screen.
+      expect(
+        screen.getByText(/contact sunset management llc to arrange payment/i),
+      ).toHaveTextContent(/^Online payment isn’t available here\.\s+Contact Sunset Management LLC/);
+      expect(screen.queryByText(/balance above/i)).not.toBeInTheDocument();
       // This resident owes money (possibly overdue), so the banner must not read
       // as "you're paid up" — it said "Your balance is current" until 2026-11-21.
       expect(screen.queryByText(/balance is current/i)).not.toBeInTheDocument();

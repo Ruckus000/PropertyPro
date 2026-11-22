@@ -72,8 +72,9 @@ type SqlExecutor = {
 
 /**
  * Ids of the communities the reset may wipe: those holding a demo slug AND
- * flagged `is_demo`. The reset DELETEs 31 tables for these ids and runs against
- * production, so a real association that somehow holds a demo slug must never
+ * flagged `is_demo`. The reset DELETEs from 35 tables for these ids (the
+ * `DEMO_RESET_TABLE_DELETION_ORDER` list in scripts/reset-demo.ts, counted
+ * 2026-11-21) and runs against production, so a real association that somehow holds a demo slug must never
  * be returned — the slug alone is not proof a row is a demo.
  */
 export async function resolveDemoCommunityIds(
