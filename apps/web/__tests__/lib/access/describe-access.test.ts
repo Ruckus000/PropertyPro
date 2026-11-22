@@ -7,7 +7,7 @@ const cases = COMMUNITY_TYPES.flatMap((type) => RBAC_RESOURCES.map((resource) =>
 
 describe('describeAccess', () => {
   it.each(cases)('%s %s names exactly the roles the matrix admits', (type, resource) => {
-    const sentence = describeAccess(type, resource);
+    const sentence = describeAccess(type, resource, 'own') ?? '';
     for (const role of MATRIX_ROLES) {
       const canRead = RBAC_MATRIX[type][role][resource].read;
       const named = sentence.includes(WORD[role]) || (role !== 'manager' && sentence.includes('Residents'));
@@ -15,7 +15,7 @@ describe('describeAccess', () => {
     }
   });
   it.each(cases)('%s %s says Residents only when owners and tenants can do the same', (type, resource) => {
-    if (!describeAccess(type, resource).includes('Residents')) return;
+    if (!(describeAccess(type, resource, 'own') ?? '').includes('Residents')) return;
     const { owner, tenant } = RBAC_MATRIX[type];
     expect(owner[resource]).toEqual(tenant[resource]);
     expect(owner[resource].read).toBe(true);
@@ -26,7 +26,20 @@ describe('describeAccess', () => {
   it('says when owners see only what was sent to them, and never names tenants who cannot read', () => {
     expect(describeAccess('condo_718', 'emergency_broadcasts', 'sent-to-them')).toBe('Managers can add and change these. Owners can see only the ones sent to them.');
   });
+  it('says nothing when no role can read', () => {
+    const unreadable = cases.filter(([type, resource]) =>
+      MATRIX_ROLES.every((role) => !RBAC_MATRIX[type][role][resource].read),
+    );
+    expect(unreadable.length, 'matrix has no unreadable cell to test').toBeGreaterThan(0);
+    for (const [type, resource] of unreadable) expect(describeAccess(type, resource, 'own')).toBeUndefined();
+  });
+  it('describes a resident write cell as adding and changing only their own', () => {
+    expect(describeAccess('condo_718', 'maintenance', 'own')).toBe('Managers can add and change these. Residents can add and change only their own.');
+  });
+  it('describes a manager read-only cell', () => {
+    expect(describeAccess('condo_718', 'audit', 'own')).toBe('Managers can see these.');
+  });
   it('never claims something can be undone', () => {
-    for (const [type, resource] of cases) expect(describeAccess(type, resource)).not.toMatch(/undo|undone|restore/i);
+    for (const [type, resource] of cases) expect(describeAccess(type, resource, 'own') ?? '').not.toMatch(/undo|undone|restore/i);
   });
 });

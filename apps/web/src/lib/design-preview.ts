@@ -8,6 +8,9 @@ export const DESIGN_PREVIEW_COOKIE = 'pp_design_preview';
 /**
  * True when the user is on the allow-list, or, outside a production build, when
  * the cookie is "1". Never throws. Env is read at call time, not module load.
+ *
+ * Selects which view to render only. Never use it as an authorization check:
+ * callers must still gate on role (for example `preview && isStaff`).
  */
 export async function isDesignPreviewOn(userId: string): Promise<boolean> {
   try {

@@ -36,12 +36,19 @@ function residentSentence(name: string, capability: Capability, object: string):
  * Builds the "About" sentence for a page from the permission matrix, so the
  * words cannot drift from what the server enforces. A role that cannot read is
  * never named. This is the one place allowed to cast a string to AccessSentence.
+ *
+ * `residentScope` is required, with no default. A resident cell in the matrix is
+ * necessary but not sufficient: a resident "write" means "may submit their own",
+ * not "may change anyone's", so every caller must state the scope or the
+ * sentence can claim more than the server allows.
+ *
+ * Returns undefined when no role can read, rather than an empty sentence.
  */
 export function describeAccess(
   communityType: CommunityType,
   resource: RbacResource,
-  residentScope: ResidentScope = 'all',
-): AccessSentence {
+  residentScope: ResidentScope,
+): AccessSentence | undefined {
   const manager = capabilityOf(communityType, 'manager', resource);
   const owner = capabilityOf(communityType, 'owner', resource);
   const tenant = capabilityOf(communityType, 'tenant', resource);
@@ -57,5 +64,6 @@ export function describeAccess(
     parts.push(residentSentence('Owners', owner, object));
     parts.push(residentSentence('Tenants', tenant, object));
   }
-  return parts.filter((part): part is string => part !== null).join(' ') as AccessSentence;
+  const sentence = parts.filter((part): part is string => part !== null).join(' ');
+  return sentence === '' ? undefined : (sentence as AccessSentence);
 }
