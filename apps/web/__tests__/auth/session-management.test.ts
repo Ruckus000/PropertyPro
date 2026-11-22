@@ -273,10 +273,33 @@ describe('p1-22 session middleware', () => {
         host: 'unknown.getpropertypro.com',
       }),
     );
-    const json = (await response.json()) as { error: string };
-
     expect(response.status).toBe(404);
-    expect(json.error).toBe('Not Found');
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'NOT_FOUND',
+        message:
+          "We couldn't find this community. Check the web address, or open it again from your list of communities.",
+      },
+    });
+  });
+
+  it('returns a 500 error envelope when tenant resolution fails on an API path', async () => {
+    rpcMock.mockResolvedValueOnce({ data: null, error: { message: 'connection reset' } });
+
+    const response = await middleware(
+      request('http://localhost:3000/api/v1/documents', {
+        host: 'resolution-fails.getpropertypro.com',
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    // The upstream error text must not leak into the body.
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Something went wrong on our end. Please try again in a moment.',
+      },
+    });
   });
 
   it('redirects unknown tenant subdomain page requests to canonical select-community', async () => {
@@ -316,11 +339,14 @@ describe('p1-22 session middleware', () => {
     mockAuthState({ id: 'user-1', emailVerified: false });
 
     const response = await middleware(request('http://localhost:3000/api/v1/documents'));
-    const json = (await response.json()) as { error: string };
-
     expect(response.status).toBe(403);
     expect(response.headers.get('location')).toBeNull();
-    expect(json.error).toBe('Email verification required');
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'EMAIL_VERIFICATION_REQUIRED',
+        message: 'Verify your email address to continue. Check your inbox for the link we sent.',
+      },
+    });
   });
 
   it('allows authenticated + verified users to access protected routes', async () => {

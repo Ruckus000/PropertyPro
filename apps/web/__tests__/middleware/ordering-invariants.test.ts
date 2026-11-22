@@ -586,7 +586,7 @@ describe('invariant 2: preflight and CSRF reject return before any Supabase sess
     expect(getUserMock).not.toHaveBeenCalled();
   });
 
-  it('CSRF: disallowed Origin on a POST → 403 "invalid origin", no Supabase client built', async () => {
+  it('CSRF: disallowed Origin on a POST → 403 INVALID_ORIGIN, no Supabase client built', async () => {
     const res = await middleware(
       req('https://app.getpropertypro.com/api/v1/documents', {
         method: 'POST',
@@ -595,12 +595,14 @@ describe('invariant 2: preflight and CSRF reject return before any Supabase sess
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'Forbidden: invalid origin' });
+    expect(await res.json()).toEqual({
+      error: { code: 'INVALID_ORIGIN', message: "We blocked this request because it didn't come from a PropertyPro page. Reload the page and try again." },
+    });
     expect(createMiddlewareClientMock).not.toHaveBeenCalled();
     expect(getUserMock).not.toHaveBeenCalled();
   });
 
-  it('CSRF: no Origin + disallowed Referer on a DELETE → 403 "invalid referer", no Supabase client built', async () => {
+  it('CSRF: no Origin + disallowed Referer on a DELETE → 403 INVALID_REFERER, no Supabase client built', async () => {
     const res = await middleware(
       req('https://app.getpropertypro.com/api/v1/documents', {
         method: 'DELETE',
@@ -609,7 +611,9 @@ describe('invariant 2: preflight and CSRF reject return before any Supabase sess
     );
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'Forbidden: invalid referer' });
+    expect(await res.json()).toEqual({
+      error: { code: 'INVALID_REFERER', message: "We blocked this request because it didn't come from a PropertyPro page. Reload the page and try again." },
+    });
     expect(createMiddlewareClientMock).not.toHaveBeenCalled();
     expect(getUserMock).not.toHaveBeenCalled();
   });

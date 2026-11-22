@@ -83,21 +83,36 @@ describe('useReauth', () => {
     expect(resolved).toBeUndefined();
   });
 
-  it('verify surfaces string-shaped middleware errors verbatim (not "Incorrect password")', async () => {
-    // Middleware-level rejections (CSRF 403, missing-session 401) return
-    // { error: "<string>" } rather than the structured AppError shape.
-    // Previously the hook fell back to "Incorrect password" for these,
-    // wrongly blaming the user's credentials for a server-side problem.
+  it('verify surfaces string-shaped errors verbatim (not "Incorrect password")', async () => {
+    // The web middleware now answers in the AppError envelope, but the hook
+    // still accepts a bare { error: "<string>" } so an older deploy or a proxy
+    // body never falls back to "Incorrect password",
+    // which would blame the user's credentials for a server-side problem.
     fetchMock.mockResolvedValue({
       status: 403,
       ok: false,
-      json: async () => ({ error: 'Forbidden: invalid origin' }),
+      json: async () => ({ error: 'Request blocked upstream' }),
     });
     const { result } = renderHook(() => useReauth());
     act(() => { void result.current.triggerReauth(); });
     await expect(
       act(async () => { await result.current.verify('correct'); })
-    ).rejects.toThrow('Forbidden: invalid origin');
+    ).rejects.toThrow('Request blocked upstream');
+  });
+
+  it('verify surfaces the middleware CSRF envelope message (not "Incorrect password")', async () => {
+    fetchMock.mockResolvedValue({
+      status: 403,
+      ok: false,
+      json: async () => ({
+        error: { code: 'INVALID_ORIGIN', message: 'Reload the page and try again.' },
+      }),
+    });
+    const { result } = renderHook(() => useReauth());
+    act(() => { void result.current.triggerReauth(); });
+    await expect(
+      act(async () => { await result.current.verify('correct'); })
+    ).rejects.toThrow('Reload the page and try again.');
   });
 
   it('verify surfaces REAUTH_MISCONFIGURED message instead of "Incorrect password"', async () => {
