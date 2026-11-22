@@ -41,6 +41,52 @@ export async function listActorUnitIds(
 }
 
 /**
+ * The units a user OWNS in the scoped community: units whose recorded owner is
+ * the user, plus the unit on the user's own resident membership when that
+ * membership is flagged `isUnitOwner` (a co-owner who is not the unit's
+ * recorded owner). A tenant's membership unit is deliberately excluded — this
+ * is listActorUnitIds without the occupancy arm, for owner-only statutory
+ * rights such as voting (§718.128) and naming a proxy.
+ */
+export async function listActorOwnedUnitIds(
+  scopedClient: ScopedClient,
+  actorUserId: string,
+): Promise<number[]> {
+  const [ownerMembershipRows, ownedUnitRows] = await Promise.all([
+    scopedClient.selectFrom<{ unitId: number | null }>(
+      userRoles,
+      { unitId: userRoles.unitId },
+      and(
+        eq(userRoles.userId, actorUserId),
+        eq(userRoles.role, 'resident'),
+        eq(userRoles.isUnitOwner, true),
+      ),
+    ),
+    scopedClient.selectFrom<{ id: number }>(
+      units,
+      { id: units.id },
+      eq(units.ownerUserId, actorUserId),
+    ),
+  ]);
+
+  const unitIds = new Set<number>();
+
+  for (const row of ownedUnitRows) {
+    if (typeof row.id === 'number' && Number.isFinite(row.id)) {
+      unitIds.add(row.id);
+    }
+  }
+
+  for (const row of ownerMembershipRows) {
+    if (typeof row.unitId === 'number' && Number.isFinite(row.unitId)) {
+      unitIds.add(row.unitId);
+    }
+  }
+
+  return [...unitIds];
+}
+
+/**
  * Every resident (owners and tenants) of a unit: resident role assignments on
  * the unit, plus the unit's recorded owner — `user_roles.unit_id` holds one
  * unit per membership, so an owner of several units appears only via

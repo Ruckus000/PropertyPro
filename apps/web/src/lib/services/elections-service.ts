@@ -14,7 +14,7 @@ import {
   type ProxyStatus,
   units,
 } from '@propertypro/db';
-import { and, asc, desc, eq, inArray, isNotNull, sql } from '@propertypro/db/filters';
+import { and, asc, desc, eq, inArray, isNotNull, or, sql } from '@propertypro/db/filters';
 // Merges support-session attribution (metadata.support) into this direct audit insert — see packages/db/src/audit-actor.ts.
 import { stampAuditActorMetadata } from '@propertypro/db/audit-actor';
 import { createSelectionDigest } from '@/lib/elections/selection-digest';
@@ -27,7 +27,7 @@ import {
   UnprocessableEntityError,
   ValidationError,
 } from '@/lib/api/errors';
-import { listActorUnitIds, requireActorUnitId } from '@/lib/units/actor-units';
+import { listActorOwnedUnitIds } from '@/lib/units/actor-units';
 import { isNamedUniqueViolation } from '@/lib/db/postgres-error';
 
 interface ElectionRecord {
@@ -546,9 +546,12 @@ async function resolveVotingUnit(
     };
   }
 
-  const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
+  // §718.128: the vote belongs to the unit's OWNER. A tenant lives in the unit
+  // but holds no vote for it, so occupancy (listActorUnitIds) is not enough —
+  // without an approved proxy (above), only an owned unit can be voted.
+  const ownedUnitIds = await listActorOwnedUnitIds(scoped, actorUserId);
   if (requestedUnitId != null) {
-    if (!actorUnitIds.includes(requestedUnitId)) {
+    if (!ownedUnitIds.includes(requestedUnitId)) {
       throw new ForbiddenError('You are not authorized to vote for that unit');
     }
 
@@ -558,8 +561,16 @@ async function resolveVotingUnit(
     };
   }
 
+  // ponytail: no unit picker yet, so an owner of several units votes the first
+  // one. Trigger: elections are enabled for a community (LAUNCH-BLOCKERS lists
+  // the multi-unit picker as a pre-enable item).
+  const firstOwnedUnitId = ownedUnitIds[0];
+  if (firstOwnedUnitId === undefined) {
+    throw new ForbiddenError('Only unit owners can vote in association elections');
+  }
+
   return {
-    unitId: await requireActorUnitId(scoped, actorUserId),
+    unitId: firstOwnedUnitId,
     proxy: null,
   };
 }
@@ -799,11 +810,18 @@ export async function getElectionResultsForCommunity(
   };
 }
 
+/**
+ * Proxy designations for an election. Pass `participantUserId` to narrow the
+ * list to designations that user gave or holds — every viewer who does not
+ * administer the election (canActAsBoard). Omit it only for the board.
+ */
 export async function listElectionProxiesForCommunity(
   communityId: number,
   electionId: number,
+  options: { participantUserId?: string } = {},
 ): Promise<ElectionProxyRecord[]> {
   const scoped = createScopedClient(communityId);
+  const { participantUserId } = options;
 
   const proxies = await scoped
     .selectFrom<ElectionProxyRecord>(
@@ -820,7 +838,15 @@ export async function listElectionProxiesForCommunity(
         createdAt: electionProxies.createdAt,
         updatedAt: electionProxies.updatedAt,
       },
-      eq(electionProxies.electionId, electionId),
+      participantUserId === undefined
+        ? eq(electionProxies.electionId, electionId)
+        : and(
+            eq(electionProxies.electionId, electionId),
+            or(
+              eq(electionProxies.grantorUserId, participantUserId),
+              eq(electionProxies.proxyHolderUserId, participantUserId),
+            ),
+          ),
     )
     .orderBy(desc(electionProxies.createdAt), desc(electionProxies.id));
 
@@ -841,8 +867,10 @@ export async function getMyElectionVoteReceiptForCommunity(
     throw new NotFoundError('Election not found');
   }
   const scoped = createScopedClient(communityId);
-  const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
-  const submission = await getExistingReceiptForActorUnits(scoped, electionId, actorUnitIds);
+  // Owned units only: a tenant shares the owner's unit but not their vote, so
+  // must not read the owner's receipt (whether, when and how the unit voted).
+  const ownedUnitIds = await listActorOwnedUnitIds(scoped, actorUserId);
+  const submission = await getExistingReceiptForActorUnits(scoped, electionId, ownedUnitIds);
 
   return {
     hasVoted: submission !== null,
@@ -1219,9 +1247,15 @@ export async function createElectionProxyForCommunity(
       throw new UnprocessableEntityError('Proxy designations are closed for this election');
     }
 
-    const actorUnitIds = await listActorUnitIds(scoped, actorUserId);
-    const grantorUnitId = input.grantorUnitId ?? (await requireActorUnitId(scoped, actorUserId));
-    if (!actorUnitIds.includes(grantorUnitId)) {
+    // Only the unit's owner holds its vote, so only an owner can hand it to a
+    // proxy. A tenant naming a proxy for the unit they rent would be granting
+    // a vote they never had.
+    const ownedUnitIds = await listActorOwnedUnitIds(scoped, actorUserId);
+    const grantorUnitId = input.grantorUnitId ?? ownedUnitIds[0];
+    if (grantorUnitId === undefined) {
+      throw new ForbiddenError('Only unit owners can designate a proxy');
+    }
+    if (!ownedUnitIds.includes(grantorUnitId)) {
       throw new ForbiddenError('You are not authorized to designate a proxy for that unit');
     }
 

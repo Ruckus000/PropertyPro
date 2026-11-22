@@ -14,7 +14,8 @@ import { eq, sql } from '@propertypro/db/filters';
 // AUTHZ: Integration test fixture setup — bypass needed to seed/inspect rows across test communities.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
 import { castElectionVoteForCommunity } from '@/lib/services/elections-service';
-import { UnprocessableEntityError } from '@/lib/api/errors';
+import { ForbiddenError, UnprocessableEntityError } from '@/lib/api/errors';
+import { listActorOwnedUnitIds } from '@/lib/units/actor-units';
 
 /**
  * Integration tests for the transactional vote submission path.
@@ -23,6 +24,8 @@ import { UnprocessableEntityError } from '@/lib/api/errors';
  * 1. A valid vote is recorded and totalBallotsCast increments
  * 2. A duplicate vote returns the existing receipt (idempotency)
  * 3. A vote after closesAt is rejected
+ * 4. A tenant of the unit is refused (§718.128: the owner holds the vote), and
+ *    listActorOwnedUnitIds' real SQL tells the owner from the tenant
  *
  * Run against the LOCAL disposable DB (never production — `.env.local`'s
  * DATABASE_URL is prod, which is how test communities leaked there):
@@ -34,6 +37,7 @@ describe('vote submission integration', () => {
   const auditLogMaintenanceLockKey = 1;
   const db = createUnscopedClient();
   const testUserId = randomUUID();
+  const tenantUserId = randomUUID();
   let communityId: number;
   let openElectionId: number;
   let expiredElectionId: number;
@@ -47,6 +51,12 @@ describe('vote submission integration', () => {
       id: testUserId,
       email: `test-vote-integration-${Date.now()}@test.local`,
       fullName: 'Test Voter',
+    });
+
+    await db.insert(users).values({
+      id: tenantUserId,
+      email: `test-vote-integration-tenant-${Date.now()}@test.local`,
+      fullName: 'Test Tenant',
     });
 
     // Seed a community
@@ -78,6 +88,15 @@ describe('vote submission integration', () => {
       role: 'resident',
       unitId,
       isUnitOwner: true,
+    });
+
+    // The same unit's tenant: a resident membership on the unit, not an owner.
+    await db.insert(userRoles).values({
+      userId: tenantUserId,
+      communityId,
+      role: 'resident',
+      unitId,
+      isUnitOwner: false,
     });
 
     // Use DB-relative timestamps (via SQL expressions) to avoid client/server clock skew.
@@ -168,6 +187,7 @@ describe('vote submission integration', () => {
 
     // Finally remove the test user
     await db.delete(users).where(eq(users.id, testUserId));
+    await db.delete(users).where(eq(users.id, tenantUserId));
   });
 
   it('records a valid vote and increments totalBallotsCast', async () => {
@@ -213,6 +233,23 @@ describe('vote submission integration', () => {
       eq(elections.id, openElectionId),
     );
     expect(rows[0]!.totalBallotsCast).toBe(1);
+  });
+
+  it('lists the owner\'s unit as owned, and none for the tenant who lives there', async () => {
+    const scoped = createScopedClient(communityId);
+    expect(await listActorOwnedUnitIds(scoped, testUserId)).toEqual([unitId]);
+    expect(await listActorOwnedUnitIds(scoped, tenantUserId)).toEqual([]);
+  });
+
+  it('refuses the unit\'s tenant with ForbiddenError', async () => {
+    await expect(
+      castElectionVoteForCommunity(
+        communityId,
+        openElectionId,
+        tenantUserId,
+        { selectedCandidateIds: [candidateId], unitId },
+      ),
+    ).rejects.toThrow(ForbiddenError);
   });
 
   it('rejects a vote after closesAt with UnprocessableEntityError', async () => {

@@ -41,6 +41,17 @@ vi.mock('@/lib/elections/common', () => ({
 
 vi.mock('@/lib/db/access-control', () => ({
   requirePermission: requirePermissionMock,
+  // The real predicate: managers, or a board designation.
+  canActAsBoard: (membership: { isAdmin: boolean; designation?: string | null }) =>
+    membership.isAdmin ||
+    membership.designation === 'board_member' ||
+    membership.designation === 'board_president',
+}));
+
+// A board/manager read reaches the lapsed-subscription check, which reads the
+// database; residents short-circuit before it.
+vi.mock('@/lib/middleware/read-entitlement-guard', () => ({
+  requireEntitledForAdminRead: vi.fn(async () => undefined),
 }));
 
 vi.mock('@/lib/finance/common', () => ({
@@ -123,7 +134,9 @@ describe('/api/v1/elections/[id]/proxies route', () => {
     expect(res.status).toBe(200);
     expect(resolveEffectiveCommunityIdMock).toHaveBeenCalledWith(expect.anything(), 42);
     expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'elections', 'read');
-    expect(listElectionProxiesForCommunityMock).toHaveBeenCalledWith(42, 7);
+    expect(listElectionProxiesForCommunityMock).toHaveBeenCalledWith(42, 7, {
+      participantUserId: 'user-1',
+    });
     const json = (await res.json()) as { data: Array<{ id: number }> };
     expect(json.data[0]?.id).toBe(10);
   });
@@ -218,6 +231,39 @@ describe('/api/v1/elections/[id]/proxies route', () => {
     expect(res.status).toBe(400);
     expect(requireAuthenticatedUserIdMock).not.toHaveBeenCalled();
     expect(createElectionProxyForCommunityMock).not.toHaveBeenCalled();
+  });
+
+  it('narrows a resident\'s GET to proxies they gave or hold', async () => {
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/7/proxies?communityId=42');
+    const res = await GET(req, routeCtx('7'));
+
+    expect(res.status).toBe(200);
+    expect(listElectionProxiesForCommunityMock).toHaveBeenCalledWith(42, 7, {
+      participantUserId: 'user-1',
+    });
+  });
+
+  it('lists every proxy, pending included, for a resident with a board seat', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({ ...MEMBERSHIP, designation: 'board_member' });
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/7/proxies?communityId=42');
+    const res = await GET(req, routeCtx('7'));
+
+    expect(res.status).toBe(200);
+    expect(listElectionProxiesForCommunityMock).toHaveBeenCalledWith(42, 7, {});
+  });
+
+  it('lists every proxy for a manager', async () => {
+    requireCommunityMembershipMock.mockResolvedValue({
+      ...MEMBERSHIP,
+      role: 'manager' as const,
+      isAdmin: true,
+      isUnitOwner: false,
+    });
+    const req = new NextRequest('http://localhost:3000/api/v1/elections/7/proxies?communityId=42');
+    const res = await GET(req, routeCtx('7'));
+
+    expect(res.status).toBe(200);
+    expect(listElectionProxiesForCommunityMock).toHaveBeenCalledWith(42, 7, {});
   });
 
   it('returns 403 when elections are disabled', async () => {
