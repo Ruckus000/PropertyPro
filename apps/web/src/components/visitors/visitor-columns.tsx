@@ -158,8 +158,14 @@ export interface VisitorColumnActions {
   onRevoke: (visitor: VisitorListItem) => void;
 }
 
+export interface VisitorColumnOptions {
+  /** Replaces the status badge; the page kit passes a glyph and the same word. */
+  renderStatus?: (status: VisitorStatus) => React.ReactNode;
+}
+
 export function getVisitorColumns(
   actions: VisitorColumnActions,
+  options?: VisitorColumnOptions,
 ): ColumnDef<VisitorListItem, unknown>[] {
   return [
     {
@@ -205,7 +211,12 @@ export function getVisitorColumns(
     {
       id: 'status',
       header: 'Status',
-      cell: ({ row }) => <StatusBadge visitor={row.original} />,
+      cell: ({ row }) =>
+        options?.renderStatus ? (
+          options.renderStatus(getVisitorStatus(row.original))
+        ) : (
+          <StatusBadge visitor={row.original} />
+        ),
     },
     {
       id: 'duration',
