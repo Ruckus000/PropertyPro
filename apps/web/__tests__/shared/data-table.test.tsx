@@ -189,3 +189,16 @@ describe('DataTable — loading, empty and keying', () => {
     expect(screen.getByText('Budget 2026').closest('tr')).toBe(first);
   });
 });
+
+describe('DataTable — bare', () => {
+  it('draws its own border by default and drops it when bare', () => {
+    const { container, rerender } = renderTable();
+    const wrapper = () => container.querySelector('table')!.parentElement!.parentElement as HTMLElement;
+    expect(wrapper().className).toContain('border-edge');
+    rerender(
+      <DataTable<Row, unknown> columns={COLUMNS} data={ROWS} bare getRowId={(r) => `row-${r.id}`} />,
+    );
+    expect(wrapper().className).not.toContain('border');
+    expect(wrapper().className).not.toContain('rounded-md');
+  });
+});

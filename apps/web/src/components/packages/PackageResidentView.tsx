@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { format, parseISO } from 'date-fns';
 import { Package } from 'lucide-react';
+import { formatDatetime } from '@/components/packages/package-columns';
 import { useMyPackages, type PackageListItem } from '@/hooks/use-packages';
 import { isNoUnitAssociationError } from '@/lib/units/no-unit-association';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -15,15 +15,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 interface PackageResidentViewProps {
   communityId: number;
-}
-
-function formatDatetime(dateStr: string | null): string {
-  if (!dateStr) return '\u2014';
-  try {
-    return format(parseISO(dateStr), 'MMM d, yyyy h:mm a');
-  } catch {
-    return dateStr;
-  }
 }
 
 function StatusBadge({ status }: { status: PackageListItem['status'] }) {

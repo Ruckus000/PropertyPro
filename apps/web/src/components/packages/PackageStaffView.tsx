@@ -1,23 +1,14 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus } from 'lucide-react';
-import { usePackages, usePickupPackage, type PackageListItem } from '@/hooks/use-packages';
+import { usePackages, type PackageListItem } from '@/hooks/use-packages';
 import { DataTable } from '@/components/shared/data-table';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { getPackageColumns, type PackageColumnActions } from './package-columns';
 import { PackageLogForm } from './PackageLogForm';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { PackagePickupDialog } from './PackagePickupDialog';
 
 interface PackageStaffViewProps {
   communityId: number;
@@ -33,10 +24,8 @@ export function PackageStaffView({ communityId }: PackageStaffViewProps) {
   const [activeFilter, setActiveFilter] = useState('all');
   const [logOpen, setLogOpen] = useState(false);
   const [pickupPkg, setPickupPkg] = useState<PackageListItem | null>(null);
-  const [pickedUpByName, setPickedUpByName] = useState('');
 
   const { data: packages, isLoading } = usePackages(communityId);
-  const pickupMutation = usePickupPackage(communityId);
 
   const filteredPackages = useMemo(() => {
     if (!packages) return [];
@@ -54,23 +43,12 @@ export function PackageStaffView({ communityId }: PackageStaffViewProps) {
     () => ({
       onMarkPickedUp: (pkg) => {
         setPickupPkg(pkg);
-        setPickedUpByName('');
       },
     }),
     [],
   );
 
   const columns = useMemo(() => getPackageColumns(actions), [actions]);
-
-  const handlePickup = useCallback(async () => {
-    if (!pickupPkg || !pickedUpByName.trim()) return;
-    await pickupMutation.mutateAsync({
-      packageId: pickupPkg.id,
-      pickedUpByName: pickedUpByName.trim(),
-    });
-    setPickupPkg(null);
-    setPickedUpByName('');
-  }, [pickupPkg, pickedUpByName, pickupMutation]);
 
   return (
     <div className="space-y-4">
@@ -104,46 +82,11 @@ export function PackageStaffView({ communityId }: PackageStaffViewProps) {
         onOpenChange={setLogOpen}
       />
 
-      {/* Pickup confirmation dialog */}
-      <Dialog
-        open={pickupPkg !== null}
-        onOpenChange={(open) => {
-          if (!open) setPickupPkg(null);
-        }}
-      >
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>Mark as Picked Up</DialogTitle>
-            <DialogDescription>
-              Confirm pickup for {pickupPkg?.recipientName}&apos;s{' '}
-              {pickupPkg?.carrier} package.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <Label htmlFor="pickup-by">Picked Up By</Label>
-            <Input
-              id="pickup-by"
-              placeholder="Name of person picking up"
-              value={pickedUpByName}
-              onChange={(e) => setPickedUpByName(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPickupPkg(null)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handlePickup}
-              disabled={!pickedUpByName.trim() || pickupMutation.isPending}
-            >
-              {pickupMutation.isPending ? 'Confirming...' : 'Confirm Pickup'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PackagePickupDialog
+        communityId={communityId}
+        pkg={pickupPkg}
+        onClose={() => setPickupPkg(null)}
+      />
     </div>
   );
 }
