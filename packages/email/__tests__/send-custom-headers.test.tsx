@@ -73,7 +73,7 @@ describe('sendEmail custom headers', () => {
       '<https://example.com/unsubscribe?token=real>',
     );
     expect(testInbox[0]?.headers['List-Unsubscribe-Post']).toBe(
-      'List-Unsubscribe=One-Click-Unsubscribe',
+      'List-Unsubscribe=One-Click',
     );
     // ...while unrelated caller headers still survive, so this is proving
     // precedence and not merely that caller headers are dropped.

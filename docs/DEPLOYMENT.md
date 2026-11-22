@@ -210,7 +210,7 @@ surfaced:
   unsubscribe links. **These are the quietest failure in this section.** The
   signers return `null` instead of throwing (deliberately: an unset variable
   must not take down every association's mail), so the send still succeeds and
-  the email still carries a `List-Unsubscribe-Post: One-Click` header — while
+  the email still carries a `List-Unsubscribe-Post: List-Unsubscribe=One-Click` header — while
   the URL it points at falls back to `/settings?communityId=…`, which is
   login-walled. The mail therefore *advertises* RFC 8058 one-click unsubscribe
   and cannot honour it. Gmail and Yahoo's bulk-sender rules treat that as a

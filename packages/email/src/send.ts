@@ -104,7 +104,7 @@ function buildHeaders(options: SendEmailOptions): Record<string, string> {
     }
 
     headers['List-Unsubscribe'] = `<${options.unsubscribeUrl}>`;
-    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click-Unsubscribe';
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
   }
 
   return headers;

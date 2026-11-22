@@ -6,7 +6,8 @@
  *   tenant membership. Both read `communities.community_type` through SQL that
  *   a mocked builder cannot prove.
  * - `listJoinRequestsForUser` is the requester's view: their own rows only,
- *   each with the community's name (a LEFT JOIN), and never `reviewedBy`.
+ *   each with the community's name (a LEFT JOIN), never `reviewedBy`, and a
+ *   reviewer note only on a denial.
  *
  * Seeds communityA (condo) and communityC (apartment), plus tenantA, a member
  * of communityA only, who asks to join both.
@@ -29,6 +30,7 @@ import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
   approveJoinRequest,
   createJoinRequest,
+  denyJoinRequest,
   listJoinRequestsForUser,
 } from '@/lib/join-requests/approve-request';
 
@@ -137,7 +139,11 @@ describeDb('join requests — apartments are tenant-only; requesters see their o
       )
       .returning({ id: communityJoinRequests.id });
 
-    await approveJoinRequest({ requestId: pendingRow!.id, reviewerUserId: reviewerId });
+    await approveJoinRequest({
+      requestId: pendingRow!.id,
+      reviewerUserId: reviewerId,
+      notes: 'Lease on file; manager-only note',
+    });
 
     const [role] = await state.db
       .select({ isUnitOwner: userRoles.isUnitOwner, displayTitle: userRoles.displayTitle })
@@ -158,5 +164,35 @@ describeDb('join requests — apartments are tenant-only; requesters see their o
     );
     expect(listed?.status).toBe('approved');
     expect(listed?.reviewedAt).toBeInstanceOf(Date);
+    // The row records what was granted, not the Owner that was asked for.
+    expect(listed?.residentType).toBe('tenant');
+    // An approval note is for managers; the requester does not see it.
+    expect(listed?.reviewNotes).toBeNull();
+    const [stored] = await state.db
+      .select({ reviewNotes: communityJoinRequests.reviewNotes })
+      .from(communityJoinRequests)
+      .where(eq(communityJoinRequests.id, pendingRow!.id));
+    expect(stored?.reviewNotes).toBe('Lease on file; manager-only note');
+  });
+
+  it('shows the requester a DENIAL reason, which the deny flow says is sent to them', async () => {
+    const [condoRequest] = (await listJoinRequestsForUser(requesterId)).filter(
+      (r) => r.communityId === condoId,
+    );
+    expect(condoRequest?.status).toBe('pending');
+
+    await denyJoinRequest({
+      requestId: condoRequest!.id,
+      reviewerUserId: reviewerId,
+      notes: 'Unit 101 is not on our roster.',
+    });
+
+    const [listed] = (await listJoinRequestsForUser(requesterId)).filter(
+      (r) => r.communityId === condoId,
+    );
+    expect(listed?.status).toBe('denied');
+    expect(listed?.reviewNotes).toBe('Unit 101 is not on our roster.');
+    // Not an apartment, so nothing rewrote the owner request it was filed as.
+    expect(listed?.residentType).toBe('owner');
   });
 });

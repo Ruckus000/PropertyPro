@@ -56,7 +56,7 @@ describe('sendEmail', () => {
     expect(testInbox).toHaveLength(1);
     expect(testInbox[0]?.headers['List-Unsubscribe']).toBe('<https://example.com/unsubscribe>');
     expect(testInbox[0]?.headers['List-Unsubscribe-Post']).toBe(
-      'List-Unsubscribe=One-Click-Unsubscribe',
+      'List-Unsubscribe=One-Click',
     );
   });
 
