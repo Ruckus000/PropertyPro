@@ -109,7 +109,13 @@ function forwarded(res: NextResponse, name: string): string | null {
 
 async function expectReadOnly403(res: NextResponse): Promise<void> {
   expect(res.status).toBe(403);
-  expect(await res.json()).toEqual({ error: 'Forbidden: support session is read-only' });
+  expect(await res.json()).toEqual({
+    error: {
+      code: 'SUPPORT_SESSION_READ_ONLY',
+      message:
+        "This support session is read-only, so changes are turned off. Ask a manager of this community to make this change.",
+    },
+  });
   expect(forwarded(res, 'x-support-session')).toBeNull();
 }
 

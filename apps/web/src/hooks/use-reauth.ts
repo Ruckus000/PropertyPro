@@ -51,9 +51,9 @@ export function useReauth(): UseReauthReturn {
       body: JSON.stringify({ password }),
     });
     if (!res.ok) {
-      // The API returns two error shapes: structured AppError responses
-      // ({ error: { code, message } }) and middleware-level rejections
-      // ({ error: "<string>" }). Handle both, and only blame the password
+      // Routes and the middleware answer { error: { code, message } }; a bare
+      // { error: "<string>" } is still accepted (older deploys, proxies).
+      // Handle both, and only blame the password
       // for an actual 401 — other statuses (500 misconfig, 429 rate limit,
       // 403 CSRF) deserve their own message so users aren't told their
       // password is wrong when the server is the problem.

@@ -21,7 +21,10 @@ import {
   SUPPORT_SESSION_COOKIE,
 } from '@propertypro/shared';
 import {
+  AppError,
   buildSupportSessionClearCookie,
+  ForbiddenError,
+  NotFoundError,
   resolveSupportCookieHostname,
   UnauthorizedError,
 } from '@propertypro/shared/http';
@@ -313,6 +316,10 @@ function finaliseResponse(
   return target;
 }
 
+// One message for both CSRF refusals; the code tells origin from referer.
+const CSRF_REJECTED_MESSAGE =
+  "We blocked this request because it didn't come from a PropertyPro page. Reload the page and try again.";
+
 function notFoundResponse(
   request: NextRequest,
   source: NextResponse,
@@ -322,7 +329,12 @@ function notFoundResponse(
 ): NextResponse {
   const isApi = isApiPath(request.nextUrl.pathname);
   if (isApi) {
-    const target = NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    const target = NextResponse.json(
+      new NotFoundError(
+        "We couldn't find this community. Check the web address, or open it again from your list of communities.",
+      ).toJSON(),
+      { status: 404 },
+    );
     return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
   }
   const redirectUrl = new URL('/select-community', getWebAppOriginFromEnv());
@@ -340,7 +352,15 @@ function internalErrorResponse(
 ): NextResponse {
   const isApi = isApiPath(request.nextUrl.pathname);
   const target = isApi
-    ? NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    ? NextResponse.json(
+        // Same code as withErrorHandler's unknown-error 500, so clients see one shape.
+        new AppError(
+          'Something went wrong on our end. Please try again in a moment.',
+          500,
+          'INTERNAL_ERROR',
+        ).toJSON(),
+        { status: 500 },
+      )
     : new NextResponse('Internal Server Error', { status: 500 });
   return finaliseResponse(source, target, requestId, origin, isApi, isPreview);
 }
@@ -603,10 +623,16 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     const origin = request.headers.get('origin');
     const referer = request.headers.get('referer');
     if (origin && !isAllowedOrigin(origin)) {
-      return NextResponse.json({ error: 'Forbidden: invalid origin' }, { status: 403 });
+      return NextResponse.json(
+        new ForbiddenError(CSRF_REJECTED_MESSAGE, 'INVALID_ORIGIN').toJSON(),
+        { status: 403 },
+      );
     }
     if (!origin && referer && !isAllowedReferer(referer)) {
-      return NextResponse.json({ error: 'Forbidden: invalid referer' }, { status: 403 });
+      return NextResponse.json(
+        new ForbiddenError(CSRF_REJECTED_MESSAGE, 'INVALID_REFERER').toJSON(),
+        { status: 403 },
+      );
     }
   }
 
@@ -1021,7 +1047,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       if (isApiPath(pathname)) {
         return finaliseResponse(
           response as unknown as NextResponse,
-          NextResponse.json({ error: 'Email verification required' }, { status: 403 }),
+          NextResponse.json(
+            new ForbiddenError(
+              'Verify your email address to continue. Check your inbox for the link we sent.',
+              'EMAIL_VERIFICATION_REQUIRED',
+            ).toJSON(),
+            { status: 403 },
+          ),
           requestId,
           origin,
           isApi,
@@ -1348,7 +1380,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return finaliseResponse(
         response as unknown as NextResponse,
         NextResponse.json(
-          { error: 'Forbidden: support session is read-only' },
+          new ForbiddenError(
+            "This support session is read-only, so changes are turned off. Ask a manager of this community to make this change.",
+            'SUPPORT_SESSION_READ_ONLY',
+          ).toJSON(),
           { status: 403 },
         ),
         requestId,
