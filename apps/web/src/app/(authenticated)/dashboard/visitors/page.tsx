@@ -19,6 +19,9 @@ import { FeatureGate } from '@/components/billing/feature-gate';
 import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
 import { PageHeader } from '@/components/shared/page-header';
+import { VisitorsStaffPage } from '@/components/visitors/visitors-staff-page';
+import { describeAccess } from '@/lib/access/describe-access';
+import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -60,6 +63,22 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
       const labelMap = await getUnitLabelMap(communityId, [primaryId]);
       hostUnitLabel = labelMap.get(primaryId);
     }
+  }
+
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  // There is no pilot resident view for visitors: residents always get the current one.
+  const preview = await isDesignPreviewOn(userId);
+
+  if (preview && isStaff) {
+    return (
+      <FeatureGate feature="hasVisitorLogging" communityId={communityId}>
+        <VisitorsStaffPage
+          communityId={communityId}
+          about={describeAccess(membership.communityType, 'visitors', 'own')}
+        />
+      </FeatureGate>
+    );
   }
 
   return (

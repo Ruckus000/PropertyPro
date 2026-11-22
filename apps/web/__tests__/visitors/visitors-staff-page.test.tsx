@@ -1,0 +1,212 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
+
+const { useVisitorsMock, searchParamsRef, checkinMutate, fetchMatches, mutation } = vi.hoisted(() => ({
+  mutation: () => ({ mutateAsync: () => Promise.resolve(), isPending: false }),
+  useVisitorsMock: vi.fn(),
+  searchParamsRef: { current: new URLSearchParams() },
+  checkinMutate: vi.fn(),
+  fetchMatches: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => searchParamsRef.current,
+  usePathname: () => '/dashboard/visitors',
+}));
+
+vi.mock('@/hooks/use-visitors', () => ({
+  useVisitors: useVisitorsMock,
+  useCheckinVisitor: () => ({ mutateAsync: checkinMutate, isPending: false }),
+  useCheckoutVisitor: mutation,
+  useRevokeVisitor: mutation,
+  useCreateVisitor: mutation,
+}));
+vi.mock('@/hooks/use-denied-visitors', () => ({
+  useDeniedVisitors: () => ({
+    data: [
+      {
+        id: 1,
+        fullName: 'Chris Vaughn',
+        reason: 'Trespass notice',
+        vehiclePlate: null,
+        deniedByUserId: 'user-1',
+        createdAt: '2026-03-01T00:00:00.000Z',
+        isActive: true,
+      },
+    ],
+    isLoading: false,
+  }),
+  useUpdateDeniedVisitor: mutation,
+  useDeleteDeniedVisitor: mutation,
+  useCreateDeniedVisitor: mutation,
+  fetchDeniedMatches: fetchMatches,
+}));
+
+import { VisitorsStaffPage } from '@/components/visitors/visitors-staff-page';
+import type { VisitorListItem } from '@/hooks/use-visitors';
+
+function visitor(id: number, over: Partial<VisitorListItem> = {}): VisitorListItem {
+  return {
+    id,
+    communityId: 1,
+    visitorName: `Guest ${id}`,
+    purpose: 'Dinner',
+    hostUnitId: id,
+    hostUnitLabel: `${id}A`,
+    hostUserId: null,
+    expectedArrival: new Date().toISOString(),
+    checkedInAt: null,
+    checkedOutAt: null,
+    passCode: 'AB12',
+    staffUserId: null,
+    notes: null,
+    guestType: 'one_time',
+    validFrom: null,
+    validUntil: null,
+    recurrenceRule: null,
+    expectedDurationMinutes: 60,
+    vehicleMake: null,
+    vehicleModel: null,
+    vehicleColor: null,
+    vehiclePlate: null,
+    revokedByUserId: null,
+    revokedAt: null,
+    createdAt: '2026-03-01T00:00:00.000Z',
+    updatedAt: '2026-03-01T00:00:00.000Z',
+    ...over,
+  };
+}
+
+const refetch = vi.fn();
+function result(over: Record<string, unknown>) {
+  return { data: undefined, isLoading: false, isError: false, error: null, refetch, ...over };
+}
+const ABOUT = 'Managers can add and change these.' as never;
+const mount = () => render(<VisitorsStaffPage communityId={1} about={ABOUT} />);
+
+describe('VisitorsStaffPage', () => {
+  let replaceState: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    searchParamsRef.current = new URLSearchParams('communityId=1');
+    useVisitorsMock.mockReset();
+    useVisitorsMock.mockReturnValue(result({ data: [visitor(1), visitor(2)] }));
+    checkinMutate.mockReset();
+    checkinMutate.mockResolvedValue(undefined);
+    fetchMatches.mockReset();
+    fetchMatches.mockResolvedValue([]);
+    replaceState = vi.spyOn(window.history, 'replaceState');
+  });
+  afterEach(() => replaceState.mockRestore());
+
+  it('shows the title, two tabs and the Register Visitor primary', () => {
+    mount();
+    expect(screen.getByRole('heading', { level: 1, name: 'Visitors' })).toBeVisible();
+    expect(screen.getAllByRole('tab')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Register Visitor' })).toHaveLength(1);
+    expect(screen.getByText('Guest 1')).toBeVisible();
+  });
+
+  it('marks the selected tab in ink, never in the interactive colour', () => {
+    mount();
+    const selected = screen.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true');
+    expect(selected).toHaveLength(1);
+    expect(selected[0]).toHaveTextContent('Visitors');
+    expect(selected[0]!.className).not.toContain('interactive');
+    expect(selected[0]!.className).toContain('border-content');
+  });
+
+  it('starts on the denied list for ?tab=denied and shows its own add action', () => {
+    searchParamsRef.current = new URLSearchParams('communityId=1&tab=denied');
+    mount();
+    expect(screen.getByText('Chris Vaughn')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Add to Denied List' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Register Visitor' })).toBeNull();
+  });
+
+  it('records the tab in the URL without navigating, keeping other params', async () => {
+    const user = userEvent.setup();
+    searchParamsRef.current = new URLSearchParams('communityId=1&tab=denied');
+    mount();
+    await user.click(screen.getByRole('tab', { name: 'Visitors' }));
+    const url = String(replaceState.mock.calls.at(-1)?.[2]);
+    expect(url).toContain('tab=visitors');
+    expect(url).toContain('communityId=1');
+  });
+
+  it('opens the registration form from the primary', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getByRole('button', { name: 'Register Visitor' }));
+    expect(await screen.findByRole('dialog')).toBeVisible();
+  });
+
+  it('checks a visitor in', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getAllByRole('button', { name: 'Check In' })[0]!);
+    await vi.waitFor(() => expect(checkinMutate).toHaveBeenCalledWith(1));
+  });
+
+  it('warns before checking in a visitor who matches the denied list', async () => {
+    const user = userEvent.setup();
+    fetchMatches.mockResolvedValue([{ id: 9, fullName: 'Guest 1', reason: 'x', vehiclePlate: null, isActive: true }]);
+    mount();
+    await user.click(screen.getAllByRole('button', { name: 'Check In' })[0]!);
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Denied-list match found');
+    expect(checkinMutate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Check In Anyway' }));
+    await vi.waitFor(() => expect(checkinMutate).toHaveBeenCalledWith(1));
+  });
+
+  it('asks for a reason before revoking', async () => {
+    const user = userEvent.setup();
+    mount();
+    await user.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Revoke Visitor Pass');
+  });
+
+  it('keeps the guest-type filter and the quick filters', async () => {
+    const user = userEvent.setup();
+    mount();
+    expect(screen.getByRole('combobox')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Checked In' }));
+    expect(screen.getByText('No visitors found.')).toBeVisible();
+  });
+
+  it('shows status as a glyph and its word, with no interactive colour', () => {
+    const { container } = mount();
+    const cell = Array.from(container.querySelectorAll('tbody td')).find(
+      (td) => td.textContent?.includes('Expected') && td.querySelector('svg'),
+    ) as HTMLElement;
+    expect(cell).toBeDefined();
+    for (const el of [cell, ...Array.from(cell.querySelectorAll('*'))]) {
+      const cls = el.getAttribute('class') ?? '';
+      expect(cls).not.toContain('content-link');
+      expect(cls).not.toContain('interactive');
+    }
+  });
+
+  it('says so when the list cannot load, with a retry', async () => {
+    const user = userEvent.setup();
+    useVisitorsMock.mockReturnValue(result({ data: undefined, isError: true }));
+    mount();
+    expect(screen.getByRole('alert')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('states no figure it does not compute and has no Needs attention position', () => {
+    const { container } = mount();
+    expect(screen.queryByRole('heading', { name: 'Needs attention' })).toBeNull();
+    expect(container.querySelector('[data-source]')).toBeNull();
+    expect(within(container).getByText(/Managers can add and change these/)).toBeInTheDocument();
+  });
+
+  it('has no axe violations', async () => {
+    const { container } = mount();
+    expect(container.querySelectorAll('tbody tr').length).toBeGreaterThan(0);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
