@@ -269,6 +269,10 @@ function resolveSameOriginReturnTo(
     return null;
   }
   if (parsed.origin !== origin) return null;
+  // Same origin is not enough: dot segments and backslashes normalise
+  // `/.//evil.com` to the PATH `//evil.com`, which is protocol-relative the
+  // moment anything serialises it without the origin.
+  if (/^\/[/\\]/.test(parsed.pathname)) return null;
   return { pathname: parsed.pathname, search: parsed.search };
 }
 
@@ -1198,9 +1202,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       if (!user.emailVerified) {
         const verifyUrl = request.nextUrl.clone();
         verifyUrl.pathname = VERIFY_EMAIL_PATH;
+        // Forward only a returnTo that passes the same screen as the verified
+        // branch below. The old `startsWith('/') && !startsWith('//')` check
+        // let `/\evil.com` and `/.//evil.com` through to the verify page.
         const returnTo = request.nextUrl.searchParams.get('returnTo');
-        if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+        if (returnTo && resolveSameOriginReturnTo(returnTo, request.nextUrl.origin)) {
           verifyUrl.searchParams.set('returnTo', returnTo);
+        } else {
+          verifyUrl.searchParams.delete('returnTo');
         }
         return finaliseResponse(
           response as unknown as NextResponse,

@@ -494,6 +494,66 @@ describe('p1-22 session middleware', () => {
     expect(new URL(response.headers.get('location')!).origin).toBe('http://localhost:3000');
   });
 
+  // Values that pass the raw-string screen but that the URL parser normalises
+  // to a protocol-relative PATH (`//evil.example/…`). Same origin is not
+  // enough: the path is off-site the moment anything serialises it without
+  // the origin, so these fall back rather than redirect to `//evil.example`.
+  it.each([
+    ['a dot segment', '/.//evil.example/steal'],
+    ['a parent segment', '/..//evil.example/steal'],
+    ['an encoded dot segment', '/%2e//evil.example/steal'],
+    ['a dot segment then a backslash', '/./\\evil.example/steal'],
+  ])('refuses a returnTo that normalises to a protocol-relative path (%s)', async (_label, returnTo) => {
+    mockAuthState({ id: 'user-1', emailVerified: true });
+
+    const response = await middleware(
+      request(`http://localhost:3000/auth/login?returnTo=${encodeURIComponent(returnTo)}`, {
+        'x-real-ip': nextClientIp(),
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.origin).toBe('http://localhost:3000');
+    expect(location.pathname).toBe('/select-community');
+  });
+
+  it.each([
+    ['backslash protocol-relative', '/\\evil.example/steal'],
+    ['a dot segment', '/.//evil.example/steal'],
+    ['an absolute URL', 'https://evil.example/steal'],
+  ])('an unverified user is not handed a returnTo with %s on the way to verify-email', async (_label, returnTo) => {
+    // The verify-email redirect clones the request URL, so the incoming
+    // returnTo rode along even when the old `startsWith` screen rejected it.
+    mockAuthState({ id: 'user-1', emailVerified: false });
+
+    const response = await middleware(
+      request(`http://localhost:3000/auth/login?returnTo=${encodeURIComponent(returnTo)}`, {
+        'x-real-ip': nextClientIp(),
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.pathname).toBe('/auth/verify-email');
+    expect(location.searchParams.has('returnTo')).toBe(false);
+  });
+
+  it('control: an unverified user keeps a safe returnTo on the way to verify-email', async () => {
+    mockAuthState({ id: 'user-1', emailVerified: false });
+
+    const response = await middleware(
+      request(`http://localhost:3000/auth/login?returnTo=${encodeURIComponent('/documents?tab=minutes')}`, {
+        'x-real-ip': nextClientIp(),
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.pathname).toBe('/auth/verify-email');
+    expect(location.searchParams.get('returnTo')).toBe('/documents?tab=minutes');
+  });
+
   it('keeps unverified users on verify-email route (no redirect loop)', async () => {
     mockAuthState({ id: 'user-1', emailVerified: false });
 

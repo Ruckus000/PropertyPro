@@ -6,6 +6,7 @@ import {
   applyCommunityIdToReturnTo,
   resolveSafeReturnTo,
 } from '../../src/lib/utils/return-to';
+import { resolveReturnTo } from '../../src/lib/utils/auth';
 
 describe('resolveSafeReturnTo', () => {
   it('accepts a plain absolute path', () => {
@@ -71,5 +72,66 @@ describe('applyCommunityIdToReturnTo', () => {
     // A bare-bones smoke test for the catch path. URL is permissive, so the
     // input has to be genuinely malformed.
     expect(applyCommunityIdToReturnTo('http://[bad', 282)).toBe('/dashboard?communityId=282');
+  });
+});
+
+/**
+ * Open redirect via URL normalisation. Each payload starts with ONE slash, so
+ * a raw-string screen passes it, but `new URL` removes dot segments (`.`,
+ * `..`, `%2e`), turns `\` into `/` and strips tabs — collapsing the value into
+ * the PATH `//evil.com…`. `applyCommunityIdToReturnTo` serialised only
+ * `pathname + search + hash`, so `/select-community?returnTo=/.//evil.com`
+ * produced the protocol-relative `//evil.com?communityId=…` as its redirect
+ * and card hrefs.
+ */
+const COLLAPSING_PAYLOADS: Array<[label: string, value: string]> = [
+  ['a dot segment', '/.//evil.com'],
+  ['a parent segment', '/..//evil.com'],
+  ['a segment then a parent segment', '/a/..//evil.com'],
+  ['an encoded dot segment', '/%2e//evil.com'],
+  ['a dot segment then a backslash', '/./\\evil.com'],
+  ['a dot-backslash segment', '/.\\/evil.com'],
+  ['a tab the parser strips', '/\t/x//evil.com/p'],
+];
+
+describe('returnTo values that normalise off-site', () => {
+  it.each(COLLAPSING_PAYLOADS)('resolveSafeReturnTo rejects %s', (_label, value) => {
+    expect(resolveSafeReturnTo(value)).toBeNull();
+  });
+
+  it.each(COLLAPSING_PAYLOADS)(
+    'applyCommunityIdToReturnTo falls back to the dashboard for %s',
+    (_label, value) => {
+      expect(applyCommunityIdToReturnTo(value, 282)).toBe('/dashboard?communityId=282');
+    },
+  );
+
+  it.each([...COLLAPSING_PAYLOADS, ['an absolute URL', 'https://evil.com/x'] as [string, string]])(
+    'applyCommunityIdToReturnTo never emits a protocol-relative or off-site target for %s',
+    (_label, value) => {
+      const out = applyCommunityIdToReturnTo(value, 282);
+      expect(out).toMatch(/^\/(?![/\\])/);
+      expect(new URL(out, 'https://getpropertypro.com').origin).toBe('https://getpropertypro.com');
+    },
+  );
+
+  it.each([
+    ['/dashboard', '/dashboard', '/dashboard?communityId=282'],
+    ['/documents?x=1#h', '/documents?x=1#h', '/documents?x=1&communityId=282#h'],
+    ['/a/../b', '/a/../b', '/b?communityId=282'],
+  ])('control: %s still resolves on-site', (value, safe, applied) => {
+    expect(resolveSafeReturnTo(value)).toBe(safe);
+    expect(applyCommunityIdToReturnTo(value, 282)).toBe(applied);
+  });
+});
+
+describe('resolveReturnTo (login / verify-email)', () => {
+  it.each(COLLAPSING_PAYLOADS)('falls back for %s', (_label, value) => {
+    expect(resolveReturnTo(value)).toBe('/select-community');
+    expect(resolveReturnTo(value, true)).toBe('/dashboard');
+  });
+
+  it.each(['/dashboard', '/documents?x=1#h', '/a/../b'])('control: keeps %s', (value) => {
+    expect(resolveReturnTo(value)).toBe(value);
   });
 });

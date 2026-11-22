@@ -311,6 +311,32 @@ describe('select-community page — tenant host routing', () => {
     expect(html).not.toContain('https://');
   });
 
+  /**
+   * Open redirect: `/.//evil.com` starts with one slash, but URL normalisation
+   * collapses it to the path `//evil.com`, and the relative destination was
+   * built from pathname + search alone — `//evil.com?communityId=133`, which a
+   * browser follows off-site. Only the non-tenant hosts were exposed (a
+   * community subdomain builds an absolute URL via buildCommunityUrl).
+   */
+  it('on the apex, a returnTo that normalises to //evil.com auto-redirects on-site', async () => {
+    listCommunitiesForUserMock.mockResolvedValue([membership(133, 'Breakaway Condos', 'breakaway')]);
+
+    await expect(renderWith('getpropertypro.com', { returnTo: '/.//evil.com' })).rejects.toThrow(
+      'NEXT_REDIRECT',
+    );
+    expect(redirectMock).toHaveBeenCalledWith('/dashboard?communityId=133');
+    const target = (redirectMock.mock.calls[0] as unknown as [string])[0];
+    expect(new URL(target, 'https://getpropertypro.com').origin).toBe('https://getpropertypro.com');
+  });
+
+  it('on the apex, picker cards for a returnTo that normalises to //evil.com stay on-site', async () => {
+    const html = await renderWith('getpropertypro.com', { returnTo: '/.//evil.com' });
+
+    expect(html).toContain('href="/dashboard?communityId=133"');
+    expect(html).toContain('href="/dashboard?communityId=134"');
+    expect(html).not.toContain('evil.com');
+  });
+
   it('on the apex, the single-community auto-redirect stays relative', async () => {
     listCommunitiesForUserMock.mockResolvedValue([membership(133, 'Breakaway Condos', 'breakaway')]);
 
