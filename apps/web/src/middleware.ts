@@ -62,6 +62,7 @@ import {
   USER_PHONE_HEADER,
 } from './lib/request/forwarded-headers';
 import { buildCommunityUrl } from './lib/utils/community-url';
+import { isSafeReturnPath } from './lib/utils/return-to';
 import {
   classifySubdomainPath,
   HOST_NATIVE_PUBLIC_SUFFIX_ROUTES,
@@ -242,40 +243,28 @@ function buildReturnTo(request: NextRequest): string {
   return `${request.nextUrl.pathname}${request.nextUrl.search}`;
 }
 
-/** Reject returnTo values that could cause open-redirect or path-traversal. */
-function safeReturnTo(value: string | null, fallback: string): string {
-  // Reject protocol-relative targets in BOTH forms the WHATWG URL parser treats
-  // as cross-origin ('//host' and '/\host'), plus any control characters.
-  if (!value || !/^\/(?![/\\])/.test(value) || /[\u0000-\u001f]/.test(value)) {
-    return fallback;
-  }
-  return value;
-}
-
 /**
  * Parse a returnTo into the pathname + search to redirect to, or null when it
- * is unsafe. `safeReturnTo` screens the raw string; resolving it against the
- * request origin and requiring the SAME origin back is the second check, so a
- * spelling the regex misses but the URL parser reads as another host still
- * cannot leave the site.
+ * is unsafe. `isSafeReturnPath` (lib/utils/return-to.ts, shared with the login
+ * page, /select-community and demo-login) is the screen: one leading `/` not
+ * followed by `/` or `\`, no control characters, and a parse whose normalised
+ * pathname is not protocol-relative — `/.//evil.com` normalises to the PATH
+ * `//evil.com`. Resolving against the request origin and requiring the SAME
+ * origin back is kept as a second check, so a spelling the screen misses but
+ * the URL parser reads as another host still cannot leave the site.
  */
 function resolveSameOriginReturnTo(
   value: string | null,
   origin: string,
 ): { pathname: string; search: string } | null {
-  const safe = safeReturnTo(value, '');
-  if (!safe) return null;
+  if (!value || !isSafeReturnPath(value)) return null;
   let parsed: URL;
   try {
-    parsed = new URL(safe, origin);
+    parsed = new URL(value, origin);
   } catch {
     return null;
   }
   if (parsed.origin !== origin) return null;
-  // Same origin is not enough: dot segments and backslashes normalise
-  // `/.//evil.com` to the PATH `//evil.com`, which is protocol-relative the
-  // moment anything serialises it without the origin.
-  if (/^\/[/\\]/.test(parsed.pathname)) return null;
   return { pathname: parsed.pathname, search: parsed.search };
 }
 

@@ -32,9 +32,14 @@ function staysOnSite(url: URL): boolean {
 
 /**
  * True when `value` is a same-site path that stays same-site after URL
- * normalisation. Mirrors the middleware's `safeReturnTo` raw-string screen
- * (one leading `/` not followed by `/` or `\`, no control characters) and adds
- * the parse-and-compare step.
+ * normalisation: a raw-string screen (one leading `/` not followed by `/` or
+ * `\`, no control characters) plus the parse-and-compare step.
+ *
+ * The ONE screen for every returnTo/redirect reader in apps/web: the
+ * middleware, the login and verify-email pages, /select-community and the
+ * demo-login `?redirect=` override all call it. It must stay import-free and
+ * runtime-neutral (`URL` and RegExp only) because the middleware imports it
+ * into the edge bundle.
  */
 export function isSafeReturnPath(value: string): boolean {
   if (!/^\/(?![/\\])/.test(value)) return false;

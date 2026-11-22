@@ -16,6 +16,7 @@ import {
 import { buildSecurityHeaders, buildCspHeader } from '@/lib/middleware/security-headers';
 import { createDemoSession } from '@/lib/services/demo-session';
 import { fillDemoCommunitySite } from '@/lib/services/site-look-service';
+import { isSafeReturnPath } from '@/lib/utils/return-to';
 import {
   getDemoCommunityExpiry,
   getDemoInstanceForLogin,
@@ -126,6 +127,34 @@ function loginError(baseUrl: string, error?: string): NextResponse {
   return createRedirectResponse(new URL(url, baseUrl));
 }
 
+/**
+ * Resolve the post-login destination. An explicit `?redirect=` override is
+ * honoured only when it passes the shared returnTo screen AND, resolved against
+ * the trusted base, keeps that base's origin. Anything else falls back to the
+ * role's default page.
+ *
+ * The HMAC signs `token`, not `redirect`, so the override is attacker-chosen
+ * for anyone holding a valid demo link. The URL parser maps `\` to `/` and
+ * strips tabs and newlines, so `/\evil.com`, `/<TAB>/evil.com` and
+ * `/<LF>/evil.com` all pass a `startsWith('/') && !startsWith('//')` screen
+ * and still resolve to `https://evil.com/`.
+ */
+function resolveRedirectTarget(
+  explicitRedirect: string | null,
+  defaultPath: string,
+  trustedBaseUrl: string,
+): URL {
+  const fallback = new URL(defaultPath, trustedBaseUrl);
+  if (!explicitRedirect || !isSafeReturnPath(explicitRedirect)) return fallback;
+  let candidate: URL;
+  try {
+    candidate = new URL(explicitRedirect, trustedBaseUrl);
+  } catch {
+    return fallback;
+  }
+  return candidate.origin === fallback.origin ? candidate : fallback;
+}
+
 // route-gate: public — sessionless demo auto-login; validateDemoToken checks the demo instance's HMAC before any session is minted
 export async function GET(request: Request) {
   const trustedBaseUrl = getTrustedBaseUrl(request);
@@ -199,26 +228,15 @@ export async function GET(request: Request) {
   }
   await fillDemoCommunitySite(communityId);
 
-  // Allow explicit redirect override (used by admin preview tabs)
-  const explicitRedirect = url.searchParams.get('redirect');
-  let redirectPath: string;
-  if (explicitRedirect) {
-    if (
-      !explicitRedirect.startsWith('/') ||
-      explicitRedirect.startsWith('//') ||
-      explicitRedirect.includes('://')
-    ) {
-      return loginError(trustedBaseUrl, 'invalid_redirect');
-    }
-    redirectPath = explicitRedirect;
-  } else {
-    redirectPath =
-      payload.role === 'resident'
-        ? `/mobile?communityId=${communityId}`
-        : `/dashboard?communityId=${communityId}`;
-  }
-
-  const redirectToUrl = new URL(redirectPath, trustedBaseUrl);
+  const defaultRedirectPath =
+    payload.role === 'resident'
+      ? `/mobile?communityId=${communityId}`
+      : `/dashboard?communityId=${communityId}`;
+  const redirectToUrl = resolveRedirectTarget(
+    url.searchParams.get('redirect'),
+    defaultRedirectPath,
+    trustedBaseUrl,
+  );
   // Propagate preview flag so the final page response has relaxed iframe headers
   if (url.searchParams.get('preview') === 'true') {
     redirectToUrl.searchParams.set('preview', 'true');
