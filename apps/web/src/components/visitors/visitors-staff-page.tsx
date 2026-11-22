@@ -58,7 +58,16 @@ function renderStatus(status: VisitorStatus): React.ReactNode {
 }
 
 // Ink, not coral: the selected tab is marked by an underline (design §11.3).
-const TRIGGER_CLASS = 'data-[state=active]:border-b-2 data-[state=active]:border-content';
+// A plain left-aligned row of text tabs: a hairline under the whole row, an ink
+// underline under the selected tab. These override the primitive's pill (bar
+// background, centring, rounding, shadow, active card fill) with className only.
+// Every override has the primitive's variant (none, or data-[state=active]) so
+// tailwind-merge replaces rather than stacks; the primitive has no md: twin for
+// any of them. The 44px height below md is the primitive's min-h-11.
+const LIST_CLASS =
+  'flex w-full justify-start gap-1 rounded-none border-b border-edge-strong bg-transparent p-0';
+const TRIGGER_CLASS =
+  'rounded-none border-b-2 border-transparent py-2 data-[state=active]:border-content data-[state=active]:bg-transparent data-[state=active]:shadow-none';
 
 export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps) {
   const pathname = usePathname();
@@ -125,7 +134,7 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
             />
           }
           tabs={
-            <TabsList>
+            <TabsList className={LIST_CLASS}>
               <TabsTrigger value="visitors" className={TRIGGER_CLASS}>
                 Visitors
               </TabsTrigger>
