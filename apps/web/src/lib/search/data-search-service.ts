@@ -128,7 +128,7 @@ async function executeSearchGroup(
           id: row.id,
           title: row.title,
           subtitle: `${row.priority} · ${row.status}`,
-          href: operationsHubHref(communityId, 'requests'),
+          href: operationsHubHref(communityId, 'requests', { request: row.id }),
           entityType: 'maintenance',
           status: row.status,
           priority: row.priority,

@@ -50,6 +50,20 @@ describe('operationsHubHref', () => {
       '/communities/42/operations?tab=requests&scope=mine'
     );
   });
+
+  it('names the request whose panel to open', () => {
+    expect(operationsHubHref(42, 'requests', { request: 7 })).toBe(
+      '/communities/42/operations?tab=requests&request=7'
+    );
+  });
+
+  it('leaves out a request that is not a positive integer', () => {
+    for (const bad of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(operationsHubHref(42, 'requests', { request: bad })).toBe(
+        '/communities/42/operations?tab=requests'
+      );
+    }
+  });
 });
 
 describe('buildLegacyRedirectParams', () => {

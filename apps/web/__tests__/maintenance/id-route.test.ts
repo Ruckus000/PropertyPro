@@ -105,6 +105,10 @@ vi.mock('@/lib/services/notification-service', () => ({
 }));
 
 import { GET, PATCH, DELETE } from '../../src/app/api/v1/maintenance-requests/[id]/route';
+import {
+  allowedNextStatuses,
+  isAllowedStatusTransition,
+} from '../../src/lib/maintenance/status-transitions';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -584,7 +588,7 @@ describe('maintenance requests [id] route', () => {
       expect('internalNotes' in notifPayload).toBe(false);
     });
 
-    it('status change creates in-app notification linking to the Operations hub', async () => {
+    it("status change creates in-app notification opening the request's panel in the Operations hub", async () => {
       const req = new NextRequest(
         'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',
         {
@@ -602,7 +606,7 @@ describe('maintenance requests [id] route', () => {
         42,
         expect.objectContaining({
           category: 'maintenance',
-          actionUrl: '/communities/42/operations?tab=requests',
+          actionUrl: '/communities/42/operations?tab=requests&request=1',
         }),
         expect.objectContaining({ type: 'specific_user' }),
         'session-user-1',
@@ -626,6 +630,41 @@ describe('maintenance requests [id] route', () => {
           newValues: expect.objectContaining({ internalNotes: 'Updated internal note' }),
         }),
       );
+    });
+
+    // The route reads the shared table rather than a copy of its own, so the
+    // manager's form (which reads the same table) can never offer a move the
+    // server refuses. Every pair the table names is checked both ways.
+    describe('enforces lib/maintenance/status-transitions for every pair', () => {
+      const STATUSES = ['open', 'submitted', 'acknowledged', 'in_progress', 'resolved', 'closed'];
+      const pairs = STATUSES.flatMap((from) =>
+        STATUSES.filter((to) => to !== 'open').map((to) => [from, to] as const),
+      );
+
+      it.each(pairs)('%s → %s', async (from, to) => {
+        createScopedClientMock.mockReturnValue(
+          makeDefaultScopedClient({
+            requestRows: [makeMaintenanceRow({ status: from })],
+            updatedRows: [makeMaintenanceRow({ status: to })],
+          }),
+        );
+        const req = new NextRequest(
+          'http://localhost:3000/api/v1/maintenance-requests/1?communityId=42',
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ communityId: 42, status: to }),
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+        const res = await PATCH(req, { params: Promise.resolve({ id: '1' }) });
+        if (isAllowedStatusTransition(from, to)) {
+          expect(res.status).toBe(200);
+        } else {
+          expect(res.status).toBe(422);
+          const body = await res.json() as { error: { details: { allowedTransitions: string[] } } };
+          expect(body.error.details.allowedTransitions).toEqual([...allowedNextStatuses(from)]);
+        }
+      });
     });
 
     it('legacy open status rows can transition to acknowledged', async () => {

@@ -72,6 +72,15 @@ vi.mock('../../../src/components/operations/ReservationCreateSheet', () => ({
   ReservationCreateSheet: (props: { open: boolean; initialAmenityId?: number }) =>
     props.open ? <div role="heading">Reserve Amenity {props.initialAmenityId ?? ''}</div> : null,
 }));
+vi.mock('../../../src/components/operations/RequestDetailSheet', () => ({
+  RequestDetailSheet: (props: { open: boolean; onClose: () => void; requestId: number; isAdmin: boolean }) =>
+    props.open ? (
+      <div>
+        <div role="heading" aria-level={2}>{`Request ${props.requestId}${props.isAdmin ? ' (manager)' : ''}`}</div>
+        <button type="button" onClick={props.onClose}>Close request</button>
+      </div>
+    ) : null,
+}));
 vi.mock('../../../src/components/operations/AmenityFormSheet', () => ({
   AmenityFormSheet: (props: { open: boolean; amenity?: { name: string } }) =>
     props.open ? <div role="heading">{props.amenity ? `Edit ${props.amenity.name}` : 'Add amenity'}</div> : null,
@@ -865,5 +874,143 @@ describe('OperationsHub — amenities', () => {
     render(hub(true));
     expect(useAmenitiesMock).toHaveBeenLastCalledWith(42, { enabled: true });
     expect(await screen.findByRole('heading', { name: 'Edit Pool' })).toBeInTheDocument();
+  });
+});
+
+describe('OperationsHub — request panel', () => {
+  const hub = (isAdmin = false) => (
+    <OperationsHub
+      communityId={42}
+      requestsEnabled={true}
+      workOrdersEnabled={false}
+      reservationsEnabled={false}
+      requestScope={isAdmin ? 'community' : 'mine'}
+      isAdmin={isAdmin}
+      userId="u-1"
+      communityTimezone="America/New_York"
+    />
+  );
+  const leak = {
+    id: 7,
+    communityId: 42,
+    unitId: null,
+    submittedById: 'u-1',
+    title: 'Kitchen leak',
+    description: 'Water under the sink',
+    status: 'submitted',
+    priority: 'high',
+    category: 'plumbing',
+    comments: [],
+    createdAt: '2026-03-27T14:00:00.000Z',
+    updatedAt: '2026-03-27T14:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useMaintenanceRequestsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: { data: [leak], meta: { total: 1, page: 1, limit: 20 } },
+    });
+    useOperationsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { partialFailure: false, unavailableSources: [] } } });
+    useWorkOrdersMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { page: 1, limit: 20, total: 0 } } });
+    useReservationsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { page: 1, limit: 20, total: 0 } } });
+    amenities([]);
+  });
+
+  it('opens the panel for the request named by ?request= (a notification or search link)', async () => {
+    searchParamsMock.mockReturnValue('tab=requests&request=7');
+    render(hub());
+    expect(await screen.findByRole('heading', { name: 'Request 7' })).toBeInTheDocument();
+  });
+
+  it('hands the manager flag to the panel, which decides who gets the status control', async () => {
+    searchParamsMock.mockReturnValue('tab=requests&request=7');
+    render(hub(true));
+    expect(await screen.findByRole('heading', { name: 'Request 7 (manager)' })).toBeInTheDocument();
+  });
+
+  it('opens no panel for a ?request= that is not a request id', async () => {
+    for (const bad of ['abc', '0', '-3', '1.5', '7abc', '0x7', '1e1', ' 7']) {
+      searchParamsMock.mockReturnValue(`tab=requests&request=${bad}`);
+      const { unmount } = render(hub());
+      await screen.findByRole('button', { name: 'Kitchen leak' });
+      expect(screen.queryByRole('button', { name: 'Close request' })).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('opens no panel when maintenance requests are off for this community', () => {
+    searchParamsMock.mockReturnValue('tab=reservations&request=7');
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={false}
+        workOrdersEnabled={false}
+        reservationsEnabled={true}
+        requestScope="mine"
+        isAdmin={false}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Close request' })).not.toBeInTheDocument();
+  });
+
+  it('a request row opens its panel with a history entry, and closing pops exactly that entry', async () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { rerender } = render(hub());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kitchen leak' }));
+    expect(historyPush).toHaveBeenCalledTimes(1);
+    expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=requests&request=7');
+    expect(pushMock).not.toHaveBeenCalled();
+
+    searchParamsMock.mockReturnValue('tab=requests&request=7');
+    rerender(hub());
+    fireEvent.click(await screen.findByRole('button', { name: 'Close request' }));
+    expect(backMock).toHaveBeenCalledTimes(1);
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('closing a panel the visitor arrived with strips request in place, without Back', async () => {
+    const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+    searchParamsMock.mockReturnValue('tab=requests&from=maintenance&request=7');
+    render(hub());
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Close request' }));
+    expect(backMock).not.toHaveBeenCalled();
+    expect(historyReplace).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=requests&from=maintenance');
+    historyReplace.mockRestore();
+  });
+
+  it('opens a request from the All tab, but not a work order', () => {
+    searchParamsMock.mockReturnValue('tab=all');
+    useOperationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [
+          { id: 7, type: 'maintenance_request', title: 'Kitchen leak', status: 'submitted', priority: 'high', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+          { id: 8, type: 'work_order', title: 'Repaint lobby', status: 'created', priority: 'low', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+        ],
+        meta: { cursor: null, limit: 50, partialFailure: false, unavailableSources: [] },
+      },
+    });
+    render(
+      <OperationsHub
+        communityId={42}
+        requestsEnabled={true}
+        workOrdersEnabled={true}
+        reservationsEnabled={false}
+        requestScope="community"
+        isAdmin={true}
+        userId="u-1"
+        communityTimezone="America/New_York"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Kitchen leak' }));
+    expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=all&request=7');
+    expect(screen.queryByRole('button', { name: 'Repaint lobby' })).not.toBeInTheDocument();
   });
 });

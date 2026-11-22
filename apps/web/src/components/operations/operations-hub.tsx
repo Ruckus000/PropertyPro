@@ -40,6 +40,10 @@ const AmenityFormSheet = dynamic(
   () => import('./AmenityFormSheet').then((m) => ({ default: m.AmenityFormSheet })),
   { ssr: false },
 );
+const RequestDetailSheet = dynamic(
+  () => import('./RequestDetailSheet').then((m) => ({ default: m.RequestDetailSheet })),
+  { ssr: false },
+);
 // The two amenity tabs render only when selected, so their code loads then (perf-check budget).
 const AmenityList = dynamic(() => import('./AmenityList').then((m) => ({ default: m.AmenityList })));
 const ReservationList = dynamic(() => import('./ReservationList').then((m) => ({ default: m.ReservationList })));
@@ -62,6 +66,21 @@ function parsePage(raw: string | null): number {
   const page = Number(raw);
   return Number.isInteger(page) && page >= 1 ? page : 1;
 }
+
+/** `?request=` names the maintenance request whose panel is open; anything else opens none. */
+function parseRequestId(raw: string | null): number | undefined {
+  if (raw === null || !/^\d+$/.test(raw)) return undefined;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+}
+
+/**
+ * Makes a whole list card open its detail: the title's button stretches an
+ * invisible layer over the card (the card must be `relative`), and that layer
+ * carries the focus ring.
+ */
+const CARD_OPEN_BUTTON_CLASS =
+  'text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-focus';
 
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations' | 'amenities';
 
@@ -180,6 +199,12 @@ export function OperationsHub({
   const createAmenityId = Number.isInteger(rawAmenityId) && rawAmenityId > 0 ? rawAmenityId : undefined;
   // True only while a sheet this page opened (pushState) is showing.
   const openedHereRef = useRef(false);
+  const openRequestId = parseRequestId(searchParams.get('request'));
+  // The same, for the request panel.
+  const requestOpenedHereRef = useRef(false);
+  // The card button that opened the request panel, so closing it returns focus
+  // there. A ref, not state: the panel is gone before Radix asks where to focus.
+  const requestOpenerRef = useRef<HTMLElement | null>(null);
 
   const operationsQuery = useOperations(
     communityId,
@@ -359,6 +384,37 @@ export function OperationsHub({
     window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
   }
 
+  /** Opens a request's panel; Back closes it, exactly as for the create sheets above. */
+  function openRequest(requestId: number, opener: HTMLElement) {
+    requestOpenerRef.current = opener;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('request', String(requestId));
+    requestOpenedHereRef.current = true;
+    window.history.pushState(null, '', `${pathname}?${params.toString()}`);
+  }
+
+  /** A visitor who arrived on `?request=` (a notification, search, an email) gets the param stripped in place. */
+  function closeRequest() {
+    if (requestOpenedHereRef.current) {
+      requestOpenedHereRef.current = false;
+      router.back();
+      return;
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('request');
+    const query = params.toString();
+    window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
+  }
+
+  /** The panel has no Radix trigger, so without this focus falls to <body> on close. */
+  function restoreRequestOpenerFocus(event: Event) {
+    const opener = requestOpenerRef.current;
+    requestOpenerRef.current = null;
+    if (!opener?.isConnected) return;
+    event.preventDefault();
+    opener.focus();
+  }
+
   const requestsDescription = requestScope === 'community'
     ? 'Review community requests, work orders, and reservations from one hub.'
     : 'Track your requests, work orders, and reservations from one hub.';
@@ -499,13 +555,21 @@ export function OperationsHub({
         {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data ? (
           <div className="space-y-4">
             {operationsQuery.data.data.map((item) => (
-              <article key={`${item.type}-${item.id}`} className="rounded-xl border border-edge bg-surface-card p-5">
+              <article key={`${item.type}-${item.id}`} className="relative rounded-xl border border-edge bg-surface-card p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
                     <p className="text-xs font-semibold uppercase tracking-wide text-content-tertiary">
                       {item.type.replace('_', ' ')}
                     </p>
-                    <h2 className="text-lg font-semibold text-content">{item.title}</h2>
+                    <h2 className="text-lg font-semibold text-content">
+                      {item.type === 'maintenance_request' && requestsEnabled ? (
+                        <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(item.id, e.currentTarget)}>
+                          {item.title}
+                        </button>
+                      ) : (
+                        item.title
+                      )}
+                    </h2>
                     <p className="text-xs text-content-tertiary">
                       Created {formatInCommunityTimezone(item.createdAt, communityTimezone)}
                     </p>
@@ -529,10 +593,14 @@ export function OperationsHub({
         {!activeState.isLoading && !activeState.error && selectedTab === 'requests' && requestsQuery.data ? (
           <div className="space-y-4">
             {requestsQuery.data.data.map((request) => (
-              <article key={request.id} className="rounded-xl border border-edge bg-surface-card p-5">
+              <article key={request.id} className="relative rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-edge-strong">
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-content">{request.title}</h2>
+                    <h2 className="text-lg font-semibold text-content">
+                      <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(request.id, e.currentTarget)}>
+                        {request.title}
+                      </button>
+                    </h2>
                     <p className="text-sm text-content-secondary">{request.description}</p>
                   </div>
                   <StatusBadge status={request.status} />
@@ -613,6 +681,20 @@ export function OperationsHub({
         ) : null}
       </section>
 
+      {openRequestId !== undefined && requestsEnabled ? (
+        <RequestDetailSheet
+          // A new key per request, so a stale status form never carries over.
+          key={openRequestId}
+          open
+          onClose={closeRequest}
+          onCloseAutoFocus={restoreRequestOpenerFocus}
+          communityId={communityId}
+          requestId={openRequestId}
+          communityTimezone={communityTimezone}
+          isAdmin={isAdmin}
+          userId={userId}
+        />
+      ) : null}
       {createValue === 'request' && requestsEnabled ? (
         <RequestCreateSheet
           open
