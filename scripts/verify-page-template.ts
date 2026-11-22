@@ -26,8 +26,8 @@
 // `--write-baseline` rewrites the baseline from the current failures. It may
 // shrink freely; GROWING it needs `--force`, as guard:service-dead-exports does.
 
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { isMainModule } from './lib/is-main-module';
@@ -52,7 +52,8 @@ export const SCANNED_GROUPS = [
 export const EXCLUDED_REASON = 'mobile: phone app is a separate programme';
 
 const DELEGATED_RE = /^\s*\/\/\s*page-template:\s*delegated to\s+(.+?)\s*$/;
-const EXEMPT_RE = /^\s*\/\/\s*page-template:exempt\b/;
+// An exemption must give a reason after a dash; a bare marker does not count.
+const EXEMPT_RE = /^\s*\/\/\s*page-template:exempt\s*[—-]\s*\S/;
 
 export interface Result {
   status: 0 | 1 | 2;
@@ -138,7 +139,9 @@ function parserSelfTest(): boolean {
 function listPages(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) listPages(full, out);
+    const st = lstatSync(full);
+    if (st.isSymbolicLink()) continue; // never follow links out of the tree
+    if (st.isDirectory()) listPages(full, out);
     else if (entry === 'page.tsx') out.push(full);
   }
   return out;
@@ -164,7 +167,10 @@ function delegationFailure(root: string, comments: string[]): string | null {
       const bad: string[] = [];
       for (const p of paths) {
         const target = resolve(root, p);
-        if (!existsSync(target) || !statSync(target).isFile()) {
+        const rel = relative(root, target);
+        if (isAbsolute(p) || rel === '..' || rel.startsWith(`..${sep}`)) {
+          bad.push(`${p} (outside the root)`);
+        } else if (!existsSync(target) || !statSync(target).isFile()) {
           bad.push(`${p} (does not exist)`);
         } else if (!analyze(target, readFileSync(target, 'utf8')).hasPageLayout) {
           bad.push(`${p} (no <PageLayout>)`);
@@ -257,7 +263,7 @@ export function scan(root: string, baseline?: string[]): Result {
   return result;
 }
 
-function report(root: string, r: Result): void {
+function report(r: Result): void {
   if (r.status === 2) {
     console.error(`Page-template guard could not check — ${r.error}`);
     return;
@@ -281,7 +287,52 @@ function report(root: string, r: Result): void {
     for (const s of r.stale) console.error(`  ${s}`);
     console.error('  Run: pnpm exec tsx scripts/verify-page-template.ts --write-baseline');
   }
-  void root;
+}
+
+function baselinePath(root: string): string {
+  return root === repoRoot ? BASELINE_PATH : resolve(root, 'scripts/page-template-baseline.json');
+}
+
+export type BaselinePlan = { ok: true; added: string[] } | { ok: false; added: string[]; reason: string };
+
+/**
+ * Whether a baseline write may proceed. Shrinking an EXISTING baseline is free;
+ * growing it, or writing when none exists (a silent re-seed), needs --force.
+ */
+export function planBaselineWrite(current: string[] | null, next: string[], force: boolean): BaselinePlan {
+  const added = next.filter((p) => !(current ?? []).includes(p));
+  if (force) return { ok: true, added };
+  if (current === null) return { ok: false, added, reason: 'no baseline file exists; seeding one needs --force' };
+  if (added.length > 0) return { ok: false, added, reason: 'the baseline would GROW' };
+  return { ok: true, added };
+}
+
+/** Exit code: 0 written · 1 refused (growth / re-seed) · 2 could not check. */
+export function writeBaseline(root: string, force: boolean): number {
+  const target = baselinePath(root);
+  let current: string[] | null;
+  try {
+    current = existsSync(target) ? loadBaseline(root) : null;
+  } catch (e) {
+    console.error(`Page-template guard could not check — ${e instanceof Error ? e.message : String(e)}`);
+    return 2;
+  }
+  const r = scan(root, []);
+  if (r.status === 2) {
+    report(r);
+    return 2;
+  }
+  const next = [...r.failing].sort();
+  const plan = planBaselineWrite(current, next, force);
+  if (!plan.ok) {
+    console.error(`--write-baseline refused: ${plan.reason}.`);
+    for (const a of plan.added) console.error(`  ${a}`);
+    console.error('Build the page on PageLayout instead. If deliberate, re-run with --force and justify it.');
+    return 1;
+  }
+  writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`);
+  console.log(`Baseline written: ${next.length} page(s) (+${plan.added.length}).`);
+  return 0;
 }
 
 function main(): number {
@@ -300,31 +351,10 @@ function main(): number {
     throw e;
   }
 
-  if (write) {
-    const current = existsSync(root === repoRoot ? BASELINE_PATH : resolve(root, 'scripts/page-template-baseline.json'))
-      ? loadBaseline(root)
-      : null;
-    const r = scan(root, []);
-    if (r.status === 2) {
-      report(root, r);
-      return 2;
-    }
-    const next = [...r.failing].sort();
-    const added = next.filter((p) => !(current ?? []).includes(p));
-    if (added.length > 0 && current !== null && !force) {
-      console.error('--write-baseline would GROW the baseline:');
-      for (const a of added) console.error(`  ${a}`);
-      console.error('Build the page on PageLayout instead. If deliberate, re-run with --force and justify it.');
-      return 1;
-    }
-    const target = root === repoRoot ? BASELINE_PATH : resolve(root, 'scripts/page-template-baseline.json');
-    writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`);
-    console.log(`Baseline written: ${next.length} page(s) (+${added.length}).`);
-    return 0;
-  }
+  if (write) return writeBaseline(root, force);
 
   const r = scan(root);
-  report(root, r);
+  report(r);
   return r.status;
 }
 
