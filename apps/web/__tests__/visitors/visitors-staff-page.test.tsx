@@ -138,7 +138,7 @@ describe('VisitorsStaffPage', () => {
     expect(selected).toHaveAttribute('aria-selected', 'true');
     expect(selected.className).not.toContain('interactive');
     expect(selected.className).not.toContain('bg-surface-card');
-    expect(selected.className).not.toContain('data-[state=active]:shadow ');
+    expect(selected.className.split(/\s+/)).not.toContain('data-[state=active]:shadow');
     expect(selected).toHaveClass('min-h-11');
   });
 

@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-import { checkPage, startPilot } from './helpers/design-pilot';
+import { checkPage, rowOrEmpty, startPilot } from './helpers/design-pilot';
 
 /**
  * Pilot findings that fail today, kept as fixme so the measurement is not lost.
@@ -25,6 +25,7 @@ test.describe('design direction pilot, known issues', () => {
       shot: 'visitors',
       role: 'cam',
       url: `/dashboard/visitors?communityId=${communityId}`,
+      ready: (p) => rowOrEmpty(p, 'No visitors found.'),
       widths: [1280],
     });
   });

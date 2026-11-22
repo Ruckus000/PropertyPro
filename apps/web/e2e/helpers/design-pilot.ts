@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { expect, type BrowserContext, type Page, type TestInfo } from '@playwright/test';
+import { expect, type BrowserContext, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 import { loginAs, type DevRole } from './dev-login';
 import { findOverflows } from './overflow';
@@ -30,15 +30,28 @@ export async function startPilot(
   return login.communityId;
 }
 
-/** Navigate, then wait until the client tree has painted what the page loads. */
-export async function open(page: Page, width: number, url: string) {
+/** A body row, or the empty message a table draws when it has none. */
+export const rowOrEmpty = (page: Page, emptyText: string | RegExp): Locator =>
+  page.locator('main tbody tr').or(page.getByText(emptyText)).first();
+
+/**
+ * Navigate, then wait until the client tree has painted what the page loads.
+ *
+ * `ready` is the proof the data arrived: not `aria-busy` (which is also false
+ * before the query starts) but something only the loaded page draws. Without it
+ * the page falls back to a best-effort network-idle wait.
+ */
+export async function open(page: Page, width: number, url: string, ready?: (page: Page) => Locator) {
   await page.setViewportSize({ width, height: 900 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.locator('main').waitFor({ state: 'visible' });
   await page.evaluate(() => document.fonts.ready);
   await expect(page.locator('main [aria-busy="true"]')).toHaveCount(0);
-  // Data-backed sections render after a client query; let it land.
-  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+  if (ready) {
+    await expect(ready(page), `${url}: the page's data never rendered`).toBeVisible();
+  } else {
+    await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined);
+  }
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
@@ -161,11 +174,18 @@ export async function shoot(page: Page, testInfo: TestInfo, name: string) {
 export async function checkPage(
   page: Page,
   testInfo: TestInfo,
-  opts: { label: string; shot: string; role: string; url: string; widths?: readonly Width[] },
+  opts: {
+    label: string;
+    shot: string;
+    role: string;
+    url: string;
+    ready: (page: Page) => Locator;
+    widths?: readonly Width[];
+  },
 ) {
   for (const width of opts.widths ?? WIDTHS) {
     const where = `${opts.label} @ ${width}px`;
-    await open(page, width, opts.url);
+    await open(page, width, opts.url, opts.ready);
     await expectPaintedTitle(page, where);
     await expectNoBleed(page, where);
     await recordSummaryPlacement(page, testInfo, opts.label, width);
