@@ -22,8 +22,8 @@ everything else:
 
 1. **Time is the product.** If a record has a deadline, show the time-left
    chip. Never a bare date.
-2. **Quiet until it matters.** Colour is for the one main action, for status,
-   and for time. Nothing else.
+2. **Quiet until it matters.** Coral means one thing: the action to take.
+   Other colour is for status and time only.
 3. **One page, one shape.** Header, main column, context. Every page picks a
    template. There are no exceptions.
 4. **Say something true first.** Every page opens with a figure or fact that is
@@ -391,6 +391,46 @@ other four report tabs; the website overview's Records, Versions and Settings
 tabs; the meetings Schedule and Minutes views and the meeting dialog; the
 dashboard's setup rail.
 
+### 5.16 The navigation shell
+
+**(owner)** asked for the navigation to be drawn. It keeps today's structure
+(`nav-config.ts`: Dashboard, then Community, Management and Admin groups; a
+search-led top bar with help, notifications and profile) and takes the design:
+
+- **Sidebar.** Community switcher at the top with the community name in the
+  display face. Items are a bare icon and a label; a count sits at the right in
+  mono where the app already has one. The selected item gets the place mark
+  (6.7): a solid ink tile behind its icon, on a muted row.
+- **Rail.** When the app frame is narrower than about 1300px the sidebar
+  collapses to a 56px icon rail, so the side panel keeps its place beside the
+  list on a 1280px laptop. This settles the laptop-width risk: at 1280 and 1440
+  wide, every table in the mockup fits without sideways scrolling except the
+  import preview.
+- **Top bar.** Search with its shortcut, then a standing "Next deadline" with
+  the time-left chip linking to Compliance, then help, notifications and
+  profile. The next-deadline chip puts rule 1 on every screen.
+- **Running head.** The breadcrumb line carries an "As of" stamp at the right
+  (date and time the page's data was read).
+- **Phone.** No sidebar; a menu button opens it as a drawer. The top bar keeps
+  search, notifications and profile.
+
+### 5.17 States
+
+Every templated page has the same five states, drawn in the mockup's State
+switch:
+
+| State | What shows |
+|---|---|
+| With data | The page |
+| Empty (first run) | 5.7 |
+| Loading | Header and section titles are real; toolbars, rows, cells and the side panel's figures are skeletons that mirror the final layout. Skeletons pulse gently and are still under reduced motion. |
+| Error | Header and side panel stay. The main section shows what failed, that nothing was lost, a "Try again" button and a reference stamp. A left rule in the danger colour, no tinted box. |
+| No results | Toolbar stays with the search text and zero counts. The section says what did not match and offers "Clear search". No example record. |
+
+On phones: tables become stacked records (first column as the title, the rest
+as label and value pairs), a calendar shows marks only with the agenda list
+below it, the key-figure band is two-up, and controls are 44px.
+
 ## 6. Visual language
 
 **(owner)** found the first refined look "still too bland" and asked for
@@ -425,7 +465,7 @@ below has to tell the user something.
 ### 6.2 The four signatures
 
 **(owner)** "I really like signature." Everything else stays neutral so these
-stay recognisable. The fourth, the icon tile, is defined in 6.7.
+stay recognisable. The fourth, the place mark, is defined in 6.7.
 
 1. **Display face.** Fraunces, the brand serif already used on the marketing
    site and in the admin console's page titles. Allowed in exactly three
@@ -473,8 +513,8 @@ stay recognisable. The fourth, the icon tile, is defined in 6.7.
 - Geist for interface text; Geist Mono for counts in chips and statute
   references; Fraunces per 6.2. Page title 30px, headline figure 42px.
   Record titles are medium weight; only page and section titles are heavy.
-- The accent (coral) appears on the one primary button, the selected page
-  tab, and links. Selected filters use ink. Status colours are for status only.
+- The accent (coral) appears on the one primary button and on links. Selected
+  tabs and filters use ink. Status colours are for status only.
 - 120ms colour transitions on hover; a 1px press on buttons; nothing moves on
   load; all off under `prefers-reduced-motion`.
 
@@ -495,6 +535,40 @@ checks for overflow, over-wide tables and duplicated controls.
 | Two steps of a flow drawn at once | One step at a time |
 | "About" text described the interface or the plan | About says who can do what, nothing else |
 | Card footer link "Open" beside a status badge "Open" | Card action is "View" |
+
+### 6.8 Timelessness: research and what changed
+
+**(owner)** asked for more character and for research into how large firms
+achieve timeless design.
+
+Sources read include Vitsoe on Rams, Apple's iOS 7 and 2025 design
+announcements, Material's print-based foundations, NN/g on flat design and low
+contrast, Linear's redesign, Stripe's colour system, Butterick on tables of
+numbers, and the Fraunces source. Not verified from a primary source: IBM and
+Paul Rand, the NYC subway standards, Bloomberg's amber, and Apple's type
+history beyond the Bold Text fixes.
+
+What lasts: structure over effects; a typeface chosen for the job and kept;
+one owned colour with a functional meaning; legibility as a floor; density
+tuned to the task; small details done correctly. What dates: gloss, gradients,
+long shadows and glass; ultra-thin type; low-contrast grey; house illustration
+styles; decorative motion.
+
+Changes made because of it:
+
+| Change | Why |
+|---|---|
+| Coral means only "the action to take" (primary button and links). The selected tab is ink. | One owned colour with one meaning, as the FT's pink. |
+| Three weights of rule: hairline between rows, a firmer rule under headers, a double rule under the summary figures. | Ledger convention; hierarchy from rules, not boxes or effects. |
+| Running head with an "As of" stamp; statute chips are real citations. | Record-book furniture is kept only where it carries information, which is what stops it being costume. |
+| Icons are bare and monochrome. The soft-filled tiles are gone; one solid ink tile marks the current place. | Soft rounded icon tiles were judged the highest dating risk in the direction. |
+| Fraunces with its soft and wonky axes set to 0, moderate weight. | Those axes are the early-2020s look; the plain cut is a conventional old-style serif. |
+| A numeric voice: tabular figures everywhere, amounts right-aligned, one date format ("Nov 21, 2026"), mono for citations, counts in chips and stamps. | Correct number setting reads as quality in any decade. |
+| A registrar's writing voice: plain and exact ("Posted Nov 18. Due in 9 days."). | Voice survives any reskin. |
+
+Remaining judgement calls: the warm paper background is fashionable now but
+has long print precedent, so it stays near-neutral with strong contrast; Geist
+is low risk.
 
 ### 6.7 Icons
 
@@ -525,11 +599,11 @@ Decisions:
   status glyph (6.2) says what state it is in. A row shows one or the other:
   a kind icon when the list mixes kinds (notifications, audit trail, dashboard
   feeds), a status glyph when every row is the same kind.
-- **The icon tile, the fourth signature.** A rounded-square tile on the muted
-  surface holding a soft-filled icon. Used only for wayfinding: the page
-  header, navigation, picker cards, empty states, and kind icons in mixed
-  rows. The selected tile turns solid ink with an inverse icon, so selection
-  never depends on colour.
+- **The place mark, the fourth signature.** Icons are bare. One solid ink tile
+  with an inverse icon marks the current place: the selected navigation item,
+  repeated beside the page title. Nothing else gets a tile. (An earlier draft
+  used soft-filled tiles widely; the timeless-design research in 6.8 judged
+  those the most likely part of the direction to date.)
 - **Labels by default.** Icon-only buttons are limited to close, search, more,
   back and expand.
 - **One concept, one icon.** A registry maps each part of the app to one icon
