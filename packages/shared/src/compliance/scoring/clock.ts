@@ -6,7 +6,6 @@
  * the admin console score a community with the same rule. Keep it pure: no
  * I/O, no app imports.
  */
-import { addMonths, isAfter, isBefore } from 'date-fns';
 import { calculatePostingDeadline } from '../posting-deadline';
 
 export type ComplianceStatus = 'satisfied' | 'unsatisfied' | 'overdue' | 'not_applicable';
@@ -123,6 +122,35 @@ export const LATE_POSTING_COUNTS_MONTHS = 12;
  */
 export function calculateRollingWindowStart(referenceDate: Date, months: number = 12): Date {
   return addMonths(referenceDate, -months);
+}
+
+/*
+ * date-fns 4.1.0's `addMonths`, `isAfter` and `isBefore`, copied so this
+ * package keeps no date-fns dependency (a test runner that inlines
+ * @propertypro/shared resolves its imports from the CALLER's package, which
+ * may not have date-fns). Local-calendar arithmetic, clamped to the end of a
+ * shorter month, exactly as date-fns does; parity is pinned against date-fns
+ * itself in apps/web/__tests__/compliance/clock-date-parity.test.ts.
+ */
+function addMonths(date: Date, amount: number): Date {
+  const result = new Date(date.getTime());
+  if (Number.isNaN(amount)) return new Date(Number.NaN);
+  if (!amount) return result;
+  const dayOfMonth = result.getDate();
+  const endOfDesiredMonth = new Date(result.getTime());
+  endOfDesiredMonth.setMonth(result.getMonth() + amount + 1, 0);
+  const daysInMonth = endOfDesiredMonth.getDate();
+  if (dayOfMonth >= daysInMonth) return endOfDesiredMonth;
+  result.setFullYear(endOfDesiredMonth.getFullYear(), endOfDesiredMonth.getMonth(), dayOfMonth);
+  return result;
+}
+
+function isAfter(date: Date, dateToCompare: Date): boolean {
+  return date.getTime() > dateToCompare.getTime();
+}
+
+function isBefore(date: Date, dateToCompare: Date): boolean {
+  return date.getTime() < dateToCompare.getTime();
 }
 
 function iso(date: Date | null | undefined): string | null {
