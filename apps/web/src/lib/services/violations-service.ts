@@ -435,9 +435,9 @@ async function notifyArcDecision(
  * List violations for a community.
  *
  * Note (Plan B3): the `/api/v1/violations` route uses
- * `paginateViolationsForCommunity` instead. This helper serves the resident
- * report page (`(authenticated)/violations/report/page.tsx`), which fetches
- * two small unpaginated lists: "On your unit" (`allowedUnitIds` + the D1a
+ * `paginateViolationsForCommunity` instead. This helper serves the Mine tab of
+ * `(authenticated)/violations/page.tsx` (via `lib/violations/resident-lists.ts`),
+ * which fetches two small unpaginated lists: "On your unit" (`allowedUnitIds` + the D1a
  * `visibleWhere`) and "Your reports" (`reportedByUserId` = the viewer, any unit).
  */
 export async function listViolationsForCommunity(

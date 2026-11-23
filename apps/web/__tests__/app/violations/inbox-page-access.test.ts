@@ -1,6 +1,7 @@
 /**
- * The violations inbox admits whoever the violation admin writes admit
- * (requireViolationAdminWrite → canActAsBoard): managers and board seats.
+ * Who /violations admits. Review follows the violation admin writes
+ * (requireViolationAdminWrite → canActAsBoard): managers and board seats. Mine
+ * admits every resident. A member with neither is turned away.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,10 +18,8 @@ vi.mock('@/lib/request/page-auth-context', () => ({
 vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: membershipMock,
 }));
-vi.mock('@/components/violations/ViolationsAdminInbox', () => ({ ViolationsAdminInbox: () => null }));
 vi.mock('@/components/billing/feature-gate', () => ({ FeatureGate: () => null }));
 // The page imports the data layer at runtime; stub it so the file loads without DATABASE_URL.
-vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: vi.fn(async () => false) }));
 vi.mock('@propertypro/db', async () => ({
   ...(await import('../../../../../packages/db/src/schema')),
   createScopedClient: () => ({ selectFrom: async () => [] }),
@@ -36,7 +35,7 @@ import ViolationsPage from '../../../src/app/(authenticated)/violations/page';
 const base = { communityType: 'condo_718', violationFinesEnabled: false };
 const open = () => ViolationsPage({ searchParams: Promise.resolve({ communityId: '1' }) });
 
-describe('violations inbox access', () => {
+describe('violations page access', () => {
   beforeEach(() => {
     redirectMock.mockClear();
   });
@@ -51,18 +50,14 @@ describe('violations inbox access', () => {
     await expect(open()).resolves.toBeTruthy();
   });
 
-  it('turns away any other resident', async () => {
+  it('admits a plain resident (Mine)', async () => {
     membershipMock.mockResolvedValue({ ...base, role: 'resident', isAdmin: false, designation: null });
-    await expect(open()).rejects.toThrow('redirect:/dashboard?reason=insufficient-permissions');
+    await expect(open()).resolves.toBeTruthy();
+    expect(redirectMock).not.toHaveBeenCalled();
   });
-});
 
-describe('violations inbox for one unit', () => {
-  it('passes ?unitId= to the inbox as its starting filter (the Directory\'s Records link)', async () => {
-    membershipMock.mockResolvedValue({ ...base, role: 'property_manager', isAdmin: true, designation: null });
-    const page = (await ViolationsPage({ searchParams: Promise.resolve({ communityId: '1', unitId: '5' }) })) as {
-      props: { children: { props: { initialUnitId?: number } } };
-    };
-    expect(page.props.children.props.initialUnitId).toBe(5);
+  it('turns away a member with neither tab', async () => {
+    membershipMock.mockResolvedValue({ ...base, role: 'property_manager', isAdmin: false, designation: null });
+    await expect(open()).rejects.toThrow('redirect:/dashboard?reason=insufficient-permissions');
   });
 });

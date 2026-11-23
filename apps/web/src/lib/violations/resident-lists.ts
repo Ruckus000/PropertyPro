@@ -1,8 +1,7 @@
 /**
- * The two lists a resident sees under the report form: "On your unit" and
- * "Your reports". Server-only; imported by pages. Moved out of
- * violations/report/page.tsx unchanged so the old view and the new Mine tab
- * share one projection (the D1a/D1b privacy boundary).
+ * The two lists on a resident's Mine tab of /violations: "On your unit" and
+ * "Your reports". Server-only; imported by the page. This projection is the
+ * D1a/D1b privacy boundary.
  */
 import { createScopedClient } from '@propertypro/db';
 import type { CommunityMembership } from '@/lib/api/community-membership';

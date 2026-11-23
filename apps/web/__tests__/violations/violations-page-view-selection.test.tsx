@@ -1,14 +1,14 @@
 /**
- * Pins which Violations view each viewer gets. The real tab rules
- * (violationsTabs / pickTab) run; the data layer and both views are stubbed.
+ * Pins which Violations tabs each viewer gets, and who is refused. The real tab
+ * rules (violationsTabs / pickTab) run; the data layer and the page component
+ * are stubbed.
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { membershipMock, previewMock, unitIdsMock, listsMock } = vi.hoisted(() => ({
+const { membershipMock, unitIdsMock, listsMock } = vi.hoisted(() => ({
   membershipMock: vi.fn(),
-  previewMock: vi.fn(),
   unitIdsMock: vi.fn(),
   listsMock: vi.fn(),
 }));
@@ -29,7 +29,6 @@ vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: membershipMock,
 }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
-vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: previewMock }));
 vi.mock('@/lib/units/actor-units', () => ({
   getActorUnitIds: unitIdsMock,
   requireActorUnitId: vi.fn(),
@@ -42,11 +41,8 @@ vi.mock('@/components/billing/feature-gate', () => ({
 }));
 vi.mock('@/components/violations/violations-page', () => ({
   ViolationsPage: (props: unknown) => (
-    <div data-testid="pilot" data-props={JSON.stringify(props)} />
+    <div data-testid="violations-page" data-props={JSON.stringify(props)} />
   ),
-}));
-vi.mock('@/components/violations/ViolationsAdminInbox', () => ({
-  ViolationsAdminInbox: () => <div data-testid="old-inbox" />,
 }));
 
 import ViolationsRoute from '@/app/(authenticated)/violations/page';
@@ -62,19 +58,20 @@ const RESIDENT = {
 };
 const MANAGER = { ...RESIDENT, role: 'property_manager', isAdmin: true };
 const BOARD = { ...RESIDENT, designation: 'board_member' };
+// CommunityRole admits no such member today; it pins that the page refuses
+// rather than admits whoever violationsTabs gives no tab.
+const NEITHER = { ...RESIDENT, role: 'property_manager', isAdmin: false };
 
 function propsOf(): Record<string, unknown> {
-  return JSON.parse(screen.getByTestId('pilot').getAttribute('data-props')!);
+  return JSON.parse(screen.getByTestId('violations-page').getAttribute('data-props')!);
 }
 
 async function run(
   membership: unknown,
-  preview: boolean,
   unitIds: number[],
   extra: Record<string, string> = {},
 ) {
   membershipMock.mockResolvedValue(membership);
-  previewMock.mockResolvedValue(preview);
   unitIdsMock.mockResolvedValue(unitIds);
   listsMock.mockResolvedValue({ onYourUnit: [{ id: 1 }], yourReports: [{ id: 2 }] });
   render(await ViolationsRoute({ searchParams: Promise.resolve({ communityId: '42', ...extra }) }));
@@ -83,31 +80,45 @@ async function run(
 describe('violations route view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
-    previewMock.mockReset();
     unitIdsMock.mockReset();
     listsMock.mockReset();
   });
 
-  it('redirects a plain resident when the gate is off', async () => {
-    await expect(run(RESIDENT, false, [101])).rejects.toThrow(
+  it('admits a plain resident with Mine only', async () => {
+    await run(RESIDENT, [101]);
+    const props = propsOf();
+    expect(props['tabs']).toEqual(['mine']);
+    expect(props['initialTab']).toBe('mine');
+    expect(props['mine']).toEqual({
+      residentUnitIds: [101],
+      onYourUnit: [{ id: 1 }],
+      yourReports: [{ id: 2 }],
+    });
+  });
+
+  it('refuses a member with neither tab (not a resident, no admin, no board seat)', async () => {
+    await expect(run(NEITHER, [])).rejects.toThrow(
+      'NEXT_REDIRECT:/dashboard?reason=insufficient-permissions',
+    );
+    expect(unitIdsMock).not.toHaveBeenCalled();
+    expect(listsMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a member with neither tab as insufficient-permissions, not feature-unavailable, in a type without violations', async () => {
+    await expect(run({ ...NEITHER, communityType: 'apartment' }, [])).rejects.toThrow(
       'NEXT_REDIRECT:/dashboard?reason=insufficient-permissions',
     );
   });
 
-  it('sends a plain resident to insufficient-permissions, not feature-unavailable, in a type without violations (gate off)', async () => {
-    await expect(run({ ...RESIDENT, communityType: 'apartment' }, false, [])).rejects.toThrow(
-      'NEXT_REDIRECT:/dashboard?reason=insufficient-permissions',
+  it('sends a resident in a type without violations to feature-unavailable, loading nothing', async () => {
+    await expect(run({ ...RESIDENT, communityType: 'apartment' }, [101])).rejects.toThrow(
+      'NEXT_REDIRECT:/dashboard?reason=feature-unavailable',
     );
-  });
-
-  it('gives a manager the old inbox when the gate is off', async () => {
-    await run(MANAGER, false, []);
-    expect(screen.getByTestId('old-inbox')).toBeInTheDocument();
-    expect(screen.queryByTestId('pilot')).toBeNull();
+    expect(listsMock).not.toHaveBeenCalled();
   });
 
   it('gives a manager Review only, and loads no lists', async () => {
-    await run(MANAGER, true, []);
+    await run(MANAGER, []);
     const props = propsOf();
     expect(props['tabs']).toEqual(['review']);
     expect(props['mine']).toBeNull();
@@ -117,7 +128,7 @@ describe('violations route view selection', () => {
   });
 
   it('gives a board resident Review and Mine, with lists loaded', async () => {
-    await run(BOARD, true, [101]);
+    await run(BOARD, [101]);
     const props = propsOf();
     expect(props['tabs']).toEqual(['review', 'mine']);
     expect(props['mine']).toEqual({
@@ -129,7 +140,7 @@ describe('violations route view selection', () => {
   });
 
   it('gives a board resident with no units empty Mine and runs no list query', async () => {
-    await run(BOARD, true, []);
+    await run(BOARD, []);
     const props = propsOf();
     expect(props['tabs']).toEqual(['review', 'mine']);
     expect(props['mine']).toEqual({ residentUnitIds: [], onYourUnit: [], yourReports: [] });
@@ -137,7 +148,7 @@ describe('violations route view selection', () => {
   });
 
   it('gives a plain resident Mine even when they type ?tab=review', async () => {
-    await run(RESIDENT, true, [101], { tab: 'review' });
+    await run(RESIDENT, [101], { tab: 'review' });
     const props = propsOf();
     expect(props['tabs']).toEqual(['mine']);
     expect(props['initialTab']).toBe('mine');
@@ -145,13 +156,13 @@ describe('violations route view selection', () => {
   });
 
   it('gives a resident with no units empty Mine and runs no list query', async () => {
-    await run(RESIDENT, true, []);
+    await run(RESIDENT, []);
     expect(propsOf()['mine']).toEqual({ residentUnitIds: [], onYourUnit: [], yourReports: [] });
     expect(listsMock).not.toHaveBeenCalled();
   });
 
   it('passes ?unitId= through as initialUnitId', async () => {
-    await run(MANAGER, true, [], { unitId: '7' });
+    await run(MANAGER, [], { unitId: '7' });
     expect(propsOf()['initialUnitId']).toBe(7);
   });
 });

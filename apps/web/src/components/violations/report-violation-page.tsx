@@ -1,11 +1,10 @@
 'use client';
 
 /**
- * Report a violation on the page kit (preview only). One Section holds the
- * fields, a footer holds the one primary button. Behaviour matches
- * ViolationReportForm: same validation, same photo limits, photos uploaded in
- * order before the report is created. Success navigates to the list with the
- * new id; a failed upload leaves the form filled in.
+ * Report a violation on the page kit. One Section holds the fields, a footer
+ * holds the one primary button. Photos are uploaded in order before the report
+ * is created. Success navigates to the list with the new id; a failed upload
+ * leaves the form filled in.
  */
 import { useState } from 'react';
 import Link from 'next/link';

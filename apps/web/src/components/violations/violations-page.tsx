@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Violations on the page kit (preview only): a Review tab for whoever passes
+ * Violations on the page kit: a Review tab for whoever passes
  * the board rule and a Mine tab for residents. The server decides `tabs`;
  * this component never widens them, and loads Review data only when Review is
  * one of them. Mine rows arrive already projected by `toCardFields`.

@@ -1,7 +1,8 @@
 /**
- * D1a/D1b on the two server-rendered violation pages — the reads the list and
- * detail APIs do not cover. Uses the REAL `residentVisibleViolationsWhere`,
- * `redactViolationReporter` and `hydrateReportedByRole`; only the data layer
+ * D1a/D1b on the two server-rendered violation pages (the case detail and the
+ * Mine tab of /violations) — the reads the list and detail APIs do not cover.
+ * Uses the REAL `residentVisibleViolationsWhere`, `redactViolationReporter`
+ * and `hydrateReportedByRole`; only the data layer
  * and the client components are stubbed, so what is asserted is exactly what
  * crosses to the browser.
  */
@@ -16,8 +17,7 @@ const {
   getViolationForCommunityMock,
   listViolationsForCommunityMock,
   detailViewMock,
-  cardMock,
-  reportFormMock,
+  violationsPageMock,
   roleRows,
 } = vi.hoisted(() => ({
   requireAuthMock: vi.fn(),
@@ -26,8 +26,7 @@ const {
   getViolationForCommunityMock: vi.fn(),
   listViolationsForCommunityMock: vi.fn(),
   detailViewMock: vi.fn(),
-  cardMock: vi.fn(),
-  reportFormMock: vi.fn(),
+  violationsPageMock: vi.fn(),
   roleRows: [] as Array<{ userId: string; role: string }>,
 }));
 
@@ -49,7 +48,6 @@ vi.mock('@/lib/request/page-auth-context', () => ({ requirePageAuthenticatedUser
 vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: requireMembershipMock,
 }));
-vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: vi.fn(async () => false) }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
 vi.mock('@/lib/units/actor-units', () => ({
   getActorUnitIds: getActorUnitIdsMock,
@@ -67,31 +65,21 @@ vi.mock('@/lib/services/violations-service', () => ({
 vi.mock('@/components/billing/feature-gate', () => ({
   FeatureGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/violations/ViolationDetailView', () => ({
   ViolationDetailView: (props: unknown) => {
     detailViewMock(props);
     return null;
   },
 }));
-vi.mock('@/components/violations/ViolationCard', () => ({
-  ViolationCard: (props: unknown) => {
-    cardMock(props);
+vi.mock('@/components/violations/violations-page', () => ({
+  ViolationsPage: (props: unknown) => {
+    violationsPageMock(props);
     return null;
   },
-}));
-vi.mock('@/components/violations/ViolationReportForm', () => ({
-  ViolationReportForm: (props: unknown) => {
-    reportFormMock(props);
-    return null;
-  },
-}));
-vi.mock('@/components/violations/StaffViolationReportForm', () => ({
-  StaffViolationReportForm: () => null,
 }));
 
 import ViolationDetailPage from '@/app/(authenticated)/violations/[id]/page';
-import ViolationReportPage from '@/app/(authenticated)/violations/report/page';
+import ViolationsRoute from '@/app/(authenticated)/violations/page';
 
 const RESIDENT = {
   role: 'resident',
@@ -169,25 +157,27 @@ describe('violation detail page', () => {
   });
 });
 
-describe('violation report page', () => {
-  async function renderReport() {
-    render(await ViolationReportPage({ searchParams: Promise.resolve({ communityId: '42' }) }));
-    return cardMock.mock.calls.map(
-      (c) => c[0] as { violation: Record<string, unknown>; linkable?: boolean },
-    );
+describe('violations page, Mine tab', () => {
+  type Card = Record<string, unknown>;
+  async function renderMine() {
+    render(await ViolationsRoute({ searchParams: Promise.resolve({ communityId: '42' }) }));
+    const props = violationsPageMock.mock.calls[0]![0] as {
+      mine: { residentUnitIds: number[]; onYourUnit: Card[]; yourReports: Card[] };
+    };
+    return props.mine;
   }
 
   it('lists "On your unit" through the D1a predicate and "Your reports" by filer', async () => {
     listViolationsForCommunityMock.mockResolvedValue([]);
 
-    await renderReport();
+    const mine = await renderMine();
 
     expect(listViolationsForCommunityMock).toHaveBeenCalledTimes(2);
-    const [onUnit, mine] = listViolationsForCommunityMock.mock.calls.map((c) => c[1]);
+    const [onUnit, byFiler] = listViolationsForCommunityMock.mock.calls.map((c) => c[1]);
     expect(onUnit).toMatchObject({ allowedUnitIds: [101] });
     expect(onUnit.visibleWhere).toBeDefined();
-    expect(mine).toEqual({ reportedByUserId: 'household-1' });
-    expect(reportFormMock).toHaveBeenCalledWith(expect.objectContaining({ ownUnitIds: [101] }));
+    expect(byFiler).toEqual({ reportedByUserId: 'household-1' });
+    expect(mine.residentUnitIds).toEqual([101]);
   });
 
   it('never names a neighbour who filed against the household, and sends only card fields', async () => {
@@ -195,30 +185,30 @@ describe('violation report page', () => {
       f['reportedByUserId'] ? [] : [row({})],
     );
 
-    const [card] = await renderReport();
+    const { onYourUnit } = await renderMine();
 
-    expect(card!.violation.reportedByRole).toBeNull();
-    expect(card!.violation).not.toHaveProperty('reportedByUserId');
-    expect(card!.violation).not.toHaveProperty('resolutionNotes');
-    expect(card!.violation).not.toHaveProperty('hearingLocation');
-    expect(card!.linkable).toBeUndefined();
+    const [card] = onYourUnit;
+    expect(card!.reportedByRole).toBeNull();
+    expect(card).not.toHaveProperty('reportedByUserId');
+    expect(card).not.toHaveProperty('resolutionNotes');
+    expect(card).not.toHaveProperty('hearingLocation');
   });
 
-  it('links "Your reports" only where the unit is the reporter\'s own', async () => {
+  it('sends a neighbour\'s case in "Your reports" as card fields only, with the filer\'s own attribution', async () => {
     requireAuthMock.mockResolvedValue('neighbour-1');
     listViolationsForCommunityMock.mockImplementation(async (_c: number, f: Record<string, unknown>) =>
-      f['reportedByUserId']
-        ? [row({ id: 7, unitId: 205 }), row({ id: 8, unitId: 101 })]
-        : [],
+      f['reportedByUserId'] ? [row({ id: 7, unitId: 205 }), row({ id: 8, unitId: 101 })] : [],
     );
 
-    const cards = await renderReport();
+    const { yourReports, residentUnitIds } = await renderMine();
 
-    expect(cards.map((c) => [c.violation.id, c.linkable])).toEqual([
-      [7, false],
-      [8, true],
-    ]);
+    expect(yourReports.map((c) => c.id)).toEqual([7, 8]);
+    // Linkability is decided client-side from residentUnitIds
+    // (violations-page.test: "does not link a report about a unit that is not the viewer's").
+    expect(residentUnitIds).toEqual([101]);
+    expect(yourReports[0]).not.toHaveProperty('resolutionNotes');
+    expect(yourReports[0]).not.toHaveProperty('hearingLocation');
     // The filer sees their own attribution.
-    expect(cards[0]!.violation.reportedByRole).toBe('resident');
+    expect(yourReports[0]!.reportedByRole).toBe('resident');
   });
 });

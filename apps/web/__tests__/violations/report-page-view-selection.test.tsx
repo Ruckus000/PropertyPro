@@ -1,14 +1,13 @@
 /**
- * Pins which Report-a-violation view each viewer gets. The real report-mode
- * and role predicates run; the data layer and both views are stubbed.
+ * Pins which report form each viewer gets. The real report-mode and role
+ * predicates run; the data layer and the page component are stubbed.
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { membershipMock, previewMock, unitIdsMock, listMock } = vi.hoisted(() => ({
+const { membershipMock, unitIdsMock, listMock } = vi.hoisted(() => ({
   membershipMock: vi.fn(),
-  previewMock: vi.fn(),
   unitIdsMock: vi.fn(),
   listMock: vi.fn(),
 }));
@@ -29,13 +28,9 @@ vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: membershipMock,
 }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
-vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: previewMock }));
 vi.mock('@/lib/units/actor-units', () => ({
   getActorUnitIds: unitIdsMock,
   requireActorUnitId: vi.fn(),
-}));
-vi.mock('@/lib/units/unit-labels', () => ({
-  withUnitLabels: async (_s: unknown, rows: unknown[]) => rows,
 }));
 vi.mock('@/lib/services/violations-service', () => ({
   listViolationsForCommunity: listMock,
@@ -43,19 +38,11 @@ vi.mock('@/lib/services/violations-service', () => ({
 vi.mock('@/components/billing/feature-gate', () => ({
   FeatureGate: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/violations/report-violation-page', () => ({
   ReportViolationPage: (props: unknown) => (
-    <div data-testid="report-pilot" data-props={JSON.stringify(props)} />
+    <div data-testid="report-page" data-props={JSON.stringify(props)} />
   ),
 }));
-vi.mock('@/components/violations/ViolationReportForm', () => ({
-  ViolationReportForm: () => <div data-testid="old-form" />,
-}));
-vi.mock('@/components/violations/StaffViolationReportForm', () => ({
-  StaffViolationReportForm: () => <div data-testid="old-staff-form" />,
-}));
-vi.mock('@/components/violations/ViolationCard', () => ({ ViolationCard: () => null }));
 
 import ViolationReportPage from '@/app/(authenticated)/violations/report/page';
 
@@ -71,12 +58,11 @@ const RESIDENT = {
 const MANAGER = { ...RESIDENT, role: 'property_manager', isAdmin: true };
 
 function propsOf(): Record<string, unknown> {
-  return JSON.parse(screen.getByTestId('report-pilot').getAttribute('data-props')!);
+  return JSON.parse(screen.getByTestId('report-page').getAttribute('data-props')!);
 }
 
-async function run(membership: unknown, preview: boolean, unitIds: number[]) {
+async function run(membership: unknown, unitIds: number[]) {
   membershipMock.mockResolvedValue(membership);
-  previewMock.mockResolvedValue(preview);
   unitIdsMock.mockResolvedValue(unitIds);
   listMock.mockResolvedValue([]);
   render(await ViolationReportPage({ searchParams: Promise.resolve({ communityId: '42' }) }));
@@ -85,33 +71,31 @@ async function run(membership: unknown, preview: boolean, unitIds: number[]) {
 describe('ViolationReportPage view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
-    previewMock.mockReset();
     unitIdsMock.mockReset();
     listMock.mockReset();
   });
 
   it('gives a resident with units the resident mode, and loads no lists', async () => {
-    await run(RESIDENT, true, [101, 102]);
+    await run(RESIDENT, [101, 102]);
     expect(propsOf()).toEqual({ communityId: 42, mode: 'resident', ownUnitIds: [101, 102] });
     expect(listMock).not.toHaveBeenCalled();
   });
 
-  it('gives a manager the staff mode, and loads no lists', async () => {
-    await run(MANAGER, true, []);
+  it('gives a manager the staff mode without reading their units', async () => {
+    await run(MANAGER, []);
     expect(propsOf()['mode']).toBe('staff');
+    expect(unitIdsMock).not.toHaveBeenCalled();
     expect(listMock).not.toHaveBeenCalled();
   });
 
-  it('gives a resident with no unit the no-unit mode, and loads no lists', async () => {
-    await run(RESIDENT, true, []);
+  it('gives a resident with no unit the no-unit mode', async () => {
+    await run(RESIDENT, []);
     expect(propsOf()['mode']).toBe('resident_no_unit');
-    expect(listMock).not.toHaveBeenCalled();
   });
 
-  it('renders the old form and loads the lists when the gate is off', async () => {
-    await run(RESIDENT, false, [101]);
-    expect(screen.getByTestId('old-form')).toBeInTheDocument();
-    expect(screen.queryByTestId('report-pilot')).toBeNull();
-    expect(listMock).toHaveBeenCalledTimes(2);
+  it('refuses a community type without violations', async () => {
+    await expect(run({ ...RESIDENT, communityType: 'apartment' }, [101])).rejects.toThrow(
+      'NEXT_REDIRECT:/dashboard?reason=feature-unavailable',
+    );
   });
 });
