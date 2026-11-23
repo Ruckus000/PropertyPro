@@ -20,6 +20,14 @@
  * throws after the claim may already have reached some recipients, and
  * repeating a partial emergency alert is worse than reporting it. The row is
  * marked `failed` with the error's class name and stays claimed.
+ *
+ * ## A claim that never finished
+ *
+ * If the function dies between the claim and the outcome (a timeout, a
+ * deploy), the row is claimed with no outcome and would read "Sending"
+ * forever. Each tick first marks such rows `failed` / `interrupted` once the
+ * claim is older than `INTERRUPTED_AFTER_MS`. Same rule as any failed send:
+ * reported, never retried.
  */
 import { captureException } from '@sentry/nextjs';
 import { communities, createScopedClient, emergencyBroadcasts, logAuditEvent } from '@propertypro/db';
@@ -46,6 +54,12 @@ import {
 /** A scheduled alert found more than this long after its time is not sent. */
 export const MISSED_AFTER_MS = 60 * 60 * 1000;
 
+/**
+ * A claim this old with no outcome is a send that died part-way. Far longer
+ * than a function can run, so a send still in flight is never swept.
+ */
+export const INTERRUPTED_AFTER_MS = 15 * 60 * 1000;
+
 /** How many due alerts one cron tick will process. */
 const BATCH_SIZE = 25;
 
@@ -54,10 +68,16 @@ export interface ProcessDueScheduledBroadcastsSummary {
   due: number;
   sent: number;
   missed: number;
-  /** Claimed, then the send threw. Marked failed; never retried. */
+  /**
+   * Marked failed, never retried: the send threw after the claim, or the claim
+   * never finished (`interrupted`, which this INCLUDES so `withCronJob`, which
+   * reports a non-zero `failed`, raises both).
+   */
   failed: number;
   /** Due at scan time but claimed by another tick or canceled before our claim. */
   claimedElsewhere: number;
+  /** The part of `failed` that was a claim over 15 minutes old with no outcome. */
+  interrupted: number;
 }
 
 interface ClaimedRow {
@@ -94,6 +114,7 @@ export async function processDueScheduledBroadcasts(
   now: Date = new Date(),
 ): Promise<ProcessDueScheduledBroadcastsSummary> {
   const db = createUnscopedClient();
+  const interrupted = await failInterruptedSends(db, now);
 
   // A raw `sql` template cannot bind a Date on this driver: pass ISO strings.
   const due = rowsOf<{ id: number }>(
@@ -115,8 +136,9 @@ export async function processDueScheduledBroadcasts(
     due: due.length,
     sent: 0,
     missed: 0,
-    failed: 0,
+    failed: interrupted,
     claimedElsewhere: 0,
+    interrupted,
   };
 
   for (const { id } of due) {
@@ -217,12 +239,61 @@ export async function processDueScheduledBroadcasts(
 }
 
 /**
+ * Mark every claimed alert that never reached an outcome as failed, with the
+ * same system audit entry a failed send writes. Returns how many it marked.
+ *
+ * The scan error propagates like the due-row scan's. A failure to record one
+ * row is reported and skipped, so it cannot stop the due alerts from sending;
+ * the row is found again on the next tick.
+ */
+async function failInterruptedSends(
+  db: ReturnType<typeof createUnscopedClient>,
+  now: Date,
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - INTERRUPTED_AFTER_MS).toISOString();
+  const stale = rowsOf<Pick<ClaimedRow, 'id' | 'community_id' | 'initiated_by' | 'title' | 'scheduled_for'>>(
+    await db.execute(sql`
+      SELECT id, community_id, initiated_by, title, scheduled_for
+        FROM emergency_broadcasts
+       WHERE send_claimed_at < ${cutoff}
+         AND completed_at IS NULL
+         AND canceled_at IS NULL
+         AND send_outcome IS NULL
+         AND deleted_at IS NULL
+       ORDER BY send_claimed_at ASC
+       LIMIT ${BATCH_SIZE}
+    `),
+  );
+
+  let marked = 0;
+  for (const row of stale) {
+    const broadcastId = Number(row.id);
+    const communityId = Number(row.community_id);
+    try {
+      const recorded = await recordOutcome(broadcastId, communityId, 'failed', 'interrupted', {
+        title: row.title,
+        scheduledBy: row.initiated_by,
+        scheduledFor: new Date(row.scheduled_for).toISOString(),
+      });
+      if (recorded) marked += 1;
+    } catch (error) {
+      captureException(error, {
+        tags: { emergency_broadcast: 'scheduled_outcome_not_recorded' },
+        extra: { broadcastId, communityId },
+      });
+    }
+  }
+  return marked;
+}
+
+/**
  * Write the terminal outcome and its audit entry (system actor; the scheduler
  * is named in metadata).
  *
  * Guarded on "no outcome yet and not sent", so a failure after `completed_at`
  * was written cannot relabel a sent alert as failed, and an outcome is never
- * overwritten. The audit entry is written only when the row actually changed.
+ * overwritten. The audit entry is written only when the row actually changed;
+ * the return value says whether it did.
  */
 async function recordOutcome(
   broadcastId: number,
@@ -230,7 +301,7 @@ async function recordOutcome(
   outcome: 'missed' | 'failed',
   reason: string,
   scheduler: { title: string; scheduledBy: string; scheduledFor: string },
-): Promise<void> {
+): Promise<boolean> {
   const updated = await createScopedClient(communityId).update(
     emergencyBroadcasts,
     { sendOutcome: outcome, sendOutcomeReason: reason },
@@ -240,7 +311,7 @@ async function recordOutcome(
       isNull(emergencyBroadcasts.completedAt),
     ),
   );
-  if (updated.length === 0) return;
+  if (updated.length === 0) return false;
 
   await logAuditEvent({
     userId: null,
@@ -250,4 +321,5 @@ async function recordOutcome(
     communityId,
     metadata: { reason, ...scheduler },
   });
+  return true;
 }

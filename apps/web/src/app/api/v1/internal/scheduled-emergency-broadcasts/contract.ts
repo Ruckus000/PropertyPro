@@ -24,10 +24,12 @@ export const scheduledEmergencyBroadcastsResponseSchema = z.object({
   sent: count,
   /** Not sent: more than 60 minutes late, or the community was deleted. */
   missed: count,
-  /** Claimed, then the send threw. `withCronJob` reports a non-zero value. */
+  /** Claimed, then the send threw or never finished. `withCronJob` reports a non-zero value. */
   failed: count,
   /** Claimed by another run, or canceled, between the scan and our claim. */
   claimedElsewhere: count,
+  /** The part of `failed` that was a claim over 15 minutes old with no outcome (`interrupted`). */
+  interrupted: count,
 });
 
 export const scheduledEmergencyBroadcastsContract = defineRoute({

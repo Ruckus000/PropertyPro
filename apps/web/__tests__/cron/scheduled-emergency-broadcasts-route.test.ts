@@ -42,6 +42,7 @@ describe('scheduled-emergency-broadcasts cron route', () => {
       missed: 1,
       failed: 0,
       claimedElsewhere: 0,
+      interrupted: 0,
     });
   });
 
@@ -77,7 +78,7 @@ describe('scheduled-emergency-broadcasts cron route', () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      data: { due: 3, sent: 2, missed: 1, failed: 0, claimedElsewhere: 0 },
+      data: { due: 3, sent: 2, missed: 1, failed: 0, claimedElsewhere: 0, interrupted: 0 },
     });
   });
 

@@ -259,6 +259,49 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     expect(emailsFor(title)).toBe(0);
   });
 
+  it('a claim that never finished: failed/interrupted after 15 minutes, untouched before', async () => {
+    const { emergencyBroadcasts } = state.dbModule;
+    const staleTitle = `Interrupted ${state.runSuffix}`;
+    const staleId = await seedDue(staleTitle, 20);
+    const freshId = await seedDue(`Still sending ${state.runSuffix}`, 20);
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: new Date(Date.now() - 16 * MINUTE) })
+      .where(eq(emergencyBroadcasts.id, staleId));
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: new Date(Date.now() - 14 * MINUTE) })
+      .where(eq(emergencyBroadcasts.id, freshId));
+
+    const summary = await processDueScheduledBroadcasts();
+
+    expect(summary.interrupted).toBe(1);
+    const rows = await load([staleId, freshId]);
+    expect(rows.get(staleId)).toMatchObject({
+      sendOutcome: 'failed',
+      sendOutcomeReason: 'interrupted',
+      completedAt: null,
+    });
+    expect(rows.get(freshId)!.sendOutcome).toBeNull();
+    expect(emailsFor(staleTitle)).toBe(0);
+
+    const audit = (await state.sqlClient`
+      select user_id, metadata from compliance_audit_log
+       where community_id = ${communityId}
+         and action = 'emergency_broadcast_failed'
+         and resource_id = ${String(staleId)}
+    `) as unknown as Array<{ user_id: string | null; metadata: Record<string, unknown> }>;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.user_id).toBeNull();
+    expect(audit[0]!.metadata).toMatchObject({ reason: 'interrupted', scheduledBy: managerId });
+
+    // Give the still-sending row an outcome so later runs in this file ignore it.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ completedAt: new Date() })
+      .where(eq(emergencyBroadcasts.id, freshId));
+  });
+
   it('the CHECK constraint refuses any outcome but missed or failed', async () => {
     const id = await seedDue(`Check ${state.runSuffix}`, -60);
     const { emergencyBroadcasts } = state.dbModule;

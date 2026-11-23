@@ -63,7 +63,7 @@ One migration on `emergency_broadcasts`, all nullable, no backfill:
 | `scheduled_for timestamptz` | Set means "send later at this time". Null for immediate alerts. |
 | `send_claimed_at timestamptz` | Set by the job's atomic claim. Null until then. |
 | `send_outcome text` | Null, or `missed`, or `failed` (CHECK constraint). |
-| `send_outcome_reason text` | Short machine reason: `late`, `community_deleted`, or an error class name. Never a message body or address. |
+| `send_outcome_reason text` | Short machine reason: `late`, `community_deleted`, `interrupted` (claimed, then no outcome for 15 minutes: the job died mid-send), or an error class name. Never a message body or address. |
 
 A partial index on `scheduled_for` where `scheduled_for is not null and
 send_claimed_at is null and canceled_at is null and send_outcome is null` serves

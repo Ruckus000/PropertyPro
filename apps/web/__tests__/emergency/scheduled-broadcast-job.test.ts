@@ -118,6 +118,17 @@ beforeEach(() => {
       return [row];
     }
     const cutoff = new Date(query.values[0] as string).getTime();
+    if (query.text.includes('send_claimed_at <')) {
+      // The interrupted sweep: claimed before the cutoff, and no outcome of any kind.
+      return rows.filter(
+        (r) =>
+          r.send_claimed_at &&
+          r.send_claimed_at.getTime() < cutoff &&
+          !r.completed_at &&
+          !r.canceled_at &&
+          !r.send_outcome,
+      );
+    }
     return rows
       .filter((r) => claimable(r) && r.scheduled_for.getTime() <= cutoff)
       .sort((a, b) => a.scheduled_for.getTime() - b.scheduled_for.getTime())
@@ -163,8 +174,8 @@ describe('processDueScheduledBroadcasts', () => {
     const first = await processDueScheduledBroadcasts(NOW);
     const second = await processDueScheduledBroadcasts(NOW);
 
-    expect(first).toEqual({ due: 1, sent: 1, missed: 0, failed: 0, claimedElsewhere: 0 });
-    expect(second).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0 });
+    expect(first).toEqual({ due: 1, sent: 1, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
+    expect(second).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
     expect(executeBroadcastMock).toHaveBeenCalledTimes(1);
     // The immediate-send path, as the system actor, naming the scheduler.
     expect(executeBroadcastMock).toHaveBeenCalledWith(1, 42, null, { scheduledBy: 'manager-1' });
@@ -213,7 +224,7 @@ describe('processDueScheduledBroadcasts', () => {
 
     const summary = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 2, sent: 1, missed: 1, failed: 0, claimedElsewhere: 0 });
+    expect(summary).toEqual({ due: 2, sent: 1, missed: 1, failed: 0, claimedElsewhere: 0, interrupted: 0 });
     expect(late).toMatchObject({ send_outcome: 'missed', send_outcome_reason: 'late' });
     expect(onTheLine.send_outcome).toBeNull();
     expect(executeBroadcastMock).toHaveBeenCalledTimes(1);
@@ -256,7 +267,7 @@ describe('processDueScheduledBroadcasts', () => {
     const summary = await processDueScheduledBroadcasts(NOW);
     const again = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 2, sent: 1, missed: 0, failed: 1, claimedElsewhere: 0 });
+    expect(summary).toEqual({ due: 2, sent: 1, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 0 });
     expect(bad).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'EmailProviderDownError' });
     expect(good.completed_at).not.toBeNull();
     // Not retried: the failed row stays claimed and the next run finds nothing.
@@ -280,15 +291,63 @@ describe('processDueScheduledBroadcasts', () => {
     db.execute.mockImplementation(async (query: { text: string; values: unknown[] }) => {
       const result = await realExecute(query);
       // Another tick wins the claim right after our scan.
-      if (!query.text.includes('UPDATE')) row.send_claimed_at = new Date();
+      if (!query.text.includes('UPDATE') && !query.text.includes('send_claimed_at <')) {
+        row.send_claimed_at = new Date();
+      }
       return result;
     });
 
     const summary = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 1, sent: 0, missed: 0, failed: 0, claimedElsewhere: 1 });
+    expect(summary).toEqual({ due: 1, sent: 0, missed: 0, failed: 0, claimedElsewhere: 1, interrupted: 0 });
     expect(executeBroadcastMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('a claim 14 minutes old with no outcome is left alone', async () => {
+    const row = seed(1, 20, { send_claimed_at: new Date(NOW.getTime() - 14 * MINUTE) });
+
+    const summary = await processDueScheduledBroadcasts(NOW);
+
+    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
+    expect(row.send_outcome).toBeNull();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('a claim 16 minutes old with no outcome is marked failed/interrupted, audited, and never sent', async () => {
+    const row = seed(1, 20, { send_claimed_at: new Date(NOW.getTime() - 16 * MINUTE) });
+    const sent = seed(2, 20, {
+      send_claimed_at: new Date(NOW.getTime() - 16 * MINUTE),
+      completed_at: new Date(NOW.getTime() - 15 * MINUTE),
+    });
+    const canceled = seed(3, 20, {
+      send_claimed_at: new Date(NOW.getTime() - 16 * MINUTE),
+      canceled_at: new Date(NOW.getTime() - 15 * MINUTE),
+    });
+
+    const summary = await processDueScheduledBroadcasts(NOW);
+    const again = await processDueScheduledBroadcasts(NOW);
+
+    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 1 });
+    expect(again.interrupted).toBe(0);
+    expect(row).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'interrupted' });
+    expect(sent.send_outcome).toBeNull();
+    expect(canceled.send_outcome).toBeNull();
+    expect(executeBroadcastMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      userId: null,
+      action: 'emergency_broadcast_failed',
+      resourceType: 'emergency_broadcast',
+      resourceId: '1',
+      communityId: 42,
+      metadata: {
+        reason: 'interrupted',
+        title: 'Alert 1',
+        scheduledBy: 'manager-1',
+        scheduledFor: row.scheduled_for.toISOString(),
+      },
+    });
   });
 
   it('does not relabel an alert as failed when the throw came after it was sent', async () => {
