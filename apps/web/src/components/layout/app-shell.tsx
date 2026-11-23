@@ -233,7 +233,7 @@ function ShellInner({ topNav = process.env.NEXT_PUBLIC_TOP_NAV_ENABLED === 'true
   const tabsAtDesktop = topNav && DesktopNavSlot !== null;
   const desktopRail = portfolioPage ? null : (
     <div className="hidden lg:block">
-      <AppSidebar {...sidebarProps} />
+      <AppSidebar hoverPeek {...sidebarProps} />
     </div>
   );
 
