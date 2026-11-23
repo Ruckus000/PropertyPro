@@ -37,15 +37,9 @@ import { and, eq, inArray, isNotNull, isNull } from '@propertypro/db/filters';
 const WALK_PAGINATED_MAX_PAGES = 20;
 const DELETED_DOCUMENTS_ROW_CAP = WALK_PAGINATED_MAX_PAGES * MAX_PAGE_SIZE;
 
-export interface LinkedDocumentState {
-  deletedAt: Date | null;
-  /** `posted_at` is NULL: owners cannot see it, so it is not posted. */
-  isDraft: boolean;
-  /** `posted_at`: when owners could first open it. Null for a draft. */
-  postedAt?: Date | null;
-  /** `received_at`: when the association received or created the record. */
-  receivedAt?: Date | null;
-}
+import type { LinkedDocumentState } from '@propertypro/shared';
+
+export type { LinkedDocumentState };
 
 /**
  * What compliance needs about the documents its items link to, for a specific

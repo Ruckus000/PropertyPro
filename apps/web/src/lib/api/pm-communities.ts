@@ -29,7 +29,6 @@ export interface PmCommunityPortfolioCard {
   residentCount: number;
   totalUnits: number;
   openMaintenanceRequests: number;
-  unsatisfiedComplianceItems: number;
   /** Count of distinct units with an active lease (apartment only, else 0) */
   occupiedUnits: number;
   /** Rounded occupancy percentage (apartment only when totalUnits > 0, else null) */

@@ -50,6 +50,7 @@ import {
   findChecklistLinkConflict,
   insertComplianceChecklistItems,
   listComplianceChecklistItems,
+  markChecklistItemNotApplicable,
   updateComplianceChecklistItem,
 } from '@/lib/services/compliance-service';
 import {
@@ -196,41 +197,48 @@ export const PATCH = withErrorHandler(
       }
     }
 
-    // Build the update payload based on the action
-    let updateData: Record<string, unknown>;
+    // Apply the action. "Doesn't apply" goes through its own predicated write:
+    // only a conditional row with no file posted may be switched off.
+    let row: Record<string, unknown> | null;
     switch (patchAction) {
       case 'link_document':
-        updateData = {
+        row = await updateComplianceChecklistItem(communityId, id, {
           documentId: documentId!,
           documentPostedAt: new Date(),
           lastModifiedBy: userId,
-        };
+        });
         break;
       case 'unlink_document':
-        updateData = {
+        row = await updateComplianceChecklistItem(communityId, id, {
           documentId: null,
           documentPostedAt: null,
           lastModifiedBy: userId,
-        };
+        });
         break;
-      case 'mark_not_applicable':
-        updateData = {
-          isApplicable: false,
-          // The contract's refinement guarantees a reason for this action.
-          notApplicableReason: reason!,
-          lastModifiedBy: userId,
-        };
+      case 'mark_not_applicable': {
+        // The contract's refinement guarantees a reason for this action.
+        const outcome = await markChecklistItemNotApplicable(communityId, id, reason!, userId);
+        if ('row' in outcome) {
+          row = outcome.row;
+        } else if (outcome.refused === 'not_conditional') {
+          throw new ValidationError(
+            "This record is required for every association, so it can't be marked as not applying.",
+          );
+        } else if (outcome.refused === 'has_document') {
+          throw new ConflictError('This record has a file posted. Remove the file first.');
+        } else {
+          row = null;
+        }
         break;
+      }
       case 'mark_applicable':
-        updateData = {
+        row = await updateComplianceChecklistItem(communityId, id, {
           isApplicable: true,
           notApplicableReason: null,
           lastModifiedBy: userId,
-        };
+        });
         break;
     }
-
-    const row = await updateComplianceChecklistItem(communityId, id, updateData);
     if (!row) {
       throw new ValidationError('Checklist item not found or does not belong to this community');
     }

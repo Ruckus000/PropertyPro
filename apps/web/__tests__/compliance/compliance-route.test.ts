@@ -36,13 +36,13 @@ const {
   requirePermissionMock,
   getFeaturesForCommunityMock,
   getComplianceTemplateMock,
-  calculateComplianceStatusMock,
   calculatePostingDeadlineMock,
   tryAutoCompleteMock,
   logAuditEventMock,
   listComplianceChecklistItemsMock,
   insertComplianceChecklistItemsMock,
   updateComplianceChecklistItemMock,
+  markChecklistItemNotApplicableMock,
   findChecklistLinkConflictMock,
   createScopedClientMock,
   scopedQueryByIdMock,
@@ -57,13 +57,13 @@ const {
   requirePermissionMock: vi.fn(),
   getFeaturesForCommunityMock: vi.fn(),
   getComplianceTemplateMock: vi.fn(),
-  calculateComplianceStatusMock: vi.fn(),
   calculatePostingDeadlineMock: vi.fn(),
   tryAutoCompleteMock: vi.fn(),
   logAuditEventMock: vi.fn(),
   listComplianceChecklistItemsMock: vi.fn(),
   insertComplianceChecklistItemsMock: vi.fn(),
   updateComplianceChecklistItemMock: vi.fn(),
+  markChecklistItemNotApplicableMock: vi.fn(),
   findChecklistLinkConflictMock: vi.fn(),
   createScopedClientMock: vi.fn(),
   scopedQueryByIdMock: vi.fn(),
@@ -117,13 +117,6 @@ vi.mock('@/lib/utils/compliance-calculator', async () => {
   );
   return {
     ...actual,
-    calculateComplianceStatus: calculateComplianceStatusMock,
-    // The route derives through `calculateComplianceClock`; route tests drive
-    // the status through the same mock they always have.
-    calculateComplianceClock: (input: Parameters<typeof actual.calculateComplianceClock>[0]) => ({
-      status: calculateComplianceStatusMock(input),
-      clock: { state: 'open', deadline: null, postedAt: null, basis: 'statute' },
-    }),
     calculatePostingDeadline: calculatePostingDeadlineMock,
   };
 });
@@ -151,6 +144,7 @@ vi.mock('@/lib/services/compliance-service', () => ({
   listComplianceChecklistItems: listComplianceChecklistItemsMock,
   insertComplianceChecklistItems: insertComplianceChecklistItemsMock,
   updateComplianceChecklistItem: updateComplianceChecklistItemMock,
+  markChecklistItemNotApplicable: markChecklistItemNotApplicableMock,
   findChecklistLinkConflict: findChecklistLinkConflictMock,
 }));
 
@@ -198,7 +192,6 @@ beforeEach(() => {
   createScopedClientMock.mockReturnValue({ queryById: scopedQueryByIdMock });
   findChecklistLinkConflictMock.mockResolvedValue(null);
   getFeaturesForCommunityMock.mockReturnValue({ hasCompliance: true });
-  calculateComplianceStatusMock.mockReturnValue('overdue');
   getCommunityUnitCountMock.mockResolvedValue(null);
   calculatePostingDeadlineMock.mockReturnValue(new Date('2026-01-01T00:00:00Z'));
   tryAutoCompleteMock.mockResolvedValue(undefined);
@@ -342,14 +335,11 @@ describe('GET /api/v1/compliance', () => {
         rollingWindow: { months: 12 },
       },
     ]);
-    calculateComplianceStatusMock.mockReturnValueOnce('unsatisfied');
-
+    // The rule itself (packages/shared) decides the status, unmocked: with the
+    // clock kept, a deadline in January would read overdue.
     const res = await GET(getReq('55'), undefined);
 
     expect(getCommunityUnitCountMock).toHaveBeenCalledWith(55);
-    expect(calculateComplianceStatusMock).toHaveBeenCalledWith(
-      expect.objectContaining({ deadline: null, rollingWindowMonths: null }),
-    );
     const json = (await res.json()) as { data: Array<Record<string, unknown>> };
     expect(json.data[0]).toMatchObject({ deadline: null, rollingWindow: null, status: 'unsatisfied' });
   });
@@ -366,11 +356,10 @@ describe('GET /api/v1/compliance', () => {
       },
     ]);
 
-    await GET(getReq('55'), undefined);
+    const res = await GET(getReq('55'), undefined);
 
-    expect(calculateComplianceStatusMock).toHaveBeenCalledWith(
-      expect.objectContaining({ deadline: new Date('2026-01-01T00:00:00.000Z') }),
-    );
+    const json = (await res.json()) as { data: Array<Record<string, unknown>> };
+    expect(json.data[0]).toMatchObject({ deadline: '2026-01-01T00:00:00.000Z', status: 'overdue' });
   });
 
   it('does not fire auto-complete when there are zero rows', async () => {
@@ -643,7 +632,8 @@ describe('PATCH /api/v1/compliance', () => {
     expect(res.status).toBe(200);
     const json = (await res.json()) as { data: { id: number; status: string } };
     expect(json.data.id).toBe(5);
-    expect(json.data.status).toBe('overdue');
+    // Linked and posted, with no received date: met, no lateness claimed.
+    expect(json.data.status).toBe('satisfied');
 
     expect(assertNotDemoGraceMock).toHaveBeenCalledWith(42);
     expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'compliance', 'write');
@@ -776,6 +766,7 @@ describe('PATCH /api/v1/compliance', () => {
     expect(tryAutoCompleteMock.mock.calls).toEqual([[42, USER_ID, 'review_compliance']]);
 
     tryAutoCompleteMock.mockClear();
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({ row: { id: 5, title: 'Budget', isApplicable: false } });
     await PATCH(
       bodyReq('PATCH', { id: 5, communityId: 42, action: 'mark_not_applicable', reason: 'No elevator.' }),
       undefined,
@@ -866,12 +857,8 @@ describe('PATCH /api/v1/compliance', () => {
   });
 
   it('marks an item not applicable', async () => {
-    updateComplianceChecklistItemMock.mockResolvedValueOnce({
-      id: 7,
-      title: 'Budget',
-      isApplicable: false,
-      deadline: null,
-      rollingWindow: null,
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({
+      row: { id: 7, title: 'Budget', isApplicable: false, deadline: null, rollingWindow: null },
     });
 
     const res = await PATCH(
@@ -885,21 +872,61 @@ describe('PATCH /api/v1/compliance', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(
-      42,
-      7,
-      expect.objectContaining({ isApplicable: false }),
+    expect(markChecklistItemNotApplicableMock).toHaveBeenCalledWith(42, 7, 'Our building has no elevator.', USER_ID);
+    expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses "doesn\'t apply" on a required record, with no write or audit', async () => {
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({ refused: 'not_conditional' });
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 7, communityId: 42, action: 'mark_not_applicable', reason: 'We have no budget.' }),
+      undefined,
     );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.message).toMatch(/required for every association/);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+    expect(tryAutoCompleteMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses "doesn\'t apply" while a file is posted to the record', async () => {
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({ refused: 'has_document' });
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 7, communityId: 42, action: 'mark_not_applicable', reason: 'No elevator.' }),
+      undefined,
+    );
+
+    expect(res.status).toBe(409);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('answers "not found" when the record is not in this community', async () => {
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({ refused: 'not_found' });
+
+    const res = await PATCH(
+      bodyReq('PATCH', { id: 999, communityId: 42, action: 'mark_not_applicable', reason: 'No elevator.' }),
+      undefined,
+    );
+
+    expect(res.status).toBe(400);
+    const json = (await res.json()) as { error: { message: string } };
+    expect(json.error.message).toMatch(/not found/);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('stores and audits the reason', async () => {
-    updateComplianceChecklistItemMock.mockResolvedValueOnce({
-      id: 7,
-      title: 'Budget',
-      isApplicable: false,
-      notApplicableReason: 'Our building has no elevator.',
-      deadline: null,
-      rollingWindow: null,
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({
+      row: {
+        id: 7,
+        title: 'Budget',
+        isApplicable: false,
+        notApplicableReason: 'Our building has no elevator.',
+        deadline: null,
+        rollingWindow: null,
+      },
     });
 
     const res = await PATCH(
@@ -913,12 +940,8 @@ describe('PATCH /api/v1/compliance', () => {
     );
 
     expect(res.status).toBe(200);
-    // Stored trimmed, and the update carries nothing the action did not ask for.
-    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(42, 7, {
-      isApplicable: false,
-      notApplicableReason: 'Our building has no elevator.',
-      lastModifiedBy: USER_ID,
-    });
+    // Stored trimmed.
+    expect(markChecklistItemNotApplicableMock).toHaveBeenCalledWith(42, 7, 'Our building has no elevator.', USER_ID);
     // The audit row carries the reason and nothing else in newValues.
     expect(logAuditEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -932,13 +955,8 @@ describe('PATCH /api/v1/compliance', () => {
 
   it('accepts a reason of exactly 200 characters', async () => {
     const reason = 'x'.repeat(200);
-    updateComplianceChecklistItemMock.mockResolvedValueOnce({
-      id: 7,
-      title: 'Budget',
-      isApplicable: false,
-      notApplicableReason: reason,
-      deadline: null,
-      rollingWindow: null,
+    markChecklistItemNotApplicableMock.mockResolvedValueOnce({
+      row: { id: 7, title: 'Budget', isApplicable: false, notApplicableReason: reason, deadline: null, rollingWindow: null },
     });
 
     const res = await PATCH(
@@ -947,11 +965,7 @@ describe('PATCH /api/v1/compliance', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(updateComplianceChecklistItemMock).toHaveBeenCalledWith(
-      42,
-      7,
-      expect.objectContaining({ notApplicableReason: reason }),
-    );
+    expect(markChecklistItemNotApplicableMock).toHaveBeenCalledWith(42, 7, reason, USER_ID);
   });
 
   describe('a reason that mark_not_applicable cannot accept', () => {
@@ -984,6 +998,7 @@ describe('PATCH /api/v1/compliance', () => {
       expect(json.error.code).toBe('VALIDATION_ERROR');
       expect(json.error.details.fields.map((f) => f.field)).toEqual(['reason']);
       expect(updateComplianceChecklistItemMock).not.toHaveBeenCalled();
+      expect(markChecklistItemNotApplicableMock).not.toHaveBeenCalled();
       expect(logAuditEventMock).not.toHaveBeenCalled();
     }
 

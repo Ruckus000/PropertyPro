@@ -46,7 +46,6 @@ function row(over: Partial<DashboardCommunityRow> & { communityId: number }): Da
     residentCount: 0,
     totalUnits: 50,
     openMaintenanceRequests: 0,
-    unsatisfiedComplianceItems: 0,
     occupiedUnits: 0,
     occupancyRate: null,
     siteOnboardingCompletedAt: null,

@@ -12,6 +12,7 @@ import { ClientWorkspace } from '@/components/clients/ClientWorkspace';
 import type { CommunitySettings } from '@/components/clients/community-settings';
 import { requireAdminPageSession } from '@/lib/request/admin-page-context';
 import { getCommunityActivity } from '@/lib/server/community-activity';
+import { loadComplianceScores } from '@/lib/server/compliance-scores';
 import { getCommunitySnapshots } from '@/lib/server/community-snapshots';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +43,7 @@ const CommunityRowSchema = z.object({
   community_settings: z.record(z.string(), z.unknown()).nullable(),
   created_at: z.string(),
   is_demo: z.boolean(),
+  unit_count: z.number().nullable(),
 });
 
 const DeletionRequestRowSchema = z.object({
@@ -68,7 +70,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // Fetch community (need it to gate 404)
   const communityResult = await db
     .from('communities')
-    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, subscription_current_period_end_at, custom_domain, custom_domain_status, custom_domain_verified_at, site_published_at, transparency_enabled, community_settings, created_at, is_demo')
+    .select('id, name, slug, community_type, city, state, zip_code, address_line1, timezone, subscription_status, subscription_plan, subscription_current_period_end_at, custom_domain, custom_domain_status, custom_domain_verified_at, site_published_at, transparency_enabled, community_settings, created_at, is_demo, unit_count')
     .eq('id', communityId)
     .is('deleted_at', null)
     .single();
@@ -83,14 +85,12 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   // recent activity in parallel. `getCommunityActivity` throws internally on
   // a query error, matching the "throw rather than degrade to empty" policy
   // below.
-  const [membersResult, documentsResult, complianceResult, deletionResult, activity, snapshots] = await Promise.all([
+  const [membersResult, documentsResult, complianceScores, deletionResult, activity, snapshots] = await Promise.all([
     db.from('user_roles').select('*', { count: 'exact', head: true }).eq('community_id', communityId),
     db.from('documents').select('*', { count: 'exact', head: true }).eq('community_id', communityId).is('deleted_at', null),
-    // Use the actual table name (not the non-existent compliance_items view)
-    db.from('compliance_checklist_items')
-      .select('document_id, deadline, is_applicable')
-      .eq('community_id', communityId)
-      .is('deleted_at', null),
+    // The association's own Compliance page rule (compliance-scores.ts). It
+    // throws on a failed read, which reaches error.tsx like the checks below.
+    loadComplianceScores(db, [community]),
     // `account_deletion_requests` has no per-community uniqueness constraint on
     // an open ('cooling') request, so this takes the most recent one rather
     // than `.single()` — a second concurrent request should never happen, but
@@ -115,9 +115,6 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   if (documentsResult.error) {
     throw new Error(`Failed to count documents: ${documentsResult.error.message}`);
   }
-  if (complianceResult.error) {
-    throw new Error(`Failed to load compliance items: ${complianceResult.error.message}`);
-  }
   if (deletionResult.error) {
     throw new Error(`Failed to load deletion request: ${deletionResult.error.message}`);
   }
@@ -125,11 +122,7 @@ export default async function ClientWorkspacePage({ params }: PageProps) {
   const memberCount = membersResult.count ?? 0;
   const documentCount = documentsResult.count ?? 0;
 
-  // Compute compliance score the same way the compliance API does
-  const rows = (complianceResult.data ?? []) as { document_id: number | null; deadline: string | null; is_applicable: boolean }[];
-  const applicable = rows.filter((r) => r.is_applicable);
-  const met = applicable.filter((r) => r.document_id !== null);
-  const complianceScore = applicable.length > 0 ? Math.round((met.length / applicable.length) * 100) : null;
+  const complianceScore = complianceScores.get(communityId)?.score ?? null;
 
   const deletionRow = deletionResult.data?.[0] ?? null;
   const deletionParse = deletionRow ? DeletionRequestRowSchema.safeParse(deletionRow) : null;

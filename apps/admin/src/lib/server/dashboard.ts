@@ -4,20 +4,15 @@ import {
   COMMUNITY_SCAN_ROW_BOUND,
   fetchAllRowsInPages,
 } from '@/lib/api/list-limits';
+import type { DerivedCompliance } from '@propertypro/shared';
+import { loadComplianceScores, type ScoredCommunity } from './compliance-scores';
 
-const PAGE_SIZE = 1000;
 
-type AdminDb = ReturnType<typeof createAdminClient>;
 
 interface SubscriptionRow {
   subscription_status: string | null;
 }
 
-interface ComplianceChecklistRow {
-  community_id: number;
-  document_id: number | null;
-  is_applicable: boolean;
-}
 
 export interface PlatformDashboardStats {
   overview: {
@@ -72,27 +67,17 @@ function buildBillingSummary(subscriptions: SubscriptionRow[]): PlatformDashboar
   };
 }
 
+/**
+ * Summarize the per-community scores (the Compliance page's own rule, from
+ * `loadComplianceScores`). A community with no score (an apartment, or nothing
+ * applicable) is not tracked, rather than counted as 100%.
+ */
 function buildComplianceSummary(
-  complianceRows: ComplianceChecklistRow[],
+  scores: ReadonlyMap<number, DerivedCompliance>,
 ): PlatformDashboardStats['compliance'] {
-  const byCommunity = new Map<number, { applicable: number; met: number }>();
-
-  for (const row of complianceRows) {
-    if (!row.is_applicable) {
-      continue;
-    }
-
-    const entry = byCommunity.get(row.community_id) ?? { applicable: 0, met: 0 };
-    entry.applicable += 1;
-    if (row.document_id !== null) {
-      entry.met += 1;
-    }
-    byCommunity.set(row.community_id, entry);
-  }
-
-  const complianceScores = [...byCommunity.values()].map(({ applicable, met }) => (
-    applicable > 0 ? Math.round((met / applicable) * 100) : 100
-  ));
+  const complianceScores = [...scores.values()]
+    .map((s) => s.score)
+    .filter((score): score is number => score !== null);
 
   const distribution = { top: 0, high: 0, mid: 0, low: 0 };
   for (const score of complianceScores) {
@@ -112,41 +97,6 @@ function buildComplianceSummary(
   };
 }
 
-async function fetchAllComplianceRows(
-  db: AdminDb,
-  communityIds: number[],
-): Promise<ComplianceChecklistRow[]> {
-  if (communityIds.length === 0) {
-    return [];
-  }
-
-  const allRows: ComplianceChecklistRow[] = [];
-  let from = 0;
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { data, error } = await db
-      .from('compliance_checklist_items')
-      .select('community_id, document_id, is_applicable')
-      .is('deleted_at', null)
-      .in('community_id', communityIds)
-      .range(from, from + PAGE_SIZE - 1);
-
-    throwIfError(error, 'Failed to load compliance checklist items');
-
-    const rows = (data ?? []) as ComplianceChecklistRow[];
-    allRows.push(...rows);
-
-    if (rows.length < PAGE_SIZE) {
-      break;
-    }
-
-    from += PAGE_SIZE;
-  }
-
-  return allRows;
-}
-
 export async function getPlatformDashboardStats(): Promise<PlatformDashboardStats> {
   const db = createAdminClient();
 
@@ -158,12 +108,12 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
   // which is exactly the headline-vs-chart divergence
   // `guard:admin-community-scope` exists for, with both reads carrying the
   // predicate and the guard green.
-  const realCommunities = await fetchAllRowsInPages<{ id: number }>(
+  const realCommunities = await fetchAllRowsInPages<ScoredCommunity>(
     'the real-community id set',
     (from, to) =>
       db
         .from('communities')
-        .select('id')
+        .select('id, community_type, unit_count')
         .eq('is_demo', false)
         .is('deleted_at', null)
         .order('id')
@@ -181,7 +131,7 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
     membersResult,
     documentsResult,
     subscriptionRows,
-    complianceRows,
+    complianceScores,
     activeAccessResult,
     coolingDeletionsResult,
     communities30dResult,
@@ -211,7 +161,7 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
       COMMUNITY_SCAN_PAGE_SIZE,
       COMMUNITY_SCAN_ROW_BOUND,
     ),
-    fetchAllComplianceRows(db, realIds),
+    loadComplianceScores(db, realCommunities),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (db.from('access_plans')
       .select('*', { count: 'exact', head: true })
@@ -251,7 +201,7 @@ export async function getPlatformDashboardStats(): Promise<PlatformDashboardStat
       documents: documentsResult.count ?? 0,
     },
     billing: buildBillingSummary(subscriptionRows),
-    compliance: buildComplianceSummary(complianceRows),
+    compliance: buildComplianceSummary(complianceScores),
     lifecycle: {
       activeFreeAccess: activeAccessResult.count ?? 0,
       pendingDeletions: coolingDeletionsResult.count ?? 0,

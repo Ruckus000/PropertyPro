@@ -53,7 +53,6 @@ describe('GET /api/v1/pm/communities', () => {
         residentCount: 12,
         totalUnits: 20,
         openMaintenanceRequests: 2,
-        unsatisfiedComplianceItems: 1,
       },
     ]);
 

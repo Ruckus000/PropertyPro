@@ -42,6 +42,8 @@ type Chain = {
   // fixture; the projection/filter assertions live in
   // `community-snapshots.test.ts`.
   in?: (...args: unknown[]) => Chain;
+  gte?: (...args: unknown[]) => Chain;
+  range?: (...args: unknown[]) => Chain;
   not?: (...args: unknown[]) => Chain;
   single?: () => Promise<{ data: unknown; error?: unknown }>;
   then?: PromiseLike<unknown>['then'];
@@ -57,6 +59,8 @@ function resolvedChain(result: { data: unknown; count?: number }): Chain {
     order: () => chain,
     limit: () => chain,
     in: () => chain,
+    gte: () => chain,
+    range: () => chain,
     not: () => chain,
   };
   chain.then = resolved.then.bind(resolved);
@@ -85,6 +89,7 @@ function makeDb() {
     community_settings: null,
     created_at: '2026-03-20T00:00:00.000Z',
     is_demo: false,
+    unit_count: 60,
   };
 
   const counts = {
@@ -92,10 +97,18 @@ function makeDb() {
     documents: 34,
   };
 
+  // Scored by the Compliance page's own rule (packages/shared): the linked
+  // posted file is met, a row linked to a DRAFT is not (the old "any linked
+  // document" count read it as met), and a not-applicable row drops out.
+  const checklistRow = { community_id: 42, document_posted_at: null, deadline: null, rolling_window: null };
   const complianceRows = [
-    { document_id: 1001, deadline: null, is_applicable: true },
-    { document_id: null, deadline: null, is_applicable: true },
-    { document_id: null, deadline: null, is_applicable: false },
+    { ...checklistRow, id: 1, template_key: '718_bylaws', document_id: 1001, is_applicable: true },
+    { ...checklistRow, id: 2, template_key: '718_rules', document_id: 1002, is_applicable: true },
+    { ...checklistRow, id: 3, template_key: '718_budget', document_id: null, is_applicable: false },
+  ];
+  const linkedDocuments = [
+    { id: 1001, community_id: 42, deleted_at: null, posted_at: '2026-03-01T00:00:00.000Z', received_at: null },
+    { id: 1002, community_id: 42, deleted_at: null, posted_at: null, received_at: null },
   ];
 
   const deletionRows = [{ id: 7, status: 'cooling', cooling_ends_at: '2026-04-10T00:00:00.000Z' }];
@@ -139,7 +152,12 @@ function makeDb() {
     }
 
     if (table === 'documents') {
-      return resolvedChain({ data: null, count: counts.documents });
+      // One fixture answers both reads: the head count and the linked-document lookup.
+      return resolvedChain({ data: linkedDocuments, count: counts.documents });
+    }
+
+    if (table === 'meetings') {
+      return resolvedChain({ data: [] });
     }
 
     if (table === 'compliance_checklist_items') {

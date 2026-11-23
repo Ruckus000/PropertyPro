@@ -15,11 +15,15 @@
  * requests have no due date, so "overdue" has no meaning for them yet.
  */
 import {
+  deriveCompliance,
   getEffectiveFeatures,
   isValidHexColor,
   liveLook,
-  postingClockApplies,
+  MEETING_SCORING_WINDOW_MONTHS,
+  calculateRollingWindowStart,
   resolvePlanId,
+  scoreCommunityCompliance,
+  type DerivedCompliance,
   type CommunityBranding,
   type CommunityType,
 } from '@propertypro/shared';
@@ -34,14 +38,6 @@ import {
   type DashboardKpis,
   type PortfolioStatusInputs,
 } from '@propertypro/db/unsafe';
-import { withDerivedStatus, type MeetingScoring } from '@/lib/compliance/derive-checklist-status';
-import { summarizeMeetingNotices } from '@/lib/compliance/meeting-notice-status';
-import {
-  MEETING_SCORING_WINDOW_MONTHS,
-  summarizeMeetingMinutes,
-  toMinutesInputs,
-} from '@/lib/compliance/meeting-minutes-status';
-import { calculateRollingWindowStart } from '@/lib/utils/compliance-calculator';
 import {
   PORTFOLIO_SORT_KEYS,
   PORTFOLIO_VIEWS,
@@ -93,41 +89,11 @@ const STATUS_ORDER: Record<PortfolioStatus, number> = {
   not_tracked: 2,
 };
 
-interface DerivedCompliance {
-  score: number | null;
-  pastDeadline: number;
-  satisfied: number;
-  applicable: number;
-}
-
 /**
- * Derive one community's compliance numbers from its raw checklist rows with
- * the Compliance page's own rule (`withDerivedStatus`).
+ * The per-community rule lives in `@propertypro/shared` (`deriveCompliance`,
+ * `scoreCommunityCompliance`), shared with the admin console.
  */
-export function deriveCompliance(
-  rows: ReadonlyArray<Record<string, unknown>>,
-  documentStates: PortfolioStatusInputs['documentStates'],
-  clockApplies: boolean,
-  meetings: MeetingScoring | null = null,
-  now: Date = new Date(),
-): DerivedCompliance {
-  let applicable = 0;
-  let satisfied = 0;
-  let pastDeadline = 0;
-  for (const row of rows) {
-    const status = withDerivedStatus(row, documentStates, clockApplies, meetings, now)['status'];
-    if (status === 'not_applicable') continue;
-    applicable += 1;
-    if (status === 'satisfied') satisfied += 1;
-    if (status === 'overdue') pastDeadline += 1;
-  }
-  return {
-    score: applicable > 0 ? Math.round((satisfied / applicable) * 100) : null,
-    pastDeadline,
-    satisfied,
-    applicable,
-  };
-}
+export { deriveCompliance };
 
 /** The status rule, on already-measured numbers. */
 export function classifyStatus(input: {
@@ -166,28 +132,15 @@ export function deriveAllCompliance(
   }
   const derived = new Map<number, DerivedCompliance>();
   for (const row of rows) {
-    if (row.communityType === 'apartment') continue;
-    const clockApplies = postingClockApplies({
+    const score = scoreCommunityCompliance({
       communityType: row.communityType,
       unitCount: inputs.facts.get(row.communityId)?.unitCount ?? null,
+      checklistRows: checklistByCommunity.get(row.communityId) ?? [],
+      documentStates: inputs.documentStates,
+      meetings: inputs.noticeMeetings.get(row.communityId) ?? [],
+      now,
     });
-    // Same per-meeting notice and minutes rules as the Compliance page, or
-    // the two scores would disagree for any community that schedules meetings.
-    const communityMeetings = inputs.noticeMeetings.get(row.communityId) ?? [];
-    const meetings: MeetingScoring = {
-      notices: summarizeMeetingNotices(communityMeetings, row.communityType, now),
-      minutes: summarizeMeetingMinutes(toMinutesInputs(communityMeetings, inputs.documentStates), now),
-    };
-    derived.set(
-      row.communityId,
-      deriveCompliance(
-        checklistByCommunity.get(row.communityId) ?? [],
-        inputs.documentStates,
-        clockApplies,
-        meetings,
-        now,
-      ),
-    );
+    if (score) derived.set(row.communityId, score);
   }
   return derived;
 }

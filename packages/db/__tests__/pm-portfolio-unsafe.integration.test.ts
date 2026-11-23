@@ -351,12 +351,10 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     expect(rowA!.residentCount).toBe(1);
     expect(rowA!.totalUnits).toBe(2);
     expect(rowA!.openMaintenanceRequests).toBe(2);
-    expect(rowA!.unsatisfiedComplianceItems).toBe(1);
 
     expect(rowB).toBeDefined();
     expect(rowB!.totalUnits).toBe(1);
     expect(rowB!.openMaintenanceRequests).toBe(0);
-    expect(rowB!.unsatisfiedComplianceItems).toBe(1);
   });
 
   it('counts submitted and acknowledged requests as open work (P3-50 lifecycle)', async () => {
@@ -733,15 +731,40 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     const rowA = (await findManagedCommunitiesPortfolioUnscoped(pmUserId)).find(
       (row) => row.communityId === communityAId,
     );
-    expect(rowA!.unsatisfiedComplianceItems).toBe(0);
+    expect(rowA).toBeDefined();
 
     const report = await getComplianceStatusReport(pmUserId, [communityAId]);
     expect(report.tableData).toEqual([
       expect.objectContaining({ score: 100, satisfied: 1, overdue: 0, missing: 0 }),
     ]);
 
+    // The KPI is filled by apps/web from the shared rule, never by this SQL.
     const dashboard = await getPortfolioDashboard(pmUserId, { communityType: 'condo_718' });
-    expect(dashboard.kpis.complianceScore).toBe(100);
+    expect(dashboard.kpis.complianceScore).toBeNull();
+  });
+
+  it('scores the compliance report with the Compliance page rule: a draft file is not met (M-3)', async () => {
+    const docBase = { communityId: communityAId, fileSize: 1024, mimeType: 'application/pdf' };
+    const [posted, draft] = await db
+      .insert(documents)
+      .values([
+        { ...docBase, title: 'Bylaws', filePath: `communities/${communityAId}/documents/bylaws-m3.pdf`, fileName: 'bylaws-m3.pdf' },
+        { ...docBase, title: 'Rules', filePath: `communities/${communityAId}/documents/rules-m3.pdf`, fileName: 'rules-m3.pdf', postedAt: null },
+      ])
+      .returning({ id: documents.id });
+    await db.insert(complianceChecklistItems).values([
+      { communityId: communityAId, templateKey: 'test_m3_posted', title: 'Posted', category: 'governing_documents', documentId: posted!.id },
+      { communityId: communityAId, templateKey: 'test_m3_draft', title: 'Draft', category: 'governing_documents', documentId: draft!.id },
+    ]);
+
+    const { getComplianceStatusReport } = await import('../src/unsafe');
+    const report = await getComplianceStatusReport(pmUserId, [communityAId]);
+
+    // "Any linked document counts" read this as 100%.
+    expect(report.tableData).toEqual([
+      expect.objectContaining({ score: 50, satisfied: 1, missing: 1 }),
+    ]);
+    expect(report.kpis.portfolioScore).toBe(50);
   });
 
   it('findPortfolioStatusInputsUnscoped returns facts, live checklist rows and every linked document state', async () => {

@@ -296,6 +296,71 @@ describeDb('P4-58: compliance lifecycle (db-backed integration)', () => {
     expect(await documentOf(first.id)).toBe(replacement);
   });
 
+  it('PATCH mark_not_applicable switches off only a conditional record with no file', async () => {
+    const kit = requireState();
+    const route = requireRoute();
+    const communityA = requireCommunity(kit, 'communityA');
+    const { complianceChecklistItems } = kit.dbModule;
+
+    function markNotApplicable(itemId: number) {
+      return route.PATCH(
+        jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
+          id: itemId,
+          communityId: communityA.id,
+          action: 'mark_not_applicable',
+          reason: 'Integration check.',
+        }),
+      );
+    }
+    async function rowOf(itemId: number) {
+      const rows = await kit.db
+        .select({
+          id: complianceChecklistItems.id,
+          isApplicable: complianceChecklistItems.isApplicable,
+          isConditional: complianceChecklistItems.isConditional,
+          documentId: complianceChecklistItems.documentId,
+          communityId: complianceChecklistItems.communityId,
+        })
+        .from(complianceChecklistItems);
+      return rows.find((row) => row.id === itemId);
+    }
+
+    const all = await kit.db
+      .select({
+        id: complianceChecklistItems.id,
+        communityId: complianceChecklistItems.communityId,
+        isConditional: complianceChecklistItems.isConditional,
+        isApplicable: complianceChecklistItems.isApplicable,
+        documentId: complianceChecklistItems.documentId,
+      })
+      .from(complianceChecklistItems);
+    const mine = all.filter((row) => row.communityId === communityA.id && row.isApplicable && row.documentId === null);
+    const required = mine.find((row) => !row.isConditional);
+    const conditional = mine.find((row) => row.isConditional);
+    if (!required || !conditional) throw new Error('Expected a required and a conditional unlinked item');
+
+    // A required record cannot be switched off, and nothing is written.
+    const refused = await markNotApplicable(required.id);
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify(await refused.json())).toContain('required for every association');
+    expect((await rowOf(required.id))?.isApplicable).toBe(true);
+
+    // A conditional one can.
+    expect((await markNotApplicable(conditional.id)).status).toBe(200);
+    expect((await rowOf(conditional.id))?.isApplicable).toBe(false);
+
+    // Put it back for the tests after this one.
+    const restored = await route.PATCH(
+      jsonRequest(apiUrl('/api/v1/compliance'), 'PATCH', {
+        id: conditional.id,
+        communityId: communityA.id,
+        action: 'mark_applicable',
+      }),
+    );
+    expect(restored.status).toBe(200);
+    expect((await rowOf(conditional.id))?.isApplicable).toBe(true);
+  });
+
   it('PATCH link_document with replace puts a new file over a stale one, but never gives one file to two records', async () => {
     const kit = requireState();
     const route = requireRoute();
