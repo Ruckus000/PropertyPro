@@ -119,7 +119,7 @@ describe('POST /api/v1/emergency-broadcasts/[id]/cancel', () => {
     expect(cancelBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
   });
 
-  it('returns 409 CONFLICT when the undo window has expired', async () => {
+  it('returns 409 CONFLICT when the cancel loses (undo window expired, or already sending)', async () => {
     cancelBroadcastMock.mockResolvedValueOnce(false);
 
     const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
@@ -128,7 +128,7 @@ describe('POST /api/v1/emergency-broadcasts/[id]/cancel', () => {
     const json = (await res.json()) as { error: { code: string; message: string } };
     expect(json.error.code).toBe('CONFLICT');
     expect(json.error.message).toBe(
-      'Undo window has expired. Broadcast cannot be canceled.',
+      'This alert can no longer be canceled: the undo window has expired or it has already started sending.',
     );
   });
 

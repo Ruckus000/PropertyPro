@@ -141,6 +141,9 @@
   "apps/web/src/lib/services/elections-service.ts": {
     "unscoped": 1
   },
+  "apps/web/src/lib/services/emergency-broadcast-schedule-service.ts": {
+    "unscoped": 1
+  },
   "apps/web/src/lib/services/esign/signing.ts": {
     "unscoped": 1
   },

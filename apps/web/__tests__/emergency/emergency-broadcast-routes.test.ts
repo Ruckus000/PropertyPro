@@ -333,7 +333,7 @@ describe('Emergency Broadcast Routes', () => {
 
       expect(res.status).toBe(409);
       expect(json.error.code).toBe('CONFLICT');
-      expect(json.error.message).toContain('Undo window has expired');
+      expect(json.error.message).toContain('undo window has expired');
     });
 
     it('returns 400 for invalid broadcast ID', async () => {

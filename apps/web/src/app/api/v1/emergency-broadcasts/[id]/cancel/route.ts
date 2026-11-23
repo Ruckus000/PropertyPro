@@ -1,5 +1,8 @@
 /**
- * Emergency Broadcast cancel API — cancel within undo window (10 seconds).
+ * Emergency Broadcast cancel API — cancel an immediate broadcast within its
+ * undo window (10 seconds), or a scheduled one any time before the
+ * scheduled-emergency-broadcasts cron claims it. Either way a lost cancel is a
+ * 409 `CONFLICT` with one message that is true of both cases.
  *
  * POST /api/v1/emergency-broadcasts/[id]/cancel
  * Body: { communityId }
@@ -43,7 +46,9 @@ export const POST = withErrorHandler(
 
     const canceled = await cancelBroadcast(params.id, communityId, userId);
     if (!canceled) {
-      throw new ConflictError('Undo window has expired. Broadcast cannot be canceled.');
+      throw new ConflictError(
+        'This alert can no longer be canceled: the undo window has expired or it has already started sending.',
+      );
     }
 
     return { canceled: true as const };

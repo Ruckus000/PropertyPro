@@ -2,7 +2,8 @@
  * Emergency Broadcasts API — list + create.
  *
  * GET  /api/v1/emergency-broadcasts — paginated list (Plan B3 rollout)
- * POST /api/v1/emergency-broadcasts — Create broadcast draft + resolve recipients
+ * POST /api/v1/emergency-broadcasts — Create broadcast draft + resolve recipients,
+ *                                     or schedule it when `scheduledFor` is sent
  *
  * Plan A1 drain #114 — both methods migrated to `runRoute(contract, handler)`;
  * see `./contract.ts` for schemas, B1 POST envelope migration, and rationale.
@@ -90,6 +91,8 @@ export const POST = withErrorHandler(
       // See @/lib/sms/dispatch-flag and audit F-10.
       smsAllowed: isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled,
       initiatedBy: userId,
+      // Present = "send later"; the service checks the 5-minute/365-day window.
+      ...(body.scheduledFor ? { scheduledFor: new Date(body.scheduledFor) } : {}),
     });
   }),
 );

@@ -93,6 +93,11 @@ const WEB_UNSAFE_IMPORT_ALLOWLIST = new Set<string>([
   // carries an explicit predicate; the per-community entry points in the same
   // file use createScopedClient.
   resolve(repoRoot, 'apps/web/src/lib/services/site-publish-schedule-service.ts'),
+  // Cron worker for scheduled emergency alerts: the due-row scan and the atomic
+  // claim are cross-tenant (due alerts in every community). Each statement
+  // carries an explicit predicate; everything after the claim uses
+  // createScopedClient with the claimed row's community.
+  resolve(repoRoot, 'apps/web/src/lib/services/emergency-broadcast-schedule-service.ts'),
   // Compliance alert cron — cross-community overdue scanning
   resolve(repoRoot, 'apps/web/src/lib/services/compliance-alert-service.ts'),
   // P2-34: Stripe integration — pre-tenant context, no communityId available

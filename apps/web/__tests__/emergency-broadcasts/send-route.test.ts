@@ -14,6 +14,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ConflictError } from '../../src/lib/api/errors/ConflictError';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
@@ -123,6 +124,23 @@ describe('POST /api/v1/emergency-broadcasts/[id]/send', () => {
       'write',
     );
     // Service signature: executeBroadcast(broadcastId, communityId, userId) — id FIRST.
+    expect(executeBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
+  });
+
+  it('returns 409 CONFLICT for a scheduled broadcast (only the cron sends those)', async () => {
+    // The refusal itself lives in executeBroadcast and is asserted in
+    // emergency/emergency-broadcast-scheduling.test.ts; this pins the wire shape.
+    executeBroadcastMock.mockRejectedValueOnce(
+      new ConflictError('This alert is scheduled and will be sent automatically at its scheduled time.'),
+    );
+
+    const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
+
+    expect(res.status).toBe(409);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toContain('scheduled');
+    // The manager's send reaches the service WITHOUT the cron's scheduledSend argument.
     expect(executeBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
   });
 

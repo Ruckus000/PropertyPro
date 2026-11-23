@@ -1,8 +1,9 @@
 /**
  * Route contract for `POST /api/v1/emergency-broadcasts/[id]/cancel`.
  *
- * Plan A1 drain #71. Cancels a recently-sent emergency broadcast within the
- * 10-second undo window. Service is `cancelBroadcast(broadcastId, communityId,
+ * Cancels an immediate emergency broadcast within the 10-second undo window,
+ * or a scheduled one any time before the cron claims it (409 `CONFLICT` when
+ * the cancel loses either way). Service is `cancelBroadcast(broadcastId, communityId,
  * userId)` — note `broadcastId` is the FIRST positional arg (NOT communityId-
  * first as on most sibling services).
  *
