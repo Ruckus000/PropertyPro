@@ -18,7 +18,8 @@ interface PublicSiteFooterProps {
 
 /**
  * Public site footer — community name, an optional PM note, an optional
- * statutory records line, "Powered by PropertyPro", and the copyright year.
+ * statutory records line, the accessibility and privacy links, "Powered by
+ * PropertyPro", and the copyright year.
  *
  * ## The statutory line is opt-in, and its wording is not editable
  *
@@ -66,7 +67,7 @@ export function PublicSiteFooter({
           {noteText ? <p className="text-base">{noteText}</p> : null}
           {statutoryLine ? <p className="text-sm">{statutoryLine}</p> : null}
         </div>
-        <p className="text-sm">
+        <nav aria-label="Site policies" className="flex gap-6 text-sm">
           {/*
             Accessibility statement — NOT opt-in, unlike the statutory line.
 
@@ -91,7 +92,21 @@ export function PublicSiteFooter({
           >
             Accessibility
           </a>
-        </p>
+          {/*
+            Privacy policy (audit 2026-11-05, L-2). Owners sign in to this site's
+            protected section, and PropertyPro holds those credentials and the
+            portal's personal information, so the policy that governs them is
+            ours. Not opt-in, for the same reason as the statement above.
+          */}
+          <a
+            href="https://getpropertypro.com/legal/privacy"
+            className={FOOTER_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy
+          </a>
+        </nav>
       </div>
       <div className="mx-auto mt-12 flex max-w-6xl flex-col gap-2 border-t border-white/20 pt-6 text-sm site-sm:flex-row site-sm:justify-between">
         <span>

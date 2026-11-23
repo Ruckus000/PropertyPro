@@ -196,6 +196,49 @@ describe('verified custom domain — public end to end', () => {
   });
 });
 
+/**
+ * Audit 2026-11-05, L-4. The public site's sign-in links are relative, and on a
+ * custom domain no session can be made (the auth cookie is scoped to the
+ * PropertyPro domain). So sign-in on a verified custom domain moves to the app.
+ */
+describe('custom domain — sign-in moves to the app host (L-4)', () => {
+  it('307s /auth/login to the web app origin, naming the community', async () => {
+    const res = await middleware(request(CUSTOM_HOST, '/auth/login'));
+    expect(res.status).toBe(307);
+    const to = new URL(res.headers.get('location') ?? '');
+    expect(to.hostname).toBe(ROOT_DOMAIN);
+    expect(to.pathname).toBe('/auth/login');
+    expect(to.searchParams.get('communityId')).toBe('7');
+  });
+
+  it('keeps the rest of the query, such as returnTo', async () => {
+    const res = await middleware(request(CUSTOM_HOST, '/auth/login?returnTo=%2Fdocuments'));
+    const to = new URL(res.headers.get('location') ?? '');
+    expect(to.searchParams.get('returnTo')).toBe('/documents');
+    expect(to.searchParams.get('communityId')).toBe('7');
+  });
+
+  it('does not redirect a POST', async () => {
+    const res = await middleware(
+      new NextRequest(`https://${CUSTOM_HOST}/auth/login`, { method: 'POST', headers: { host: CUSTOM_HOST } }),
+    );
+    expect(res.headers.get('location') ?? '').not.toContain(ROOT_DOMAIN);
+  });
+
+  it('leaves sign-in alone on a host that is not a verified domain (a preview deployment)', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null });
+    const res = await middleware(
+      request('property-pro-web-abc123-ruckus000s-projects.vercel.app', '/auth/login'),
+    );
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('leaves sign-in alone on a community subdomain', async () => {
+    const res = await middleware(request(`sunset-condos.${ROOT_DOMAIN}`, '/auth/login'));
+    expect(res.headers.get('location')).toBeNull();
+  });
+});
+
 describe('subdomain public root', () => {
   it('serves the public site to an anonymous visitor', async () => {
     const res = await middleware(request(`sunset-condos.${ROOT_DOMAIN}`, '/'));

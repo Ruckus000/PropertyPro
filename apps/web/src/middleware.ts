@@ -865,6 +865,51 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // --- Sign-in from a verified custom domain moves to the app's host (L-4) ---
+  //
+  // The public site's sign-in links are relative (`/auth/login`), so on a custom
+  // domain they open the login page on the association's own host, where no
+  // session can be made: in production the auth cookie is written for
+  // `NEXT_PUBLIC_COOKIE_DOMAIN` (`.getpropertypro.com`), and a browser drops a
+  // cookie set for a domain the page is not on. Owners could not reach the
+  // owners-only section from a custom-domain site (audit 2026-11-05, L-4).
+  //
+  // So `/auth/*` on a VERIFIED custom domain goes to the same path on the web
+  // app origin, with `?communityId=` so the login page carries the community's
+  // name and colours (the auth block below reads it there). GET and HEAD only:
+  // a link is a GET, and a 307 would replay a POST across origins. A host that
+  // is not a verified custom domain (an unknown domain, a preview deployment)
+  // resolves no community and is left alone.
+  if (
+    (pathname === AUTH_PATH_PREFIX || pathname.startsWith(`${AUTH_PATH_PREFIX}/`)) &&
+    (request.method === 'GET' || request.method === 'HEAD')
+  ) {
+    const authHost = resolveCommunityContext({
+      searchParams: request.nextUrl.searchParams,
+      host: request.headers.get('host'),
+      rootDomain,
+    });
+    if (authHost.source === 'custom_domain' && authHost.customDomainHost) {
+      try {
+        const communityId = await findCommunityIdByCustomDomain(supabase, authHost.customDomainHost);
+        if (communityId != null) {
+          const target = new URL(`${pathname}${request.nextUrl.search}`, getWebAppOriginFromEnv());
+          target.searchParams.set('communityId', String(communityId));
+          return finaliseResponse(
+            response as unknown as NextResponse,
+            NextResponse.redirect(target, 307),
+            requestId,
+            origin,
+            isApi,
+            isPreviewRequest,
+          );
+        }
+      } catch (error) {
+        reportTenantResolutionFailure('custom_domain', authHost.customDomainHost, error);
+      }
+    }
+  }
+
   // --- Community subdomain: public website vs authenticated app [11b-2] ---
   //
   // A subdomain serves BOTH surfaces, so this is the fork between them — and it

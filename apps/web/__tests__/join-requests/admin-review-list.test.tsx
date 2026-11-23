@@ -93,12 +93,32 @@ describe('AdminReviewList', () => {
   });
 
   it('says whether approving will link the claimed unit (audit F5)', () => {
-    setQuery({ data: [{ ...row, unitOnRoster: true }, { ...row, id: 6, unitIdentifier: 'Unit 99', unitOnRoster: false }] });
+    const tenant = { ...row, residentType: 'tenant' };
+    setQuery({ data: [{ ...tenant, unitOnRoster: true }, { ...tenant, id: 6, unitIdentifier: 'Unit 99', unitOnRoster: false }] });
     render(<AdminReviewList />);
     expect(screen.getByText('On your roster. Approving links them to this unit.')).toBeDefined();
     expect(
       screen.getByText('Not on your roster. Approving gives access without a unit; assign one in Directory.'),
     ).toBeDefined();
+  });
+
+  it('shows the roster check on an owner claim (audit 2026-11-05, M-6)', () => {
+    setQuery({
+      data: [
+        { ...row, unitOnRoster: true, recordedOwners: [] },
+        { ...row, id: 6, unitOnRoster: true, recordedOwners: [{ name: 'Olga Owner', email: 'olga@example.com' }] },
+        { ...row, id: 7, unitOnRoster: false, recordedOwners: [] },
+      ],
+    });
+    render(<AdminReviewList />);
+    expect(screen.getByText(/On your roster, with no owner recorded yet/)).toBeDefined();
+    expect(
+      screen.getByText(/already records Olga Owner · olga@example\.com as the owner of this unit\. Approving adds another owner\./),
+    ).toBeDefined();
+    expect(screen.getByText(/This unit is not on your roster\. Approving gives owner access without a unit/)).toBeDefined();
+    // The two warnings say so in words, not colour alone.
+    expect(screen.getAllByText('Check before approving.', { exact: false })).toHaveLength(2);
+    expect(screen.queryByText('On your roster. Approving links them to this unit.')).toBeNull();
   });
 
   it('submits a denial with trimmed notes', () => {

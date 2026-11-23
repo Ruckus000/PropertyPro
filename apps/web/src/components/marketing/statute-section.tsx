@@ -13,7 +13,7 @@ const OBLIGATIONS: Obligation[] = [
   {
     cite: '§718.111(12)',
     amount: '30 days',
-    unit: 'from the record existing',
+    unit: 'of receiving or creating it',
     title: 'Publish the official records',
     body: 'Declaration, bylaws, budgets, financials, insurance, minutes.',
   },
@@ -50,8 +50,8 @@ export function StatuteSection() {
             Four obligations. Fixed dates. No discretion.
           </h2>
           <p className="mk-sec-note">
-            Condos at 25+ units, HOAs at 100+ parcels. General information, not legal
-            advice.
+            For condos at 25+ units. HOAs at 100+ parcels post records and notices under
+            §720.303, with no fixed posting deadline. General information, not legal advice.
           </p>
         </div>
         <div className="mk-dl">

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,8 +12,54 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   useAdminJoinRequests,
   useReviewJoinRequest,
+  type PendingRequest,
   type ReviewJoinRequestInput,
 } from '@/hooks/use-admin-join-requests';
+
+function ownerLabel(owner: { name: string | null; email: string | null }): string {
+  return [owner.name, owner.email].filter(Boolean).join(' · ') || 'a member with no name on file';
+}
+
+/**
+ * An owner claim is self-declared, and approving it opens the owners-only
+ * section of the website (§718.111(12)(g) / §720.303(4)), so the reviewer sees
+ * what the roster says about the unit before approving (audit 2026-11-05, M-6).
+ */
+function OwnerRosterCheck({ request }: { request: PendingRequest }) {
+  const owners = request.recordedOwners ?? [];
+  const warn = !request.unitOnRoster || owners.length > 0;
+  const Icon = warn ? AlertTriangle : Info;
+  let message: string;
+  if (!request.unitOnRoster) {
+    message =
+      'This unit is not on your roster. Approving gives owner access without a unit; check their ownership first, then assign a unit in Directory.';
+  } else if (owners.length > 0) {
+    message = `Your roster already records ${owners.map(ownerLabel).join(', ')} as ${
+      owners.length === 1 ? 'the owner' : 'owners'
+    } of this unit. Approving adds another owner.`;
+  } else {
+    message =
+      'On your roster, with no owner recorded yet. Check this person against your ownership records; approving links them to this unit as its owner.';
+  }
+  return (
+    <div
+      className={
+        warn
+          ? 'mt-2 flex gap-2 rounded-md border border-status-warning-border bg-status-warning-bg px-3 py-2 text-sm text-content'
+          : 'mt-2 flex gap-2 rounded-md border border-status-info-border bg-status-info-bg px-3 py-2 text-sm text-content'
+      }
+    >
+      <Icon
+        className={warn ? 'mt-0.5 h-4 w-4 flex-none text-status-warning' : 'mt-0.5 h-4 w-4 flex-none text-status-info'}
+        aria-hidden="true"
+      />
+      <p>
+        <span className="font-medium">{warn ? 'Check before approving. ' : 'Roster check. '}</span>
+        {message}
+      </p>
+    </div>
+  );
+}
 
 export function AdminReviewList({ communityId }: { communityId?: number } = {}) {
   const [actingId, setActingId] = useState<number | null>(null);
@@ -88,11 +135,15 @@ export function AdminReviewList({ communityId }: { communityId?: number } = {}) 
                   {[r.requesterName, r.requesterEmail].filter(Boolean).join(' · ')}
                 </p>
               ) : null}
-              <p className="mt-1 text-sm text-content-secondary">
-                {r.unitOnRoster
-                  ? 'On your roster. Approving links them to this unit.'
-                  : 'Not on your roster. Approving gives access without a unit; assign one in Directory.'}
-              </p>
+              {r.residentType === 'owner' ? (
+                <OwnerRosterCheck request={r} />
+              ) : (
+                <p className="mt-1 text-sm text-content-secondary">
+                  {r.unitOnRoster
+                    ? 'On your roster. Approving links them to this unit.'
+                    : 'Not on your roster. Approving gives access without a unit; assign one in Directory.'}
+                </p>
+              )}
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge variant="outline">{r.residentType}</Badge>
                 <span className="text-xs text-content-secondary">

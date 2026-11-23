@@ -47,6 +47,13 @@ export interface PendingJoinRequestRow {
   updatedAt: Date;
   /** The claimed unit number matches a unit on this community's roster. */
   unitOnRoster?: boolean;
+  /**
+   * Members already recorded as owners of the claimed unit (M-6). Only the
+   * association's owners may enter the protected section, and an owner claim is
+   * self-declared, so the reviewer sees who the roster already names before
+   * approving. Empty when the unit is not on the roster or has no owner yet.
+   */
+  recordedOwners?: Array<{ name: string | null; email: string | null }>;
   /** Who is asking — the reviewer checks this against ownership/lease records. */
   requesterName?: string | null;
   requesterEmail?: string | null;
@@ -94,26 +101,50 @@ export async function listPendingJoinRequestsForCommunity(
   // unit's access, so the reviewer must be able to check the person against
   // ownership or lease records. The requester chose to ask this community.
   const claimed = [...new Set(rows.map((row) => unitKey(row.unitIdentifier)))];
-  const [onRoster, requesters] = await Promise.all([
-    db.selectFrom<{ unitNumber: string }>(
-      units,
-      { unitNumber: units.unitNumber },
-      and(isNull(units.deletedAt), inArray(sql`lower(${units.unitNumber})`, claimed)),
-    ),
-    db.selectFrom<{ id: string; fullName: string | null; email: string }>(
-      users,
-      { id: users.id, fullName: users.fullName, email: users.email },
-      inArray(users.id, [...new Set(rows.map((row) => row.userId))]),
-    ),
-  ]);
-  const known = new Set(onRoster.map((unit) => unitKey(unit.unitNumber)));
-  const byId = new Map(requesters.map((user) => [user.id, user]));
-  return rows.map((row) => ({
-    ...row,
-    unitOnRoster: known.has(unitKey(row.unitIdentifier)),
-    requesterName: byId.get(row.userId)?.fullName ?? null,
-    requesterEmail: byId.get(row.userId)?.email ?? null,
-  }));
+  const onRoster = await db.selectFrom<{ id: number; unitNumber: string }>(
+    units,
+    { id: units.id, unitNumber: units.unitNumber },
+    and(isNull(units.deletedAt), inArray(sql`lower(${units.unitNumber})`, claimed)),
+  );
+  // Who the roster already records as owning each claimed unit (M-6).
+  const owners =
+    onRoster.length === 0
+      ? []
+      : await db.selectFrom<{ unitId: number; userId: string }>(
+          userRoles,
+          { unitId: userRoles.unitId, userId: userRoles.userId },
+          and(
+            inArray(
+              userRoles.unitId,
+              onRoster.map((unit) => unit.id),
+            ),
+            eq(userRoles.isUnitOwner, true),
+          ),
+        );
+  const people = await db.selectFrom<{ id: string; fullName: string | null; email: string }>(
+    users,
+    { id: users.id, fullName: users.fullName, email: users.email },
+    inArray(users.id, [...new Set([...rows.map((row) => row.userId), ...owners.map((owner) => owner.userId)])]),
+  );
+  const unitIdByKey = new Map(onRoster.map((unit) => [unitKey(unit.unitNumber), unit.id]));
+  const byId = new Map(people.map((user) => [user.id, user]));
+  const ownersByUnit = new Map<number, Array<{ name: string | null; email: string | null }>>();
+  for (const owner of owners) {
+    const person = byId.get(owner.userId);
+    const list = ownersByUnit.get(owner.unitId) ?? [];
+    list.push({ name: person?.fullName ?? null, email: person?.email ?? null });
+    ownersByUnit.set(owner.unitId, list);
+  }
+  return rows.map((row) => {
+    const unitId = unitIdByKey.get(unitKey(row.unitIdentifier));
+    return {
+      ...row,
+      unitOnRoster: unitId !== undefined,
+      recordedOwners: unitId === undefined ? [] : (ownersByUnit.get(unitId) ?? []),
+      requesterName: byId.get(row.userId)?.fullName ?? null,
+      requesterEmail: byId.get(row.userId)?.email ?? null,
+    };
+  });
 }
 
 export interface CreateJoinRequestInput {

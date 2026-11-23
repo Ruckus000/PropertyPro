@@ -15,7 +15,7 @@
  * from "React escapes by default".
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { PublicSiteFooter } from '@/components/public-site/PublicSiteFooter';
 import {
   HOA_STATUTORY_FOOTER_LINE,
@@ -86,12 +86,9 @@ describe('PublicSiteFooter — note', () => {
 
   it.each([null, undefined, '', '   '])('renders nothing for %s', (value) => {
     const { container } = render(<PublicSiteFooter communityName={COMMUNITY} note={value} />);
-    // The accessibility link is now an unconditional paragraph (F-12), so this
-    // asserts the absence of the NOTE rather than of every <p> — the old
-    // blanket count would pass for the wrong reason if the note ever moved out
-    // of a <p>, and fails for the wrong reason now.
+    // The policy links sit in a <nav>, not a <p>, so no paragraph is left.
     const paragraphs = [...container.querySelectorAll('p')].map((el) => el.textContent);
-    expect(paragraphs).toEqual(['Accessibility']);
+    expect(paragraphs).toEqual([]);
   });
 
   // The footer note is PM-authored, unreviewed, and lands on an anonymous page.
@@ -177,7 +174,6 @@ describe('PublicSiteFooter — everything at once', () => {
     expect(paragraphs).toEqual([
       'Managed by Acme Property Group.',
       STATUTORY_FOOTER_LINE,
-      'Accessibility',
     ]);
   });
 });
@@ -205,5 +201,17 @@ describe('PublicSiteFooter — accessibility statement (F-12)', () => {
   it('is present even when a PM opted OUT of the statutory line', () => {
     render(<PublicSiteFooter communityName={COMMUNITY} showStatutoryLine={false} />);
     expect(screen.getByRole('link', { name: 'Accessibility' })).toBeInTheDocument();
+  });
+});
+
+describe('PublicSiteFooter — privacy policy (audit 2026-11-05, L-2)', () => {
+  it('always links to the privacy policy, in a new tab with a safe rel', () => {
+    render(<PublicSiteFooter communityName={COMMUNITY} />);
+
+    const nav = screen.getByRole('navigation', { name: 'Site policies' });
+    const link = within(nav).getByRole('link', { name: 'Privacy' });
+    expect(link).toHaveAttribute('href', 'https://getpropertypro.com/legal/privacy');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 });
