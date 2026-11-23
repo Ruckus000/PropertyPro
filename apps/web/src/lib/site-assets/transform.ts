@@ -1,5 +1,9 @@
 import sharp from 'sharp';
-import { resizeSiteImage, type SiteImageVariants } from '@/lib/services/image-processor';
+import {
+  assertSiteImageBytes,
+  resizeSiteImage,
+  type SiteImageVariants,
+} from '@/lib/services/image-processor';
 
 export interface CropBox {
   x: number;
@@ -19,6 +23,7 @@ export async function transformSiteImage(
   input: Buffer,
   crop?: CropBox,
 ): Promise<SiteImageVariants> {
+  await assertSiteImageBytes(input);
   let bytes = input;
   if (crop) {
     if (crop.x < 0 || crop.y < 0 || crop.width <= 0 || crop.height <= 0) {

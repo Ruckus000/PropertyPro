@@ -8,7 +8,28 @@
  * This module must NEVER be imported in client components — it relies on
  * the `sharp` native module which is server-only.
  */
+import { fileTypeFromBuffer } from 'file-type';
 import sharp from 'sharp';
+import { ValidationError } from '@/lib/api/errors';
+
+/** The raster formats a website image may be. Matches the presign allowlist. */
+const SITE_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+/**
+ * Refuse bytes that are not really a PNG, JPEG or WebP, BEFORE sharp sees them.
+ *
+ * The presign route checks only the MIME type the client declared, and sharp
+ * will happily decode other formats (SVG among them) if handed them. Every
+ * website-image entry point (`transformSiteImage`, `resizeFavicon`,
+ * `resizeShareImage`) calls this first, so the three finalize routes share one
+ * check. A 400, not the 500 a sharp decode error would surface as.
+ */
+export async function assertSiteImageBytes(input: Buffer): Promise<void> {
+  const detected = await fileTypeFromBuffer(input);
+  if (!detected || !SITE_IMAGE_MIME_TYPES.has(detected.mime)) {
+    throw new ValidationError('The uploaded file is not a PNG, JPEG or WebP image.');
+  }
+}
 
 const LOGO_SIZE = 400;
 const LOGO_QUALITY = 80;
@@ -125,6 +146,7 @@ const APPLE_TOUCH_SIZE = 180;
  * metadata, colour profile or trailing payload the original carried.
  */
 export async function resizeFavicon(input: Buffer): Promise<FaviconVariants> {
+  await assertSiteImageBytes(input);
   const [icon32, appleTouch180] = await Promise.all([
     sharp(input)
       .resize(FAVICON_SIZE, FAVICON_SIZE, { fit: 'cover', position: 'center' })
@@ -149,6 +171,7 @@ export async function resizeFavicon(input: Buffer): Promise<FaviconVariants> {
  * sanitisation step, as for the favicon.
  */
 export async function resizeShareImage(input: Buffer): Promise<Buffer> {
+  await assertSiteImageBytes(input);
   return sharp(input)
     .rotate()
     .resize(SHARE_IMAGE_WIDTH, SHARE_IMAGE_HEIGHT, { fit: 'cover', position: 'center' })
