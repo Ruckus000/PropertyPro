@@ -16,19 +16,28 @@ export const MFA_REQUIRED_CODE = 'MFA_REQUIRED';
 interface ClaimsReader {
   auth: {
     getClaims(): Promise<{
-      data: { claims: { aal?: unknown } } | null;
+      data: { claims: { aal?: unknown; sub?: unknown } } | null;
       error: unknown;
     }>;
   };
 }
 
 /**
- * True only when the session's VERIFIED access token says `aal2`.
+ * The user id of an `aal2` session, or null for anything less.
  *
  * `getClaims()` verifies the JWT (locally against the JWKS, or via the Auth
- * server on a legacy shared secret) before returning its claims, so the level
- * cannot be forged by editing the cookie. Any error reads as "not aal2".
+ * server on a legacy shared secret) before returning its claims, so neither
+ * the level nor the subject can be forged by editing the cookie. Any error
+ * reads as "no aal2 session".
  */
+export async function aal2SessionSubject(supabase: ClaimsReader): Promise<string | null> {
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || data?.claims?.aal !== 'aal2') return null;
+  const sub = data.claims.sub;
+  return typeof sub === 'string' && sub.length > 0 ? sub : null;
+}
+
+/** True only when the session's VERIFIED access token says `aal2`. */
 export async function sessionIsAal2(supabase: ClaimsReader): Promise<boolean> {
   const { data, error } = await supabase.auth.getClaims();
   return !error && data?.claims?.aal === 'aal2';
