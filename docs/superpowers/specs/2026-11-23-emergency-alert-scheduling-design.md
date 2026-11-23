@@ -15,8 +15,8 @@ before it goes. They also want "warn now, remind the evening before".
    today) or "Send later" with a date and time in the community's time zone.
 2. **See it.** A scheduled alert is in the manager's list and on its own page as
    "Scheduled", with the time it will go. Residents see nothing until it sends.
-3. **Cancel it.** Any time before sending starts, from the list row or the alert
-   page. A cancelled scheduled alert is shown as "Canceled".
+3. **Cancel it.** Any time before sending starts, from the alert page (a list
+   row links to it). A cancelled scheduled alert is shown as "Canceled".
 4. **Send again later.** A sent or scheduled alert has "Send again later", which
    opens the composer pre-filled with the same title, bodies, severity, audience
    and channels. This is the whole of "repeats": no recurrence rules.
@@ -64,6 +64,9 @@ One migration on `emergency_broadcasts`, all nullable, no backfill:
 | `send_claimed_at timestamptz` | Set by the job's atomic claim. Null until then. |
 | `send_outcome text` | Null, or `missed`, or `failed` (CHECK constraint). |
 | `send_outcome_reason text` | Short machine reason: `late`, `community_deleted`, `interrupted` (claimed, then no outcome for 15 minutes: the job died mid-send), or an error class name. Never a message body or address. |
+
+Scheduling converts the composer's draft row in place (it sets `scheduled_for`
+and deletes the draft's recipient rows); no second row is written.
 
 A partial index on `scheduled_for` where `scheduled_for is not null and
 send_claimed_at is null and canceled_at is null and send_outcome is null` serves

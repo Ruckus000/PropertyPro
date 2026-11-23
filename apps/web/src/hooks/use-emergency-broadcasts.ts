@@ -80,8 +80,6 @@ interface CreateBroadcastParams {
   templateKey?: string;
   targetAudience: 'all' | 'owners_only';
   channels: Array<'sms' | 'email'>;
-  /** ISO instant. Present = schedule the alert for this time instead of drafting it. */
-  scheduledFor?: string;
 }
 
 interface CreateBroadcastResult {
@@ -89,7 +87,6 @@ interface CreateBroadcastResult {
   recipientCount: number;
   smsEligibleCount: number;
   emailCount: number;
-  scheduledFor?: string;
 }
 
 interface EmergencyTemplate {
@@ -195,6 +192,38 @@ export function useSendBroadcast() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });
+      queryClient.invalidateQueries({
+        queryKey: KEYS.detail(variables.communityId, variables.broadcastId),
+      });
+    },
+  });
+}
+
+/** Turn a drafted alert into a scheduled one, in place. `scheduledFor` is an ISO instant. */
+export function useScheduleBroadcast() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      broadcastId,
+      communityId,
+      scheduledFor,
+    }: {
+      broadcastId: number;
+      communityId: number;
+      scheduledFor: string;
+    }) => {
+      return requestJson<{ scheduled: true; scheduledFor: string }>(
+        `/api/v1/emergency-broadcasts/${broadcastId}/schedule`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, scheduledFor }),
+        },
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });

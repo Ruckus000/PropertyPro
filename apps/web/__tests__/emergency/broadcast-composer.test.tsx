@@ -11,8 +11,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { ApiRequestError } from '@/lib/api/request-json';
 
-const { createAsync, sendMutate, cancelMutate, push } = vi.hoisted(() => ({
+const { createAsync, scheduleAsync, sendMutate, cancelMutate, push } = vi.hoisted(() => ({
   createAsync: vi.fn(),
+  scheduleAsync: vi.fn(),
   sendMutate: vi.fn(),
   cancelMutate: vi.fn(),
   push: vi.fn(),
@@ -21,8 +22,8 @@ const { createAsync, sendMutate, cancelMutate, push } = vi.hoisted(() => ({
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 vi.mock('@/hooks/use-emergency-broadcasts', () => ({
   useEmergencyTemplates: () => ({ data: [] }),
-  // Both instances (draft and schedule) share one spy; calls are told apart by `scheduledFor`.
   useCreateBroadcast: () => ({ mutateAsync: createAsync, isPending: false, error: null }),
+  useScheduleBroadcast: () => ({ mutateAsync: scheduleAsync, isPending: false, error: null }),
   useSendBroadcast: () => ({ mutate: sendMutate }),
   useCancelBroadcast: () => ({ mutate: cancelMutate }),
 }));
@@ -80,18 +81,17 @@ function chooseLater(local: string) {
   fireEvent.change(screen.getByLabelText(/Send on/), { target: { value: local } });
 }
 
-const scheduleCalls = () =>
-  createAsync.mock.calls.map(([body]) => body).filter((body) => 'scheduledFor' in body);
+const scheduleCalls = () => scheduleAsync.mock.calls.map(([body]) => body);
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(NOW);
-  createAsync.mockImplementation(async (body: { scheduledFor?: string }) =>
-    body.scheduledFor
-      ? { broadcastId: 12, recipientCount: 48, smsEligibleCount: 0, emailCount: 48, scheduledFor: body.scheduledFor }
-      : { broadcastId: 11, recipientCount: 48, smsEligibleCount: 0, emailCount: 48 },
-  );
+  createAsync.mockResolvedValue({ broadcastId: 11, recipientCount: 48, smsEligibleCount: 0, emailCount: 48 });
+  scheduleAsync.mockImplementation(async (body: { scheduledFor: string }) => ({
+    scheduled: true,
+    scheduledFor: body.scheduledFor,
+  }));
 });
 
 afterEach(() => {
@@ -126,6 +126,7 @@ describe('BroadcastComposer, Send now', () => {
       channels: ['email'],
     });
     expect(createAsync.mock.calls[0]![0]).not.toHaveProperty('scheduledFor');
+    expect(scheduleAsync).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });
 });
@@ -149,20 +150,13 @@ describe('BroadcastComposer, Send later', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedule alert' }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/emergency/12?communityId=7'));
-    expect(scheduleCalls()).toEqual([
-      {
-        communityId: 7,
-        title: 'Water off',
-        body: 'Water is off 9 to noon.',
-        smsBody: undefined,
-        severity: 'emergency',
-        templateKey: undefined,
-        targetAudience: 'all',
-        channels: ['email'],
-        scheduledFor: day.utc,
-      },
-    ]);
+    // The page opened is the DRAFT's (id 11): it was converted, not copied.
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/emergency/11?communityId=7'));
+    // Exactly one schedule request, on the draft made at "Next: Confirm"...
+    expect(scheduleCalls()).toEqual([{ broadcastId: 11, communityId: 7, scheduledFor: day.utc }]);
+    // ...and exactly one create request, the draft itself: no second broadcast.
+    expect(createAsync).toHaveBeenCalledTimes(1);
+    expect(createAsync.mock.calls[0]![0]).not.toHaveProperty('scheduledFor');
     // No undo countdown and no immediate send for a scheduled alert.
     expect(screen.queryByText(/Sending in/)).toBeNull();
     expect(sendMutate).not.toHaveBeenCalled();
@@ -209,6 +203,7 @@ describe('BroadcastComposer, Send later', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Schedule alert' }));
     await waitFor(() => expect(push).toHaveBeenCalled());
     expect(scheduleCalls()[0].scheduledFor).toBe('2026-03-01T12:05:00.000Z');
+    expect(createAsync).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a time more than 365 days ahead', async () => {
@@ -226,7 +221,7 @@ describe('BroadcastComposer, Send later', () => {
   it("shows the server's refusal of the time on the same field", async () => {
     view();
     await reachConfirm();
-    createAsync.mockRejectedValueOnce(
+    scheduleAsync.mockRejectedValueOnce(
       new ApiRequestError('Choose a time at least 5 minutes from now.', {
         status: 400,
         code: 'VALIDATION_ERROR',
@@ -239,7 +234,8 @@ describe('BroadcastComposer, Send later', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Choose a time at least 5 minutes from now.');
     expect(screen.getByLabelText(/Send on/)).toHaveAttribute('aria-invalid', 'true');
     // The request WAS made: this message is the server's, not the local check's.
-    expect(createAsync).toHaveBeenCalledTimes(2);
+    expect(scheduleAsync).toHaveBeenCalledTimes(1);
+    expect(createAsync).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
   });
 

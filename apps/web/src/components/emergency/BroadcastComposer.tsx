@@ -5,6 +5,7 @@ import { SmsPreview } from './SmsPreview';
 import {
   useEmergencyTemplates,
   useCreateBroadcast,
+  useScheduleBroadcast,
   useSendBroadcast,
   useCancelBroadcast,
 } from '@/hooks/use-emergency-broadcasts';
@@ -143,8 +144,8 @@ export function BroadcastComposer({
 
   const { data: templates } = useEmergencyTemplates(communityId);
   const createMutation = useCreateBroadcast();
-  // A second instance: scheduling has its own pending and error state.
-  const scheduleMutation = useCreateBroadcast();
+  // Scheduling converts the draft made at "Next: Confirm"; it creates nothing new.
+  const scheduleMutation = useScheduleBroadcast();
   const sendMutation = useSendBroadcast();
   const cancelMutation = useCancelBroadcast();
 
@@ -216,6 +217,7 @@ export function BroadcastComposer({
   }
 
   async function handleSchedule() {
+    if (!broadcastId) return;
     const resolved = resolveScheduledTime(scheduledLocal, timeZone, new Date());
     if ('error' in resolved) {
       setScheduleError(resolved.error);
@@ -223,19 +225,13 @@ export function BroadcastComposer({
     }
     setScheduleError(null);
     try {
-      const result = await scheduleMutation.mutateAsync({
+      await scheduleMutation.mutateAsync({
+        broadcastId,
         communityId,
-        title,
-        body,
-        smsBody: smsBody || undefined,
-        severity,
-        templateKey,
-        targetAudience,
-        channels,
         scheduledFor: resolved.iso,
       });
       // No undo countdown: a scheduled alert is canceled from its own page.
-      router.push(`/emergency/${result.broadcastId}?communityId=${communityId}`);
+      router.push(`/emergency/${broadcastId}?communityId=${communityId}`);
     } catch (error) {
       // The server refused the time (its clock is the authority): same field, same message.
       if (
@@ -253,8 +249,14 @@ export function BroadcastComposer({
       ? resolveScheduledTime(scheduledLocal, timeZone, new Date())
       : null;
   const scheduledIso = scheduledPreview && 'iso' in scheduledPreview ? scheduledPreview.iso : null;
-  const scheduleFailed =
-    scheduleMutation.error && !scheduleError ? scheduleMutation.error.message : null;
+  // A 409 means the draft is no longer a draft (sent, scheduled or canceled
+  // elsewhere): trying again cannot help, so the server's sentence stands alone.
+  const scheduleFailure = scheduleError ? null : scheduleMutation.error;
+  const scheduleFailed = !scheduleFailure
+    ? null
+    : scheduleFailure instanceof ApiRequestError && scheduleFailure.status === 409
+      ? `${scheduleFailure.message} Start a new alert to schedule it.`
+      : `We couldn't schedule this alert. ${scheduleFailure.message} Please try again.`;
 
   function handleUndo() {
     if (broadcastId) {
@@ -614,7 +616,7 @@ export function BroadcastComposer({
               role="alert"
               className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger"
             >
-              We couldn&apos;t schedule this alert. {scheduleFailed} Please try again.
+              {scheduleFailed}
             </div>
           )}
 
