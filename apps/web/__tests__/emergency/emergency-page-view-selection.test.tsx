@@ -6,10 +6,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-const { membershipMock, previewMock, receivedMock, queryMock, smsGlobalMock } = vi.hoisted(() => ({
+const { membershipMock, receivedMock, queryMock, smsGlobalMock } = vi.hoisted(() => ({
   smsGlobalMock: vi.fn(),
   membershipMock: vi.fn(),
-  previewMock: vi.fn(),
   receivedMock: vi.fn(),
   queryMock: vi.fn(),
 }));
@@ -17,6 +16,9 @@ const { membershipMock, previewMock, receivedMock, queryMock, smsGlobalMock } = 
 vi.mock('next/navigation', () => ({
   redirect: vi.fn((to: string) => {
     throw new Error(`redirect:${to}`);
+  }),
+  notFound: vi.fn(() => {
+    throw new Error('notFound');
   }),
 }));
 vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
@@ -34,7 +36,6 @@ vi.mock('@/lib/request/page-auth-context', () => ({
 vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: membershipMock,
 }));
-vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: previewMock }));
 vi.mock('@/lib/access/describe-access', () => ({ describeAccess: vi.fn(() => undefined) }));
 vi.mock('@/lib/services/emergency-broadcast-service', () => ({
   listBroadcastsForRecipient: receivedMock,
@@ -47,30 +48,19 @@ vi.mock('@propertypro/db', () => ({
 vi.mock('@/lib/sms/dispatch-flag', () => ({ isSmsDispatchGloballyEnabled: smsGlobalMock }));
 vi.mock('@/components/emergency/emergency-new-page', () => ({
   EmergencyNewPage: (props: unknown) => (
-    <div data-testid="pilot-new" data-props={JSON.stringify(props)} />
+    <div data-testid="page-new" data-props={JSON.stringify(props)} />
   ),
-}));
-vi.mock('@/components/emergency/BroadcastComposer', () => ({
-  BroadcastComposer: () => <div data-testid="old-composer" />,
 }));
 vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/emergency/emergency-list-page', () => ({
   EmergencyListPage: (props: unknown) => (
-    <div data-testid="pilot-list" data-props={JSON.stringify(props)} />
-  ),
-}));
-vi.mock('@/components/emergency/BroadcastHistoryTable', () => ({
-  BroadcastHistoryTable: (props: { showDelivery?: boolean }) => (
-    <div data-testid="old-table" data-show-delivery={String(props.showDelivery)} />
+    <div data-testid="page-list" data-props={JSON.stringify(props)} />
   ),
 }));
 vi.mock('@/components/emergency/emergency-detail-page', () => ({
   EmergencyDetailPage: (props: unknown) => (
-    <div data-testid="pilot-detail" data-props={JSON.stringify(props)} />
+    <div data-testid="page-detail" data-props={JSON.stringify(props)} />
   ),
-}));
-vi.mock('@/app/(authenticated)/emergency/[id]/broadcast-detail-client', () => ({
-  BroadcastDetailClient: () => <div data-testid="old-detail" />,
 }));
 
 import EmergencyPage from '@/app/(authenticated)/emergency/page';
@@ -96,7 +86,6 @@ function propsOf(testId: string): Record<string, unknown> {
 describe('EmergencyPage (list) view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
-    previewMock.mockReset();
     receivedMock.mockReset();
     queryMock.mockReset();
     receivedMock.mockResolvedValue([
@@ -118,16 +107,15 @@ describe('EmergencyPage (list) view selection', () => {
     ]);
   });
 
-  async function run(kind: 'owner' | 'tenant' | 'manager', preview: boolean) {
+  async function run(kind: 'owner' | 'tenant' | 'manager') {
     membershipMock.mockResolvedValue(member(kind));
-    previewMock.mockResolvedValue(preview);
     const el = await EmergencyPage({ searchParams: Promise.resolve({ communityId: '1' }) });
     render(el);
   }
 
   it('gives a non-admin owner the recipient view with no recipient figures and no write flag', async () => {
-    await run('owner', true);
-    const props = propsOf('pilot-list');
+    await run('owner');
+    const props = propsOf('page-list');
     expect(props['view']).toBe('recipient');
     expect(props).not.toHaveProperty('canWrite');
     const rows = props['broadcasts'] as Record<string, unknown>[];
@@ -136,27 +124,14 @@ describe('EmergencyPage (list) view selection', () => {
   });
 
   it('gives a manager the manager view', async () => {
-    await run('manager', true);
-    const props = propsOf('pilot-list');
+    await run('manager');
+    const props = propsOf('page-list');
     expect(props['view']).toBe('manager');
     expect(props['canWrite']).toBe(true);
   });
 
-  it('gives an owner the old table without delivery columns when the gate is off', async () => {
-    await run('owner', false);
-    expect(screen.getByTestId('old-table')).toHaveAttribute('data-show-delivery', 'false');
-    expect(screen.queryByTestId('pilot-list')).toBeNull();
-  });
-
-  it('gives a manager the old table when the gate is off', async () => {
-    await run('manager', false);
-    expect(screen.getByTestId('old-table')).toHaveAttribute('data-show-delivery', 'undefined');
-    expect(screen.queryByTestId('pilot-list')).toBeNull();
-  });
-
   it('refuses a tenant before anything renders', async () => {
     membershipMock.mockResolvedValue(member('tenant'));
-    previewMock.mockResolvedValue(true);
     await expect(
       EmergencyPage({ searchParams: Promise.resolve({ communityId: '1' }) }),
     ).rejects.toThrow(/not permitted/i);
@@ -168,7 +143,6 @@ describe('EmergencyPage (list) view selection', () => {
 describe('BroadcastDetailPage view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
-    previewMock.mockReset();
   });
 
   const call = async (communityId?: string) =>
@@ -179,34 +153,33 @@ describe('BroadcastDetailPage view selection', () => {
       }),
     );
 
-  it('renders the old client and resolves no membership when the gate is off', async () => {
-    previewMock.mockResolvedValue(false);
-    await call('1');
-    expect(screen.getByTestId('old-detail')).toBeInTheDocument();
-    expect(membershipMock).not.toHaveBeenCalled();
-  });
-
-  it('tells the pilot a non-admin is not an admin', async () => {
-    previewMock.mockResolvedValue(true);
+  it('tells the page a non-admin is not an admin', async () => {
     membershipMock.mockResolvedValue(member('owner'));
     await call('1');
-    const props = propsOf('pilot-detail');
+    const props = propsOf('page-detail');
     expect(props['isAdmin']).toBe(false);
     expect(props['communityId']).toBe(1);
     expect(props['broadcastId']).toBe(3);
   });
 
-  it('tells the pilot a manager is an admin', async () => {
-    previewMock.mockResolvedValue(true);
+  it('tells the page a manager is an admin', async () => {
     membershipMock.mockResolvedValue(member('manager'));
     await call('1');
-    expect(propsOf('pilot-detail')['isAdmin']).toBe(true);
+    expect(propsOf('page-detail')['isAdmin']).toBe(true);
   });
 
-  it('falls back to the old client when communityId is missing', async () => {
-    previewMock.mockResolvedValue(true);
-    await call();
-    expect(screen.getByTestId('old-detail')).toBeInTheDocument();
+  it('is a 404 when communityId is missing, before any membership is resolved', async () => {
+    await expect(call()).rejects.toThrow('notFound');
+    expect(membershipMock).not.toHaveBeenCalled();
+  });
+
+  it('is a 404 when the id is not a positive integer', async () => {
+    await expect(
+      BroadcastDetailPage({
+        params: Promise.resolve({ id: 'abc' }),
+        searchParams: Promise.resolve({ communityId: '1' }),
+      }),
+    ).rejects.toThrow('notFound');
     expect(membershipMock).not.toHaveBeenCalled();
   });
 });
@@ -214,7 +187,6 @@ describe('BroadcastDetailPage view selection', () => {
 describe('NewBroadcastPage view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
-    previewMock.mockReset();
     smsGlobalMock.mockReset();
     queryMock.mockReset();
     queryMock.mockResolvedValue([{ id: 1, name: 'Sunset Condos' }]);
@@ -227,48 +199,34 @@ describe('NewBroadcastPage view selection', () => {
     return { ...member('manager'), smsDispatchEnabled };
   }
 
-  it('gate on: smsEnabled is false when the global flag is off', async () => {
-    previewMock.mockResolvedValue(true);
+  it('smsEnabled is false when the global flag is off', async () => {
     smsGlobalMock.mockReturnValue(false);
     membershipMock.mockResolvedValue(writer(true));
     await call();
-    expect(propsOf('pilot-new')['smsEnabled']).toBe(false);
+    expect(propsOf('page-new')['smsEnabled']).toBe(false);
   });
 
-  it('gate on: smsEnabled is false when the community flag is off', async () => {
-    previewMock.mockResolvedValue(true);
+  it('smsEnabled is false when the community flag is off', async () => {
     smsGlobalMock.mockReturnValue(true);
     membershipMock.mockResolvedValue(writer(false));
     await call();
-    expect(propsOf('pilot-new')['smsEnabled']).toBe(false);
+    expect(propsOf('page-new')['smsEnabled']).toBe(false);
   });
 
-  it('gate on: smsEnabled is true only when both flags are on', async () => {
-    previewMock.mockResolvedValue(true);
+  it('smsEnabled is true only when both flags are on', async () => {
     smsGlobalMock.mockReturnValue(true);
     membershipMock.mockResolvedValue(writer(true));
     await call();
-    expect(propsOf('pilot-new')['smsEnabled']).toBe(true);
-    expect(propsOf('pilot-new')['communityId']).toBe(1);
+    expect(propsOf('page-new')['smsEnabled']).toBe(true);
+    expect(propsOf('page-new')['communityId']).toBe(1);
   });
 
   it('refuses a member without write permission before anything renders', async () => {
-    previewMock.mockResolvedValue(true);
     smsGlobalMock.mockReturnValue(true);
     membershipMock.mockResolvedValue({ ...member('owner'), smsDispatchEnabled: true });
     await expect(
       NewBroadcastPage({ searchParams: Promise.resolve({ communityId: '1' }) }),
     ).rejects.toThrow(/not permitted/i);
     expect(queryMock).not.toHaveBeenCalled();
-    expect(previewMock).not.toHaveBeenCalled();
-  });
-
-  it('gate off: renders the old composer directly', async () => {
-    previewMock.mockResolvedValue(false);
-    smsGlobalMock.mockReturnValue(true);
-    membershipMock.mockResolvedValue(writer(true));
-    await call();
-    expect(screen.getByTestId('old-composer')).toBeInTheDocument();
-    expect(screen.queryByTestId('pilot-new')).toBeNull();
   });
 });

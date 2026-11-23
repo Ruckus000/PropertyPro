@@ -1,4 +1,4 @@
-// breadcrumbs:exempt — delegated to apps/web/src/app/(authenticated)/emergency/[id]/broadcast-detail-client.tsx (with the design preview on, the title comes from components/emergency/emergency-detail-page.tsx)
+// breadcrumbs:exempt — delegated to apps/web/src/components/emergency/emergency-detail-page.tsx
 // page-template: delegated to apps/web/src/components/emergency/emergency-detail-page.tsx
 /**
  * Emergency Broadcast detail page.
@@ -8,18 +8,15 @@
  * API decides what the viewer gets (managers the delivery report, everyone
  * else the message alone, and only for an alert sent to them).
  *
- * The page body is a client component. With the design preview off this page
- * does exactly what it always did: it renders that component and nothing else,
- * so no membership or permission is resolved here (middleware and the API
- * enforce access, as before).
+ * A missing or malformed communityId or id is a 404, as on the other detail
+ * pages (announcements/[id], documents/[id]).
  */
+import { notFound } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { describeAccess } from '@/lib/access/describe-access';
-import { isDesignPreviewOn } from '@/lib/design-preview';
 import { EmergencyDetailPage } from '@/components/emergency/emergency-detail-page';
-import { BroadcastDetailClient } from './broadcast-detail-client';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -28,10 +25,6 @@ interface PageProps {
 
 export default async function BroadcastDetailPage({ params, searchParams }: PageProps) {
   const userId = await requireAuthenticatedUserId();
-
-  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
-  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
-  if (!(await isDesignPreviewOn(userId))) return <BroadcastDetailClient />;
 
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const communityId = Number(query['communityId']);
@@ -42,7 +35,7 @@ export default async function BroadcastDetailPage({ params, searchParams }: Page
     !Number.isInteger(broadcastId) ||
     broadcastId <= 0
   ) {
-    return <BroadcastDetailClient />;
+    notFound();
   }
 
   const membership = await requireCommunityMembership(communityId, userId);

@@ -1,10 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { loginAs } from './helpers/dev-login';
 import { clickWhenHydrated } from './helpers/hydration';
 import {
   checkPage,
-  DESIGN_PREVIEW_COOKIE,
   expectNoBleed,
   expectPaintedTitle,
   open,
@@ -24,10 +22,10 @@ import {
  * ones where a table beside a side panel is tightest. Nothing here turns the
  * text size down; a page that only fits in standard mode must fail.
  *
- * Every block switches the pilot on with the preview cookie, then proves the
- * painted `h1` is visible BEFORE it measures anything. The current pages carry
- * an `sr-only` h1, so without that assertion every overflow check below would
- * pass against the old page and prove nothing about the new one.
+ * Every block proves the painted `h1` is visible BEFORE it measures anything.
+ * A page that is not on `PageLayout` carries an `sr-only` h1, so without that
+ * assertion every overflow check below would pass against a page that lost the
+ * redesigned layout and prove nothing about it.
  */
 
 /** The packages list is loaded: a body row, or the first-run heading when none are logged. */
@@ -41,8 +39,8 @@ test.describe('design direction pilot', () => {
   // A dev server compiles each route on demand, and a block visits two widths.
   test.setTimeout(180_000);
 
-  test('packages (staff) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('packages (staff) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     await checkPage(page, testInfo, {
       label: 'packages',
       shot: 'packages',
@@ -53,8 +51,8 @@ test.describe('design direction pilot', () => {
     });
   });
 
-  test('emergency alerts list (manager) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('emergency alerts list (manager) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     await checkPage(page, testInfo, {
       label: 'emergency list',
       shot: 'emergency-list',
@@ -64,8 +62,8 @@ test.describe('design direction pilot', () => {
     });
   });
 
-  test('emergency alert detail (manager) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('emergency alert detail (manager) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     await open(page, 1440, `/emergency?communityId=${communityId}`, seededAlert);
     // An existing alert only: sending one from a test would message real recipients.
     const href = await page
@@ -86,8 +84,8 @@ test.describe('design direction pilot', () => {
     });
   });
 
-  test('emergency new alert (manager) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('emergency new alert (manager) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     // Opened and measured only; nothing on this page is submitted.
     await checkPage(page, testInfo, {
       label: 'emergency new',
@@ -105,8 +103,8 @@ test.describe('design direction pilot', () => {
   // What this spec asserts for the staff table instead is the block further down:
   // the row's actions stay on screen while the table scrolls.
 
-  test('visitors denied list (staff) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('visitors denied list (staff) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     await checkPage(page, testInfo, {
       label: 'visitors denied tab',
       shot: 'visitors-denied',
@@ -124,12 +122,12 @@ test.describe('design direction pilot', () => {
   // action column is pinned: a row's Check In and Revoke must be on screen
   // without a sideways scroll. The block REQUIRES the overflow, so it cannot
   // pass on a table that simply fits and proves nothing about the pin.
-  test('visitors (staff): a row\'s actions stay on screen when the table scrolls sideways', async ({ page, context, baseURL }, testInfo) => {
+  test('visitors (staff): a row\'s actions stay on screen when the table scrolls sideways', async ({ page }, testInfo) => {
     // The root manager, not `cam`: every other staff block here signs in as cam,
     // and reads are limited to 100 a minute per user. Three more page loads as
     // cam pushed the next spec (e-sign, also cam) into a 429 on CI, where it
     // skipped itself and failed the executed-test floor.
-    const communityId = await startPilot(page, context, baseURL, 'root_sunset');
+    const communityId = await startPilot(page, 'root_sunset');
     const url = `/dashboard/visitors?communityId=${communityId}`;
 
     const stamp = Date.now().toString(36);
@@ -231,8 +229,8 @@ test.describe('design direction pilot', () => {
   // ever run against the agent sandbox or CI's disposable Supabase stack, never a
   // shared or production database. Do not launch the default Playwright config
   // without the demo-db wrapper (scripts/with-env-local-demo-db.sh).
-  test('a 90-character recipient name stays visible and does not break the packages page', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test('a 90-character recipient name stays visible and does not break the packages page', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     const url = `/dashboard/packages?communityId=${communityId}`;
     await open(page, 1440, url, packagesReady);
     await expectPaintedTitle(page, 'packages before logging');
@@ -276,8 +274,8 @@ test.describe('design direction pilot', () => {
   // The owner may or may not hold a package here (the long-name block logs one
   // against the first unit, which the seed gives to the owner), so every
   // assertion holds in both states.
-  test('a resident sees the owner views with no manager figures', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'owner');
+  test('a resident sees the owner views with no manager figures', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'owner');
 
     await open(page, 1440, `/dashboard/packages?communityId=${communityId}`, (p) =>
       // A resident row (RecordList, not a table) or the first-run heading.
@@ -302,17 +300,5 @@ test.describe('design direction pilot', () => {
     await expect(page.getByRole('link', { name: /send alert/i })).toHaveCount(0);
     await expectNoBleed(page, 'emergency (recipient) @ 1440px');
     await shoot(page, testInfo, 'emergency-list-owner-1440');
-  });
-
-  test('without the preview cookie, packages is still the current page', async ({ page, baseURL }) => {
-    expect(baseURL).toBeTruthy();
-    const { communityId } = await loginAs(page, 'cam', { communitySlug: 'sunset-condos', skipPortalNav: true });
-    // loginAs does not set the cookie; assert that rather than assume it.
-    const cookies = await page.context().cookies(baseURL!);
-    expect(cookies.map((c) => c.name)).not.toContain(DESIGN_PREVIEW_COOKIE);
-
-    await open(page, 1440, `/dashboard/packages?communityId=${communityId}`);
-    const h1 = page.locator('main h1').first();
-    await expect(h1).toHaveClass(/sr-only/);
   });
 });

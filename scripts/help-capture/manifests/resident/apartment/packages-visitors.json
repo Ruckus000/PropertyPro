@@ -12,7 +12,7 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "text=My Packages"
+          "selector": "text=My packages"
         }
       ],
       "clipTo": "main"

@@ -24,8 +24,8 @@ test.describe('design direction pilot, known issues', () => {
   // The action column is now pinned, so Check In and Revoke stay on screen
   // (asserted in design-direction-pilot.spec.ts); the other columns still scroll.
   // Fixing that means choosing which columns to drop or merge, a design decision.
-  test.fixme('visitors (staff) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+  test.fixme('visitors (staff) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'cam');
     await checkPage(page, testInfo, {
       label: 'visitors',
       shot: 'visitors',
