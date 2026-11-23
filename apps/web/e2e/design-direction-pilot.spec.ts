@@ -125,35 +125,37 @@ test.describe('design direction pilot', () => {
   // without a sideways scroll. The block REQUIRES the overflow, so it cannot
   // pass on a table that simply fits and proves nothing about the pin.
   test('visitors (staff): a row\'s actions stay on screen when the table scrolls sideways', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
+    // The root manager, not `cam`: every other staff block here signs in as cam,
+    // and reads are limited to 100 a minute per user. Three more page loads as
+    // cam pushed the next spec (e-sign, also cam) into a 429 on CI, where it
+    // skipped itself and failed the executed-test floor.
+    const communityId = await startPilot(page, context, baseURL, 'root_sunset');
     const url = `/dashboard/visitors?communityId=${communityId}`;
-    await open(page, 1280, url, (p) => rowOrEmpty(p, 'No visitors found.'));
-    await expectPaintedTitle(page, 'visitors before registering');
 
     const stamp = Date.now().toString(36);
     const name = `${stamp} Pinned Actions`;
-    const created = await page.evaluate(
-      async ({ id, visitorName }) => {
-        const units = await fetch(`/api/v1/units?communityId=${id}`);
-        const unitBody = (await units.json()) as { data?: Array<{ unitNumber?: string }> };
-        const hostUnitLabel = unitBody.data?.[0]?.unitNumber;
-        if (!hostUnitLabel) return { status: 0, unit: null };
-        const res = await fetch('/api/v1/visitors', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            communityId: id,
-            visitorName,
-            purpose: 'Contractor walk-through',
-            hostUnitLabel,
-            expectedArrival: new Date().toISOString(),
-            expectedDurationMinutes: 60,
-          }),
-        });
-        return { status: res.status, unit: hostUnitLabel };
-      },
-      { id: communityId, visitorName: name },
-    );
+    // Through the context's request client (same cookies), so registering costs
+    // no page load.
+    const units = await page.request.get(`/api/v1/units?communityId=${communityId}`);
+    const unitBody = (await units.json()) as { data?: Array<{ unitNumber?: string }> };
+    const hostUnitLabel = unitBody.data?.[0]?.unitNumber ?? null;
+    const created = {
+      unit: hostUnitLabel,
+      status: hostUnitLabel
+        ? (
+            await page.request.post('/api/v1/visitors', {
+              data: {
+                communityId,
+                visitorName: name,
+                purpose: 'Contractor walk-through',
+                hostUnitLabel,
+                expectedArrival: new Date().toISOString(),
+                expectedDurationMinutes: 60,
+              },
+            })
+          ).status()
+        : 0,
+    };
     expect(created.unit, 'the seed has at least one unit to host a visitor').toBeTruthy();
     expect(created.status, 'registering the visitor').toBeLessThan(300);
 
