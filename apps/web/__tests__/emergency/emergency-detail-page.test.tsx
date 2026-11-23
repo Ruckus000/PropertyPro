@@ -405,3 +405,16 @@ describe('EmergencyDetailPage, a scheduled alert (manager)', () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 });
+
+describe('EmergencyDetailPage, the scheduled recipient count reads as singular or plural', () => {
+  it.each([
+    [0, '0 recipients as of now'],
+    [1, '1 recipient as of now'],
+    [2, '2 recipients as of now'],
+  ])('with %i it says "%s"', (count, text) => {
+    const { container } = show({ ...SCHEDULED, recipientCount: count });
+    expect(screen.getByText(text)).toBeVisible();
+    // The Details row is labelled Recipients, so its value carries no noun.
+    expect(container.querySelector('aside')).toHaveTextContent(`Recipients${count} as of now`);
+  });
+});

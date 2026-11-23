@@ -80,6 +80,9 @@ const draftView = (id: number, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/** How many recipients the next draft reports; tests that change it put 48 back. */
+let draftRecipients = 48;
+
 const fetchMock = vi.fn(async (url: RequestInfo, init?: RequestInit) => {
   const path = String(url).split('?')[0]!;
   const method = init?.method ?? 'GET';
@@ -87,7 +90,7 @@ const fetchMock = vi.fn(async (url: RequestInfo, init?: RequestInit) => {
   if (path.endsWith('/templates')) return json(200, { data: [] });
   if (method === 'POST' && path === '/api/v1/emergency-broadcasts') {
     return json(200, {
-      data: { broadcastId: nextDraftId++, recipientCount: 48, smsEligibleCount: 0, emailCount: 48 },
+      data: { broadcastId: nextDraftId++, recipientCount: draftRecipients, smsEligibleCount: 0, emailCount: draftRecipients },
     });
   }
   if (method === 'POST' && path.endsWith('/schedule')) return onSchedule();
@@ -772,5 +775,31 @@ describe('BroadcastComposer, pre-filled from an earlier alert', () => {
     expect(screen.getByRole('heading', { name: 'Choose a Template' })).toBeVisible();
     await reachConfirm();
     expect(screen.getByRole('radio', { name: 'Send now' })).toBeChecked();
+  });
+});
+
+describe('BroadcastComposer, recipient counts read as singular or plural', () => {
+  afterEach(() => {
+    draftRecipients = 48;
+  });
+
+  it.each([
+    [0, '0 people', '0 recipients as of now'],
+    [1, '1 person', '1 recipient as of now'],
+    [2, '2 people', '2 recipients as of now'],
+  ])('with %i: "%s" for Send now and "%s" for Send later', async (count, now, later) => {
+    draftRecipients = count;
+    view();
+    await reachConfirm();
+
+    expect(screen.getByRole('checkbox').closest('label')).toHaveTextContent(
+      `I understand this will immediately alert ${now} via email.`,
+    );
+
+    // Before a time is chosen, and after: the two sentences share the count.
+    fireEvent.click(screen.getByRole('radio', { name: 'Send later' }));
+    expect(screen.getByText(later)).toBeVisible();
+    fireEvent.change(screen.getByLabelText(/Send on/), { target: { value: BEFORE_DST.local } });
+    expect(screen.getByText(later)).toBeVisible();
   });
 });

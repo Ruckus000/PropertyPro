@@ -12,6 +12,7 @@
  * Order is the page's: newest first by when the alert was created, so an alert
  * scheduled today sits at the top.
  */
+import { recipientCountText } from './count-noun';
 import Link from 'next/link';
 import { Siren } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
@@ -102,8 +103,8 @@ function EmergencyRow({
   if (m.recipientCount !== undefined && !neverSent && status.word !== 'Sending') {
     outcome =
       status.word === 'Scheduled'
-        ? `${m.recipientCount} recipients as of now`
-        : `${m.recipientCount} recipients`;
+        ? `${recipientCountText(m.recipientCount)} as of now`
+        : recipientCountText(m.recipientCount);
   }
   return (
     <RecordRow
@@ -178,7 +179,7 @@ export function EmergencyListPage(props: Props) {
               glance: lastSent ? (
                 <PanelGlance
                   figure={String(lastSent.recipientCount)}
-                  unit="recipients on the last alert"
+                  unit={`${lastSent.recipientCount === 1 ? 'recipient' : 'recipients'} on the last alert`}
                   lines={[
                     [
                       'Sent',
