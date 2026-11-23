@@ -2,10 +2,6 @@
 //
 // CI guard: every signed-in page is built on PageLayout, or says why not.
 //
-// ponytail: proves a page HAS a PageLayout view, not that customers are served it
-// (a pilot page still renders its old view to everyone off the allow-list).
-// Trigger: Task 19 removes the gate; delete this note then.
-//
 // A `page.tsx` under the scanned route groups passes when it:
 //   1. contains a JSX `<PageLayout>` element; or
 //   2. carries a leading `// page-template: delegated to <path>[, <path>…]`

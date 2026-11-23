@@ -32,7 +32,6 @@ type Filter = 'all' | 'pending' | 'picked_up';
 
 const isAwaiting = (p: PackageListItem) => p.status !== 'picked_up';
 
-// The words are the ones the current view's badge shows; only the mark changes.
 const STATUS_WORD: Record<PackageListItem['status'], string> = {
   received: 'Received',
   notified: 'Notified',
@@ -102,8 +101,7 @@ export function PackagesStaffPage({ communityId, about }: PackagesStaffPageProps
     [baseColumns],
   );
   // The shared column set leaves the action column's header empty, which fails
-  // axe's empty-table-header; name it for screen readers here without touching
-  // the columns the current view also uses.
+  // axe's empty-table-header; name it for screen readers here.
   const columns = useMemo(
     () =>
       baseColumns.map((c) =>
