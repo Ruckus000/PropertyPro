@@ -5,7 +5,7 @@
  * Route: /dashboard/visitors?communityId=X
  * Auth: all community members
  * Feature gate: hasVisitorLogging (apartment + condo)
- * View: staff see VisitorStaffView, residents see VisitorResidentView
+ * View: staff see VisitorsStaffPage, residents see VisitorResidentView
  */
 import { redirect } from 'next/navigation';
 import type { SearchParams } from 'next/dist/server/request/search-params';
@@ -17,12 +17,10 @@ import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { listActorUnitIds } from '@/lib/units/actor-units';
 import { getUnitLabelMap } from '@/lib/services/units-lookup';
 import { FeatureGate } from '@/components/billing/feature-gate';
-import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
 import { VisitorResidentView } from '@/components/visitors/VisitorResidentView';
 import { PageHeader } from '@/components/shared/page-header';
 import { VisitorsStaffPage } from '@/components/visitors/visitors-staff-page';
 import { describeAccess } from '@/lib/access/describe-access';
-import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -66,12 +64,7 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
     }
   }
 
-  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
-  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
-  // There is no pilot resident view for visitors: residents always get the current one.
-  const preview = await isDesignPreviewOn(userId);
-
-  if (preview && isStaff) {
+  if (isStaff) {
     return (
       <FeatureGate feature="hasVisitorLogging" communityId={communityId}>
         <VisitorsStaffPage
@@ -84,18 +77,13 @@ export default async function VisitorsPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasVisitorLogging" communityId={communityId}>
-      <PageHeader title={isStaff ? 'Visitor Management' : 'My Visitors'} />
-
-      {isStaff ? (
-        <VisitorStaffView communityId={communityId} />
-      ) : (
-        <VisitorResidentView
-          communityId={communityId}
-          hostUnitLabel={hostUnitLabel}
-          allowResidentVisitorRevoke={communitySettings.allowResidentVisitorRevoke === true}
-          currentUserId={userId}
-        />
-      )}
+      <PageHeader title="My Visitors" />
+      <VisitorResidentView
+        communityId={communityId}
+        hostUnitLabel={hostUnitLabel}
+        allowResidentVisitorRevoke={communitySettings.allowResidentVisitorRevoke === true}
+        currentUserId={userId}
+      />
     </FeatureGate>
   );
 }

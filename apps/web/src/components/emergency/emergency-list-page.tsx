@@ -2,7 +2,7 @@
  * Emergency Alerts list on the page kit. A server component: it renders client
  * parts (PageLayout, PageHeader) and hands them elements and plain data only.
  *
- * It states only what BroadcastHistoryTable states today: a title, a severity,
+ * It states a title, a severity,
  * a recipient count and one of three statuses. It adds no delivery or reach
  * figure; whether a resident was not reached is on the detail page.
  */

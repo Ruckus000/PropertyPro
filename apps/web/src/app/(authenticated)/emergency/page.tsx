@@ -7,7 +7,6 @@
  * same gate the list API applies), admin for write. Managers see every
  * broadcast with delivery counts; owners see only the alerts sent to them.
  */
-import Link from 'next/link';
 import { headers } from 'next/headers';
 import { createScopedClient, emergencyBroadcasts } from '@propertypro/db';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -15,12 +14,10 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
-import { BroadcastHistoryTable } from '@/components/emergency/BroadcastHistoryTable';
 import { listBroadcastsForRecipient } from '@/lib/services/emergency-broadcast-service';
 import { PageHeader } from '@/components/shared/page-header';
 import { EmergencyListPage } from '@/components/emergency/emergency-list-page';
 import { describeAccess } from '@/lib/access/describe-access';
-import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -62,47 +59,24 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     { isUnitOwner: membership.isUnitOwner },
   );
 
-  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
-  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
-  const preview = await isDesignPreviewOn(userId);
-
   // Non-managers (owners, board seats included) see only the alerts sent to
   // them, dated when sent — never drafts, canceled alerts or delivery counts.
   if (!membership.isAdmin) {
     const received = await listBroadcastsForRecipient(context.communityId, userId);
-    if (preview) {
-      return (
-        <EmergencyListPage
-          view="recipient"
-          broadcasts={received.map((b) => ({
-            id: b.id,
-            title: b.title,
-            severity: b.severity,
-            initiatedAt: b.completedAt.toISOString(),
-            completedAt: b.completedAt.toISOString(),
-            canceledAt: null,
-          }))}
-          communityId={context.communityId}
-          timeZone={membership.timezone}
-        />
-      );
-    }
     return (
-      <div className="mx-auto max-w-4xl space-y-6">
-        <PageHeader title="Emergency Alerts" />
-        <BroadcastHistoryTable
-          broadcasts={received.map((b) => ({
-            id: b.id,
-            title: b.title,
-            severity: b.severity,
-            initiatedAt: b.completedAt.toISOString(),
-            completedAt: b.completedAt.toISOString(),
-            canceledAt: null,
-          }))}
-          communityId={context.communityId}
-          showDelivery={false}
-        />
-      </div>
+      <EmergencyListPage
+        view="recipient"
+        broadcasts={received.map((b) => ({
+          id: b.id,
+          title: b.title,
+          severity: b.severity,
+          initiatedAt: b.completedAt.toISOString(),
+          completedAt: b.completedAt.toISOString(),
+          canceledAt: null,
+        }))}
+        communityId={context.communityId}
+        timeZone={membership.timezone}
+      />
     );
   }
 
@@ -128,39 +102,14 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     canceledAt: r['canceledAt'] instanceof Date ? (r['canceledAt'] as Date).toISOString() : null,
   }));
 
-  if (preview) {
-    return (
-      <EmergencyListPage
-        view="manager"
-        broadcasts={broadcasts}
-        canWrite={canWrite}
-        communityId={context.communityId}
-        timeZone={membership.timezone}
-        about={describeAccess(membership.communityType, 'emergency_broadcasts', 'sent-to-them')}
-      />
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader
-        title="Emergency Alerts"
-        actions={
-          canWrite ? (
-            <Link
-              href={`/emergency/new?communityId=${context.communityId}`}
-              className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-[var(--red-900)]"
-            >
-              Send Emergency Alert
-            </Link>
-          ) : undefined
-        }
-      />
-
-      <BroadcastHistoryTable
-        broadcasts={broadcasts}
-        communityId={context.communityId}
-      />
-    </div>
+    <EmergencyListPage
+      view="manager"
+      broadcasts={broadcasts}
+      canWrite={canWrite}
+      communityId={context.communityId}
+      timeZone={membership.timezone}
+      about={describeAccess(membership.communityType, 'emergency_broadcasts', 'sent-to-them')}
+    />
   );
 }

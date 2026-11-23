@@ -12,14 +12,14 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+          "selector": "role=button[name=\"Log a package\"] >> nth=0"
         }
       ],
       "clipTo": [
-        "role=button[name=\"Pending\"]",
-        "role=button[name=\"Log Package\"] >> nth=0"
+        "role=button[name=/^Awaiting pickup/]",
+        "role=button[name=\"Log a package\"] >> nth=0"
       ],
-      "highlight": "role=button[name=\"Log Package\"] >> nth=0",
+      "highlight": "role=button[name=\"Log a package\"] >> nth=0",
       "step": 1
     },
     {
@@ -31,11 +31,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+          "selector": "role=button[name=\"Log a package\"] >> nth=0"
         },
         {
           "type": "click",
-          "selector": "role=button[name=\"Log Package\"] >> nth=0"
+          "selector": "role=button[name=\"Log a package\"] >> nth=0"
         },
         {
           "type": "waitFor",
@@ -55,11 +55,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Pending\"]"
+          "selector": "role=button[name=/^Awaiting pickup/]"
         },
         {
           "type": "click",
-          "selector": "role=button[name=\"Pending\"]"
+          "selector": "role=button[name=/^Awaiting pickup/]"
         },
         {
           "type": "waitFor",
@@ -67,7 +67,7 @@
         }
       ],
       "clipTo": [
-        "role=button[name=\"Pending\"]",
+        "role=button[name=/^Awaiting pickup/]",
         "table"
       ],
       "highlight": "role=button[name=\"Mark Picked Up\"] >> nth=0",
@@ -82,11 +82,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Pending\"]"
+          "selector": "role=button[name=/^Awaiting pickup/]"
         },
         {
           "type": "click",
-          "selector": "role=button[name=\"Pending\"]"
+          "selector": "role=button[name=/^Awaiting pickup/]"
         },
         {
           "type": "waitFor",

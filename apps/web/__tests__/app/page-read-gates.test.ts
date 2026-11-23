@@ -48,7 +48,7 @@ vi.mock('@/lib/services/stripe-service', () => ({
 vi.mock('@/lib/services/emergency-broadcast-service', () => ({
   listBroadcastsForRecipient: listReceivedMock,
 }));
-vi.mock('@/components/emergency/BroadcastHistoryTable', () => ({ BroadcastHistoryTable: () => null }));
+vi.mock('@/components/emergency/emergency-list-page', () => ({ EmergencyListPage: () => null }));
 vi.mock('@/components/shared/page-header', () => ({ PageHeader: () => null }));
 vi.mock('@/components/settings/billing-page-client', () => ({ BillingPageClient: billingClientMock }));
 

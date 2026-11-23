@@ -40,7 +40,6 @@ interface VisitorsStaffPageProps {
 
 type TabValue = 'visitors' | 'denied';
 
-// The words are the ones the current view's badge shows; only the mark changes.
 const STATUS: Record<VisitorStatus, { kind: StatusGlyphKind; word: string }> = {
   expected: { kind: 'not-started', word: 'Expected' },
   checked_in: { kind: 'in-progress', word: 'Checked In' },
@@ -91,8 +90,7 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
   );
   const baseColumns = useMemo(() => getVisitorColumns(actions, { renderStatus }), [actions]);
   // The shared column set leaves the action column's header empty, which fails
-  // axe's empty-table-header; name it for screen readers here without touching
-  // the columns the current view also uses. The same column is pinned to the
+  // axe's empty-table-header; name it for screen readers here. The same column is pinned to the
   // right edge: the eleven columns before it are wider than the box at 1440px,
   // and a row's Check In and Revoke must not need a sideways scroll.
   const columns = useMemo(
@@ -133,7 +131,7 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
               icon={<Users />}
               description="Expected visitors and the people who may not be let in."
               // The denied list keeps its own "Add to Denied List" button inside its
-              // section, as in the current view, so the header offers none on that tab.
+              // section, so the header offers none on that tab.
               actions={tab === 'visitors' ? registerButton : undefined}
             />
           }

@@ -147,8 +147,8 @@ import { DelinquencyTable } from '@/components/finance/delinquency-table';
 import { LedgerTable } from '@/components/finance/ledger-table';
 import { ArcSubmissionsTab } from '@/components/violations/ArcSubmissionsTab';
 import { DeniedVisitorsTab } from '@/components/visitors/DeniedVisitorsTab';
-import { PackageStaffView } from '@/components/packages/PackageStaffView';
-import { VisitorStaffView } from '@/components/visitors/VisitorStaffView';
+import { PackagesStaffPage } from '@/components/packages/packages-staff-page';
+import { VisitorsStaffPage } from '@/components/visitors/visitors-staff-page';
 
 /**
  * Every screen renders inside a QueryClientProvider. The data hooks above are
@@ -225,7 +225,7 @@ describe('governance and operations', () => {
   });
 
   it('renders a package row', () => {
-    render(<PackageStaffView communityId={1} />);
+    render(<PackagesStaffPage communityId={1} />);
     expect(screen.getByText('Ada Fisher')).toBeDefined();
     // The unit column shows the unit's number, not its database id.
     expect(screen.getByText('Unit 4C')).toBeDefined();
@@ -233,7 +233,7 @@ describe('governance and operations', () => {
   });
 
   it('renders a visitor row, including the accessor-only Purpose column', () => {
-    render(<VisitorStaffView communityId={1} />);
+    render(<VisitorsStaffPage communityId={1} />);
     expect(screen.getByText('Sam Okafor')).toBeDefined();
     // `purpose` has no `cell` — it renders through the default value path, which
     // is the seam most likely to break silently under a new renderer.

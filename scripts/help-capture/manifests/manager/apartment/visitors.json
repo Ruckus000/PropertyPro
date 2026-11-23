@@ -87,11 +87,11 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=tab[name=\"Denied List\"]"
+          "selector": "role=tab[name=\"Denied list\"]"
         },
         {
           "type": "click",
-          "selector": "role=tab[name=\"Denied List\"]"
+          "selector": "role=tab[name=\"Denied list\"]"
         },
         {
           "type": "waitFor",

@@ -1,16 +1,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { expect, type BrowserContext, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 import { loginAs, type DevRole } from './dev-login';
 import { findOverflows } from './overflow';
-
-// Mirrors DESIGN_PREVIEW_COOKIE in `src/lib/design-preview.ts`. Not imported:
-// that module pulls in `next/headers`, which has no business in a Playwright
-// worker. The no-cookie block and the preview-off probe both fail if the two
-// names ever drift apart.
-export const DESIGN_PREVIEW_COOKIE = 'pp_design_preview';
 
 export const WIDTHS = [1280, 1440] as const;
 export type Width = (typeof WIDTHS)[number];
@@ -18,15 +12,8 @@ export type Width = (typeof WIDTHS)[number];
 /** Set to a directory to also write each screenshot there as a PNG (owner review). */
 const SHOTS_DIR = process.env.PILOT_SHOTS_DIR;
 
-export async function startPilot(
-  page: Page,
-  context: BrowserContext,
-  baseURL: string | undefined,
-  role: DevRole,
-) {
+export async function startPilot(page: Page, role: DevRole) {
   const login = await loginAs(page, role, { communitySlug: 'sunset-condos', skipPortalNav: true });
-  expect(baseURL, 'playwright baseURL').toBeTruthy();
-  await context.addCookies([{ name: DESIGN_PREVIEW_COOKIE, value: '1', url: baseURL! }]);
   return login.communityId;
 }
 
@@ -79,7 +66,7 @@ export async function expectPaintedTitle(page: Page, where: string) {
       height: Math.round(box.height),
     };
   });
-  expect(state.srOnly, `${where}: the h1 is sr-only, so this is the current page, not the pilot`).toBe(false);
+  expect(state.srOnly, `${where}: the h1 is sr-only, so this page is not on PageLayout`).toBe(false);
   expect(
     state.width > 24 && state.height > 16,
     `${where}: the h1 has no painted box (${state.width}x${state.height})`,

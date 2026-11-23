@@ -256,4 +256,27 @@ Full reference: `/DESIGN.md`. Tokens are DEFINED in `packages/tokens` (`src/prim
   the in-scope glob: `**/[<param>]/page.tsx`, `**/new/page.tsx`,
   `**/[<param>]/edit/page.tsx` under `apps/web/src/app/(authenticated)/`.
 
+## Page templates
+
+- Build a signed-in page with `PageLayout` (`template`: `list`, `detail`, `form`,
+  `settings`, `canvas` or `focus`), `PageHeader` in its `header` slot, and the Section kit (`Section`,
+  `SectionHeader`, `SectionToolbar`, `SectionFooter`, `SectionError`,
+  `SectionFirstRun`) or `RecordList` / `RecordRow` for the body. All of these
+  except `PageHeader` live in `packages/ui/src/components/shared/`.
+- Status inside these pages is a `StatusGlyph` with its word. The optional side
+  panel (`panel` prop) holds a glance figure and the "who can see this" sentences.
+- The route's `page.tsx` does auth and permission checks, then renders one client
+  or server component that owns the `PageLayout`. It names that file in a leading
+  `// page-template: delegated to <path>` comment.
+- `pnpm guard:page-template` checks every signed-in page: it has a `PageLayout`,
+  delegates to a file that has one, only redirects, or carries
+  `// page-template:exempt — <reason>`. Pages not yet moved are listed in
+  `scripts/page-template-baseline.json`, which can only shrink.
+- Reference pages: Packages (`components/packages/packages-staff-page.tsx`,
+  `packages-resident-page.tsx`), Visitors staff view
+  (`components/visitors/visitors-staff-page.tsx`) and Emergency Alerts
+  (`components/emergency/emergency-{list,detail,new}-page.tsx`). Copy their
+  structure for the next page you move. Each has one view; there is no preview
+  switch.
+
 </important>

@@ -183,6 +183,19 @@ Source: `packages/tokens/src/static.ts` (elevation values); `packages/ui/src/tok
 
 ---
 
+## Page Templates
+
+Signed-in pages are built from one kit, so every page has the same frame.
+
+- `PageLayout` sets the frame (`template`: `list`, `detail`, `form`, `settings`, `canvas` or `focus`) and takes the header, optional tabs, an optional side panel and the body.
+- `PageHeader` goes in the `header` slot. Inside a `PageLayout` it paints the title, description, icon and status.
+- The body is made of `Section` blocks (`SectionHeader`, `SectionToolbar`, `SectionFooter`, `SectionError`, `SectionFirstRun`). Lists of records use `RecordList` / `RecordRow` or the shared `DataTable`.
+- The kit lives in `packages/ui/src/components/shared/` (`page-layout.tsx`, `section.tsx`, `record-row.tsx`, `side-panel.tsx`, `status-glyph.tsx`).
+- `pnpm guard:page-template` enforces this. A page passes when it has a `PageLayout`, delegates to a file that has one, only redirects, or is marked exempt with a reason. Pages not yet moved sit in `scripts/page-template-baseline.json`, which can only shrink.
+- Reference pages: Packages, Visitors (staff view) and Emergency Alerts (list, detail and new). Follow their structure when moving another page.
+
+---
+
 ## UX Patterns & States
 
 ### Every Data View Must Handle Four States
