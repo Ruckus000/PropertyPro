@@ -27,6 +27,7 @@ import {
   type BroadcastAudience,
 } from './broadcast-audience';
 import { formatDateTimeWithZone, timeZoneLabel } from './broadcast-status';
+import { countNoun, recipientCountText } from './count-noun';
 
 type Severity = 'emergency' | 'urgent' | 'info';
 /** The manager's shape of an alert (the composer is manager-only). */
@@ -670,7 +671,7 @@ export function BroadcastComposer({
               />
               <span className="text-sm text-status-danger">
                 I understand this will immediately alert{' '}
-                <strong>{recipientInfo.recipientCount} people</strong> via{' '}
+                <strong>{countNoun(recipientInfo.recipientCount, 'person', 'people')}</strong> via{' '}
                 {channels.join(' and ')}.
               </span>
             </label>
@@ -714,12 +715,12 @@ export function BroadcastComposer({
                   <>
                     This alert will be sent on{' '}
                     <strong>{formatDateTimeWithZone(scheduledIso, timeZone)}</strong> to{' '}
-                    <strong>{recipientInfo.recipientCount} recipients as of now</strong>.
+                    <strong>{recipientCountText(recipientInfo.recipientCount)} as of now</strong>.
                   </>
                 ) : (
                   <>
                     This alert will be sent at the time you choose to{' '}
-                    <strong>{recipientInfo.recipientCount} recipients as of now</strong>.
+                    <strong>{recipientCountText(recipientInfo.recipientCount)} as of now</strong>.
                   </>
                 )}{' '}
                 Recipients are worked out again when it sends. You can cancel it until it starts

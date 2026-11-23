@@ -344,3 +344,36 @@ describe('EmergencyListPage, recipient view', () => {
     expect(await axe(second.container)).toHaveNoViolations();
   });
 });
+
+describe('EmergencyListPage, recipient counts read as singular or plural', () => {
+  const item = (name: string) => screen.getByRole('link', { name }).closest('li')!;
+
+  it.each([
+    [0, '0 recipients', 'recipients on the last alert'],
+    [1, '1 recipient', 'recipient on the last alert'],
+    [2, '2 recipients', 'recipients on the last alert'],
+  ])('a sent alert with %i says "%s", in the row and at a glance', (count, text, unit) => {
+    const { container } = manager([row({ id: 1, title: 'Went out', recipientCount: count })]);
+    expect(item('Went out').textContent).toMatch(new RegExp(`${text}$`));
+    const glance = container.querySelector('[data-source="emergencyBroadcasts.recipientCount"]')!;
+    expect(glance.textContent).toMatch(new RegExp(`${count}\\s*${unit}`));
+  });
+
+  it.each([
+    [0, '0 recipients as of now'],
+    [1, '1 recipient as of now'],
+    [2, '2 recipients as of now'],
+  ])('a scheduled alert with %i says "%s"', (count, text) => {
+    manager([
+      row({
+        id: 1,
+        title: 'Goes later',
+        initiatedAt: '2026-03-05T12:00:00.000Z',
+        completedAt: null,
+        scheduledFor: '2026-03-10T13:00:00.000Z',
+        recipientCount: count,
+      }),
+    ]);
+    expect(item('Goes later')).toHaveTextContent(text);
+  });
+});

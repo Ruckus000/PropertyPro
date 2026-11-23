@@ -12,6 +12,7 @@
  * later". A missed or failed alert shows why in plain words. The Delivery
  * section is drawn only for an alert that was actually sent.
  */
+import { recipientCountText } from './count-noun';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Siren } from 'lucide-react';
@@ -201,7 +202,7 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
       <p className={cn(noticeClass, 'bg-surface-hover text-content')}>
         Scheduled for <strong>{formatDateTimeWithZone(scheduledFor, timeZone)}</strong>. It sends
         within 5 minutes after that time, to{' '}
-        <strong>{managerReport.recipientCount} recipients as of now</strong>. Recipients are worked
+        <strong>{recipientCountText(managerReport.recipientCount)} as of now</strong>. Recipients are worked
         out again when it sends.
       </p>
     );
