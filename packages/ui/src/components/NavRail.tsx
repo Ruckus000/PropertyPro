@@ -53,6 +53,12 @@ export interface NavRailProps {
   expanded: boolean;
   onToggle?: () => void;
   /**
+   * The rail is open only while the pointer is over it (the caller's hover
+   * state), not because the user expanded it. The toggle then keeps it open,
+   * so it is labelled "Keep sidebar open" instead of "Collapse sidebar".
+   */
+  peeking?: boolean;
+  /**
    * Optional render function for link items (items with `href`).
    * Receives href, className, children, and common props.
    * Use this to render framework-specific link components (e.g. Next.js `Link`).
@@ -174,6 +180,7 @@ export function NavRail({
   onViewChange,
   expanded,
   onToggle,
+  peeking = false,
   renderLink,
   header,
   footer,
@@ -618,13 +625,18 @@ export function NavRail({
               setAnimateWidth(true);
               onToggle();
             }}
-            aria-label={expanded ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={peeking ? "Keep sidebar open" : expanded ? "Collapse sidebar" : "Expand sidebar"}
             className={cn(
               "flex min-h-11 md:min-h-0 w-full items-center gap-2 bg-transparent px-2.5 py-2 text-[var(--nav-text-muted)] transition-colors duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] hover:bg-[var(--nav-bg-hover)] hover:text-[var(--nav-text-active)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--nav-surface)]",
               expanded ? "" : "justify-center",
             )}
           >
-            {expanded ? (
+            {peeking ? (
+              <>
+                <PanelLeftIcon size={16} />
+                <span className="text-sm">Keep open</span>
+              </>
+            ) : expanded ? (
               <>
                 <PanelLeftCloseIcon size={16} />
                 <span className="text-sm">Collapse</span>

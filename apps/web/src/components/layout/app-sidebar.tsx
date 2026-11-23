@@ -8,11 +8,12 @@
  * Plan-locked items are shown with a "Pro" pill (via NavRail.trailingBadge) and
  * open an UpgradeDialog when clicked.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
 import { prefetchNavData } from './nav-prefetch';
 import { NavRail, PlanBadge, type NavRailItem, type NavRailSection } from '@propertypro/ui';
 import {
@@ -81,6 +82,13 @@ interface AppSidebarProps {
   showCollapseToggle?: boolean;
   onNavigate?: () => void;
   /**
+   * Desktop rail only. While the rail is collapsed, a mouse pointer over it
+   * opens it as an overlay on top of the page (nothing shifts), and it closes
+   * when the pointer leaves. Touch and pen do not trigger it; they keep the
+   * expand button.
+   */
+  hoverPeek?: boolean;
+  /**
    * Served on a community's own subdomain (`isCommunitySubdomainHost`,
    * computed server-side in the authenticated layout). The community picker
    * dialog then links cross-host, because there the host wins over
@@ -104,6 +112,7 @@ export function AppSidebar({
   expandedOverride,
   showCollapseToggle,
   onNavigate,
+  hoverPeek = false,
   onTenantHost = false,
 }: AppSidebarProps) {
   const pathname = usePathname();
@@ -118,7 +127,30 @@ export function AppSidebar({
     label: string;
     href: (communityId: number) => string;
   } | null>(null);
-  const resolvedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
+  const [hovered, setHovered] = useState(false);
+  const pinnedExpanded = expandedOverride !== undefined ? expandedOverride : (collapsible ? expanded : true);
+  // Open only because the pointer is over a collapsed rail.
+  const peeking = hoverPeek && hovered && !pinnedExpanded;
+  const resolvedExpanded = pinnedExpanded || peeking;
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Close when the pointer is next seen outside the rail. This is a document
+  // listener, not onPointerLeave, because a leave event can be lost: measured
+  // in Chromium, closing the community switcher's popover with Escape while
+  // the pointer was over it left the rail open over the page until the
+  // pointer came back. A popover or dialog the rail opened is rendered in a
+  // portal outside the wrapper, so those count as still inside.
+  useEffect(() => {
+    if (!hovered) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target || wrapperRef.current?.contains(target)) return;
+      if (target.closest('[data-radix-popper-content-wrapper], [role="dialog"]')) return;
+      setHovered(false);
+    };
+    document.addEventListener('pointermove', onPointerMove);
+    return () => document.removeEventListener('pointermove', onPointerMove);
+  }, [hovered]);
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
   // The shell never mounts this sidebar on the PM portfolio pages (they have no
@@ -301,8 +333,16 @@ export function AppSidebar({
   ) : null;
 
   return (
-    <>
+    // While peeking, the wrapper keeps the collapsed width in the layout and the
+    // open rail floats over the page.
+    <div
+      ref={wrapperRef}
+      className={cn('relative h-full', peeking && 'w-[4.5rem] min-w-[4.5rem]')}
+      onPointerEnter={hoverPeek ? (event) => event.pointerType === 'mouse' && setHovered(true) : undefined}
+    >
+      <div className={cn('h-full', peeking && 'absolute inset-y-0 left-0 z-40 shadow-e2')}>
       <NavRail
+        peeking={peeking}
         sections={navRailSections}
         collapsibleSections
         sectionOpen={sectionOpen}
@@ -343,6 +383,7 @@ export function AppSidebar({
           </Link>
         )}
       />
+      </div>
       <UpgradeDialog
         open={upgradeFor !== null}
         onOpenChange={(open) => {
@@ -368,6 +409,6 @@ export function AppSidebar({
           onTenantHost={onTenantHost}
         />
       )}
-    </>
+    </div>
   );
 }
