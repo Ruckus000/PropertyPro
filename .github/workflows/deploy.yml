@@ -42,7 +42,11 @@ jobs:
     name: Require Integration Tests
     # A completed-but-failed CI run must not deploy. Manual dispatch remains the
     # deliberate operator escape hatch for infrastructure-only re-deploys.
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Only a PUSH to THIS repository may deploy: for a fork pull request,
+    # `branches: [main]` above matches the fork's own branch name, so a fork PR
+    # from a branch called `main` would otherwise run here with production
+    # secrets. Pinned by scripts/__tests__/deploy-workflow-trust.test.ts.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -113,7 +117,9 @@ jobs:
   # the migration to apply. Runs beside `gate`, not after it, so it adds no time.
   schema:
     name: Require production schema to cover the code
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Same trust guard as `gate`: this job runs `pnpm install` on the triggering
+    # commit while holding SCHEMA_CHECK_DATABASE_URL.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
