@@ -43,6 +43,11 @@ describe('Table density', () => {
     expect(table.classList.contains('text-sm')).toBe(false);
   });
 
+  it('keeps column titles at interface size (text-sm), so they do not widen the table', () => {
+    renderTable();
+    expect(screen.getByRole('columnheader').classList.contains('text-sm')).toBe(true);
+  });
+
 
   it('gives the header cell a 32px height (h-8)', () => {
     renderTable();
