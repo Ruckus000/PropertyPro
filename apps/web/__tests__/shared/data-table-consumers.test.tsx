@@ -232,11 +232,9 @@ describe('governance and operations', () => {
     expect(screen.queryByText(/Unit #?12\b/)).toBeNull();
   });
 
-  it('renders a visitor row, including the accessor-only Purpose column', () => {
+  it('renders a visitor row, with the purpose under the name', () => {
     render(<VisitorsStaffPage communityId={1} />);
     expect(screen.getByText('Sam Okafor')).toBeDefined();
-    // `purpose` has no `cell` — it renders through the default value path, which
-    // is the seam most likely to break silently under a new renderer.
-    expect(screen.getByText('Delivery')).toBeDefined();
+    expect(screen.getByText(/· Delivery$/)).toBeDefined();
   });
 });

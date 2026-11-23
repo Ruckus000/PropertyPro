@@ -1,16 +1,23 @@
 'use client';
 
 import type { ColumnDef } from '@/components/shared/data-table-types';
-import { format, isToday, parseISO } from 'date-fns';
-import { AlertTriangle, Ban } from 'lucide-react';
+import { format, isSameDay, isToday } from 'date-fns';
+import { AlertTriangle, Ban, MoreHorizontal } from 'lucide-react';
 import type { VisitorListItem } from '@/hooks/use-visitors';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { VisitorQRCode } from './VisitorQRCode';
 import {
   deriveVisitorStatus,
   isAllowedVisitDay,
   isMultiUsePass,
+  visitDaysLabel,
   type VisitorStatus,
 } from '@/lib/visitors/visitor-logic';
 
@@ -18,23 +25,21 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatDatetime(dateStr: string | null): string {
-  if (!dateStr) return '\u2014';
-  try {
-    return format(parseISO(dateStr), 'MMM d, yyyy h:mm a');
-  } catch {
-    return dateStr;
-  }
-}
-
 function parseDate(value: string | null): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+/** A time today reads as the time alone; any other day carries its date. */
+function formatWhen(value: string | null, now: Date): string {
+  const date = parseDate(value);
+  if (!date) return '';
+  return format(date, isSameDay(date, now) ? 'h:mm a' : 'MMM d, h:mm a');
+}
+
 function formatDuration(minutes: number | null): string {
-  if (!minutes) return '\u2014';
+  if (!minutes) return '';
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
@@ -59,7 +64,7 @@ function formatVehicle(visitor: VisitorListItem): string {
     .filter(Boolean)
     .join(' ');
   if (details && visitor.vehiclePlate) return `${details} · ${visitor.vehiclePlate}`;
-  return details || visitor.vehiclePlate || '\u2014';
+  return details || visitor.vehiclePlate || '';
 }
 
 export function getVisitorStatus(visitor: VisitorListItem): VisitorStatus {
@@ -70,6 +75,52 @@ export function getVisitorStatus(visitor: VisitorListItem): VisitorStatus {
     validUntil: parseDate(visitor.validUntil),
     revokedAt: parseDate(visitor.revokedAt),
   });
+}
+
+/**
+ * The line under a visitor's status: the one time that matters for it. The
+ * arrival time while the guest is expected, the check-in time once on site,
+ * both ends of a finished visit, and when a pass ended or was revoked.
+ * Empty when there is nothing to add.
+ */
+export function visitorStatusDetail(visitor: VisitorListItem, now: Date = new Date()): string {
+  const when = (value: string | null) => formatWhen(value, now);
+  const stay = formatDuration(visitor.expectedDurationMinutes);
+  const arrival = parseDate(visitor.expectedArrival);
+
+  switch (getVisitorStatus(visitor)) {
+    case 'expected':
+      // A multi-use pass is Expected again after each visit, so a finished
+      // visit is the news: the guard must see the guest was already in and out.
+      if (isMultiUsePass(visitor.guestType)) {
+        if (visitor.checkedOutAt) return `Last visit ended ${when(visitor.checkedOutAt)}`;
+        // Its expectedArrival is only its first day; on a later day the allowed
+        // days say more than a past date.
+        if (arrival && arrival < now && !isSameDay(arrival, now)) {
+          const days = visitDaysLabel(visitor.recurrenceRule);
+          return days ? `Visits ${days}` : '';
+        }
+      }
+      return [when(visitor.expectedArrival), stay ? `${stay} stay` : '']
+        .filter(Boolean)
+        .join(' · ');
+    case 'checked_in':
+      return [`Since ${when(visitor.checkedInAt)}`, stay ? `${stay} stay` : '']
+        .filter(Boolean)
+        .join(' · ');
+    case 'overstayed':
+      return `In ${when(visitor.checkedInAt)} · due out ${when(visitor.validUntil)}`;
+    case 'revoked_on_site':
+      return `In ${when(visitor.checkedInAt)} · revoked ${when(visitor.revokedAt)}`;
+    case 'checked_out':
+      return visitor.checkedInAt
+        ? `${when(visitor.checkedInAt)} \u2013 ${when(visitor.checkedOutAt)}`
+        : `Out ${when(visitor.checkedOutAt)}`;
+    case 'expired':
+      return `Pass ended ${when(visitor.validUntil)}`;
+    case 'revoked':
+      return `Revoked ${when(visitor.revokedAt)}`;
+  }
 }
 
 /**
@@ -163,6 +214,15 @@ export interface VisitorColumnOptions {
   renderStatus?: (status: VisitorStatus) => React.ReactNode;
 }
 
+const DETAIL_CLASS = 'text-sm text-content-secondary';
+
+/**
+ * The gate's columns: who, which unit, where the visit stands, the passcode,
+ * and the row's actions. Purpose, guest type and vehicle sit under the name;
+ * the arrival and check-in / check-out times sit under the status. Five columns
+ * fit the page at 1280px and 1440px in large text, where eleven did not
+ * (1440px of table in a 1092px box, measured 2026-11-23).
+ */
 export function getVisitorColumns(
   actions: VisitorColumnActions,
   options?: VisitorColumnOptions,
@@ -170,74 +230,57 @@ export function getVisitorColumns(
   return [
     {
       accessorKey: 'visitorName',
-      header: 'Visitor Name',
-      cell: ({ row }) => (
-        <span className="font-medium">{row.original.visitorName}</span>
-      ),
-    },
-    {
-      accessorKey: 'purpose',
-      header: 'Purpose',
-    },
-    {
-      accessorKey: 'guestType',
-      header: 'Guest Type',
-      cell: ({ row }) => (
-        <Badge variant="outline" className="border-edge">
-          {formatGuestType(row.original.guestType)}
-        </Badge>
-      ),
+      header: 'Visitor',
+      // No `absorbSlack`: its `max-width: 0` lets the column shrink to nothing
+      // (72px at a 375px screen, measured). The name and its lines wrap, so the
+      // column takes the slack anyway, and the floor below keeps a name readable
+      // on a narrow screen: under it the table scrolls instead.
+      cell: ({ row }) => {
+        const vehicle = formatVehicle(row.original);
+        return (
+          <div className="min-w-40">
+            <div className="font-medium">{row.original.visitorName}</div>
+            <div className={`${DETAIL_CLASS} line-clamp-2`} title={row.original.purpose}>
+              {formatGuestType(row.original.guestType)} · {row.original.purpose}
+            </div>
+            {vehicle ? <div className={DETAIL_CLASS}>{vehicle}</div> : null}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'hostUnitLabel',
       header: 'Host',
-      cell: ({ row }) => `Unit ${row.original.hostUnitLabel ?? row.original.hostUnitId}`,
-    },
-    {
-      accessorKey: 'expectedArrival',
-      header: 'Expected Arrival',
-      cell: ({ row }) => formatDatetime(row.original.expectedArrival),
-    },
-    {
-      accessorKey: 'checkedInAt',
-      header: 'Checked In',
-      cell: ({ row }) => formatDatetime(row.original.checkedInAt),
-    },
-    {
-      accessorKey: 'checkedOutAt',
-      header: 'Checked Out',
-      cell: ({ row }) => formatDatetime(row.original.checkedOutAt),
+      cell: ({ row }) => (
+        <span className="whitespace-nowrap">
+          Unit {row.original.hostUnitLabel ?? row.original.hostUnitId}
+        </span>
+      ),
     },
     {
       id: 'status',
       header: 'Status',
-      cell: ({ row }) =>
-        options?.renderStatus ? (
-          options.renderStatus(getVisitorStatus(row.original))
-        ) : (
-          <StatusBadge visitor={row.original} />
-        ),
-    },
-    {
-      id: 'duration',
-      header: 'Duration',
-      cell: ({ row }) => formatDuration(row.original.expectedDurationMinutes),
-    },
-    {
-      id: 'vehicle',
-      header: 'Vehicle',
-      cell: ({ row }) => (
-        <span className="text-sm text-content-secondary">{formatVehicle(row.original)}</span>
-      ),
+      cell: ({ row }) => {
+        const detail = visitorStatusDetail(row.original);
+        return (
+          <div>
+            {options?.renderStatus ? (
+              options.renderStatus(getVisitorStatus(row.original))
+            ) : (
+              <StatusBadge visitor={row.original} />
+            )}
+            {/* One line where the page has room for it (1280px up); it wraps on a tablet. */}
+            {detail ? <div className={`${DETAIL_CLASS} xl:whitespace-nowrap`}>{detail}</div> : null}
+          </div>
+        );
+      },
     },
     {
       id: 'passCode',
       header: 'Passcode',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs">
-            {row.original.passCode ?? '\u2014'}
-          </span>
+        <div className="flex items-center gap-1 whitespace-nowrap">
+          <span className="font-mono">{row.original.passCode ?? '\u2014'}</span>
           {row.original.passCode ? <VisitorQRCode passCode={row.original.passCode} /> : null}
         </div>
       ),
@@ -248,37 +291,38 @@ export function getVisitorColumns(
       cell: ({ row }) => {
         const visitor = row.original;
         const status = getVisitorStatus(visitor);
+        const canRevoke = !visitor.revokedAt && status !== 'checked_out' && status !== 'expired';
 
         return (
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1 whitespace-nowrap">
             {status === 'expected' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => actions.onCheckIn(visitor)}
-              >
+              <Button variant="outline" size="sm" onClick={() => actions.onCheckIn(visitor)}>
                 Check In
               </Button>
             ) : null}
 
             {status === 'checked_in' || status === 'overstayed' || status === 'revoked_on_site' ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => actions.onCheckOut(visitor)}
-              >
+              <Button variant="outline" size="sm" onClick={() => actions.onCheckOut(visitor)}>
                 Check Out
               </Button>
             ) : null}
 
-            {!visitor.revokedAt && status !== 'checked_out' && status !== 'expired' ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => actions.onRevoke(visitor)}
-              >
-                Revoke
-              </Button>
+            {/* Revoking is rare and ends the pass, so it sits one step away from Check In. */}
+            {canRevoke ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                    <span className="sr-only">More actions for {visitor.visitorName}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => actions.onRevoke(visitor)}>
+                    <Ban className="mr-2 size-4 text-content-tertiary" aria-hidden="true" />
+                    Revoke pass
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : null}
           </div>
         );

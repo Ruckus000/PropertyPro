@@ -91,8 +91,8 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
   const baseColumns = useMemo(() => getVisitorColumns(actions, { renderStatus }), [actions]);
   // The shared column set leaves the action column's header empty, which fails
   // axe's empty-table-header; name it for screen readers here. The same column is pinned to the
-  // right edge: the eleven columns before it are wider than the box at 1440px,
-  // and a row's Check In and Revoke must not need a sideways scroll.
+  // right edge: the table fits its box at 1280px and up, but on a narrower
+  // screen it scrolls, and a row's Check In must not need a sideways scroll.
   const columns = useMemo(
     () =>
       baseColumns.map((c) =>
