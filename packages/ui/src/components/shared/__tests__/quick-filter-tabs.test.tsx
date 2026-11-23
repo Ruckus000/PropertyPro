@@ -17,7 +17,7 @@ describe('QuickFilterTabs tone', () => {
   it('paints the active tab in ink with tone="ink", with no interactive class', () => {
     render(<QuickFilterTabs tabs={tabs} active="all" onChange={() => {}} tone="ink" />);
     const active = screen.getByRole('button', { name: 'All' });
-    expect(active).toHaveClass('bg-surface-inverse', 'text-content-inverse');
+    expect(active).toHaveClass('bg-surface-muted', 'text-content');
     expect(active.className).not.toContain('interactive');
     expect(screen.getByRole('button', { name: 'Open' }).className).not.toContain('interactive');
   });

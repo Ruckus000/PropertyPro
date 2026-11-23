@@ -52,7 +52,9 @@ export function SectionToolbar({
       {bulk ? (
         <div className="flex min-w-0 flex-1 items-center gap-2 py-2">{bulk}</div>
       ) : (
-        <div data-filters className="min-w-0 flex-1 overflow-x-auto">
+        // py-2 here, not at each call site: without it a filter pill touches the
+        // section's top border and the column titles sit directly under it.
+        <div data-filters className="min-w-0 flex-1 overflow-x-auto py-2">
           {filters}
         </div>
       )}

@@ -124,7 +124,7 @@ describe('VisitorsStaffPage', () => {
       .filter((b) => b.getAttribute('aria-pressed') === 'true');
     expect(active).toHaveLength(1);
     expect(active[0]!.className).not.toContain('interactive');
-    expect(active[0]!.className).toContain('bg-surface-inverse');
+    expect(active[0]!.className).toContain('bg-surface-muted');
   });
 
   it('draws the tabs as a plain left-aligned row, not a centred pill bar', () => {

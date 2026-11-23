@@ -73,7 +73,7 @@ describe('PackagesStaffPage', () => {
       .filter((b) => b.getAttribute('aria-pressed') === 'true');
     expect(active).toHaveLength(1);
     expect(active[0]!.className).not.toContain('interactive');
-    expect(active[0]!.className).toContain('bg-surface-inverse');
+    expect(active[0]!.className).toContain('bg-surface-muted');
   });
 
   it('keeps the figure and the table in agreement', () => {

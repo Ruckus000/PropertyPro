@@ -66,7 +66,9 @@ const Table = React.forwardRef<
     >
       <table
         ref={ref}
-        className={cn("w-full caption-bottom text-sm tabular-nums", className)}
+        // text-base, not text-sm: table text is the content people came to read, and
+        // the owner found text-sm too small at every width (2026-11-23).
+        className={cn("w-full caption-bottom text-base tabular-nums", className)}
         {...props}
       />
     </div>

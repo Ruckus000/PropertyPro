@@ -16,14 +16,16 @@ interface QuickFilterTabsProps {
   className?: string;
   /**
    * How the selected tab is marked. 'brand' (default) is the coral fill every
-   * existing screen uses; 'ink' is the redesigned pages' ink fill.
+   * existing screen uses; 'ink' is the redesigned pages' quiet grey fill with ink text.
    */
   tone?: 'brand' | 'ink';
 }
 
 // Complete literals so Tailwind's scanner (web and admin both compile this file) sees them.
 const ACTIVE_BRAND = 'bg-interactive text-content-inverse shadow-sm';
-const ACTIVE_INK = 'bg-surface-inverse text-content-inverse';
+// A quiet fill with ink text. The first version was a solid ink fill
+// (`bg-surface-inverse`), which the owner found too heavy on the pilot pages.
+const ACTIVE_INK = 'bg-surface-muted text-content';
 
 export function QuickFilterTabs({
   tabs,
