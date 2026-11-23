@@ -2,6 +2,7 @@
  * Next.js middleware for apps/admin — runs on every matched request.
  *
  * Responsibilities (in order):
+ * 0. Refuse /api/ writes whose Sec-Fetch-Site is present and not same-origin
  * 1. Strip spoofed tenant/user headers from incoming requests
  * 2. Refresh Supabase auth session
  * 3. Rate-limit API routes (100 req/min per IP)
@@ -239,6 +240,8 @@ function isInternalCronPath(pathname: string): boolean {
   return pathname.startsWith(INTERNAL_CRON_PREFIX);
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 function isApiRoute(pathname: string): boolean {
   return pathname.startsWith('/api/');
 }
@@ -283,6 +286,22 @@ async function handleRequest(request: NextRequest): Promise<Response> {
   maybeEvict();
 
   const pathname = request.nextUrl.pathname;
+
+  // 0. Refuse API writes a browser marks as not same-origin. SameSite=Lax is
+  //    site-scoped, so every *.getpropertypro.com host would otherwise send the
+  //    admin cookie. No header (server-to-server, old browsers) passes.
+  const fetchSite = request.headers.get('sec-fetch-site');
+  if (
+    fetchSite &&
+    fetchSite !== 'same-origin' &&
+    isApiRoute(pathname) &&
+    !SAFE_METHODS.has(request.method)
+  ) {
+    return NextResponse.json(
+      { error: { code: 'FORBIDDEN', message: 'Cross-site request refused' } },
+      { status: 403 },
+    );
+  }
 
   // 1. Strip spoofed headers — clone the request with clean headers
   const cleanHeaders = new Headers(request.headers);
