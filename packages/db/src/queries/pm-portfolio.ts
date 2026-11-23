@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { unionAll } from 'drizzle-orm/pg-core';
-import { PM_SCOPE_DB_ROLES } from '@propertypro/shared';
+import {
+  calculateRollingWindowStart,
+  MEETING_SCORING_WINDOW_MONTHS,
+  PM_SCOPE_DB_ROLES,
+  scoreCommunityCompliance,
+  type CommunityType,
+} from '@propertypro/shared';
 import { db } from '../drizzle';
 import { assessmentLineItems } from '../schema/assessment-line-items';
 import { billingGroups } from '../schema/billing-groups';
@@ -32,7 +38,6 @@ export interface ManagedCommunityPortfolioRow {
   residentCount: number;
   totalUnits: number;
   openMaintenanceRequests: number;
-  unsatisfiedComplianceItems: number;
   /** Count of distinct units with an active lease (apartment only, else 0) */
   occupiedUnits: number;
   /** Rounded occupancy percentage (apartment only when totalUnits > 0, else null) */
@@ -277,23 +282,6 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     )
     .groupBy(maintenanceRequests.communityId);
 
-  const complianceQuery = db
-    .select({
-      communityId: complianceChecklistItems.communityId,
-      metric: sql<string>`'compliance'`,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(complianceChecklistItems)
-    .where(
-      and(
-        inArray(complianceChecklistItems.communityId, communityIds),
-        isNull(complianceChecklistItems.deletedAt),
-        eq(complianceChecklistItems.isApplicable, true),
-        isNull(complianceChecklistItems.documentId),
-      ),
-    )
-    .groupBy(complianceChecklistItems.communityId);
-
   const occupiedQuery = db
     .select({
       communityId: leases.communityId,
@@ -332,7 +320,6 @@ export async function findManagedCommunitiesPortfolioUnscoped(
     residentsQuery,
     unitsQuery,
     maintenanceQuery,
-    complianceQuery,
     occupiedQuery,
     siteDraftsQuery,
   )) as Array<{ communityId: number; metric: string; count: number }>;
@@ -340,14 +327,12 @@ export async function findManagedCommunitiesPortfolioUnscoped(
   const residentCountsRaw = allCounts.filter((row) => row.metric === 'resident');
   const unitCountsRaw = allCounts.filter((row) => row.metric === 'unit');
   const maintenanceCountsRaw = allCounts.filter((row) => row.metric === 'maintenance');
-  const complianceCountsRaw = allCounts.filter((row) => row.metric === 'compliance');
   const occupiedUnitsRaw = allCounts.filter((row) => row.metric === 'occupied');
   const siteDraftCountsRaw = allCounts.filter((row) => row.metric === 'site_draft');
 
   const residentCounts = toCountMap(residentCountsRaw);
   const unitCounts = toCountMap(unitCountsRaw);
   const maintenanceCounts = toCountMap(maintenanceCountsRaw);
-  const complianceCounts = toCountMap(complianceCountsRaw);
   const occupiedUnitCounts = toCountMap(occupiedUnitsRaw);
   const siteDraftCounts = toCountMap(siteDraftCountsRaw);
 
@@ -369,7 +354,6 @@ export async function findManagedCommunitiesPortfolioUnscoped(
       residentCount: residentCounts.get(row.communityId) ?? 0,
       totalUnits,
       openMaintenanceRequests: maintenanceCounts.get(row.communityId) ?? 0,
-      unsatisfiedComplianceItems: complianceCounts.get(row.communityId) ?? 0,
       occupiedUnits,
       occupancyRate,
       siteOnboardingCompletedAt: row.siteOnboardingCompletedAt ?? null,
@@ -387,6 +371,7 @@ export interface DashboardKpis {
   occupancyDelta: number | null;
   openMaintenance: number;
   maintenanceDelta: number | null;
+  /** Null from this query; see `getPortfolioDashboard`. Filled by apps/web's portfolio summary. */
   complianceScore: number | null;
   complianceDelta: number | null;
   delinquencyTotal: number;
@@ -461,9 +446,6 @@ export async function getPortfolioDashboard(
   const apartmentIds = allRows
     .filter((r) => r.communityType === 'apartment')
     .map((r) => r.communityId);
-  const condoHoaIds = allRows
-    .filter((r) => r.communityType !== 'apartment')
-    .map((r) => r.communityId);
 
   const now = sql`NOW()`;
   const thirtyDaysAgo = sql`NOW() - INTERVAL '30 days'`;
@@ -476,7 +458,6 @@ export async function getPortfolioDashboard(
     delinquencyData,
     occupancyPrior,
     expiringLeaseCount,
-    complianceTotalRaw,
   ] = await Promise.all([
     // Maintenance trend: current 30d vs prior 30d
     db
@@ -538,22 +519,6 @@ export async function getPortfolioDashboard(
           )
       : Promise.resolve([{ count: 0 }]),
 
-    // Compliance totals (for condo/HOA only)
-    condoHoaIds.length > 0
-      ? db
-          .select({
-            total: sql<number>`count(*)::int`,
-            satisfied: sql<number>`count(*) FILTER (WHERE ${complianceChecklistItems.documentId} IS NOT NULL)::int`,
-          })
-          .from(complianceChecklistItems)
-          .where(
-            and(
-              inArray(complianceChecklistItems.communityId, condoHoaIds),
-              isNull(complianceChecklistItems.deletedAt),
-              eq(complianceChecklistItems.isApplicable, true),
-            ),
-          )
-      : Promise.resolve([{ total: 0, satisfied: 0 }]),
   ]);
 
   // 3. Compute KPIs
@@ -579,12 +544,6 @@ export async function getPortfolioDashboard(
     0,
   );
 
-  const compTotals = complianceTotalRaw[0] ?? { total: 0, satisfied: 0 };
-  const complianceScore =
-    condoHoaIds.length > 0 && compTotals.total > 0
-      ? Math.round((compTotals.satisfied / compTotals.total) * 100)
-      : null;
-
   const kpis: DashboardKpis = {
     totalUnits,
     occupancyRate: currentOccupancy,
@@ -594,7 +553,10 @@ export async function getPortfolioDashboard(
         : null,
     openMaintenance,
     maintenanceDelta: mTrend ? calcDelta(mTrend.currentPeriod, mTrend.priorPeriod) : null,
-    complianceScore,
+    // Not computed here: the score needs the Compliance page's per-row rule
+    // (`scoreCommunityCompliance` in @propertypro/shared), which SQL cannot
+    // apply. buildPortfolioSummary (apps/web) fills it from that rule.
+    complianceScore: null,
     complianceDelta: null, // compliance trend requires historical snapshots — deferred
     delinquencyTotal,
     delinquencyDelta: null, // delinquency trend requires historical snapshots — deferred
@@ -655,6 +617,8 @@ export interface PortfolioChecklistRow {
 }
 
 export interface PortfolioLinkedDocumentState {
+  /** The community the document belongs to. Scores read only their own. */
+  communityId: number;
   deletedAt: Date | null;
   /** `posted_at` is null: owners cannot see it, so it satisfies nothing. */
   isDraft: boolean;
@@ -802,6 +766,7 @@ export async function findPortfolioStatusInputsUnscoped(
     const docRows = await db
       .select({
         id: documents.id,
+        communityId: documents.communityId,
         deletedAt: documents.deletedAt,
         postedAt: documents.postedAt,
         receivedAt: documents.receivedAt,
@@ -815,6 +780,7 @@ export async function findPortfolioStatusInputsUnscoped(
       );
     for (const row of docRows) {
       documentStates.set(row.id, {
+        communityId: row.communityId,
         deletedAt: row.deletedAt ?? null,
         isDraft: row.postedAt === null,
         postedAt: row.postedAt ?? null,
@@ -824,6 +790,24 @@ export async function findPortfolioStatusInputsUnscoped(
   }
 
   return { facts, checklistRows, documentStates, noticeMeetings };
+}
+
+/**
+ * One community's documents out of `PortfolioStatusInputs.documentStates`.
+ * The map spans every community read, so a checklist row or meeting that named
+ * another community's document (the app refuses to write one, but nothing in
+ * the schema stops it) would otherwise be scored with that document. Score a
+ * community only with this.
+ */
+export function documentStatesFor(
+  inputs: Pick<PortfolioStatusInputs, 'documentStates'>,
+  communityId: number,
+): Map<number, PortfolioLinkedDocumentState> {
+  const own = new Map<number, PortfolioLinkedDocumentState>();
+  for (const [id, state] of inputs.documentStates) {
+    if (state.communityId === communityId) own.set(id, state);
+  }
+  return own;
 }
 
 // ─── Report Query Types ───
@@ -1015,7 +999,16 @@ export async function getMaintenanceVolumeReport(
 }
 
 /**
- * Compliance status report — per-community compliance breakdown.
+ * Compliance status report — per-community compliance breakdown, scored with
+ * the Compliance page's own rule (`scoreCommunityCompliance`): a draft or
+ * deleted file, a yearly record out of its window, a late posting and a
+ * meeting with no notice are not met. It used to count any linked document as
+ * met, so this report could say 100% while the community's own page did not.
+ *
+ * - `satisfied`: rows met.
+ * - `overdue`: rows past their posting deadline.
+ * - `missing`: rows not met (overdue included), as before.
+ * A community with nothing applicable has no score and is left out.
  */
 export async function getComplianceStatusReport(
   pmUserId: string,
@@ -1031,41 +1024,54 @@ export async function getComplianceStatusReport(
     return { kpis: { portfolioScore: 0, atRiskCount: 0, overdueDocuments: 0 }, chartData: [], tableData: [] };
   }
 
-  const communityData = await db
-    .select({
-      communityId: complianceChecklistItems.communityId,
-      total: sql<number>`count(*)::int`,
-      satisfied: sql<number>`count(*) FILTER (WHERE ${complianceChecklistItems.documentId} IS NOT NULL)::int`,
-      overdue: sql<number>`count(*) FILTER (WHERE ${complianceChecklistItems.documentId} IS NULL AND ${complianceChecklistItems.deadline} < CURRENT_DATE)::int`,
-      missing: sql<number>`count(*) FILTER (WHERE ${complianceChecklistItems.documentId} IS NULL)::int`,
-    })
-    .from(complianceChecklistItems)
-    .where(
-      and(
-        inArray(complianceChecklistItems.communityId, condoHoaIds),
-        isNull(complianceChecklistItems.deletedAt),
-        eq(complianceChecklistItems.isApplicable, true),
-      ),
-    )
-    .groupBy(complianceChecklistItems.communityId);
+  const now = new Date();
+  // Only managed condo/HOA ids reach this read (getManagedCommunityIds).
+  const inputs = await findPortfolioStatusInputsUnscoped(
+    condoHoaIds,
+    condoHoaIds,
+    calculateRollingWindowStart(now, MEETING_SCORING_WINDOW_MONTHS),
+  );
+  const checklistByCommunity = new Map<number, Array<Record<string, unknown>>>();
+  for (const row of inputs.checklistRows) {
+    const list = checklistByCommunity.get(row.communityId) ?? [];
+    list.push(row as unknown as Record<string, unknown>);
+    checklistByCommunity.set(row.communityId, list);
+  }
 
-  const rows: ComplianceStatusRow[] = communityData.map((row) => ({
-    communityName: communityMap.get(row.communityId)?.name ?? '',
-    communityType: communityMap.get(row.communityId)?.type ?? '',
-    score: row.total > 0 ? Math.round((row.satisfied / row.total) * 100) : 0,
-    satisfied: row.satisfied,
-    overdue: row.overdue,
-    missing: row.missing,
-  }));
+  const rows: ComplianceStatusRow[] = [];
+  let totalApplicable = 0;
+  let totalSatisfied = 0;
+  let totalOverdue = 0;
+  for (const communityId of condoHoaIds) {
+    const info = communityMap.get(communityId);
+    const derived = scoreCommunityCompliance({
+      communityType: (info?.type ?? 'condo_718') as CommunityType,
+      unitCount: inputs.facts.get(communityId)?.unitCount ?? null,
+      checklistRows: checklistByCommunity.get(communityId) ?? [],
+      documentStates: documentStatesFor(inputs, communityId),
+      meetings: inputs.noticeMeetings.get(communityId) ?? [],
+      now,
+    });
+    if (!derived || derived.score === null) continue;
+    totalApplicable += derived.applicable;
+    totalSatisfied += derived.satisfied;
+    totalOverdue += derived.pastDeadline;
+    rows.push({
+      communityName: info?.name ?? '',
+      communityType: info?.type ?? '',
+      score: derived.score,
+      satisfied: derived.satisfied,
+      overdue: derived.pastDeadline,
+      missing: derived.applicable - derived.satisfied,
+    });
+  }
 
-  const totalItems = communityData.reduce((s, r) => s + r.total, 0);
-  const totalSatisfied = communityData.reduce((s, r) => s + r.satisfied, 0);
-  const totalOverdue = communityData.reduce((s, r) => s + r.overdue, 0);
-  const portfolioScore = totalItems > 0 ? Math.round((totalSatisfied / totalItems) * 100) : 0;
+  const portfolioScore = totalApplicable > 0 ? Math.round((totalSatisfied / totalApplicable) * 100) : 0;
   const atRiskCount = rows.filter((r) => r.score < 80).length;
 
   return {
     kpis: { portfolioScore, atRiskCount, overdueDocuments: totalOverdue },
+    // Lowest score first, in both (the table has always shown this order).
     chartData: rows.sort((a, b) => a.score - b.score),
     tableData: rows,
   };

@@ -78,13 +78,14 @@ describe('platform dashboard', () => {
       none: 1,
     });
 
-    expect(platformDashboardTestUtils.buildComplianceSummary([
-      { community_id: 1, document_id: 10, is_applicable: true },
-      { community_id: 1, document_id: null, is_applicable: true },
-      { community_id: 2, document_id: 20, is_applicable: true },
-      { community_id: 2, document_id: 21, is_applicable: true },
-      { community_id: 3, document_id: null, is_applicable: false },
-    ])).toEqual({
+    // Per-community scores from the shared rule; community 3 has nothing
+    // applicable (score null) and is not tracked, not counted as 100%.
+    const scored = (score: number | null) => ({ score, pastDeadline: 0, satisfied: 0, applicable: 0 });
+    expect(platformDashboardTestUtils.buildComplianceSummary(new Map([
+      [1, scored(50)],
+      [2, scored(100)],
+      [3, scored(null)],
+    ]))).toEqual({
       averageScore: 75,
       atRiskCount: 1,
       totalTracked: 2,

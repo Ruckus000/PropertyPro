@@ -14,7 +14,7 @@ import {
   createScopedClient,
   logAuditEvent,
 } from '@propertypro/db';
-import { eq, or } from '@propertypro/db/filters';
+import { and, eq, isNull, or } from '@propertypro/db/filters';
 
 /**
  * List every checklist item in the community. Compliance lists are small
@@ -199,6 +199,46 @@ export async function unlinkChecklistItemsForDocument(
       newValues: { documentId: null },
     });
   }
+}
+
+/** Why a "doesn't apply" was refused. */
+export type NotApplicableRefusal = 'not_found' | 'not_conditional' | 'has_document';
+
+/**
+ * Mark a checklist row "doesn't apply", only where the statute makes it
+ * conditional (`isConditional`: a SIRS, video recordings, …) and no file is
+ * posted to it. Every UI offers the action only there; the server used to
+ * accept it on any row, so a required record (the budget, the bylaws) could
+ * be switched off and drop out of every score.
+ *
+ * One predicated UPDATE, so a file linked between a read and the write cannot
+ * slip through. When nothing matched, a read says why.
+ */
+export async function markChecklistItemNotApplicable(
+  communityId: number,
+  itemId: number,
+  reason: string,
+  actorUserId: string,
+): Promise<{ row: Record<string, unknown> } | { refused: NotApplicableRefusal }> {
+  const scoped = createScopedClient(communityId);
+  const updated = (await scoped.update(
+    complianceChecklistItems,
+    { isApplicable: false, notApplicableReason: reason, lastModifiedBy: actorUserId },
+    and(
+      eq(complianceChecklistItems.id, itemId),
+      eq(complianceChecklistItems.isConditional, true),
+      isNull(complianceChecklistItems.documentId),
+    ),
+  )) as Array<Record<string, unknown>>;
+  if (updated[0]) return { row: updated[0] };
+
+  const [current] = (await scoped.selectFrom(
+    complianceChecklistItems,
+    { isConditional: complianceChecklistItems.isConditional },
+    eq(complianceChecklistItems.id, itemId),
+  )) as unknown as Array<{ isConditional: boolean }>;
+  if (!current) return { refused: 'not_found' };
+  return { refused: current.isConditional ? 'has_document' : 'not_conditional' };
 }
 
 /**

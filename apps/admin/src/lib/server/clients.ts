@@ -22,8 +22,8 @@ import {
   MEMBER_COUNT_PAGE_SIZE,
   MEMBER_COUNT_ROW_BOUND,
 } from '@/lib/api/list-limits';
+import { loadComplianceScores } from './compliance-scores';
 
-const COMPLIANCE_PAGE_SIZE = 1000;
 
 /** `communities.community_type`. Named once so the row types below cannot drift apart. */
 export type CommunityType = 'condo_718' | 'hoa_720' | 'apartment';
@@ -86,40 +86,7 @@ interface CommunityDbRow {
   subscription_status: string | null;
   subscription_plan: string | null;
   created_at: string;
-}
-
-/** Fetch all compliance rows for given community IDs, paginating past Supabase default limit. */
-async function fetchAllComplianceRows(
-  db: ReturnType<typeof createAdminClient>,
-  communityIds: number[],
-) {
-  if (communityIds.length === 0) return [];
-  const allRows: { community_id: number; document_id: number | null; is_applicable: boolean }[] = [];
-  let from = 0;
-
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { data, error } = await db
-      .from('compliance_checklist_items')
-      .select('community_id, document_id, is_applicable')
-      .is('deleted_at', null)
-      .in('community_id', communityIds)
-      .range(from, from + COMPLIANCE_PAGE_SIZE - 1);
-
-    // A failed page yields `rows.length === 0`, which ALSO satisfies the
-    // loop's exit condition — a mid-pagination failure would otherwise
-    // silently truncate the dataset. A wrong compliance score shown as fact
-    // is worse than an error page.
-    if (error) {
-      throw new Error(`Failed to load compliance rows (offset ${from}): ${error.message}`);
-    }
-
-    const rows = (data ?? []) as typeof allRows;
-    allRows.push(...rows);
-    if (rows.length < COMPLIANCE_PAGE_SIZE) break;
-    from += COMPLIANCE_PAGE_SIZE;
-  }
-  return allRows;
+  unit_count: number | null;
 }
 
 export interface MemberCountsResult {
@@ -205,7 +172,7 @@ export async function getClientsData(): Promise<{
         db
           .from('communities')
           .select(
-            'id, name, slug, community_type, city, state, subscription_status, subscription_plan, created_at',
+            'id, name, slug, community_type, city, state, subscription_status, subscription_plan, created_at, unit_count',
           )
           .eq('is_demo', false)
           .is('deleted_at', null)
@@ -233,24 +200,12 @@ export async function getClientsData(): Promise<{
 
   const communityIds = communities.map((c) => c.id);
 
-  const [complianceRows, memberCountsResult] = await Promise.all([
-    fetchAllComplianceRows(db, communityIds),
+  // The association's own Compliance page rule; see compliance-scores.ts.
+  const [scores, memberCountsResult] = await Promise.all([
+    loadComplianceScores(db, communities),
     fetchMemberCounts(db, communityIds),
   ]);
   const { counts: memberCounts, exact: memberCountsExact } = memberCountsResult;
-
-  const byCommunity = new Map<number, { applicable: number; met: number }>();
-  for (const row of complianceRows) {
-    if (!row.is_applicable) continue;
-    const entry = byCommunity.get(row.community_id) ?? { applicable: 0, met: 0 };
-    entry.applicable++;
-    if (row.document_id !== null) entry.met++;
-    byCommunity.set(row.community_id, entry);
-  }
-  const scoreMap = new Map<number, number>();
-  for (const [id, { applicable, met }] of byCommunity) {
-    scoreMap.set(id, applicable > 0 ? Math.round((met / applicable) * 100) : 100);
-  }
 
   const rootlessIds = new Set(rootlessRows.map((r) => r.id));
 
@@ -277,7 +232,7 @@ export async function getClientsData(): Promise<{
     subscription_status: c.subscription_status,
     subscription_plan: c.subscription_plan,
     created_at: c.created_at,
-    complianceScore: scoreMap.get(c.id) ?? null,
+    complianceScore: scores.get(c.id)?.score ?? null,
     memberCount: memberCountsExact ? (memberCounts.get(c.id) ?? 0) : null,
     rootless: rootlessIds.has(c.id),
     disputeOpen: disputedCommunityIds.has(c.id),
