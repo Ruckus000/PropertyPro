@@ -6,7 +6,7 @@ import type { StatusGlyphKind } from '@propertypro/ui/components/shared/status-g
 
 /**
  * One status for a broadcast, shared by the list and detail pages.
- * Same precedence as getStatusLabel in BroadcastHistoryTable: canceled, then sent, then draft.
+ * Precedence: canceled, then sent, then draft.
  * The detail page words an unsent alert "Pending" (its banner says "pending
  * confirmation"); pass `unsentWord` there. The list keeps "Draft".
  */

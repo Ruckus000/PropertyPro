@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Emergency alert detail on the page kit. Shows what the current page shows:
+ * Emergency alert detail on the page kit. Shows
  * the message, the SMS text, the canceled/pending notices, and, for managers,
  * the delivery report. The panel and the Delivery section are drawn only when
  * BOTH the page says the viewer is a manager and the API returned the report;

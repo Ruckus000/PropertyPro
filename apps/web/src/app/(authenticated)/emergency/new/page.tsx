@@ -1,3 +1,4 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/emergency/emergency-new-page.tsx
 // page-template: delegated to apps/web/src/components/emergency/emergency-new-page.tsx
 /**
  * New Emergency Broadcast composer page.
@@ -13,11 +14,8 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
 import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
-import { PageHeader } from '@/components/shared/page-header';
 import { EmergencyNewPage } from '@/components/emergency/emergency-new-page';
-import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -48,40 +46,19 @@ export default async function NewBroadcastPage({ searchParams }: PageProps) {
   const community = communityRows.find((r) => r['id'] === context.communityId);
   const communityName = typeof community?.['name'] === 'string' ? community['name'] : 'PropertyPro';
 
-  // BOTH layers, not just the per-community flag; see @/lib/sms/dispatch-flag.
+  // BOTH layers, not just the per-community flag. The service checks the env
+  // floor as well, so passing only `membership.smsDispatchEnabled` would offer
+  // an SMS channel that silently gets skipped server-side — worse than not
+  // offering it, because the admin would believe texts went out.
+  // See @/lib/sms/dispatch-flag.
   const smsEnabled = isSmsDispatchGloballyEnabled() && membership.smsDispatchEnabled;
 
-  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
-  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
-  if (await isDesignPreviewOn(userId)) {
-    return (
-      <EmergencyNewPage
-        communityId={context.communityId}
-        communityName={communityName}
-        communityType={membership.communityType}
-        smsEnabled={smsEnabled}
-      />
-    );
-  }
-
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader
-        title="Send Emergency Alert"
-      />
-      {/*
-        BOTH layers, not just the per-community flag. The service checks the env
-        floor as well, so passing only `membership.smsDispatchEnabled` would offer
-        an SMS channel that silently gets skipped server-side — worse than not
-        offering it, because the admin would believe texts went out.
-        See @/lib/sms/dispatch-flag.
-      */}
-      <BroadcastComposer
-        communityId={context.communityId}
-        communityName={communityName}
-        communityType={membership.communityType}
-        smsEnabled={smsEnabled}
-      />
-    </div>
+    <EmergencyNewPage
+      communityId={context.communityId}
+      communityName={communityName}
+      communityType={membership.communityType}
+      smsEnabled={smsEnabled}
+    />
   );
 }

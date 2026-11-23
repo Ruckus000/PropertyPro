@@ -136,6 +136,14 @@
     "seed's Today list was empty: the new block's own visitor made it fail (1292px in",
     "1092px). It joins the 1280 fixme in the known-issues spec.",
     "",
+    "2026-11-23 (later): the pilot was approved, so the redesigned pages are the only",
+    "pages and the preview cookie and its switch are deleted.",
+    "`design-direction-pilot.spec.ts` drops its `without the preview cookie, packages is",
+    "still the current page` block (9 -> 8), so expectedTestCount goes 78 -> 77. The",
+    "helper no longer sets a cookie. NOT MEASURED: no sandbox was running when this",
+    "landed, so 77 is 78 minus the one deleted block, not a `--list` count; the e2e",
+    "workflow's floor assertion is the first real check.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -161,5 +169,5 @@
     "target-size-detector.spec.ts",
     "design-direction-pilot.spec.ts"
   ],
-  "expectedTestCount": 78
+  "expectedTestCount": 77
 }

@@ -48,7 +48,7 @@ export function PackagesResidentPage({ communityId }: PackagesResidentPageProps)
       </div>
     );
   } else if (isError && isNoUnitAssociationError(error)) {
-    // Setup gap, not a failure: retrying cannot fix it (same call as the current view).
+    // Setup gap, not a failure: retrying cannot fix it.
     body = (
       <SectionFirstRun
         title="Your account isn't linked to a unit yet"

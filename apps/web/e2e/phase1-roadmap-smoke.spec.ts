@@ -180,12 +180,12 @@ test.describe('phase 1 roadmap smoke', () => {
     await page.goto(`/emergency?communityId=${communityId}`);
 
     await expect(page.getByRole('heading', { name: 'Emergency Alerts' })).toBeVisible();
-    const composerLink = page.getByRole('link', { name: 'Send Emergency Alert' });
+    const composerLink = page.getByRole('link', { name: 'Send alert' });
     await expect(composerLink).toBeVisible();
     await expect(composerLink).toHaveAttribute('href', `/emergency/new?communityId=${communityId}`);
 
     await page.goto(`/emergency/new?communityId=${communityId}`);
-    await expect(page.getByRole('heading', { name: 'Send Emergency Alert' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'New alert' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Start from scratch' }).click();
     await expect(page.getByRole('heading', { name: 'Compose Alert' })).toBeVisible();
