@@ -32,7 +32,7 @@ describe('useViolationsReview', () => {
     const { result } = renderHook(() => useViolationsReview(7, filters, true), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(listViolationsMock).toHaveBeenCalledTimes(1);
-    const [communityId, params] = listViolationsMock.mock.calls[0];
+    const [communityId, params] = listViolationsMock.mock.calls[0]!;
     expect(communityId).toBe(7);
     expect(params).toEqual({ ...filters, page: 1, limit: 2000 });
     expect(params).not.toHaveProperty('status');
@@ -42,6 +42,6 @@ describe('useViolationsReview', () => {
   it('forwards the query signal', async () => {
     const { result } = renderHook(() => useViolationsReview(7, {}, true), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(listViolationsMock.mock.calls[0][2]).toBeInstanceOf(AbortSignal);
+    expect(listViolationsMock.mock.calls[0]![2]).toBeInstanceOf(AbortSignal);
   });
 });
