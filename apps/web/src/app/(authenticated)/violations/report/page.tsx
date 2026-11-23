@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/violations/report-violation-page.tsx
 /**
  * Violation Report Page — Phase 1C
  *
@@ -22,49 +23,16 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { getFeaturesForCommunity } from '@propertypro/shared';
 import { createScopedClient } from '@propertypro/db';
-import {
-  getActorUnitIds,
-  isResidentRole,
-  residentVisibleViolationsWhere,
-} from '@/lib/violations/common';
+import { getActorUnitIds, isResidentRole } from '@/lib/violations/common';
 import { resolveReportMode } from '@/lib/violations/report-mode';
-import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
-import { listViolationsForCommunity } from '@/lib/services/violations-service';
-import { withUnitLabels } from '@/lib/units/unit-labels';
+import { loadResidentViolationLists } from '@/lib/violations/resident-lists';
 import { ViolationReportForm } from '@/components/violations/ViolationReportForm';
 import { StaffViolationReportForm } from '@/components/violations/StaffViolationReportForm';
 import { ViolationCard } from '@/components/violations/ViolationCard';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { PageHeader } from '@/components/shared/page-header';
-
-/**
- * Only what the card renders crosses to the client. A "Your reports" row can be
- * a neighbour's case, and the full row carries its hearing details and
- * resolution notes, which are that household's business, not the reporter's.
- */
-function toCardFields(v: {
-  id: number;
-  unitId: number;
-  category: string;
-  description: string;
-  status: string;
-  severity: string;
-  createdAt: unknown;
-  reportedByRole: 'staff' | 'resident' | null;
-  unitLabel: string;
-}) {
-  return {
-    id: v.id,
-    unitId: v.unitId,
-    category: v.category,
-    description: v.description,
-    status: v.status,
-    severity: v.severity,
-    createdAt: v.createdAt as string | Date,
-    reportedByRole: v.reportedByRole,
-    unitLabel: v.unitLabel,
-  };
-}
+import { ReportViolationPage } from '@/components/violations/report-violation-page';
+import { isDesignPreviewOn } from '@/lib/design-preview';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -99,26 +67,20 @@ export default async function ViolationReportPage({ searchParams }: PageProps) {
   const residentUnitIds = isResident ? await getActorUnitIds(scoped, userId) : [];
   const mode = resolveReportMode(membership.role, residentUnitIds);
 
-  const viewer = { membership, userId };
-  const [onYourUnit, yourReports] =
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  if (await isDesignPreviewOn(userId)) {
+    return (
+      <FeatureGate feature="hasViolations" communityId={communityId}>
+        <ReportViolationPage communityId={communityId} mode={mode} ownUnitIds={residentUnitIds} />
+      </FeatureGate>
+    );
+  }
+
+  const { onYourUnit, yourReports } =
     mode === 'resident'
-      ? await Promise.all([
-          listViolationsForCommunity(communityId, {
-            allowedUnitIds: residentUnitIds,
-            visibleWhere: residentVisibleViolationsWhere(membership, userId),
-          }).then(async (rows) =>
-            (await hydrateReportedByRole(scoped, await withUnitLabels(scoped, rows), viewer)).map(
-              toCardFields,
-            ),
-          ),
-          listViolationsForCommunity(communityId, { reportedByUserId: userId }).then(
-            async (rows) =>
-              (await hydrateReportedByRole(scoped, await withUnitLabels(scoped, rows), viewer)).map(
-                toCardFields,
-              ),
-          ),
-        ])
-      : [[], []];
+      ? await loadResidentViolationLists(communityId, membership, userId, residentUnitIds)
+      : { onYourUnit: [], yourReports: [] };
 
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>

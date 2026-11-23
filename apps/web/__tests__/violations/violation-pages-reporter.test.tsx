@@ -49,6 +49,7 @@ vi.mock('@/lib/request/page-auth-context', () => ({ requirePageAuthenticatedUser
 vi.mock('@/lib/request/page-community-context', () => ({
   requirePageCommunityMembership: requireMembershipMock,
 }));
+vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: vi.fn(async () => false) }));
 vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
 vi.mock('@/lib/units/actor-units', () => ({
   getActorUnitIds: getActorUnitIdsMock,
