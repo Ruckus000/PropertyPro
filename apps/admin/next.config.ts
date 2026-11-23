@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // slowing every build and turning error-severity findings into a second,
   // unintended deploy gate inside `vercel build --prod`.
   eslint: { ignoreDuringBuilds: true },
+  // Drop `X-Powered-By: Next.js`: it advertises the framework to scanners.
+  poweredByHeader: false,
   transpilePackages: [
     '@propertypro/db',
     '@propertypro/email',

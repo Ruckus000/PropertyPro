@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   // slowing every build and turning error-severity findings into a second,
   // unintended deploy gate inside `vercel build --prod`.
   eslint: { ignoreDuringBuilds: true },
+  // Drop `X-Powered-By: Next.js`: it advertises the framework to scanners.
+  poweredByHeader: false,
   // Tenant subdomain Playwright (localtest.me) fetches /_next/* from a different
   // dev host than the document; Next 15 requires this allowlist in development.
   allowedDevOrigins: [

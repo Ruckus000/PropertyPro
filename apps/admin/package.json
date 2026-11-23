@@ -27,7 +27,7 @@
     "import-in-the-middle": "2.0.6",
     "jose": "^6.2.2",
     "lucide-react": "^0.575.0",
-    "next": "^15.5.0",
+    "next": "^15.5.29",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "require-in-the-middle": "8.0.1",
@@ -36,7 +36,7 @@
     "sucrase": "^3.35.0",
     "tailwind-merge": "^3.5.0",
     "web-push": "^3.6.7",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@propertypro/eslint-config": "workspace:*",
