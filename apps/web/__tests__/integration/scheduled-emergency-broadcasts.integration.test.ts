@@ -1,0 +1,344 @@
+/**
+ * Scheduled ("send later") emergency alerts against a real database.
+ *
+ * "One send, never two" rests on two conditional UPDATEs — the cron's claim and
+ * the manager's cancel — each matching only an unclaimed, uncanceled row. That
+ * exactly one of two concurrent statements wins is a property of Postgres row
+ * locking, which a mocked builder cannot show. Hence this file:
+ *
+ *   - concurrent cron runs send each due alert exactly once;
+ *   - a cancel racing the claim leaves each alert canceled XOR claimed;
+ *   - the Missed rules and the CHECK constraint hold in SQL;
+ *   - a resident sees none of scheduled / missed / failed.
+ *
+ * Email goes to `@propertypro/email`'s in-process test inbox (no RESEND key in
+ * this environment), which is how "sent once" is counted.
+ */
+import { afterAll, beforeAll, expect, it } from 'vitest';
+import { eq, inArray } from 'drizzle-orm';
+import { testInbox } from '@propertypro/email';
+import {
+  initTestKit,
+  seedCommunities,
+  seedUsers,
+  teardownTestKit,
+  requireCommunity,
+  requireUser,
+  getDescribeDb,
+  requireDatabaseUrlInCI,
+  type TestKitState,
+} from './helpers/multi-tenant-test-kit';
+import { MULTI_TENANT_COMMUNITIES } from '../fixtures/multi-tenant-communities';
+import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
+import {
+  cancelBroadcast,
+  createBroadcast,
+  getBroadcastForRecipient,
+  getBroadcastWithReport,
+  listBroadcastsForRecipient,
+  paginateEmergencyBroadcasts,
+} from '@/lib/services/emergency-broadcast-service';
+import { processDueScheduledBroadcasts } from '@/lib/services/emergency-broadcast-schedule-service';
+
+requireDatabaseUrlInCI('scheduled-emergency-broadcasts');
+
+const describeDb = getDescribeDb();
+const MINUTE = 60_000;
+
+describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in Postgres', () => {
+  let state: TestKitState;
+  let communityId: number;
+  let deletedCommunityId: number;
+  let managerId: string;
+  let residentId: string;
+
+  type BroadcastRow = {
+    id: number;
+    completedAt: Date | null;
+    canceledAt: Date | null;
+    sendClaimedAt: Date | null;
+    sendOutcome: string | null;
+    sendOutcomeReason: string | null;
+    recipientCount: number;
+  };
+
+  /** A scheduled alert whose time was `minutesAgo` minutes ago (validation bypassed on purpose). */
+  async function seedDue(title: string, minutesAgo: number, inCommunity = communityId): Promise<number> {
+    const { emergencyBroadcasts, createScopedClient } = state.dbModule;
+    const [row] = (await createScopedClient(inCommunity).insert(emergencyBroadcasts, {
+      title,
+      body: `${title} body`,
+      severity: 'info',
+      targetAudience: 'all',
+      channels: ['email'],
+      initiatedBy: managerId,
+      scheduledFor: new Date(Date.now() - minutesAgo * MINUTE),
+    })) as Array<{ id: number }>;
+    return Number(row!.id);
+  }
+
+  async function load(ids: number[]): Promise<Map<number, BroadcastRow>> {
+    const { emergencyBroadcasts } = state.dbModule;
+    const rows = (await state.db
+      .select()
+      .from(emergencyBroadcasts)
+      .where(inArray(emergencyBroadcasts.id, ids))) as BroadcastRow[];
+    return new Map(rows.map((r) => [Number(r.id), r]));
+  }
+
+  async function recipientRowCount(broadcastId: number): Promise<number> {
+    const { emergencyBroadcastRecipients } = state.dbModule;
+    const rows = await state.db
+      .select()
+      .from(emergencyBroadcastRecipients)
+      .where(eq(emergencyBroadcastRecipients.broadcastId, broadcastId));
+    return rows.length;
+  }
+
+  const emailsFor = (title: string) => testInbox.filter((m) => m.subject.includes(title)).length;
+
+  beforeAll(async () => {
+    state = await initTestKit();
+    await seedCommunities(
+      state,
+      MULTI_TENANT_COMMUNITIES.filter((c) => c.key === 'communityA' || c.key === 'communityB'),
+    );
+    communityId = requireCommunity(state, 'communityA').id;
+    deletedCommunityId = requireCommunity(state, 'communityB').id;
+    await seedUsers(
+      state,
+      MULTI_TENANT_USERS.filter((u) => u.key === 'camA' || u.key === 'tenantA'),
+    );
+    managerId = requireUser(state, 'camA').id;
+    residentId = requireUser(state, 'tenantA').id;
+  });
+
+  afterAll(async () => {
+    if (!state) return;
+    await state.db
+      .update(state.dbModule.communities)
+      .set({ deletedAt: null })
+      .where(eq(state.dbModule.communities.id, deletedCommunityId));
+    await teardownTestKit(state);
+  });
+
+  it('three concurrent cron runs send each due alert exactly once', async () => {
+    const titles = ['Race A', 'Race B', 'Race C', 'Race D'].map((t) => `${t} ${state.runSuffix}`);
+    const ids: number[] = [];
+    for (const title of titles) ids.push(await seedDue(title, 2));
+
+    const summaries = await Promise.all([
+      processDueScheduledBroadcasts(),
+      processDueScheduledBroadcasts(),
+      processDueScheduledBroadcasts(),
+    ]);
+
+    // Exactly one winner per row, across all three runs.
+    expect(summaries.reduce((n, s) => n + s.sent, 0)).toBe(ids.length);
+    expect(summaries.reduce((n, s) => n + s.failed + s.missed, 0)).toBe(0);
+    const rows = await load(ids);
+    for (const [index, id] of ids.entries()) {
+      const row = rows.get(id)!;
+      expect(row.sendClaimedAt).toBeInstanceOf(Date);
+      expect(row.completedAt).toBeInstanceOf(Date);
+      expect(row.sendOutcome).toBeNull();
+      // Recipients were resolved at send time: the manager and the tenant, once each.
+      expect(row.recipientCount).toBe(2);
+      expect(await recipientRowCount(id)).toBe(2);
+      expect(emailsFor(titles[index]!)).toBe(2);
+    }
+
+    // And a later run finds nothing left to do for them.
+    await processDueScheduledBroadcasts();
+    for (const title of titles) expect(emailsFor(title)).toBe(2);
+  });
+
+  it('cancel racing the claim: every alert ends canceled XOR claimed, never both', async () => {
+    const titles = Array.from({ length: 6 }, (_, i) => `Cancel race ${i} ${state.runSuffix}`);
+    const ids: number[] = [];
+    for (const title of titles) ids.push(await seedDue(title, 2));
+
+    const [, , ...cancelResults] = await Promise.all([
+      processDueScheduledBroadcasts(),
+      processDueScheduledBroadcasts(),
+      ...ids.map((id) => cancelBroadcast(id, communityId, managerId)),
+    ]);
+
+    const rows = await load(ids);
+    for (const [index, id] of ids.entries()) {
+      const row = rows.get(id)!;
+      const canceled = row.canceledAt !== null;
+      const claimed = row.sendClaimedAt !== null;
+      expect(canceled !== claimed, `broadcast ${id}: canceled=${canceled} claimed=${claimed}`).toBe(true);
+      // cancelBroadcast reported the truth about who won.
+      expect(cancelResults[index]).toBe(canceled);
+      // A canceled alert reached nobody; a claimed one was sent once.
+      expect(emailsFor(titles[index]!)).toBe(canceled ? 0 : 2);
+      expect(await recipientRowCount(id)).toBe(canceled ? 0 : 2);
+    }
+  });
+
+  it('claim first, then cancel: the cancel loses', async () => {
+    const title = `Claimed first ${state.runSuffix}`;
+    const id = await seedDue(title, 2);
+
+    await processDueScheduledBroadcasts();
+
+    // completed_at is set by now, which cancelBroadcast reports by throwing.
+    await expect(cancelBroadcast(id, communityId, managerId)).rejects.toThrow(/already sent/);
+    expect((await load([id])).get(id)!.canceledAt).toBeNull();
+    expect(emailsFor(title)).toBe(2);
+  });
+
+  it('claimed but not yet sent: the cancel UPDATE matches no row', async () => {
+    const id = await seedDue(`Mid-send ${state.runSuffix}`, 2);
+    const { emergencyBroadcasts } = state.dbModule;
+    // The state a cancel sees while the cron is between its claim and the send.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: new Date() })
+      .where(eq(emergencyBroadcasts.id, id));
+
+    await expect(cancelBroadcast(id, communityId, managerId)).resolves.toBe(false);
+    expect((await load([id])).get(id)!.canceledAt).toBeNull();
+  });
+
+  it('cancel first, then the cron: the claim finds nothing and nothing is sent', async () => {
+    const title = `Canceled first ${state.runSuffix}`;
+    const id = await seedDue(title, 2);
+
+    await expect(cancelBroadcast(id, communityId, managerId)).resolves.toBe(true);
+    await processDueScheduledBroadcasts();
+
+    const row = (await load([id])).get(id)!;
+    expect(row.canceledAt).toBeInstanceOf(Date);
+    expect(row.sendClaimedAt).toBeNull();
+    expect(row.completedAt).toBeNull();
+    expect(emailsFor(title)).toBe(0);
+  });
+
+  it('more than 60 minutes late: missed/late, nothing sent, system-actor audit entry', async () => {
+    const title = `Late ${state.runSuffix}`;
+    const id = await seedDue(title, 61);
+
+    await processDueScheduledBroadcasts();
+
+    const row = (await load([id])).get(id)!;
+    expect(row).toMatchObject({ sendOutcome: 'missed', sendOutcomeReason: 'late', completedAt: null });
+    expect(emailsFor(title)).toBe(0);
+    expect(await recipientRowCount(id)).toBe(0);
+
+    const audit = (await state.sqlClient`
+      select user_id, metadata from compliance_audit_log
+       where community_id = ${communityId}
+         and action = 'emergency_broadcast_missed'
+         and resource_id = ${String(id)}
+    `) as unknown as Array<{ user_id: string | null; metadata: Record<string, unknown> }>;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.user_id).toBeNull();
+    expect(audit[0]!.metadata).toMatchObject({ reason: 'late', scheduledBy: managerId });
+    expect(JSON.stringify(audit[0]!.metadata)).not.toContain(`${title} body`);
+  });
+
+  it('soft-deleted community: missed/community_deleted, nothing sent', async () => {
+    const title = `Deleted community ${state.runSuffix}`;
+    const id = await seedDue(title, 2, deletedCommunityId);
+    await state.db
+      .update(state.dbModule.communities)
+      .set({ deletedAt: new Date() })
+      .where(eq(state.dbModule.communities.id, deletedCommunityId));
+
+    await processDueScheduledBroadcasts();
+
+    const row = (await load([id])).get(id)!;
+    expect(row).toMatchObject({
+      sendOutcome: 'missed',
+      sendOutcomeReason: 'community_deleted',
+      completedAt: null,
+    });
+    expect(emailsFor(title)).toBe(0);
+  });
+
+  it('the CHECK constraint refuses any outcome but missed or failed', async () => {
+    const id = await seedDue(`Check ${state.runSuffix}`, -60);
+    const { emergencyBroadcasts } = state.dbModule;
+
+    await expect(
+      state.db.update(emergencyBroadcasts).set({ sendOutcome: 'sent' }).where(eq(emergencyBroadcasts.id, id)),
+    ).rejects.toThrow();
+    await state.db.update(emergencyBroadcasts).set({ canceledAt: new Date() }).where(eq(emergencyBroadcasts.id, id));
+  });
+
+  it('schedules through createBroadcast: no recipient rows, visible to the manager, invisible to the resident', async () => {
+    const scheduledFor = new Date(Date.now() + 30 * MINUTE);
+    const result = await createBroadcast({
+      communityId,
+      title: `Future ${state.runSuffix}`,
+      body: 'Water off 9 to noon.',
+      severity: 'info',
+      targetAudience: 'all',
+      channels: ['email'],
+      smsAllowed: false,
+      initiatedBy: managerId,
+      scheduledFor,
+    });
+
+    expect(result).toMatchObject({ recipientCount: 2, emailCount: 2, scheduledFor: scheduledFor.toISOString() });
+    expect(await recipientRowCount(result.broadcastId)).toBe(0);
+
+    // Not due: the cron leaves it alone.
+    await processDueScheduledBroadcasts();
+    const row = (await load([result.broadcastId])).get(result.broadcastId)!;
+    expect(row.sendClaimedAt).toBeNull();
+
+    const report = await getBroadcastWithReport(result.broadcastId, communityId);
+    expect(report).toMatchObject({ scheduledFor, sendClaimedAt: null, sendOutcome: null, channels: ['email'] });
+    expect(await getBroadcastForRecipient(result.broadcastId, communityId, residentId)).toBeNull();
+
+    await expect(cancelBroadcast(result.broadcastId, communityId, managerId)).resolves.toBe(true);
+  });
+
+  it('a resident sees none of scheduled, missed or failed — even a failed send that has their recipient row', async () => {
+    const { emergencyBroadcasts, emergencyBroadcastRecipients, createScopedClient } = state.dbModule;
+    const scheduledId = await seedDue(`Hidden scheduled ${state.runSuffix}`, -120);
+    const missedId = await seedDue(`Hidden missed ${state.runSuffix}`, -120);
+    const failedId = await seedDue(`Hidden failed ${state.runSuffix}`, -120);
+    const claimedAt = new Date();
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: claimedAt, sendOutcome: 'missed', sendOutcomeReason: 'late' })
+      .where(eq(emergencyBroadcasts.id, missedId));
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: claimedAt, sendOutcome: 'failed', sendOutcomeReason: 'Error' })
+      .where(eq(emergencyBroadcasts.id, failedId));
+    // A send that threw part-way leaves recipient rows behind.
+    await createScopedClient(communityId).insert(emergencyBroadcastRecipients, {
+      broadcastId: failedId,
+      userId: residentId,
+      email: 'someone@example.com',
+    });
+
+    for (const id of [scheduledId, missedId, failedId]) {
+      expect(await getBroadcastForRecipient(id, communityId, residentId)).toBeNull();
+    }
+    const hidden = new Set([scheduledId, missedId, failedId]);
+    const list = await listBroadcastsForRecipient(communityId, residentId);
+    expect(list.filter((b) => hidden.has(b.id))).toEqual([]);
+    const residentPage = await paginateEmergencyBroadcasts({ communityId, recipientUserId: residentId, pageSize: 100 });
+    expect(residentPage.data.filter((b) => hidden.has(Number(b['id'])))).toEqual([]);
+
+    // Control: the manager's list carries all three, with the outcome fields.
+    const managerPage = await paginateEmergencyBroadcasts({ communityId, pageSize: 100 });
+    const byId = new Map(managerPage.data.map((b) => [Number(b['id']), b]));
+    expect(byId.get(scheduledId)).toMatchObject({ scheduledFor: expect.any(Date), sendOutcome: null });
+    expect(byId.get(missedId)).toMatchObject({ sendOutcome: 'missed', sendOutcomeReason: 'late' });
+    expect(byId.get(failedId)).toMatchObject({ sendOutcome: 'failed', sendOutcomeReason: 'Error' });
+
+    // Leave nothing claimable behind for other runs of the cron.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ canceledAt: new Date() })
+      .where(eq(emergencyBroadcasts.id, scheduledId));
+  });
+});
