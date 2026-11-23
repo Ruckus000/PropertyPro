@@ -130,10 +130,28 @@ describe('NAV_SECTIONS', () => {
     }
   });
 
-  it('does not nest the violations inbox under Report Violation', () => {
-    const report = NAV_ITEMS.find((i) => i.id === 'violations-report');
-    expect(report?.children ?? []).not.toContain('violations-inbox');
-    expect(NAV_SECTIONS.find((s) => s.label === 'Admin')?.items.map((i) => i.id)).toContain('violations-inbox');
+  it('has one Violations item, in Management, with no separate report item', () => {
+    const violations = NAV_ITEMS.filter((i) => i.featureKey === 'hasViolations');
+    expect(violations.map((i) => i.id)).toEqual(['violations-inbox']);
+    expect(violations[0]!.label).toBe('Violations');
+    expect(violations[0]!.href(7)).toBe('/violations?communityId=7');
+    const sectionOf = (id: string) => NAV_SECTIONS.find((s) => s.items.some((i) => i.id === id))?.label;
+    expect(sectionOf('violations-inbox')).toBe('Management');
+    expect(NAV_SECTIONS.find((s) => s.label === 'Admin')?.items.map((i) => i.id)).not.toContain('violations-inbox');
+  });
+
+  it('shows the one Violations item to owners, tenants and managers alike', () => {
+    for (const [role, isUnitOwner] of [
+      ['resident', true],
+      ['resident', false],
+      ['property_manager', undefined],
+      ['root_manager', undefined],
+    ] as const) {
+      const visible = getVisibleItems(NAV_ITEMS, role, ALL_FEATURES, isUnitOwner).filter((i) =>
+        i.href(7).startsWith('/violations'),
+      );
+      expect(visible.map((i) => i.id), `${role} owner=${isUnitOwner}`).toEqual(['violations-inbox']);
+    }
   });
 });
 
@@ -208,7 +226,7 @@ describe('getVisibleItems', () => {
   it('groups ARC Requests under Management, not an Admin heading residents would see', () => {
     const sectionOf = (id: string) => NAV_SECTIONS.find((s) => s.items.some((i) => i.id === id))?.label;
     expect(sectionOf('arc-requests')).toBe('Management');
-    expect(sectionOf('arc-requests')).toBe(sectionOf('violations-report'));
+    expect(sectionOf('arc-requests')).toBe(sectionOf('violations-inbox'));
   });
 
   it('hides ARC Requests from residents of an apartment community (no hasARC)', () => {
@@ -234,7 +252,6 @@ describe('getVisibleItems', () => {
     // Apartments don't have compliance or violations
     expect(ids).not.toContain('compliance');
     expect(ids).not.toContain('contracts');
-    expect(ids).not.toContain('report-violation');
     expect(ids).not.toContain('violations-inbox');
   });
 
@@ -383,9 +400,10 @@ describe('getActiveItemId', () => {
     expect(getActiveItemId(NAV_ITEMS, '/communities/1/payments')).toBe('payments');
   });
 
-  it('distinguishes admin violations inbox from violation report path', () => {
-    expect(getActiveItemId(NAV_ITEMS, '/violations/report')).toBe('violations-report');
+  it('highlights the one Violations item on the list, the report form and a case', () => {
     expect(getActiveItemId(NAV_ITEMS, '/violations')).toBe('violations-inbox');
+    expect(getActiveItemId(NAV_ITEMS, '/violations/report')).toBe('violations-inbox');
+    expect(getActiveItemId(NAV_ITEMS, '/violations/12')).toBe('violations-inbox');
   });
 
   it('matches board and operations paths', () => {

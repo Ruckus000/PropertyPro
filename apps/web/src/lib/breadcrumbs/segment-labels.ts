@@ -12,8 +12,9 @@
  *     the (stable) URL-segment → nav-item-id routing fact lives here; the label
  *     TEXT is pulled from nav-config, so a sidebar rename flows through to the
  *     breadcrumb automatically. The `nav-config` label parsing is unreliable
- *     (PM 'communities' matches `/pm/dashboard`, 'violations-report' ends in
- *     `report`), which is why we key by id, not by href/prefix.
+ *     (PM 'communities' matches `/pm/dashboard`, 'violations-inbox' also
+ *     matches `/violations/report`), which is why we key by id, not by
+ *     href/prefix.
  *   • SUB_SEGMENT_LABELS — breadcrumb-only segments with no nav entry, plus a
  *     few intentional divergences from the sidebar label (documented inline).
  */

@@ -217,13 +217,16 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/pm/website', '/pm/website-editor', '/pm/settings'],
   },
   {
-    id: 'violations-report',
-    label: 'Report Violation',
+    // One item for everyone (no `visibility` gate): the page picks the tabs by
+    // role, Review for managers and board seats and Mine for residents. Reporting
+    // is the page's header button, so `/violations/report` highlights this item.
+    id: 'violations-inbox',
+    label: 'Violations',
     icon: AlertTriangle,
-    href: (cid) => `/violations/report?communityId=${cid}`,
+    href: (cid) => `/violations?communityId=${cid}`,
     featureKey: 'hasViolations',
     navTier: 'more',
-    matchPrefixes: ['/violations/report'],
+    matchPrefixes: ['/violations'],
   },
 
   // ── Admin ──
@@ -323,16 +326,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     matchPrefixes: ['/esign'],
   },
   {
-    id: 'violations-inbox',
-    label: 'Violations',
-    icon: AlertTriangle,
-    href: (cid) => `/violations?communityId=${cid}`,
-    visibility: 'admin',
-    featureKey: 'hasViolations',
-    navTier: 'more',
-    matchPrefixes: ['/violations'],
-  },
-  {
     id: 'arc-requests',
     label: 'ARC Requests',
     icon: ClipboardCheck,
@@ -391,16 +384,15 @@ export const NAV_SECTIONS: readonly NavSection[] = [
   // a parent is hidden for the current user but the child itself is still visible.
   navSection(null, ['dashboard']),
   navSection('Community', ['documents', 'meetings', 'announcements', 'board', 'operations', 'insurance', 'reserves', 'storm-damage', 'emergency']),
-  // `arc-requests` sits beside `violations-report`, not under Admin: residents
-  // see it too (they submit ARC applications), and an "Admin" heading over a
-  // resident's own requests would be wrong.
-  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-report', 'arc-requests']),
+  // `violations-inbox` and `arc-requests` sit here, not under Admin: residents
+  // see both (their own cases and reports; their ARC applications), and an
+  // "Admin" heading over a resident's own records would be wrong.
+  navSection('Management', ['leases', 'packages', 'visitors', 'payments', 'website', 'violations-inbox', 'arc-requests']),
   navSection('Admin', [
     'compliance',
     'directory',
     'contracts',
     'esign',
-    'violations-inbox',
     'move-in-out',
     'audit-trail',
   ]),
@@ -794,8 +786,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = 
   'storm-damage': { title: 'Storm Damage', subtitle: 'Report & track post-storm damage' },
   emergency: { title: 'Emergency Alerts', subtitle: 'Urgent notices to residents' },
   esign: { title: 'E-Sign', subtitle: 'Digital document signing' },
-  'violations-report': { title: 'Report Violation', subtitle: 'Submit a community violation' },
-  'violations-inbox': { title: 'Violations', subtitle: 'Review & manage violations' },
+  'violations-inbox': { title: 'Violations', subtitle: 'Report & review violations' },
   'arc-requests': { title: 'ARC Requests', subtitle: 'Review architectural submissions' },
   'audit-trail': { title: 'Audit Trail', subtitle: 'Activity log' },
   payments: { title: 'Payments', subtitle: 'View balance & pay assessments' },
