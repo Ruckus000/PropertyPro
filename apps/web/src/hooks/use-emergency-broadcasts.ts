@@ -126,13 +126,21 @@ export function useEmergencyBroadcasts(communityId: number) {
   });
 }
 
+/**
+ * One alert, as the server has it now. Also used directly (outside the query
+ * cache) when a request's outcome is unknown and the UI must look before it
+ * tells the manager what happened.
+ */
+export function fetchEmergencyBroadcast(communityId: number, broadcastId: number) {
+  return requestJson<BroadcastView>(
+    `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
+  );
+}
+
 export function useEmergencyBroadcast(communityId: number, broadcastId: number) {
   return useQuery({
     queryKey: KEYS.detail(communityId, broadcastId),
-    queryFn: () =>
-      requestJson<BroadcastView>(
-        `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
-      ),
+    queryFn: () => fetchEmergencyBroadcast(communityId, broadcastId),
     enabled: communityId > 0 && broadcastId > 0,
     refetchInterval: (query) => {
       const data = query.state.data;
