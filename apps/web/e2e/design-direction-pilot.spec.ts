@@ -306,7 +306,7 @@ test.describe('design direction pilot', () => {
     // Opened and measured only; nothing is filed.
     await checkPage(page, testInfo, {
       label: 'violation report (staff)',
-      shot: 'violations-report',
+      shot: 'violation-report-form',
       role: 'root_sunset',
       url: `/violations/report?communityId=${communityId}`,
       // Enabled, not just visible: the button stays disabled until the unit
@@ -322,7 +322,7 @@ test.describe('design direction pilot', () => {
     const communityId = await startPilot(page, 'tenant');
     await checkPage(page, testInfo, {
       label: 'violation report (resident)',
-      shot: 'violations-report',
+      shot: 'violation-report-form',
       role: 'tenant',
       url: `/violations/report?communityId=${communityId}`,
       // Enabled, not just visible: the button stays disabled until the unit
