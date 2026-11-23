@@ -660,7 +660,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
    * signed preview token is the right long-term fix and belongs with the
    * editor's share-a-preview feature, not here.
    */
-  const canPreviewDrafts = isPreviewRequest && middlewareUser != null;
+  const draftPreviewRequested = isPreviewRequest && middlewareUser != null;
 
   // --- Rate limiting (Phase 1: unauthenticated routes) [P2-42] ---
   // IP-keyed tiers, checked before doing heavier work.
@@ -809,9 +809,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
           forwardedHeaders.set(COMMUNITY_ID_HEADER, String(communityId));
           forwardedHeaders.set(TENANT_SOURCE_HEADER, 'custom_domain');
           // Gated on a session, not on the query param alone — see
-          // `canPreviewDrafts`. An anonymous `?preview=true` gets the published
-          // site, which is what D7 promises.
-          if (canPreviewDrafts) {
+          // `draftPreviewRequested`. An anonymous `?preview=true` gets the
+          // published site, which is what D7 promises.
+          if (draftPreviewRequested) {
             forwardedHeaders.set('x-preview', 'true');
           }
 
@@ -1001,9 +1001,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         // (PR #8c). NOT the /mobile pattern above: that one is deliberately
         // cookie-less because it renders a published demo template, whereas
         // this one exposes unpublished pages and blocks, so it is gated on a
-        // session — see `canPreviewDrafts`.
-        if (canPreviewDrafts) {
+        // session — see `draftPreviewRequested`. The user rides along because
+        // the renderer, not middleware, decides whether they may see drafts.
+        if (draftPreviewRequested) {
           forwardedHeaders.set('x-preview', 'true');
+          stampForwardedUserHeaders(forwardedHeaders, middlewareUser);
         }
         const siteUrl = request.nextUrl.clone();
         siteUrl.pathname = pathKind === 'site-root' ? '/public-site' : `/public-site${pathname}`;
