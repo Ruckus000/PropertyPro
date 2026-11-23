@@ -129,6 +129,27 @@ describe('AppSidebar — hover opens the collapsed rail', () => {
     expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeDefined();
   });
 
+  it('collapses when Collapse is clicked with the pointer still over the rail', async () => {
+    const { container } = renderSidebar();
+    await act(async () => {});
+    fireEvent.pointerEnter(wrapper(container), { pointerType: 'mouse' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+
+    expect(isOpen()).toBe(false);
+    expect(window.localStorage.getItem(NAV_EXPANDED_KEY)).toBe('false');
+  });
+
+  it('closes on Escape without moving the pointer', async () => {
+    const { container } = await renderCollapsed();
+    fireEvent.pointerEnter(wrapper(container), { pointerType: 'mouse' });
+    expect(isOpen()).toBe(true);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(isOpen()).toBe(false);
+  });
+
   it('does nothing without hoverPeek (the phone drawer)', async () => {
     const { container } = await renderCollapsed({ hoverPeek: false });
 

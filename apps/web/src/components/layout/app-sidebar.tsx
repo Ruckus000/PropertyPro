@@ -148,9 +148,26 @@ export function AppSidebar({
       if (target.closest('[data-radix-popper-content-wrapper], [role="dialog"]')) return;
       setHovered(false);
     };
+    // Content that appears on hover must be dismissible without moving the
+    // pointer (WCAG 1.4.13).
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHovered(false);
+    };
     document.addEventListener('pointermove', onPointerMove);
-    return () => document.removeEventListener('pointermove', onPointerMove);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [hovered]);
+
+  // The toggle ends the hover state as well. Without this, "Collapse" clicked
+  // with the pointer over the rail (where the button is) unpinned it and the
+  // still-true hover reopened it at once as an overlay.
+  const handleToggle = () => {
+    setHovered(false);
+    toggleExpanded();
+  };
   const resolvedShowToggle = showCollapseToggle !== undefined ? showCollapseToggle : collapsible;
 
   // The shell never mounts this sidebar on the PM portfolio pages (they have no
@@ -363,7 +380,7 @@ export function AppSidebar({
           }
         }}
         expanded={resolvedExpanded}
-        onToggle={resolvedShowToggle ? toggleExpanded : undefined}
+        onToggle={resolvedShowToggle ? handleToggle : undefined}
         header={header}
         footer={footer}
         renderLink={({ href, className, children, onClick, ...props }) => (
