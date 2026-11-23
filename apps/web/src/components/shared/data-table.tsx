@@ -42,10 +42,28 @@ const HIDE_BELOW_CLASS: Record<'sm' | 'md', string> = {
   md: 'hidden md:table-cell',
 };
 
+/**
+ * A pinned cell needs its own opaque background, or the cells scrolling under it
+ * show through; the row's hover tint is repeated here for the same reason.
+ * Spelled in full, like HIDE_BELOW_CLASS: the scanner cannot see an assembled class.
+ */
+const PIN_END_CLASS =
+  'sticky right-0 border-l border-edge bg-surface-card [tr:hover>&]:bg-surface-hover';
+
+/**
+ * The pinned column covers the right edge of the scroll box, so a control
+ * focused in a scrolling column would be brought "into view" underneath it
+ * (WCAG 2.4.11). Scroll padding makes the browser stop short of the pinned
+ * column instead. 12rem is wider than any action column in use; too much only
+ * scrolls a little further than strictly needed.
+ */
+const PIN_END_WRAPPER_CLASS = 'scroll-pr-48';
+
 function headerClass(meta: ColumnMeta | undefined): string | undefined {
   return cn(
     meta?.hideBelow ? HIDE_BELOW_CLASS[meta.hideBelow] : undefined,
     meta?.absorbSlack ? 'w-1/2' : undefined,
+    meta?.pinEnd ? PIN_END_CLASS : undefined,
   ) || undefined;
 }
 
@@ -53,6 +71,7 @@ function cellClass(meta: ColumnMeta | undefined): string | undefined {
   return cn(
     meta?.hideBelow ? HIDE_BELOW_CLASS[meta.hideBelow] : undefined,
     meta?.absorbSlack || meta?.clamp ? 'max-w-0' : undefined,
+    meta?.pinEnd ? PIN_END_CLASS : undefined,
   ) || undefined;
 }
 
@@ -121,11 +140,12 @@ export function DataTable<TData, TValue>({
   const colCount = columns.length;
   // Matches the pre-existing default: ten skeleton rows when nothing says otherwise.
   const skeletonRowCount = 10;
+  const hasPinnedEnd = columns.some((column) => column.meta?.pinEnd);
 
   return (
     <div className="space-y-4">
       <div className={cn(!bare && 'rounded-md border border-edge')}>
-        <Table>
+        <Table wrapperClassName={hasPinnedEnd ? PIN_END_WRAPPER_CLASS : undefined}>
           <TableHeader>
             <TableRow>
               {columns.map((column, columnIndex) => (

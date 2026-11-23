@@ -98,17 +98,12 @@ test.describe('design direction pilot', () => {
     });
   });
 
-  test('visitors (staff) holds at 1440', async ({ page, context, baseURL }, testInfo) => {
-    const communityId = await startPilot(page, context, baseURL, 'cam');
-    await checkPage(page, testInfo, {
-      label: 'visitors',
-      shot: 'visitors',
-      role: 'cam',
-      url: `/dashboard/visitors?communityId=${communityId}`,
-      ready: (p) => rowOrEmpty(p, 'No visitors found.'),
-      widths: [1440],
-    });
-  });
+  // "visitors (staff) holds at 1440" used to be here. It passed only while the
+  // Today list was empty or narrow: with one real row the table is 1292px in a
+  // 1092px box at 1440 (measured 2026-11-23, sandbox; 1227 in 1092 on production).
+  // It now lives with the 1280 finding in design-direction-pilot-known-issues.spec.ts.
+  // What this spec asserts for the staff table instead is the block further down:
+  // the row's actions stay on screen while the table scrolls.
 
   test('visitors denied list (staff) holds at 1280 and 1440', async ({ page, context, baseURL }, testInfo) => {
     const communityId = await startPilot(page, context, baseURL, 'cam');
@@ -119,6 +114,117 @@ test.describe('design direction pilot', () => {
       url: `/dashboard/visitors?communityId=${communityId}&tab=denied`,
       ready: (p) => rowOrEmpty(p, 'No denied-entry records yet.'),
     });
+  });
+
+  // WRITES DATA: this block registers a real visitor through the API, under the
+  // same rule as the package block below (agent sandbox or CI's stack only).
+  //
+  // At 1280 the visitors table is wider than its box (the finding kept in
+  // design-direction-pilot-known-issues.spec.ts), so the columns scroll. The
+  // action column is pinned: a row's Check In and Revoke must be on screen
+  // without a sideways scroll. The block REQUIRES the overflow, so it cannot
+  // pass on a table that simply fits and proves nothing about the pin.
+  test('visitors (staff): a row\'s actions stay on screen when the table scrolls sideways', async ({ page, context, baseURL }, testInfo) => {
+    // The root manager, not `cam`: every other staff block here signs in as cam,
+    // and reads are limited to 100 a minute per user. Three more page loads as
+    // cam pushed the next spec (e-sign, also cam) into a 429 on CI, where it
+    // skipped itself and failed the executed-test floor.
+    const communityId = await startPilot(page, context, baseURL, 'root_sunset');
+    const url = `/dashboard/visitors?communityId=${communityId}`;
+
+    const stamp = Date.now().toString(36);
+    const name = `${stamp} Pinned Actions`;
+    // Through the context's request client (same cookies), so registering costs
+    // no page load.
+    const units = await page.request.get(`/api/v1/units?communityId=${communityId}`);
+    const unitBody = (await units.json()) as { data?: Array<{ unitNumber?: string }> };
+    const hostUnitLabel = unitBody.data?.[0]?.unitNumber ?? null;
+    const created = {
+      unit: hostUnitLabel,
+      status: hostUnitLabel
+        ? (
+            await page.request.post('/api/v1/visitors', {
+              data: {
+                communityId,
+                visitorName: name,
+                purpose: 'Contractor walk-through',
+                hostUnitLabel,
+                expectedArrival: new Date().toISOString(),
+                expectedDurationMinutes: 60,
+              },
+            })
+          ).status()
+        : 0,
+    };
+    expect(created.unit, 'the seed has at least one unit to host a visitor').toBeTruthy();
+    expect(created.status, 'registering the visitor').toBeLessThan(300);
+
+    const row = page.locator('main tbody tr').filter({ hasText: name });
+    // Both widths: 1440 is where the defect was found on production. The last
+    // pass is 1280, which the keyboard check below relies on.
+    for (const width of [1440, 1280] as const) {
+      const where = `visitors with a registered visitor @ ${width}px`;
+      await open(page, width, url, () => row);
+      await expectPaintedTitle(page, where);
+      await expect(row.getByRole('button', { name: 'Check In', exact: true })).toBeVisible();
+
+      const box = await row.evaluate((tr) => {
+        const scroller = tr.closest('table')!.parentElement!;
+        const button = [...tr.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Check In')!;
+        const s = scroller.getBoundingClientRect();
+        const b = button.getBoundingClientRect();
+        return {
+          scrollLeft: scroller.scrollLeft,
+          tableWidth: scroller.scrollWidth,
+          boxWidth: scroller.clientWidth,
+          buttonLeft: Math.round(b.left),
+          buttonRight: Math.round(b.right),
+          boxLeft: Math.round(s.left),
+          boxRight: Math.round(s.right),
+        };
+      });
+      expect(box.scrollLeft, `${where}: the table has not been scrolled`).toBe(0);
+      expect(
+        box.tableWidth,
+        `${where}: the table no longer overflows (${box.tableWidth} in ${box.boxWidth}); this block proves nothing until it does`,
+      ).toBeGreaterThan(box.boxWidth + 1);
+      expect(
+        box.buttonLeft >= box.boxLeft && box.buttonRight <= box.boxRight + 1,
+        `${where}: Check In sits at ${box.buttonLeft}..${box.buttonRight}, outside the table's box ${box.boxLeft}..${box.boxRight}`,
+      ).toBe(true);
+      await shoot(page, testInfo, `visitors-pinned-actions-cam-${width}`);
+    }
+
+    // Keyboard (WCAG 2.4.11): a control focused in a scrolling column must come
+    // to rest clear of the pinned column, not underneath it. Visitors has no
+    // control in a middle column today (the QR button is in the last scrolling
+    // column, which is always clear once the table is scrolled to its end), so
+    // the cell that starts under the pin is made focusable here to exercise the
+    // table's scroll padding itself.
+    const focused = await row.evaluate((tr) => {
+      const scroller = tr.closest('table')!.parentElement!;
+      const pinned = tr.querySelector('td.sticky')!;
+      const pinnedLeft = pinned.getBoundingClientRect().left;
+      const under = [...tr.querySelectorAll('td')].find(
+        (td) => td !== pinned && td.getBoundingClientRect().right > pinnedLeft + 1,
+      );
+      if (!under) return null;
+      const before = Math.round(under.getBoundingClientRect().right);
+      under.tabIndex = -1;
+      under.focus();
+      return {
+        before,
+        scrollLeft: Math.round(scroller.scrollLeft),
+        cellRight: Math.round(under.getBoundingClientRect().right),
+        pinnedLeft: Math.round(pinned.getBoundingClientRect().left),
+      };
+    });
+    expect(focused, 'a cell starts under the pinned column at scrollLeft 0').not.toBeNull();
+    expect(
+      focused!.cellRight,
+      `the focused cell ends at ${focused!.cellRight} (was ${focused!.before}), under the pinned column that starts at ${focused!.pinnedLeft}`,
+    ).toBeLessThanOrEqual(focused!.pinnedLeft + 1);
+    await shoot(page, testInfo, 'visitors-pinned-actions-focus-cam-1280');
   });
 
   // WRITES DATA: this block logs a real package through the app. It must only

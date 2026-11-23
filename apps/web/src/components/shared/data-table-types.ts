@@ -63,6 +63,17 @@ export interface ColumnMeta {
    * rest nothing), so a second truncating column needs this instead.
    */
   clamp?: boolean;
+  /**
+   * Keep this column at the right edge of the table's box while the other
+   * columns scroll under it. For a row's action buttons on a table too wide
+   * for its box: measured on Visitors at 1440px, a 1227px table in a 1092px
+   * box, with Check In and Revoke off-screen.
+   *
+   * The pinned cells paint `surface-card`, so use it only on a table that sits
+   * on a card (a `Section`, or `bare` inside one). At most one column per table,
+   * and it must be the last.
+   */
+  pinEnd?: boolean;
 }
 
 /** What a `cell` renderer receives. `row.original` is the datum. */
