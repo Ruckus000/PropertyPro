@@ -399,6 +399,21 @@ describe('community subdomain — public page slugs now resolve [D1]', () => {
     );
     expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/about' });
     expect(forwarded(res, 'x-preview')).toBe('true');
+    // The stamp is a request, not a grant: the renderer checks this user's
+    // role in the community (`canPreviewDrafts`), so it has to know who it is.
+    expect(forwarded(res, 'x-user-id')).toBe('u1');
+  });
+
+  it('does not forward the signed-in user to an ordinary public-site visit', async () => {
+    signedIn(true);
+    const res = await middleware(
+      new NextRequest(`https://plain-condos.${ROOT_DOMAIN}/about`, {
+        headers: { host: `plain-condos.${ROOT_DOMAIN}` },
+      }),
+    );
+    expect(outcome(res)).toEqual({ kind: 'rewrite', to: '/public-site/about' });
+    expect(forwarded(res, 'x-preview')).toBeNull();
+    expect(forwarded(res, 'x-user-id')).toBeNull();
   });
 
   // `?preview=true` is a query string — anyone can type it. 11b-2 threads

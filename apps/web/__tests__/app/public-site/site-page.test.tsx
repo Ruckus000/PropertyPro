@@ -126,6 +126,16 @@ vi.mock('@/lib/telemetry/site-block-render', () => ({
   reportDegradedBlocks: reportDegradedBlocksMock,
 }));
 
+// Whether this request may see drafts is decided per community by
+// `canPreviewDrafts` (its own test pins who qualifies). Default: no. A test
+// that wants drafts opts in for one call.
+const { canPreviewDraftsMock } = vi.hoisted(() => ({
+  canPreviewDraftsMock: vi.fn(async (_communityId: number) => false),
+}));
+vi.mock('@/lib/site/can-preview-drafts', () => ({
+  canPreviewDrafts: canPreviewDraftsMock,
+}));
+
 import PublicSitePage, { generateMetadata } from '@/app/public-site/[[...slug]]/page';
 
 const HOME_PAGE = {
@@ -349,11 +359,27 @@ describe('PublicSitePage — slug resolution [11b-2]', () => {
       if (key === 'x-preview') return 'true';
       return null;
     });
+    canPreviewDraftsMock.mockResolvedValueOnce(true);
     getPageBySlugMock.mockResolvedValue({ ...ABOUT_PAGE, isDraft: true });
     const ui = await PublicSitePage({ params: Promise.resolve({ slug: ['about'] }) });
     render(ui as React.ReactElement);
     expect(getPageBySlugMock).toHaveBeenCalledWith('about', { includeDrafts: true });
     expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: true, pageId: 7 });
+  });
+
+  it('the preview header alone does not unlock drafts: the community decides', async () => {
+    headersGetMock.mockImplementation((key: string) => {
+      if (key === 'x-community-id') return '42';
+      if (key === 'x-preview') return 'true';
+      return null;
+    });
+    getPageBySlugMock.mockResolvedValue(ABOUT_PAGE);
+    const ui = await PublicSitePage({ params: Promise.resolve({ slug: ['about'] }) });
+    const { queryByTestId } = render(ui as React.ReactElement);
+    expect(canPreviewDraftsMock).toHaveBeenCalledWith(42);
+    expect(getPageBySlugMock).toHaveBeenCalledWith('about', { includeDrafts: false });
+    expect(listSiteBlocksMock).toHaveBeenCalledWith({ includeDrafts: false, pageId: 7 });
+    expect(queryByTestId('preview-banner')).toBeNull();
   });
 
   it('still serves a page staged for deletion (D8)', async () => {
