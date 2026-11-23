@@ -753,9 +753,11 @@ export async function generateAssessmentLineItemsForCommunity(
   // period (see billingPeriodFor); a one-time assessment has a single period,
   // so any item for it at all, whatever its due date — the manager picks the
   // due date (Generate charges), and a second pick must not charge again.
-  // App-level only: assessment_line_items has no unique index, so two
-  // concurrent generations can still both read an empty set — a DB backstop
-  // is a separate migration decision (roadmap 3.T2).
+  // Two concurrent generations can both read an empty set here; the insert
+  // below skips what the other one charged first (unique index 0104).
+  // ponytail: the index keys on the due date, not the period, so two
+  // concurrent calls with DIFFERENT due dates in one period both charge.
+  // Trigger: a unit with two live line items for one assessment period.
   const period = billingPeriodFor(assessment, dueDate);
   const existingRows = await scoped.selectFrom<AssessmentLineItemRecord>(
     assessmentLineItems,
@@ -787,9 +789,13 @@ export async function generateAssessmentLineItemsForCommunity(
   }
 
   // One transaction: a charge without its ledger entry would read as charged,
-  // so a retry would skip it and the unit's balance would stay short.
+  // so a retry would skip it and the unit's balance would stay short. A unit a
+  // concurrent generation charged first is not returned, so it gets no ledger
+  // entry and counts as skipped below.
   const typedInsertedRows = await scoped.transaction(async (tx) => {
-    const rows = (await tx.insert(assessmentLineItems, toInsert)) as unknown as AssessmentLineItemRecord[];
+    const rows = (await tx.insert(assessmentLineItems, toInsert, {
+      onConflictDoNothing: true,
+    })) as unknown as AssessmentLineItemRecord[];
     for (const lineItem of rows) {
       await postLedgerEntry(tx, {
         entryType: 'assessment',

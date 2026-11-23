@@ -1,0 +1,13 @@
+-- One live charge per unit per assessment due date.
+--
+-- generateAssessmentLineItemsForCommunity reads the period's existing line
+-- items and then inserts the missing ones. Two concurrent generations (a
+-- double-click on "Generate charges", or the button while the daily cron runs)
+-- could both read an empty set and charge every unit twice. With this index the
+-- generator's INSERT ... ON CONFLICT DO NOTHING skips the second charge.
+--
+-- Partial on deleted_at IS NULL, so a soft-deleted charge can be re-issued.
+-- One-off fines insert with assessment_id NULL, and NULLs never collide.
+-- Plain (not CONCURRENTLY): CONCURRENTLY cannot run inside the migration
+-- transaction, and the table is small. Expand migration: apply before the code.
+CREATE UNIQUE INDEX IF NOT EXISTS "assessment_line_items_unit_period_uniq" ON "assessment_line_items" USING btree ("assessment_id","unit_id","due_date") WHERE "assessment_line_items"."deleted_at" IS NULL;
