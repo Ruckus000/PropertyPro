@@ -70,11 +70,11 @@ export interface AnnouncementListProps {
   onDialogClose?: () => void;
 }
 
-function stripHtml(html: string): string {
-  if (typeof document !== 'undefined') {
-    const el = document.createElement('div');
-    el.innerHTML = html;
-    return el.textContent ?? '';
+export function stripHtml(html: string): string {
+  if (typeof DOMParser !== 'undefined') {
+    // An inert document: unlike innerHTML on an element of the live page, it
+    // runs no handlers and loads nothing (an <img onerror> stays dormant).
+    return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
   }
   let result = '';
   let inTag = false;

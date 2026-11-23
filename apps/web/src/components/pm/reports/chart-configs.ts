@@ -51,15 +51,40 @@ const OCCUPANCY_COLORS = [
   'hsl(199, 89%, 48%)',  // sky-500  // design-tokens:exempt — recharts fill/stroke requires a literal color string per series; not a themeable UI surface
 ];
 
+/**
+ * The chart key for the i-th community series. Never the community name: the
+ * config's keys are written verbatim into a <style> block by ChartStyle, and a
+ * name is user-supplied text. The payload names its series by name only (no
+ * ids), so the key is the series' position in `communityNames`.
+ */
+export function occupancySeriesKey(index: number): string {
+  return `community-${index}`;
+}
+
 export function buildOccupancyChartConfig(communityNames: string[]): ChartConfig {
   const config: ChartConfig = {};
   communityNames.forEach((name, i) => {
-    config[name] = {
+    config[occupancySeriesKey(i)] = {
       label: name,
       color: OCCUPANCY_COLORS[i % OCCUPANCY_COLORS.length]!,
     };
   });
   return config;
+}
+
+/** Re-key name-keyed chart rows by `occupancySeriesKey`, to match the config. */
+export function toOccupancySeriesRows(
+  chartData: ReadonlyArray<{ month: string; [communityName: string]: string | number }>,
+  communityNames: string[],
+): Array<Record<string, string | number>> {
+  return chartData.map((row) => {
+    const out: Record<string, string | number> = { month: row.month };
+    communityNames.forEach((name, i) => {
+      const value = row[name];
+      if (value !== undefined) out[occupancySeriesKey(i)] = value;
+    });
+    return out;
+  });
 }
 
 // ---------------------------------------------------------------------------

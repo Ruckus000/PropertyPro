@@ -23,7 +23,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Users, Home, Calendar } from 'lucide-react';
-import { buildOccupancyChartConfig } from './chart-configs';
+import {
+  buildOccupancyChartConfig,
+  occupancySeriesKey,
+  toOccupancySeriesRows,
+} from './chart-configs';
 import { usePmReport, type OccupancyReportData, type ReportFilters } from '@/hooks/use-pm-reports';
 
 interface OccupancyReportProps {
@@ -41,6 +45,10 @@ export function OccupancyReport({ filters, enabled }: OccupancyReportProps) {
   const chartConfig = useMemo(
     () => buildOccupancyChartConfig(data?.communityNames ?? []),
     [data?.communityNames],
+  );
+  const seriesRows = useMemo(
+    () => toOccupancySeriesRows(data?.chartData ?? [], data?.communityNames ?? []),
+    [data?.chartData, data?.communityNames],
   );
 
   if (isLoading) {
@@ -108,18 +116,18 @@ export function OccupancyReport({ filters, enabled }: OccupancyReportProps) {
         <CardContent>
           {hasData ? (
             <ChartContainer config={chartConfig} aria-label="Multi-series line chart showing occupancy trends per community over time">
-              <LineChart data={chartData}>
+              <LineChart data={seriesRows}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis domain={[0, 100]} unit="%" />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <ChartLegend content={<ChartLegendContent />} />
-                {communityNames.map((name) => (
+                {communityNames.map((_name, i) => (
                   <Line
-                    key={name}
+                    key={occupancySeriesKey(i)}
                     type="monotone"
-                    dataKey={name}
-                    stroke={`var(--color-${name.replace(/\s/g, '-')})`}
+                    dataKey={occupancySeriesKey(i)}
+                    stroke={`var(--color-${occupancySeriesKey(i)})`}
                     strokeWidth={2}
                     dot={false}
                   />

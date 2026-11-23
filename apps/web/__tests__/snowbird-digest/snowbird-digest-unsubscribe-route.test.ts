@@ -3,7 +3,8 @@
  *  - POST is the RFC 8058 one-click target: `sendEmail` names this URL in
  *    List-Unsubscribe and sets List-Unsubscribe-Post, so mail clients POST here.
  *    A GET-only route answered that POST with 405 and the opt-out never landed.
- *  - GET backs the human-clicked link and returns a confirmation page.
+ *  - GET backs the human-clicked link. It is READ-ONLY (mail scanners prefetch
+ *    links) and renders a button that POSTs back here with `confirm=1`.
  *  - a missing/invalid token neither writes nor 200s, on either verb.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,6 +37,18 @@ async function post(token?: string): Promise<Response> {
   const handler = handlers.POST;
   if (!handler) throw new Error('route exports no POST handler (RFC 8058 one-click target)');
   return handler(req('POST', token));
+}
+
+async function postConfirmForm(token: string): Promise<Response> {
+  const handler = handlers.POST;
+  if (!handler) throw new Error('route exports no POST handler');
+  return handler(
+    new NextRequest(`http://localhost:3000/api/v1/snowbird-digest/unsubscribe?token=${token}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'confirm=1',
+    }),
+  );
 }
 
 describe('snowbird digest unsubscribe route', () => {
@@ -73,12 +86,40 @@ describe('snowbird digest unsubscribe route', () => {
     expect(applyMock).not.toHaveBeenCalled();
   });
 
-  it('GET unsubscribes and returns an HTML confirmation page', async () => {
+  it('GET does not unsubscribe', async () => {
     verifyMock.mockReturnValue({ communityId: 1, userId: 'u1' });
     const res = await route.GET(req('GET', 'good'));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(applyMock).not.toHaveBeenCalled();
+    const html = await res.text();
+    expect(html).toContain(
+      '<form method="post" action="/api/v1/snowbird-digest/unsubscribe?token=good">',
+    );
+    expect(html).toContain('<input type="hidden" name="confirm" value="1">');
+  });
+
+  it('GET escapes the token in the form action', async () => {
+    verifyMock.mockReturnValue({ communityId: 1, userId: 'u1' });
+    const res = await route.GET(
+      new NextRequest(
+        'http://localhost:3000/api/v1/snowbird-digest/unsubscribe?token=a%22%3E%3Cb',
+        { method: 'GET' },
+      ),
+    );
+    const html = await res.text();
+    expect(html).not.toContain('token=a"');
+    expect(html).toContain('token=a%22%3E%3Cb"');
+  });
+
+  it('POST from the confirm form unsubscribes', async () => {
+    verifyMock.mockReturnValue({ communityId: 1, userId: 'u1' });
+    const res = await postConfirmForm('good');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
     expect(applyMock).toHaveBeenCalledWith({ communityId: 1, userId: 'u1' });
+    expect(await res.text()).toContain("You're unsubscribed");
   });
 
   it('GET does not write on an invalid token', async () => {

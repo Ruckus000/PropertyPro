@@ -23,6 +23,7 @@ import { units } from '../schema/units';
 import { userRoles } from '../schema/user-roles';
 import { violationFines } from '../schema/violation-fines';
 import { violations } from '../schema/violations';
+import { escapeLikePattern } from './like-pattern';
 
 export interface PortfolioQueryFilters {
   communityType?: 'condo_718' | 'hoa_720' | 'apartment';
@@ -212,9 +213,7 @@ export async function findManagedCommunitiesPortfolioUnscoped(
 
   if (filters.search) {
     // Literal match: `%` and `_` in what the user typed are not wildcards.
-    // Postgres ILIKE's default escape character is backslash.
-    const escaped = filters.search.trim().replace(/[\\%_]/g, (ch) => `\\${ch}`);
-    const pattern = `%${escaped}%`;
+    const pattern = `%${escapeLikePattern(filters.search.trim())}%`;
     conditions.push(or(ilike(communities.name, pattern), ilike(communities.slug, pattern))!);
   }
 

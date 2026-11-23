@@ -16,6 +16,12 @@ import {
 } from '../rate-limit/password-reset-limiter';
 import { getBaseUrl } from '@/lib/utils/url';
 
+/**
+ * What every rate-limited reset request is told, per-email or per-IP. It names
+ * no account, so a refusal says nothing about whether the address exists.
+ */
+export const PASSWORD_RESET_RATE_LIMITED_MESSAGE = 'Too many reset requests. Please try again later.';
+
 /** Minimum response time (ms) to normalise timing across all code paths. */
 const MIN_RESPONSE_MS = 250;
 
@@ -52,7 +58,7 @@ export async function requestPasswordReset(
       await enforceMinResponseTime(start);
       return {
         success: false,
-        message: 'Too many reset requests. Please try again later.',
+        message: PASSWORD_RESET_RATE_LIMITED_MESSAGE,
         rateLimitResult,
       };
     }

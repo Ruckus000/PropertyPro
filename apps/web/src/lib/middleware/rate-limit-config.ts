@@ -228,8 +228,10 @@ export function classifyRoute(pathname: string, method: string): RouteCategory {
  *
  * Checks standard proxy headers in order of preference.
  * Falls back to 'unknown' if no IP can be determined.
+ * Takes anything with request headers, so a Server Action can pass
+ * `{ headers: await headers() }` and key on the same IP the auth tier does.
  */
-export function extractClientIp(request: NextRequest): string {
+export function extractClientIp(request: { headers: Pick<Headers, 'get'> }): string {
   // Vercel-specific header
   const vercelIp = request.headers.get('x-real-ip');
   if (vercelIp) return vercelIp;

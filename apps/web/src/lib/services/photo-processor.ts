@@ -7,6 +7,7 @@
  *
  * thumbnailUrl is nullable — thumbnail generation is best-effort fire-and-forget.
  */
+import { randomUUID } from 'node:crypto';
 import { sanitizeFilename } from '@/lib/utils/sanitize-filename';
 import { createPresignedDownloadUrl, createPresignedUploadUrl } from '@propertypro/db';
 import { MAINTENANCE_BUCKET } from '@propertypro/db/constants';
@@ -33,7 +34,9 @@ export async function getMaintenancePhotoUploadUrl(
 ): Promise<{ uploadUrl: string; storagePath: string }> {
   const safeName = sanitizeFilename(filename);
   const folder = requestId != null ? String(requestId) : 'pre-upload';
-  const storagePath = `maintenance/${communityId}/${folder}/${Date.now()}_${safeName}`;
+  // Random, not a timestamp: the POST route only checks the community prefix,
+  // so a path must not be guessable by a neighbour in the same community.
+  const storagePath = `maintenance/${communityId}/${folder}/${randomUUID()}_${safeName}`;
   const data = await createPresignedUploadUrl(MAINTENANCE_BUCKET, storagePath, { upsert: false });
   // data.signedUrl is the upload URL (Supabase createSignedUploadUrl response shape)
   return { uploadUrl: data.signedUrl, storagePath };
