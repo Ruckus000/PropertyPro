@@ -872,3 +872,37 @@ describe('support session stamps x-support-community-id on every path', () => {
     expect(forwarded(res, 'x-support-community-id')).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5. The session refresh precedes the copy of the forwarded request headers
+// ---------------------------------------------------------------------------
+
+describe('invariant 5: a session cookie refreshed by middleware is the one forwarded', () => {
+  // Pages verify the session themselves from the request cookies
+  // (lib/request/page-auth-context.ts). The refresh writes the new cookie onto
+  // `request`, so the forwarded headers must be copied from `request` AFTER
+  // createMiddlewareClient, or the page sees the stale token.
+  it('forwards the refreshed cookie, not the stale one', async () => {
+    createMiddlewareClientMock.mockImplementation(async (request: NextRequest) => {
+      request.cookies.set('sb-test-auth-token', 'refreshed-token');
+      return {
+        supabase: { auth: { getUser: getUserMock, getClaims: getUserMock }, rpc: rpcMock },
+        response: NextResponse.next(),
+        user: sessionUser.current,
+        authChecked: true,
+      };
+    });
+
+    const res = await middleware(
+      req(`http://localhost:3000/api/v1/documents?communityId=${TOKEN_COMMUNITY_ID}`, {
+        headers: { cookie: 'sb-test-auth-token=stale-token' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(forwarded(res, 'x-user-id')).toBe(ADMIN.id);
+    const cookie = forwarded(res, 'cookie') ?? '';
+    expect(cookie).toContain('sb-test-auth-token=refreshed-token');
+    expect(cookie).not.toContain('stale-token');
+  });
+});
