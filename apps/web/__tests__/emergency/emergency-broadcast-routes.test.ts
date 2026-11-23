@@ -292,7 +292,7 @@ describe('Emergency Broadcast Routes', () => {
   // ── POST /api/v1/emergency-broadcasts/[id]/cancel ───────────────────────
 
   describe('POST /api/v1/emergency-broadcasts/[id]/cancel', () => {
-    it('cancels broadcast within undo window', async () => {
+    it('cancels a broadcast', async () => {
       cancelBroadcastMock.mockResolvedValue(true);
 
       const req = new NextRequest(
@@ -314,7 +314,7 @@ describe('Emergency Broadcast Routes', () => {
       expect(cancelBroadcastMock).toHaveBeenCalledWith(10, 100, 'user-1');
     });
 
-    it('returns 409 when undo window has expired', async () => {
+    it('returns 409 when the cancel loses to a send', async () => {
       cancelBroadcastMock.mockResolvedValue(false);
 
       const req = new NextRequest(
@@ -333,7 +333,7 @@ describe('Emergency Broadcast Routes', () => {
 
       expect(res.status).toBe(409);
       expect(json.error.code).toBe('CONFLICT');
-      expect(json.error.message).toContain('undo window has expired');
+      expect(json.error.message).toBe('This alert can no longer be canceled: it has already started sending.');
     });
 
     it('returns 400 for invalid broadcast ID', async () => {

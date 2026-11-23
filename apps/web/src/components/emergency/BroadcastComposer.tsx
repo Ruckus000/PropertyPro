@@ -101,7 +101,15 @@ interface Props {
   source?: BroadcastSource;
 }
 
-type Step = 'template' | 'compose' | 'recipients' | 'confirm' | 'sending' | 'sent' | 'send-failed';
+type Step =
+  | 'template'
+  | 'compose'
+  | 'recipients'
+  | 'confirm'
+  | 'sending'
+  | 'undoing'
+  | 'sent'
+  | 'send-failed';
 
 export function BroadcastComposer({
   communityId,
@@ -344,27 +352,44 @@ export function BroadcastComposer({
   const scheduledIso = scheduledPreview && 'iso' in scheduledPreview ? scheduledPreview.iso : null;
   const alertHref = broadcastId ? `/emergency/${broadcastId}?communityId=${communityId}` : null;
 
+  function backToStart() {
+    setStep('template');
+    setBroadcastId(null);
+    setRecipientInfo(null);
+  }
+
   function handleUndo() {
-    if (broadcastId) {
-      cancelMutation.mutate(
-        { broadcastId, communityId },
-        {
-          onSuccess: () => {
-            setStep('template');
-            setBroadcastId(null);
-            setRecipientInfo(null);
-          },
-          onError: () => {
-            // Cancel failed — broadcast was already sent or undo window expired
-            setStep('sent');
-          },
-        },
-      );
-    } else {
-      setStep('template');
-      setBroadcastId(null);
-      setRecipientInfo(null);
+    if (!broadcastId) {
+      backToStart();
+      return;
     }
+    const id = broadcastId;
+    // Leaving 'sending' stops the countdown, so it cannot run out and send
+    // while the cancel request is on its way.
+    setStep('undoing');
+    cancelMutation.mutate(
+      { broadcastId: id, communityId },
+      {
+        onSuccess: backToStart,
+        // A refusal or a lost answer says nothing about whether the alert went
+        // out. Look at it, and show what it is; never assume it was sent.
+        onError: async () => {
+          const alertNow = await lookUpAlert(id);
+          if (alertNow?.canceledAt) {
+            backToStart();
+          } else if (alertNow && (alertNow.completedAt || (alertNow.sendClaimedAt && !alertNow.sendOutcome))) {
+            setStep('sent');
+          } else {
+            setSendProblem(
+              alertNow
+                ? "We couldn't cancel this alert. It has not been sent. Open the alert to see where it stands."
+                : "We couldn't confirm whether this alert was canceled. Open the alert to check before you send another.",
+            );
+            setStep('send-failed');
+          }
+        },
+      },
+    );
   }
 
   return (
@@ -761,6 +786,12 @@ export function BroadcastComposer({
             UNDO - Cancel Broadcast
           </button>
         </div>
+      )}
+
+      {step === 'undoing' && (
+        <p role="status" className="text-center text-sm text-content-secondary">
+          Canceling the alert...
+        </p>
       )}
 
       {/* The send was refused or went unanswered, and the alert is not sent */}

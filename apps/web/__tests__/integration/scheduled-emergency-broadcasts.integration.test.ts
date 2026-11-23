@@ -187,7 +187,7 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     await processDueScheduledBroadcasts();
 
     // completed_at is set by now, which cancelBroadcast reports by throwing.
-    await expect(cancelBroadcast(id, communityId, managerId)).rejects.toThrow(/already sent/);
+    await expect(cancelBroadcast(id, communityId, managerId)).rejects.toThrow(/already been sent/);
     expect((await load([id])).get(id)!.canceledAt).toBeNull();
     expect(emailsFor(title)).toBe(2);
   });
@@ -506,7 +506,26 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     expect(sendWins).toBeGreaterThanOrEqual(1);
   });
 
-  it('a send already in flight (claimed, not finished) beats a cancel inside the undo window', async () => {
+  it('a draft can be canceled long after it was made: only a send claim stops a cancel', async () => {
+    const { emergencyBroadcasts } = state.dbModule;
+    const id = await draftAlert(`Lingered ${state.runSuffix}`);
+    // The manager sat on the confirm step for half a minute before Undo.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ initiatedAt: new Date(Date.now() - 30_000) })
+      .where(eq(emergencyBroadcasts.id, id));
+
+    await expect(cancelBroadcast(id, communityId, managerId)).resolves.toBe(true);
+
+    expect((await load([id])).get(id)!.canceledAt).toBeInstanceOf(Date);
+    // A second cancel, and a send, are typed refusals now, not bare Errors.
+    await expect(cancelBroadcast(id, communityId, managerId)).rejects.toThrow('This alert was already canceled.');
+    await expect(executeBroadcast(id, communityId, managerId)).rejects.toThrow(
+      'This alert was canceled, so it cannot be sent.',
+    );
+  });
+
+  it('a send already in flight (claimed, not finished) beats a cancel', async () => {
     const { emergencyBroadcasts } = state.dbModule;
     const id = await draftAlert(`In flight ${state.runSuffix}`);
     // What a cancel finds when the send's claim landed just before it: the

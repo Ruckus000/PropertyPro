@@ -185,6 +185,16 @@ describe('POST /api/v1/emergency-broadcasts/[id]/schedule', () => {
     expect(json.error.details?.fields?.[0]?.field).toBe('scheduledFor');
   });
 
+  it('404 for an alert this community does not have', async () => {
+    scheduleBroadcastMock.mockRejectedValueOnce(new NotFoundError('This alert could not be found.'));
+    const res = await send();
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorBody).error).toMatchObject({
+      code: 'NOT_FOUND',
+      message: 'This alert could not be found.',
+    });
+  });
+
   it('409 CONFLICT when the draft was already sent, scheduled or canceled', async () => {
     scheduleBroadcastMock.mockRejectedValueOnce(
       new ConflictError('This alert has already been sent, scheduled or canceled.'),

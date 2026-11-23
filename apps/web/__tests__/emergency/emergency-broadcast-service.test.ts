@@ -90,7 +90,7 @@ describe('emergency-broadcast-service', () => {
     });
 
     await expect(executeBroadcast(7, 42, 'actor-1')).rejects.toThrow(
-      'Broadcast exceeds maximum recipient limit of 500',
+      'This alert would go to 501 people, and one alert can reach at most 500. Create it again with a smaller audience.',
     );
 
     expect(sendBulkEmergencySmsMock).not.toHaveBeenCalled();

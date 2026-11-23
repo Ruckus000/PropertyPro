@@ -77,7 +77,7 @@ import {
   listBroadcastsForRecipient,
   scheduleBroadcast,
 } from '../../src/lib/services/emergency-broadcast-service';
-import { ConflictError, ValidationError } from '../../src/lib/api/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../../src/lib/api/errors';
 
 const NOW = new Date('2026-11-23T15:00:00.000Z');
 const MINUTE = 60_000;
@@ -309,7 +309,7 @@ describe('scheduleBroadcast — converts the draft in place', () => {
   ];
 
   it('one UPDATE guarded on unsent, uncanceled, unscheduled and unclaimed; no insert', async () => {
-    const { updates, inserts, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    const { updates, inserts, setUpdateResult } = mockScoped({ ...draft, scheduledFor: null }, draftRecipients);
     setUpdateResult([draft]);
 
     await expect(scheduleBroadcast(7, 42, 'manager-1', when)).resolves.toEqual({
@@ -335,7 +335,7 @@ describe('scheduleBroadcast — converts the draft in place', () => {
   });
 
   it("deletes the draft's recipient rows AFTER the update, and only that broadcast's", async () => {
-    const { deletes, writes, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    const { deletes, writes, setUpdateResult } = mockScoped({ ...draft, scheduledFor: null }, draftRecipients);
     setUpdateResult([draft]);
 
     await scheduleBroadcast(7, 42, 'manager-1', when);
@@ -347,7 +347,7 @@ describe('scheduleBroadcast — converts the draft in place', () => {
   });
 
   it('writes the scheduling audit entry, with the counts the draft held', async () => {
-    const { setUpdateResult } = mockScoped(undefined, draftRecipients);
+    const { setUpdateResult } = mockScoped({ ...draft, scheduledFor: null }, draftRecipients);
     setUpdateResult([draft]);
 
     await scheduleBroadcast(7, 42, 'manager-1', when);
@@ -393,8 +393,16 @@ describe('scheduleBroadcast — converts the draft in place', () => {
     await expect(scheduleBroadcast(7, 42, 'manager-1', when)).resolves.toMatchObject({ scheduled: true });
   });
 
+  it('an id this community does not have is a 404, with no write', async () => {
+    const { updates } = mockScoped(undefined, []);
+
+    await expect(scheduleBroadcast(7, 42, 'manager-1', when)).rejects.toBeInstanceOf(NotFoundError);
+
+    expect(updates).toHaveLength(0);
+  });
+
   it('already sent, scheduled or canceled (the UPDATE matches no row): 409, nothing deleted, no audit entry', async () => {
-    const { deletes, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    const { deletes, setUpdateResult } = mockScoped({ ...draft, scheduledFor: null }, draftRecipients);
     setUpdateResult([]);
 
     const attempt = scheduleBroadcast(7, 42, 'manager-1', when);
@@ -409,7 +417,7 @@ describe('scheduleBroadcast — converts the draft in place', () => {
     ['too soon', 4 * MINUTE],
     ['too far', 365 * DAY + MINUTE],
   ])('a time that is %s is refused before any write', async (_label, ahead) => {
-    const { updates, deletes } = mockScoped(undefined, draftRecipients);
+    const { updates, deletes } = mockScoped({ ...draft, scheduledFor: null }, draftRecipients);
 
     await expect(
       scheduleBroadcast(7, 42, 'manager-1', new Date(NOW.getTime() + ahead)),
@@ -460,7 +468,7 @@ describe('cancelBroadcast', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('immediate broadcast: still cancellable inside the 10-second undo window', async () => {
+  it('immediate broadcast: canceled by one conditional UPDATE with no time condition', async () => {
     const { updates } = mockScoped({
       id: 7,
       scheduledFor: null,
@@ -472,7 +480,7 @@ describe('cancelBroadcast', () => {
     await expect(cancelBroadcast(7, 42, 'manager-1')).resolves.toBe(true);
 
     // ONE conditional UPDATE: not canceled, not sent, not claimed by a send,
-    // not scheduled meanwhile, and still inside the undo window.
+    // not scheduled meanwhile. No time condition.
     expect(updates[0]?.data).toEqual({ canceledAt: NOW });
     expect(updates[0]?.where).toEqual({
       __and: [
@@ -481,7 +489,6 @@ describe('cancelBroadcast', () => {
         { __isNull: 'broadcasts.completedAt' },
         { __isNull: 'broadcasts.sendClaimedAt' },
         { __isNull: 'broadcasts.scheduledFor' },
-        { __gte: ['broadcasts.initiatedAt', new Date(NOW.getTime() - 10_000)] },
       ],
     });
   });
@@ -501,17 +508,39 @@ describe('cancelBroadcast', () => {
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
-  it('immediate broadcast: refused after the undo window, with no write', async () => {
-    const { updates } = mockScoped({
-      id: 7,
-      scheduledFor: null,
-      initiatedAt: new Date(NOW.getTime() - 11_000),
-      canceledAt: null,
-      completedAt: null,
-    });
+  it.each([11_000, 30_000, 2 * DAY])(
+    'an unclaimed draft made %i ms ago can still be canceled: there is no server undo window',
+    async (age) => {
+      const { updates } = mockScoped({
+        id: 7,
+        scheduledFor: null,
+        initiatedAt: new Date(NOW.getTime() - age),
+        canceledAt: null,
+        completedAt: null,
+      });
 
-    await expect(cancelBroadcast(7, 42, 'manager-1')).resolves.toBe(false);
+      await expect(cancelBroadcast(7, 42, 'manager-1')).resolves.toBe(true);
 
+      expect(updates[0]?.data).toEqual({ canceledAt: NOW });
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'emergency_broadcast_canceled', resourceId: '7' }),
+      );
+    },
+  );
+
+  it('refuses with typed errors, not a bare Error (which the route would turn into a 500)', async () => {
+    mockScoped(undefined);
+    await expect(cancelBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(NotFoundError);
+
+    mockScoped({ id: 7, scheduledFor: null, initiatedAt: NOW, canceledAt: NOW, completedAt: null });
+    const canceled = cancelBroadcast(7, 42, 'manager-1');
+    await expect(canceled).rejects.toBeInstanceOf(ConflictError);
+    await expect(canceled).rejects.toThrow('This alert was already canceled.');
+
+    const { updates } = mockScoped({ id: 7, scheduledFor: null, initiatedAt: NOW, canceledAt: null, completedAt: NOW });
+    const sent = cancelBroadcast(7, 42, 'manager-1');
+    await expect(sent).rejects.toBeInstanceOf(ConflictError);
+    await expect(sent).rejects.toThrow('This alert has already been sent, so it cannot be canceled.');
     expect(updates).toHaveLength(0);
   });
 });
@@ -586,11 +615,34 @@ describe('executeBroadcast', () => {
     scoped.update.mockImplementation(async (table: unknown, data: Record<string, unknown>, where: unknown) => {
       updates.push({ table, data, where });
       // The write that marks it sent fails, with a resident's address in the message.
-      if ('completedAt' in data) throw new PoolExhaustedError('could not write for owner@example.com');
+      if ('completedAt' in data) {
+        throw Object.assign(new PoolExhaustedError('could not write for owner@example.com'), {
+          code: '23505',
+          detail: 'Failing row contains (owner@example.com, +13055551234).',
+          cause: Object.assign(new Error('pg'), { detail: 'Key (email)=(owner@example.com)' }),
+        });
+      }
       return [{ id: 7 }];
     });
 
-    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(PoolExhaustedError);
+    const thrown = await executeBroadcast(7, 42, 'manager-1').then(
+      () => null,
+      (error: unknown) => error as Error & Record<string, unknown>,
+    );
+    // What leaves is a stand-in: `withErrorHandler` reports it to Sentry as it
+    // is, so it must not be the original or carry anything the original held.
+    expect(thrown).not.toBeNull();
+    expect(thrown).not.toBeInstanceOf(PoolExhaustedError);
+    expect(thrown!.message).toBe('Emergency alert send failed: PoolExhaustedError (SQLSTATE 23505)');
+    expect(thrown!.cause).toBeUndefined();
+    const leaving = JSON.stringify([
+      { ...thrown },
+      Object.getOwnPropertyNames(thrown).map((key) => thrown![key]),
+    ]);
+    expect(leaving).not.toContain('owner@example.com');
+    expect(leaving).not.toContain('3055551234');
+    // Still not an AppError, so the route answers 500 as it did before.
+    expect(thrown).not.toBeInstanceOf(ConflictError);
 
     // Not left reading "Sending": the outcome is written in the same request...
     const outcome = updates.find((u) => 'sendOutcome' in u.data);
@@ -613,15 +665,24 @@ describe('executeBroadcast', () => {
       // An immediate alert: who started it, and no scheduling keys.
       metadata: { reason: 'send_error', title: 'Water off tomorrow', initiatedBy: 'manager-1' },
     });
-    const [captured, context] = captureExceptionMock.mock.calls[0]!;
-    expect(captured.message).toBe('Emergency alert send failed: PoolExhaustedError');
-    expect(context).toEqual({
-      tags: { emergency_broadcast: 'immediate_send_failed' },
-      extra: { broadcastId: 7, communityId: 42 },
-    });
-    expect(JSON.stringify([captured.message, captured.stack, logAuditEventMock.mock.calls])).not.toContain(
-      'owner@example.com',
-    );
+    // ONE Sentry event: the route's handler reports the stand-in; the service reports nothing itself.
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(logAuditEventMock.mock.calls)).not.toContain('owner@example.com');
+  });
+
+  it('refuses an unknown, canceled or sent alert with typed errors, before any claim', async () => {
+    mockScoped(undefined, [recipient]);
+    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(NotFoundError);
+
+    mockScoped({ ...draftRow, canceledAt: NOW }, [recipient]);
+    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toThrow('This alert was canceled, so it cannot be sent.');
+
+    const { updates } = mockScoped({ ...draftRow, completedAt: NOW }, [recipient]);
+    const sent = executeBroadcast(7, 42, 'manager-1');
+    await expect(sent).rejects.toBeInstanceOf(ConflictError);
+    await expect(sent).rejects.toThrow('This alert has already been sent.');
+    expect(updates).toHaveLength(0);
+    expect(sendBulkEmailMock).not.toHaveBeenCalled();
   });
 
   it('a refusal BEFORE the claim (lost claim, canceled, scheduled) records no failure', async () => {

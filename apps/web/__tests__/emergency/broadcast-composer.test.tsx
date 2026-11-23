@@ -277,6 +277,84 @@ describe('BroadcastComposer, Send now', () => {
   });
 });
 
+describe('BroadcastComposer, Undo during the countdown', () => {
+  /** Tick, press Send, then let the manager sit on the countdown before pressing Undo. */
+  async function undoAfter(seconds: number) {
+    view();
+    await reachConfirm();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Send Emergency Alert' }));
+    vi.setSystemTime(new Date(NOW.getTime() + seconds * 1000));
+    fireEvent.click(screen.getByRole('button', { name: 'UNDO - Cancel Broadcast' }));
+  }
+
+  it('Undo long after the draft was made cancels THE DRAFT and returns to the start; nothing is sent', async () => {
+    await undoAfter(30);
+
+    expect(await screen.findByRole('heading', { name: 'Choose a Template' })).toBeVisible();
+    expect(posts('/cancel')).toEqual([
+      { method: 'POST', path: '/api/v1/emergency-broadcasts/11/cancel', body: { communityId: 7 } },
+    ]);
+    expect(posts('/send')).toHaveLength(0);
+    expect(screen.queryByText('Emergency alert sent!')).toBeNull();
+  });
+
+  it('stops the countdown while the cancel is on its way', async () => {
+    let answer!: (response: Response) => void;
+    onCancel = () => new Promise<Response>((resolve) => (answer = resolve));
+    await undoAfter(2);
+
+    expect(await screen.findByText('Canceling the alert...')).toBeVisible();
+    expect(screen.queryByText(/Sending in/)).toBeNull();
+    answer(json(200, { data: { canceled: true } }));
+    expect(await screen.findByRole('heading', { name: 'Choose a Template' })).toBeVisible();
+    expect(posts('/send')).toHaveLength(0);
+  });
+
+  const REFUSED = () => conflict('This alert was already canceled.');
+
+  it('a 409 on an alert that IS canceled (the first answer was lost) ends at the start, never "sent"', async () => {
+    onCancel = REFUSED;
+    alertNow = (id) => json(200, { data: draftView(id, { canceledAt: '2026-03-01T12:00:05.000Z' }) });
+    await undoAfter(2);
+
+    expect(await screen.findByRole('heading', { name: 'Choose a Template' })).toBeVisible();
+    expect(screen.queryByText('Emergency alert sent!')).toBeNull();
+    expect(lookups()).toEqual([{ method: 'GET', path: '/api/v1/emergency-broadcasts/11', body: null }]);
+  });
+
+  it('a 409 because the alert really went out says it was sent', async () => {
+    onCancel = () => conflict('This alert has already been sent, so it cannot be canceled.');
+    alertNow = (id) => json(200, { data: draftView(id, { completedAt: '2026-03-01T12:00:11.000Z' }) });
+    await undoAfter(2);
+
+    expect(await screen.findByText('Emergency alert sent!')).toBeVisible();
+  });
+
+  it('a failed cancel on an alert that is neither canceled nor sent says exactly that', async () => {
+    onCancel = () => json(500, { error: { code: 'INTERNAL_ERROR', message: 'boom' } });
+    await undoAfter(2);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We couldn't cancel this alert. It has not been sent. Open the alert to see where it stands.",
+    );
+    expect(screen.queryByText('Emergency alert sent!')).toBeNull();
+    expect(screen.queryByText(/Sending in/)).toBeNull();
+    expect(posts('/send')).toHaveLength(0);
+  });
+
+  it('when nothing can be confirmed it says so and points at the alert', async () => {
+    onCancel = NETWORK_DOWN;
+    alertNow = NETWORK_DOWN;
+    await undoAfter(2);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "We couldn't confirm whether this alert was canceled. Open the alert to check before you send another.",
+    );
+    expect(screen.getByRole('link', { name: 'View the alert' })).toHaveAttribute('href', '/emergency/11?communityId=7');
+  });
+});
+
 describe('BroadcastComposer, Send later', () => {
   it.each([
     ['the day before the clocks go forward', BEFORE_DST],

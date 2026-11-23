@@ -19,7 +19,7 @@
  * `scheduledFor` is ISO 8601 with an offset or `Z`. The 5-minute to 365-day
  * window is enforced in the service (400 `VALIDATION_ERROR`, field
  * `scheduledFor`), as on create. A draft that has already been sent, scheduled
- * or canceled, or an id this community does not have, is 409 `CONFLICT`.
+ * or canceled is 409 `CONFLICT`; an id this community does not have is 404.
  *
  * Response is tight: two keys, and `scheduledFor` is already an ISO string.
  */

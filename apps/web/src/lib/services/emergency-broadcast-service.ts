@@ -33,7 +33,7 @@ import type {
   User,
   UserRoleRecord,
 } from '@propertypro/db';
-import { eq, and, desc, gte, inArray, isNotNull, isNull, type SQL } from '@propertypro/db/filters';
+import { eq, and, desc, inArray, isNotNull, isNull, type SQL } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendBulkEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import {
@@ -47,7 +47,7 @@ import { sendBulkEmergencySms } from '@/lib/services/sms/sms-service';
 import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
 import { getBaseUrl } from '@/lib/utils/url';
-import { ConflictError, ValidationError } from '@/lib/api/errors';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
 import { captureException } from '@sentry/nextjs';
 import { recordOutcome, sanitizedError } from './emergency-broadcast-outcome';
 
@@ -151,8 +151,6 @@ export interface ResolvedRecipient {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-/** Undo window duration in milliseconds (10 seconds) */
-const UNDO_WINDOW_MS = 10_000;
 export const MAX_BROADCAST_RECIPIENTS = 500;
 
 /**
@@ -376,7 +374,8 @@ export async function scheduleBroadcast(
       emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
     )
   )[0];
-  if (draft) assertSchedulableAudience(draft.recipientCount);
+  if (!draft) throw new NotFoundError('This alert could not be found.');
+  assertSchedulableAudience(draft.recipientCount);
 
   const converted = await scoped.update(
     emergencyBroadcasts,
@@ -448,7 +447,7 @@ export async function scheduleBroadcast(
  * cron's 15-minute sweep marks it failed / `interrupted`, exactly as for a
  * scheduled send, and like one it is never retried. A send that THROWS after
  * the claim does not wait for the sweep: it is marked failed / `send_error`
- * at once (and reported, sanitised), then the error is rethrown.
+ * at once, and a sanitised stand-in for the error is rethrown.
  */
 export async function executeBroadcast(
   broadcastId: number,
@@ -470,10 +469,6 @@ export async function executeBroadcast(
     // 15-minute sweep: mark it failed / send_error, exactly as the job would.
     // The sweep is then only for a function that died without reaching here.
     const failure = { broadcastId, communityId };
-    captureException(sanitizedError(error), {
-      tags: { emergency_broadcast: 'immediate_send_failed' },
-      extra: failure,
-    });
     await recordOutcome(
       broadcastId,
       communityId,
@@ -487,8 +482,12 @@ export async function executeBroadcast(
         extra: failure,
       });
     });
-    // The route still answers with the original error.
-    throw error;
+    // The route still answers 500, but with a stand-in that cannot carry row
+    // data: `withErrorHandler` reports whatever leaves here to Sentry, raw, so
+    // rethrowing the original would send a postgres `detail` after all. That
+    // report is the ONE Sentry event for this failure. (An AppError's message
+    // is ours, so it passes through and keeps its status.)
+    throw error instanceof AppError ? error : sanitizedError(error);
   }
 }
 
@@ -506,9 +505,11 @@ async function sendBroadcast(
     emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
   );
   const broadcast = broadcastRows[0];
-  if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast.canceledAt) throw new Error('Broadcast was canceled');
-  if (broadcast.completedAt) throw new Error('Broadcast already sent');
+  // Typed, because a manager can reach each of these from the send button
+  // (a second tab, a stale page); an untyped Error would be a 500.
+  if (!broadcast) throw new NotFoundError('This alert could not be found.');
+  if (broadcast.canceledAt) throw new ConflictError('This alert was canceled, so it cannot be sent.');
+  if (broadcast.completedAt) throw new ConflictError('This alert has already been sent.');
   if (broadcast.scheduledFor && !scheduledSend) {
     throw new ConflictError(
       'This alert is scheduled and will be sent automatically at its scheduled time.',
@@ -520,8 +521,8 @@ async function sendBroadcast(
     emergencyBroadcastRecipients, {}, eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
   );
   if (recipients.length > MAX_BROADCAST_RECIPIENTS) {
-    throw new Error(
-      `Broadcast exceeds maximum recipient limit of ${MAX_BROADCAST_RECIPIENTS}`,
+    throw new ValidationError(
+      `This alert would go to ${recipients.length} people, and one alert can reach at most ${MAX_BROADCAST_RECIPIENTS}. Create it again with a smaller audience.`,
     );
   }
 
@@ -736,15 +737,18 @@ async function sendBroadcast(
 /**
  * Cancel a broadcast.
  *
- * An immediate broadcast can be canceled within the undo window (10 seconds).
- * A scheduled broadcast can be canceled any time before the cron claims it.
+ * A draft or an immediate broadcast can be canceled any time before its send
+ * claims it (the composer's 10-second countdown is a client-side pause, not a
+ * server window). A scheduled broadcast can be canceled any time before the
+ * cron claims it. An alert that is already canceled or sent is a 409, and an
+ * unknown id a 404.
  *
  * Either way the cancel is ONE conditional UPDATE guarded on "not claimed, not
  * sent, not canceled", so a cancel racing a send's claim or a schedule has one
  * winner. The read before it only words the refusals; it decides nothing.
  *
- * Returns true if successfully canceled; false if the undo window expired, the
- * alert has started sending (or been missed), or another request got there first.
+ * Returns true if successfully canceled; false if the alert has started
+ * sending (or been missed), or another request got there first.
  */
 export async function cancelBroadcast(
   broadcastId: number,
@@ -757,9 +761,11 @@ export async function cancelBroadcast(
     emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
   );
   const broadcast = broadcastRows[0];
-  if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast.canceledAt) throw new Error('Broadcast already canceled');
-  if (broadcast.completedAt) throw new Error('Broadcast already sent — cannot cancel');
+  if (!broadcast) throw new NotFoundError('This alert could not be found.');
+  if (broadcast.canceledAt) throw new ConflictError('This alert was already canceled.');
+  if (broadcast.completedAt) {
+    throw new ConflictError('This alert has already been sent, so it cannot be canceled.');
+  }
 
   if (broadcast.scheduledFor) {
     // ONE statement, atomic against the cron's claim: whichever of the two
@@ -788,15 +794,10 @@ export async function cancelBroadcast(
     return true;
   }
 
-  // Check undo window
-  const initiatedAt = broadcast.initiatedAt;
-  if (!(initiatedAt instanceof Date)) throw new Error('Invalid broadcast initiation time');
-
-  const elapsed = Date.now() - initiatedAt.getTime();
-  if (elapsed > UNDO_WINDOW_MS) {
-    return false; // Undo window expired
-  }
-
+  // No time limit here. The composer makes the draft BEFORE its confirm step,
+  // so a server-side "10 seconds since it was created" window had usually run
+  // out before the manager could press Undo. What makes a cancel too late is
+  // the send's claim, and the UPDATE below is guarded on it.
   const won = await scoped.update(
     emergencyBroadcasts,
     { canceledAt: new Date() },
@@ -807,7 +808,6 @@ export async function cancelBroadcast(
       isNull(emergencyBroadcasts.sendClaimedAt),
       // Not scheduled since the read above: a scheduled alert takes the branch above.
       isNull(emergencyBroadcasts.scheduledFor),
-      gte(emergencyBroadcasts.initiatedAt, new Date(Date.now() - UNDO_WINDOW_MS)),
     ),
   );
   if (won.length === 0) return false;
