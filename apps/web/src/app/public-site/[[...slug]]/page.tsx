@@ -25,6 +25,7 @@ import {
 } from '@/lib/db/public-community-reader';
 import { buildCommunityUrl } from '@/lib/utils/community-url';
 import { UrgentNoticeBanner } from '@/components/public-site/UrgentNoticeBanner';
+import { canPreviewDrafts } from '@/lib/site/can-preview-drafts';
 import {
   resolveFooterSettings,
   resolveSiteSettings,
@@ -42,17 +43,6 @@ async function resolveCommunityId(): Promise<number | null> {
   if (!Number.isInteger(communityId) || communityId <= 0) return null;
 
   return communityId;
-}
-
-/**
- * Preview mode is set by the middleware when the request carries
- * `?preview=true` on the public-site rewrite (PR #8c). In preview mode the
- * page reads draft site blocks instead of published ones and renders a
- * banner indicating the visitor is seeing unpublished content.
- */
-async function resolvePreviewMode(): Promise<boolean> {
-  const requestHeaders = await headers();
-  return requestHeaders.get('x-preview') === 'true';
 }
 
 /**
@@ -181,7 +171,7 @@ export async function generateMetadata(props?: PublicSitePageProps): Promise<Met
   const segments = await resolveSlugSegments(props?.params);
   if (segments.length !== 1) return base;
 
-  const isPreview = await resolvePreviewMode();
+  const isPreview = await canPreviewDrafts(community.id);
   const page = await getPageBySlugCached(community.id, segments[0] as string, isPreview);
   // No page (404 or a retired slug about to 308) and the home page itself both
   // keep the community-level metadata.
@@ -239,7 +229,6 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
   const segments = await resolveSlugSegments(params);
 
   const communityId = await resolveCommunityId();
-  const isPreview = await resolvePreviewMode();
   if (!communityId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -256,6 +245,10 @@ export default async function PublicSitePage({ params }: PublicSitePageProps) {
       </div>
     );
   }
+
+  // Preview mode: draft pages, sections and look, with a banner saying so.
+  // Asked for with `?preview=true`; granted only to this community's managers.
+  const isPreview = await canPreviewDrafts(community.id);
 
   // Phase 11b-2 — resolve WHICH page this URL addresses before doing any render
   // work. A 404 or a 308 should not first presign logo URLs.

@@ -651,17 +651,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
    * Whether this request may see UNPUBLISHED site content [11b-2].
    *
    * `?preview=true` is visitor-controlled — it is a query string, nothing more.
-   * `x-preview` is what the public-site renderer trusts to switch to draft
-   * reads, and 11b-2 threads it to the PAGE-row lookup as well as the block
-   * lookup, so an ungated stamp would let any anonymous visitor read a page the
-   * PM created but never published by appending `?preview=true`. D7 ("an
-   * unpublished page is a 404 to the public") only holds if the stamp is gated.
-   *
-   * The gate is "there is a signed-in user", not "this user may edit this
-   * community's site": the latter needs a per-request DB read in middleware,
-   * which runs on every request. That narrows the exposure from *anyone on the
-   * internet* to *someone with an account*, which is the property D7 is about.
-   * A signed preview token is the right long-term fix and belongs with the
+   * `x-preview` records that a signed-in visitor ASKED for drafts; it is not
+   * permission to see them. This stamp only keeps anonymous requests out
+   * cheaply. Whether this user may see this community's drafts needs a
+   * membership read, which middleware must not do on every request, so the
+   * public-site renderer decides it in `canPreviewDrafts`
+   * (`lib/site/can-preview-drafts.ts`): the community's managers only. A
+   * signed preview token is the right long-term fix and belongs with the
    * editor's share-a-preview feature, not here.
    */
   const canPreviewDrafts = isPreviewRequest && middlewareUser != null;
