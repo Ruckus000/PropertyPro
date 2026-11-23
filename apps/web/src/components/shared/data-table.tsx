@@ -42,10 +42,20 @@ const HIDE_BELOW_CLASS: Record<'sm' | 'md', string> = {
   md: 'hidden md:table-cell',
 };
 
+/**
+ * A pinned cell needs its own opaque background, or the cells scrolling under it
+ * show through; the row's hover tint is repeated here for the same reason.
+ */
+const PIN_END_CLASS = 'sticky right-0 border-l border-edge bg-surface-card';
+// Spelled in full, like HIDE_BELOW_CLASS: the scanner cannot see an assembled class.
+const PIN_END_CELL_CLASS =
+  'sticky right-0 border-l border-edge bg-surface-card [tr:hover>&]:bg-surface-hover';
+
 function headerClass(meta: ColumnMeta | undefined): string | undefined {
   return cn(
     meta?.hideBelow ? HIDE_BELOW_CLASS[meta.hideBelow] : undefined,
     meta?.absorbSlack ? 'w-1/2' : undefined,
+    meta?.pinEnd ? PIN_END_CLASS : undefined,
   ) || undefined;
 }
 
@@ -53,6 +63,7 @@ function cellClass(meta: ColumnMeta | undefined): string | undefined {
   return cn(
     meta?.hideBelow ? HIDE_BELOW_CLASS[meta.hideBelow] : undefined,
     meta?.absorbSlack || meta?.clamp ? 'max-w-0' : undefined,
+    meta?.pinEnd ? PIN_END_CELL_CLASS : undefined,
   ) || undefined;
 }
 

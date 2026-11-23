@@ -92,11 +92,15 @@ export function VisitorsStaffPage({ communityId, about }: VisitorsStaffPageProps
   const baseColumns = useMemo(() => getVisitorColumns(actions, { renderStatus }), [actions]);
   // The shared column set leaves the action column's header empty, which fails
   // axe's empty-table-header; name it for screen readers here without touching
-  // the columns the current view also uses.
+  // the columns the current view also uses. The same column is pinned to the
+  // right edge: the eleven columns before it are wider than the box at 1440px,
+  // and a row's Check In and Revoke must not need a sideways scroll.
   const columns = useMemo(
     () =>
       baseColumns.map((c) =>
-        c.header === '' ? { ...c, header: <span className="sr-only">Actions</span> } : c,
+        c.id === 'actions'
+          ? { ...c, header: <span className="sr-only">Actions</span>, meta: { ...c.meta, pinEnd: true } }
+          : c,
       ),
     [baseColumns],
   );

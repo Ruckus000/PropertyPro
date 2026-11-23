@@ -147,6 +147,43 @@ describe('DataTable — the responsive meta ladder', () => {
   });
 });
 
+describe('DataTable — a column pinned to the end', () => {
+  const PINNED: ColumnDef<Row, unknown>[] = [
+    ...COLUMNS,
+    {
+      id: 'actions',
+      header: 'Actions',
+      cell: () => <button type="button">Open</button>,
+      meta: { pinEnd: true },
+    },
+  ];
+
+  it('sticks the pinned header and cell to the right edge on an opaque card background', () => {
+    renderTable({ columns: PINNED });
+
+    for (const el of [screen.getByRole('columnheader', { name: 'Actions' }), cellIn('Budget 2026', 4)]) {
+      const classes = el.className.split(/\s+/);
+      expect(classes).toContain('sticky');
+      expect(classes).toContain('right-0');
+      // Without a background the cells scrolling underneath show through.
+      expect(classes).toContain('bg-surface-card');
+    }
+  });
+
+  it('repeats the row hover tint on the pinned cell, which would otherwise cover it', () => {
+    renderTable({ columns: PINNED });
+
+    expect(cellIn('Budget 2026', 4).className).toContain('[tr:hover>&]:bg-surface-hover');
+  });
+
+  it('pins nothing on a column that does not ask for it', () => {
+    renderTable({ columns: PINNED });
+
+    expect(screen.getByRole('columnheader', { name: 'Added' }).className).not.toContain('sticky');
+    expect(cellIn('Budget 2026', 3).className).not.toContain('sticky');
+  });
+});
+
 describe('DataTable — loading, empty and keying', () => {
   it('renders skeleton rows instead of data while loading', () => {
     const { container } = renderTable({ isLoading: true });

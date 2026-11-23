@@ -124,6 +124,13 @@
     "finding lives in `design-direction-pilot-known-issues.spec.ts` as a fixme and is NOT",
     "listed here: `--refuse-skips` would fail the job on it.",
     "",
+    "2026-11-23: one block added to `design-direction-pilot.spec.ts` (10 blocks), so",
+    "expectedTestCount goes 78 -> 79. It registers a visitor and proves the row's Check In",
+    "is inside the table's box at 1280 while the table itself overflows (the action column",
+    "is pinned). MEASURED against the agent sandbox: green; with `pinEnd` removed from",
+    "visitors-staff-page.tsx it goes red with `Check In sits at 1428..1518, outside the",
+    "table's box 307..1253`.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -149,5 +156,5 @@
     "target-size-detector.spec.ts",
     "design-direction-pilot.spec.ts"
   ],
-  "expectedTestCount": 78
+  "expectedTestCount": 79
 }

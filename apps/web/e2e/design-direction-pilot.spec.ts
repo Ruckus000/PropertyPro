@@ -121,6 +121,79 @@ test.describe('design direction pilot', () => {
     });
   });
 
+  // WRITES DATA: this block registers a real visitor through the API, under the
+  // same rule as the package block below (agent sandbox or CI's stack only).
+  //
+  // At 1280 the visitors table is wider than its box (the finding kept in
+  // design-direction-pilot-known-issues.spec.ts), so the columns scroll. The
+  // action column is pinned: a row's Check In and Revoke must be on screen
+  // without a sideways scroll. The block REQUIRES the overflow, so it cannot
+  // pass on a table that simply fits and proves nothing about the pin.
+  test('visitors (staff): a row\'s actions stay on screen when the table scrolls sideways', async ({ page, context, baseURL }, testInfo) => {
+    const communityId = await startPilot(page, context, baseURL, 'cam');
+    const url = `/dashboard/visitors?communityId=${communityId}`;
+    await open(page, 1280, url, (p) => rowOrEmpty(p, 'No visitors found.'));
+    await expectPaintedTitle(page, 'visitors before registering');
+
+    const stamp = Date.now().toString(36);
+    const name = `${stamp} Pinned Actions`;
+    const created = await page.evaluate(
+      async ({ id, visitorName }) => {
+        const units = await fetch(`/api/v1/units?communityId=${id}`);
+        const unitBody = (await units.json()) as { data?: Array<{ unitNumber?: string }> };
+        const hostUnitLabel = unitBody.data?.[0]?.unitNumber;
+        if (!hostUnitLabel) return { status: 0, unit: null };
+        const res = await fetch('/api/v1/visitors', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            communityId: id,
+            visitorName,
+            purpose: 'Contractor walk-through',
+            hostUnitLabel,
+            expectedArrival: new Date().toISOString(),
+            expectedDurationMinutes: 60,
+          }),
+        });
+        return { status: res.status, unit: hostUnitLabel };
+      },
+      { id: communityId, visitorName: name },
+    );
+    expect(created.unit, 'the seed has at least one unit to host a visitor').toBeTruthy();
+    expect(created.status, 'registering the visitor').toBeLessThan(300);
+
+    await open(page, 1280, url, (p) => p.locator('main tbody tr').filter({ hasText: name }));
+    const row = page.locator('main tbody tr').filter({ hasText: name });
+    const checkIn = row.getByRole('button', { name: 'Check In', exact: true });
+    await expect(checkIn).toBeVisible();
+
+    const box = await row.evaluate((tr) => {
+      const scroller = tr.closest('table')!.parentElement!;
+      const button = [...tr.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Check In')!;
+      const s = scroller.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      return {
+        scrollLeft: scroller.scrollLeft,
+        tableWidth: scroller.scrollWidth,
+        boxWidth: scroller.clientWidth,
+        buttonLeft: Math.round(b.left),
+        buttonRight: Math.round(b.right),
+        boxLeft: Math.round(s.left),
+        boxRight: Math.round(s.right),
+      };
+    });
+    expect(box.scrollLeft, 'the table has not been scrolled').toBe(0);
+    expect(
+      box.tableWidth,
+      `the table no longer overflows at 1280 (${box.tableWidth} in ${box.boxWidth}); this block proves nothing until it does`,
+    ).toBeGreaterThan(box.boxWidth + 1);
+    expect(
+      box.buttonLeft >= box.boxLeft && box.buttonRight <= box.boxRight + 1,
+      `Check In sits at ${box.buttonLeft}..${box.buttonRight}, outside the table's box ${box.boxLeft}..${box.boxRight}`,
+    ).toBe(true);
+    await shoot(page, testInfo, 'visitors-pinned-actions-cam-1280');
+  });
+
   // WRITES DATA: this block logs a real package through the app. It must only
   // ever run against the agent sandbox or CI's disposable Supabase stack, never a
   // shared or production database. Do not launch the default Playwright config

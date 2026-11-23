@@ -272,6 +272,16 @@ describe('VisitorsStaffPage', () => {
     }
   });
 
+  it('pins the action buttons to the right edge, so a wide table never hides them', () => {
+    mount();
+    const cell = screen.getAllByRole('button', { name: 'Check In' })[0]!.closest('td')!;
+    expect(cell.className.split(/\s+/)).toEqual(expect.arrayContaining(['sticky', 'right-0']));
+    // The other columns scroll: only the action column is pinned.
+    const row = cell.closest('tr')!;
+    expect(row.querySelectorAll('td.sticky')).toHaveLength(1);
+    expect(screen.getByRole('columnheader', { name: 'Actions' }).className).toContain('sticky');
+  });
+
   it('says so when the list cannot load, with a retry', async () => {
     const user = userEvent.setup();
     useVisitorsMock.mockReturnValue(result({ data: undefined, isError: true }));
