@@ -6,7 +6,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-const { membershipMock, receivedMock, queryMock, smsGlobalMock } = vi.hoisted(() => ({
+const { membershipMock, receivedMock, queryMock, smsGlobalMock, reportMock } = vi.hoisted(() => ({
+  reportMock: vi.fn(),
   smsGlobalMock: vi.fn(),
   membershipMock: vi.fn(),
   receivedMock: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock('@/lib/request/page-community-context', () => ({
 vi.mock('@/lib/access/describe-access', () => ({ describeAccess: vi.fn(() => undefined) }));
 vi.mock('@/lib/services/emergency-broadcast-service', () => ({
   listBroadcastsForRecipient: receivedMock,
+  getBroadcastWithReport: reportMock,
 }));
 vi.mock('@propertypro/db', () => ({
   createScopedClient: vi.fn(() => ({ query: queryMock })),
@@ -130,6 +132,55 @@ describe('EmergencyPage (list) view selection', () => {
     expect(props['canWrite']).toBe(true);
   });
 
+  it('gives a manager each alert\'s scheduling fields; a recipient\'s rows carry none', async () => {
+    const goesAt = new Date('2026-03-10T13:00:00.000Z');
+    queryMock.mockResolvedValue([
+      {
+        id: 9,
+        title: 'Water off',
+        severity: 'urgent',
+        recipientCount: 48,
+        sentCount: 0,
+        deliveredCount: 0,
+        failedCount: 0,
+        initiatedAt: NOW,
+        completedAt: null,
+        canceledAt: null,
+        scheduledFor: goesAt,
+        sendClaimedAt: goesAt,
+        sendOutcome: 'missed',
+        sendOutcomeReason: 'late',
+      },
+    ]);
+    await run('manager');
+    expect((propsOf('page-list')['broadcasts'] as Record<string, unknown>[])[0]).toMatchObject({
+      scheduledFor: '2026-03-10T13:00:00.000Z',
+      sendClaimedAt: '2026-03-10T13:00:00.000Z',
+      sendOutcome: 'missed',
+      sendOutcomeReason: 'late',
+    });
+  });
+
+  it('an immediate alert has null scheduling fields for a manager', async () => {
+    await run('manager');
+    expect((propsOf('page-list')['broadcasts'] as Record<string, unknown>[])[0]).toMatchObject({
+      scheduledFor: null,
+      sendClaimedAt: null,
+      sendOutcome: null,
+      sendOutcomeReason: null,
+    });
+  });
+
+  it('a recipient is listed only what was sent to them, with no scheduling fields', async () => {
+    await run('owner');
+    expect(queryMock).not.toHaveBeenCalled();
+    for (const r of propsOf('page-list')['broadcasts'] as Record<string, unknown>[]) {
+      for (const key of ['scheduledFor', 'sendClaimedAt', 'sendOutcome', 'sendOutcomeReason']) {
+        expect(r).not.toHaveProperty(key);
+      }
+    }
+  });
+
   it('refuses a tenant before anything renders', async () => {
     membershipMock.mockResolvedValue(member('tenant'));
     await expect(
@@ -188,8 +239,90 @@ describe('NewBroadcastPage view selection', () => {
   beforeEach(() => {
     membershipMock.mockReset();
     smsGlobalMock.mockReset();
+    reportMock.mockReset();
     queryMock.mockReset();
     queryMock.mockResolvedValue([{ id: 1, name: 'Sunset Condos' }]);
+  });
+
+  const callFrom = async (from: string | string[]) => {
+    smsGlobalMock.mockReturnValue(false);
+    membershipMock.mockResolvedValue(writer(false));
+    render(await NewBroadcastPage({ searchParams: Promise.resolve({ communityId: '1', from }) }));
+    return propsOf('page-new');
+  };
+
+  it('passes the community time zone to the composer', async () => {
+    smsGlobalMock.mockReturnValue(false);
+    membershipMock.mockResolvedValue(writer(false));
+    await call();
+    expect(propsOf('page-new')['timeZone']).toBe('America/New_York');
+    expect(propsOf('page-new')).not.toHaveProperty('source');
+    expect(reportMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['abc', '0', '-3', '1.5', '7abc', ' 7', '', '99999999999999999999'])(
+    'from=%j is malformed: nothing is looked up and the empty composer renders',
+    async (from) => {
+      const props = await callFrom(from);
+      expect(reportMock).not.toHaveBeenCalled();
+      expect(props).not.toHaveProperty('source');
+    },
+  );
+
+  it('a repeated from parameter is ignored', async () => {
+    const props = await callFrom(['7', '8']);
+    expect(reportMock).not.toHaveBeenCalled();
+    expect(props).not.toHaveProperty('source');
+  });
+
+  it('from an id this community does not have (foreign or missing): the empty composer renders', async () => {
+    reportMock.mockResolvedValue(null);
+    const props = await callFrom('99');
+    // Looked up through THIS community only; another community's alert is not found.
+    expect(reportMock).toHaveBeenCalledWith(99, 1);
+    expect(props).not.toHaveProperty('source');
+  });
+
+  it('a lookup that throws is ignored too', async () => {
+    reportMock.mockRejectedValue(new Error('db down'));
+    const props = await callFrom('99');
+    expect(props).not.toHaveProperty('source');
+  });
+
+  it('from a readable alert: the composer gets its six copied fields and nothing else', async () => {
+    reportMock.mockResolvedValue({
+      id: 7,
+      communityId: 1,
+      title: 'Pool closed',
+      body: 'The pool is closed.',
+      smsBody: 'Pool closed.',
+      severity: 'urgent',
+      templateKey: 'pool',
+      targetAudience: 'owners_only',
+      channels: ['email'],
+      recipientCount: 3,
+      initiatedBy: 'user-9',
+      recipients: [{ userId: 'user-2', email: 'pat@example.com', fullName: 'Pat Resident' }],
+    });
+    const props = await callFrom('7');
+    expect(reportMock).toHaveBeenCalledWith(7, 1);
+    expect(props['source']).toEqual({
+      title: 'Pool closed',
+      body: 'The pool is closed.',
+      smsBody: 'Pool closed.',
+      severity: 'urgent',
+      targetAudience: 'owners_only',
+      channels: ['email'],
+    });
+  });
+
+  it('does not look anything up for a member without write permission', async () => {
+    smsGlobalMock.mockReturnValue(true);
+    membershipMock.mockResolvedValue({ ...member('owner'), smsDispatchEnabled: true });
+    await expect(
+      NewBroadcastPage({ searchParams: Promise.resolve({ communityId: '1', from: '7' }) }),
+    ).rejects.toThrow(/not permitted/i);
+    expect(reportMock).not.toHaveBeenCalled();
   });
 
   const call = async () =>
