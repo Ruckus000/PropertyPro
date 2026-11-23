@@ -33,7 +33,7 @@ export const TEXT_BUTTON_CLASS =
 const capitalise = (s: string) => (s === '' ? s : s.charAt(0).toUpperCase() + s.slice(1));
 
 function isStatus(s: string): s is ViolationStatus {
-  return s in VIOLATION_STATUS_LABELS;
+  return Object.hasOwn(VIOLATION_STATUS_LABELS, s);
 }
 
 export function ViolationRow({

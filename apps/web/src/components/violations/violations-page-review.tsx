@@ -42,6 +42,8 @@ export function useReviewState(
   finesEnabled: boolean,
   initialUnitId: number | undefined,
   enabled: boolean,
+  /** Called when the unit filter is cleared, so the page can drop `?unitId=` too. */
+  onUnitCleared: () => void,
 ) {
   const [unitId, setUnitId] = useState<number | undefined>(initialUnitId);
   const [severity, setSeverity] = useState<ViolationSeverity | ''>('');
@@ -92,6 +94,7 @@ export function useReviewState(
     clearUnit: () => {
       setUnitId(undefined);
       setShown(PAGE_SIZE);
+      onUnitCleared();
     },
     severity,
     setSeverity: reset(setSeverity),
@@ -107,6 +110,7 @@ export function useReviewState(
       setCreatedBefore('');
       setUnitId(undefined);
       setShown(PAGE_SIZE);
+      onUnitCleared();
     },
   };
 }

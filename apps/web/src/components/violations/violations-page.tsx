@@ -84,12 +84,22 @@ export function ViolationsPage({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
+  // A cleared unit filter leaves the URL too, so a reload or tab switch does not re-narrow.
+  function dropUnitParam() {
+    if (!searchParams.has('unitId')) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('unitId');
+    params.delete('reported');
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
   // Review data is fetched only for a viewer the server gave the Review tab.
   const review = useReviewState(
     communityId,
     finesEnabled,
     initialUnitId,
     tabs.includes('review') && tab === 'review',
+    dropUnitParam,
   );
 
   const reportHref = `/violations/report?communityId=${communityId}`;
@@ -100,11 +110,12 @@ export function ViolationsPage({
           <Link href={reportHref}>New violation</Link>
         </Button>
       ) : undefined
-    ) : (
+    ) : mine && mine.residentUnitIds.length > 0 ? (
       <Button asChild>
         <Link href={reportHref}>Report a violation</Link>
       </Button>
-    );
+    ) : // No unit: the first run's "Back to dashboard" is the way out.
+    undefined;
 
   const confirmation = reportedId ? (
     <div

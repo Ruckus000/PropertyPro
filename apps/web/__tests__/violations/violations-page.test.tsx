@@ -162,12 +162,21 @@ describe('ViolationsPage — tabs', () => {
 
   it('never asks for Review data when the viewer has no Review tab', () => {
     mount({ tabs: ['mine'] });
+    expect(useReviewMock).toHaveBeenCalled();
     for (const call of useReviewMock.mock.calls) expect(call[2]).toBe(false);
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.getByRole('link', { name: 'Report a violation' })).toHaveAttribute(
       'href',
       '/violations/report?communityId=1',
     );
+  });
+});
+
+describe('ViolationsPage — Review gate', () => {
+  it('keeps Review data off even when asked to open on Review without the tab', () => {
+    mount({ tabs: ['mine'], initialTab: 'review' });
+    expect(useReviewMock).toHaveBeenCalled();
+    for (const call of useReviewMock.mock.calls) expect(call[2]).toBe(false);
   });
 });
 
@@ -264,6 +273,29 @@ describe('ViolationsPage — Review', () => {
     expect(useReviewMock.mock.calls.at(-1)![1].unitId).toBeUndefined();
   });
 
+  it('Show all units drops ?unitId= from the URL, keeping the rest', () => {
+    searchParamsRef.current = new URLSearchParams('communityId=1&unitId=4&tab=review');
+    reviewReturns([item(4)]);
+    mount({ initialUnitId: 4 });
+    fireEvent.click(screen.getByRole('button', { name: 'Show all units' }));
+    expect(replaceMock).toHaveBeenLastCalledWith('/violations?communityId=1&tab=review', {
+      scroll: false,
+    });
+  });
+
+  it('Clear filters drops ?unitId= from the URL, keeping the rest', () => {
+    searchParamsRef.current = new URLSearchParams('communityId=1&unitId=4&tab=review');
+    // The unit has cases, none dismissed: choosing Dismissed leaves nothing to show.
+    reviewReturns([item(4)]);
+    mount({ initialUnitId: 4 });
+    fireEvent.click(screen.getByRole('button', { name: /^Dismissed/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(useReviewMock.mock.calls.at(-1)![1].unitId).toBeUndefined();
+    expect(replaceMock).toHaveBeenLastCalledWith('/violations?communityId=1&tab=review', {
+      scroll: false,
+    });
+  });
+
   it('Needs attention selects the Reported filter', () => {
     mount();
     expect(screen.getByText(/2 reported cases have no notice yet/)).toBeInTheDocument();
@@ -306,11 +338,13 @@ describe('ViolationsPage — Mine', () => {
     );
   });
 
-  it('shows the not-linked first run for a resident with no unit', () => {
+  it('shows the not-linked first run for a resident with no unit, with no header action', () => {
     mount({ tabs: ['mine'], mine: { residentUnitIds: [], onYourUnit: [], yourReports: [] } });
     expect(
       screen.getByRole('heading', { level: 2, name: "You're not linked to a unit yet" }),
     ).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'Report a violation' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Back to dashboard' })).toBeInTheDocument();
   });
 
   it('shows Nothing here yet when both lists are empty', () => {
