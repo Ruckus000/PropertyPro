@@ -100,8 +100,8 @@ function renderSlot<TContext>(
  * What TanStack rendered for a column with an `accessorKey` and no `cell`.
  *
  * `renderValue()` falls back to `null`, so a nullish value renders NOTHING —
- * not the string "null". `purpose` (`visitor-columns.tsx`) and `carrier`
- * (`package-columns.tsx`) are the two columns that depend on this.
+ * not the string "null". `carrier` (`package-columns.tsx`) is the column that
+ * depends on this.
  */
 function defaultCell<TData>(column: ColumnDef<TData>, datum: TData): ReactNode {
   if (!column.accessorKey) return null;
