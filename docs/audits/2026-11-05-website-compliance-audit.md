@@ -502,6 +502,12 @@ Three gaps:
 - `posting-requirements.mdx:49` says nothing changes when the count changes,
   but the clocks do switch off below the threshold.
 
+**Status (2026-11-23):** documented, not modelled. The help article now says the
+clocks follow the unit count, and that PropertyPro counts the association as a
+whole and models no timeshare exemption; it sends the per-condominium question
+to the association's attorney. Modelling it waits on a real multi-condominium
+customer.
+
 ### M-6 · Who gets into the protected section
 
 The statute limits the protected section to owners and association employees.
@@ -516,6 +522,12 @@ The statute limits the protected section to owners and association employees.
 **Fix:** show the roster match prominently when approving an owner claim. A
 read-only employee role is optional.
 
+**Status (2026-11-23):** addressed. An owner claim now shows a roster check:
+whether the unit is on the roster, and the members the roster already records as
+its owners ("Approving adds another owner"), with a warning style when either
+should stop the reviewer. The join-requests help article describes it. The
+read-only employee role is not built.
+
 ### M-7 · Copy that contradicts the engine
 
 - "Within 30 days of creating or receiving" (`posting-requirements.mdx:31`,
@@ -528,6 +540,13 @@ read-only employee role is optional.
 
 Per the 2026-08-09 decision, match the copy to the code where the code is right,
 and fix the code where it is not (H-2).
+
+**Status (2026-11-23):** addressed. The help articles (posting requirements,
+compliance dashboard, upload, post minutes) and the marketing copy (hero,
+statute section, both resources articles) now say the 30-day clock is the condo
+statute's, and that PropertyPro uses 30 days for HOAs as a reminder only. The
+post-minutes article describes **Record minutes**, which attaches an uploaded
+file to its meeting. Signup says "reach 25 units", not "grow past 25".
 
 ---
 
@@ -550,6 +569,10 @@ and fix the code where it is not (H-2).
     honest. Keep it that way.
   - No manual screen-reader pass is on record.
 
+**Status (2026-11-23):** the transparency page footer now links the
+accessibility statement (and the privacy policy). No manual screen-reader pass
+yet.
+
 ### L-2 · Privacy and breach notice (FIPA, §501.171)
 
 - PropertyPro is a "third-party agent" under §501.171. It must notify the
@@ -564,6 +587,16 @@ and fix the code where it is not (H-2).
 - Association sites do not link a privacy policy; add one in the footer.
 - §501.715 (sale of sensitive data) applies only to sellers. PropertyPro does
   not sell data.
+
+**Status (2026-11-23):**
+- Association site footers and the transparency page now link the privacy
+  policy.
+- The incident runbook was wrong: it said there was no statutory duty to the
+  associations. It now has the 10-day notice to each affected association as
+  the first clock (`docs/runbooks/data-breach-response.md`).
+- **Still open:** the terms of service make no breach-notice commitment at all,
+  and the privacy policy says only "timely notification". Changing either is a
+  customer-facing legal change, left to the owner.
 
 ### L-3 · Fair Housing Act
 
@@ -586,6 +619,15 @@ domain, middleware notes that a foreign host never carries a PropertyPro session
 Not tested: confirm an owner can actually reach the protected section from a
 custom-domain site. The statute requires the protected section to exist and be
 reachable.
+
+**Status (2026-11-23):** it could not, and it is fixed. The links are relative,
+so on a custom domain the login page rendered on the association's host. In
+production the auth cookie is written for `.getpropertypro.com`, and a browser
+drops a cookie set for a domain the page is not on, so no session could be made.
+Middleware now 307s `GET /auth/*` on a verified custom domain to the web app
+origin with `?communityId=`. No production community had a custom domain
+(read-only count, 2026-11-23: 0 with a domain set), so nobody was affected. Not
+yet exercised end to end on a real custom domain.
 
 ---
 
@@ -620,7 +662,8 @@ reachable.
 5. **H-2 + H-5**: a received/created date and yearly cycles. Minutes scored per
    meeting. These are the largest changes and touch the score. **Done
    2026-11-22** (see the status notes under H-2 and H-5).
-6. **M-1, M-3, M-7** and the Low items.
+6. **M-1, M-3, M-7** and the Low items. M-3 done 2026-11-22 (#1528); M-5, M-6,
+   M-7, L-1, L-2 (except the terms) and L-4 done 2026-11-23.
 
 ## Not verified
 
@@ -632,5 +675,7 @@ reachable.
   substantive from their history notes only.
 - **Title III guidance:** whether DOJ's 3/2025 guidance withdrawal included the
   2022 web guidance.
-- **Custom-domain login** (L-4).
-- **The timeshare exemption**, and multi-condominium counting (M-5).
+- **Custom-domain login** (L-4): fixed by code reading and middleware tests, not
+  on a real custom domain.
+- **The timeshare exemption**, and multi-condominium counting (M-5): documented
+  as open, not modelled.

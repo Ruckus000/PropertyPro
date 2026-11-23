@@ -15,6 +15,8 @@ export interface PendingRequest {
   createdAt: string;
   /** Approving links this unit (the claimed number is on the roster). */
   unitOnRoster?: boolean;
+  /** Members the roster already records as owners of the claimed unit. */
+  recordedOwners?: Array<{ name: string | null; email: string | null }>;
   requesterName?: string | null;
   requesterEmail?: string | null;
 }

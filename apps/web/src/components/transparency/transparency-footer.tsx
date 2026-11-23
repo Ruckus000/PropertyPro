@@ -38,6 +38,27 @@ export function TransparencyFooter({ communityType, generatedAt }: Props) {
       </div>
 
       <p className="mt-4">
+        {/* The same policy links every association site footer carries (audit 2026-11-05, L-1, L-2). */}
+        <a
+          href="https://getpropertypro.com/legal/accessibility"
+          className="font-medium text-content-link underline"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Accessibility
+        </a>
+        {' · '}
+        <a
+          href="https://getpropertypro.com/legal/privacy"
+          className="font-medium text-content-link underline"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Privacy
+        </a>
+      </p>
+
+      <p className="mt-4">
         Powered by{' '}
         <a
           href="https://getpropertypro.com/?utm_source=transparency-page&utm_medium=referral&utm_campaign=public-trust"

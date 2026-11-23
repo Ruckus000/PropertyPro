@@ -797,7 +797,7 @@ export function SignupFlow({ initialStep, sessionEmail, linkNotice, initialType,
                   <div className="text-base font-semibold text-content">Website optional at {units} {meta.noun}</div>
                   <div className="mt-0.5 text-sm">
                     Posting records online still answers owner questions before they are asked — and you are ready if
-                    you grow past {meta.threshold}.
+                    you reach {meta.threshold} {meta.noun}.
                   </div>
                 </div>
               </div>

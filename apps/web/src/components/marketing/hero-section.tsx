@@ -185,8 +185,9 @@ export function HeroSection() {
             <span className="mk-swash">on the record.</span>
           </h1>
           <p className="mk-hero-lede">
-            Florida requires most condos and HOAs to publish their official records —{' '}
-            <b>within 30 days, with the board on the hook.</b> PropertyPro turns that into
+            Florida requires condos of 25+ units and HOAs of 100+ parcels to publish their
+            official records online — <b>condos within 30 days, with the board on the hook.</b>{' '}
+            PropertyPro turns that into
             a tracked list with dates and evidence.
           </p>
           <div className="mk-hero-cta">

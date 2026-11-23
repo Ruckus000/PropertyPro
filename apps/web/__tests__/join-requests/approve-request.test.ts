@@ -112,7 +112,7 @@ vi.mock('@propertypro/db', () => ({
     reviewedAt: 'cjr.reviewed_at',
     createdAt: 'cjr.created_at',
   },
-  userRoles: { id: 'ur.id' },
+  userRoles: { id: 'ur.id', unitId: 'ur.unit_id', userId: 'ur.user_id', isUnitOwner: 'ur.is_unit_owner' },
   units: { id: 'units.id', unitNumber: 'units.unit_number', communityId: 'units.community_id', deletedAt: 'units.deleted_at' },
   users: { id: 'users.id', fullName: 'users.full_name', email: 'users.email' },
   insertNotifications: insertNotificationsMock,
@@ -529,7 +529,8 @@ describe('listPendingJoinRequestsForCommunity', () => {
     const selectFrom = vi
       .fn()
       .mockReturnValueOnce({ orderBy: () => Promise.resolve(requests) }) // requests
-      .mockResolvedValueOnce([{ unitNumber: 'A-101' }]) // units on the roster
+      .mockResolvedValueOnce([{ id: 11, unitNumber: 'A-101' }]) // units on the roster
+      .mockResolvedValueOnce([]) // owners on record: none
       .mockResolvedValueOnce([{ id: 'u-1', fullName: 'Ana Owner', email: 'ana@example.com' }]); // requesters
     createScopedClientMock.mockReturnValue({ selectFrom });
 
@@ -546,9 +547,57 @@ describe('listPendingJoinRequestsForCommunity', () => {
       ['Ana Owner', 'ana@example.com'],
       [null, null],
     ]);
-    expect(JSON.stringify(selectFrom.mock.calls[2]![2])).toContain('["u-1","u-2"]');
+    expect(JSON.stringify(selectFrom.mock.calls[3]![2])).toContain('["u-1","u-2"]');
+    expect(rows.map((r) => r.recordedOwners)).toEqual([[], []]);
     // One lookup for every claimed number, lowercased and trimmed.
     expect(JSON.stringify(selectFrom.mock.calls[1]![2])).toContain('["a-101","unit 999"]');
+  });
+
+  it('names the owners the roster already records for the claimed unit (M-6)', async () => {
+    const requests = [
+      { id: 1, userId: 'u-1', unitIdentifier: 'A-101' },
+      { id: 2, userId: 'u-2', unitIdentifier: 'B-202' },
+    ];
+    const selectFrom = vi
+      .fn()
+      .mockReturnValueOnce({ orderBy: () => Promise.resolve(requests) })
+      .mockResolvedValueOnce([
+        { id: 11, unitNumber: 'A-101' },
+        { id: 12, unitNumber: 'B-202' },
+      ])
+      .mockResolvedValueOnce([{ unitId: 11, userId: 'owner-9' }])
+      .mockResolvedValueOnce([
+        { id: 'u-1', fullName: 'Ana Claimant', email: 'ana@example.com' },
+        { id: 'owner-9', fullName: 'Olga Owner', email: 'olga@example.com' },
+      ]);
+    createScopedClientMock.mockReturnValue({ selectFrom });
+
+    const rows = await listPendingJoinRequestsForCommunity(42);
+
+    expect(rows.map((r) => r.recordedOwners)).toEqual([
+      [{ name: 'Olga Owner', email: 'olga@example.com' }],
+      [],
+    ]);
+    // Owners only, of the claimed units on the roster.
+    const ownerFilter = JSON.stringify(selectFrom.mock.calls[2]![2]);
+    expect(ownerFilter).toContain('[11,12]');
+    expect(ownerFilter).toContain('{"eq":["ur.is_unit_owner",true]}');
+    // The owners' names come from the same users lookup as the requesters'.
+    expect(JSON.stringify(selectFrom.mock.calls[3]![2])).toContain('["u-1","u-2","owner-9"]');
+  });
+
+  it('skips the owner lookup when no claimed unit is on the roster', async () => {
+    const selectFrom = vi
+      .fn()
+      .mockReturnValueOnce({ orderBy: () => Promise.resolve([{ id: 1, userId: 'u-1', unitIdentifier: 'Z-9' }]) })
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    createScopedClientMock.mockReturnValue({ selectFrom });
+
+    const rows = await listPendingJoinRequestsForCommunity(42);
+
+    expect(rows[0]).toMatchObject({ unitOnRoster: false, recordedOwners: [] });
+    expect(selectFrom).toHaveBeenCalledTimes(3);
   });
 
   it('skips the unit lookup when nothing is pending', async () => {

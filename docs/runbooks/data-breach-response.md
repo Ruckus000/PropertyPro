@@ -16,11 +16,12 @@ Source: `docs/audits/2026-08-09-legal-risk-audit.md` (F-17).
 
 ## 0. The clock
 
-Two deadlines, and they run from **determination**, not from discovery of the
-underlying bug:
+The deadlines run from **determination**, not from discovery of the underlying
+bug. The shortest one is ours to the associations:
 
 | Obligation | Deadline | Trigger |
 |---|---|---|
+| Notify each affected **association** | **10 days** | A breach of association data held by PropertyPro (§501.171(6): we are the association's third-party agent) |
 | Notify affected individuals | **30 days** | A breach of *personal information* affecting Florida residents |
 | Notify the Florida Department of Legal Affairs (AG) | **30 days** | The same breach affecting **500 or more** Florida residents |
 | Notify consumer reporting agencies | Without unreasonable delay | 1,000+ individuals in a single event |
@@ -117,12 +118,21 @@ synopsis of events, the number of Florida individuals affected, any services
 being offered (e.g. credit monitoring), a copy of the individual notice, and a
 contact for the incident.
 
-### The affected associations
+### The affected associations (10 days)
 
-Not a statutory obligation to them specifically, but a contractual and practical
-one: they are fiduciaries to their own members and will have their own
-notification decisions to make. Tell them what you know, when you know it, in
-writing.
+A statutory obligation, and the first one due. For the records an association
+keeps on PropertyPro (owner and resident names, emails, portal logins, uploaded
+documents), the association is the covered entity and PropertyPro is its
+third-party agent. §501.171(6) requires the agent to notify the covered entity
+as expeditiously as practicable, and **no later than 10 days** after
+determining the breach or having reason to believe one occurred. Tell each
+affected association in writing what you know, then keep them updated.
+
+The association then owes its owners the 30-day individual notice, and the
+Attorney General notice at 500+ Floridians. It may ask PropertyPro to send those
+notices on its behalf; agree that in writing, per association, and the 30-day
+clocks above still apply. (Audit 2026-11-05, L-2, corrected this section; it
+used to say there was no statutory duty to the associations.)
 
 ### Third-party / vendor breaches
 
