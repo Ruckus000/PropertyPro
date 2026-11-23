@@ -48,6 +48,8 @@ import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
 import { getBaseUrl } from '@/lib/utils/url';
 import { ConflictError, ValidationError } from '@/lib/api/errors';
+import { captureException } from '@sentry/nextjs';
+import { recordOutcome, sanitizedError } from './emergency-broadcast-outcome';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -444,13 +446,58 @@ export async function scheduleBroadcast(
  * Everything that can refuse the send (the recipient cap) runs BEFORE the
  * claim. After it, a send that dies leaves the row claimed with no result; the
  * cron's 15-minute sweep marks it failed / `interrupted`, exactly as for a
- * scheduled send, and like one it is never retried.
+ * scheduled send, and like one it is never retried. A send that THROWS after
+ * the claim does not wait for the sweep: it is marked failed / `send_error`
+ * at once (and reported, sanitised), then the error is rethrown.
  */
 export async function executeBroadcast(
   broadcastId: number,
   communityId: number,
   userId: string | null,
   scheduledSend?: { scheduledBy: string },
+): Promise<{ smsQueued: number; emailSent: number }> {
+  // Set once the immediate path holds the claim: from then on a throw is a
+  // send that failed part-way, not a refusal.
+  const claim: { held: { title: string; initiatedBy: string } | null } = { held: null };
+  try {
+    return await sendBroadcast(broadcastId, communityId, userId, scheduledSend, (claimed) => {
+      claim.held = claimed;
+    });
+  } catch (error) {
+    // The job records its own failures (it owns the claim on a scheduled alert).
+    if (scheduledSend || !claim.held) throw error;
+    // Say so NOW rather than leave the alert reading "Sending" until the
+    // 15-minute sweep: mark it failed / send_error, exactly as the job would.
+    // The sweep is then only for a function that died without reaching here.
+    const failure = { broadcastId, communityId };
+    captureException(sanitizedError(error), {
+      tags: { emergency_broadcast: 'immediate_send_failed' },
+      extra: failure,
+    });
+    await recordOutcome(
+      broadcastId,
+      communityId,
+      'failed',
+      'send_error',
+      { title: claim.held.title, scheduledBy: claim.held.initiatedBy, scheduledFor: null },
+      userId,
+    ).catch((recordError: unknown) => {
+      captureException(sanitizedError(recordError), {
+        tags: { emergency_broadcast: 'immediate_outcome_not_recorded' },
+        extra: failure,
+      });
+    });
+    // The route still answers with the original error.
+    throw error;
+  }
+}
+
+async function sendBroadcast(
+  broadcastId: number,
+  communityId: number,
+  userId: string | null,
+  scheduledSend: { scheduledBy: string } | undefined,
+  onImmediateClaim: (claimed: { title: string; initiatedBy: string }) => void,
 ): Promise<{ smsQueued: number; emailSent: number }> {
   const scoped = createScopedClient(communityId);
 
@@ -516,6 +563,7 @@ export async function executeBroadcast(
         'This alert is already being sent, or has been sent, scheduled or canceled.',
       );
     }
+    onImmediateClaim({ title: broadcast.title, initiatedBy: broadcast.initiatedBy });
   }
 
   const statusCallbackUrl = `${getBaseUrl()}/api/v1/webhooks/twilio`;

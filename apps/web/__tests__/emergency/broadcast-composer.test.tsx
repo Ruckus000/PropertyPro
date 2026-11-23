@@ -243,6 +243,27 @@ describe('BroadcastComposer, Send now', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('a send that failed part-way says some residents may have received it and points at Send again later', async () => {
+    onSend = () => json(500, { error: { code: 'INTERNAL_ERROR', message: 'boom' } });
+    alertNow = (id) =>
+      json(200, {
+        data: draftView(id, {
+          sendClaimedAt: '2026-03-01T12:00:10.000Z',
+          sendOutcome: 'failed',
+          sendOutcomeReason: 'send_error',
+        }),
+      });
+
+    await sendAndRunCountdown();
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'This alert did not finish sending, and some residents may already have received it. Open the alert to see who, and use Send again later from there.',
+    );
+    expect(screen.queryByText('Emergency alert sent!')).toBeNull();
+    expect(screen.queryByText('boom')).toBeNull();
+    expect(screen.getByRole('link', { name: 'View the alert' })).toHaveAttribute('href', '/emergency/11?communityId=7');
+  });
+
   it('a send whose answer never arrives, and cannot be checked, says to check before sending another', async () => {
     onSend = NETWORK_DOWN;
     alertNow = NETWORK_DOWN;

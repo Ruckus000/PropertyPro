@@ -544,8 +544,19 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     expect(summary.interrupted).toBe(1);
     expect((await load([id])).get(id)).toMatchObject({ sendOutcome: 'failed', sendOutcomeReason: 'interrupted' });
     expect(emailsFor(title)).toBe(0);
-    // Still not sendable or schedulable afterwards: no retry of a possibly partial send.
-    await expect(executeBroadcast(id, communityId, managerId)).rejects.toThrow();
+    // Still not sendable afterwards (a 409): no retry of a possibly partial send.
+    await expect(executeBroadcast(id, communityId, managerId)).rejects.toThrow(
+      'This alert is already being sent, or has been sent, scheduled or canceled.',
+    );
+    // The sweep's entry is worded for an immediate alert: no scheduling keys.
+    const audit = (await state.sqlClient`
+      select user_id, metadata from compliance_audit_log
+       where community_id = ${communityId}
+         and action = 'emergency_broadcast_failed'
+         and resource_id = ${String(id)}
+    `) as unknown as Array<{ user_id: string | null; metadata: Record<string, unknown> }>;
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.metadata).toEqual({ reason: 'interrupted', title, initiatedBy: managerId });
   });
 
   it('an alert that has already gone out is never claimed, even with a due time and no claim', async () => {

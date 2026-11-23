@@ -268,9 +268,14 @@ const ACTION_PHRASES: Record<AuditAction, PhraseSpec> = {
     object: titleFromMetadata,
     badge: { tone: 'warning', label: 'Missed' },
   },
+  // An immediate alert can fail too (its send threw, or died part-way), and
+  // its entry carries no `scheduledFor`: it must not be called scheduled.
   emergency_broadcast_failed: {
-    verb: 'could not send the scheduled emergency alert',
-    verbAlone: 'could not send a scheduled emergency alert',
+    verb: (e) =>
+      e.metadata?.['scheduledFor']
+        ? 'could not send the scheduled emergency alert'
+        : 'could not send the emergency alert',
+    verbAlone: 'could not send an emergency alert',
     object: titleFromMetadata,
     badge: { tone: 'danger', label: 'Did not send' },
   },

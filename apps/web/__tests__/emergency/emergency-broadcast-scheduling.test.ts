@@ -8,8 +8,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { createScopedClientMock, logAuditEventMock, sendBulkEmailMock, sendBulkEmergencySmsMock, tables } =
+const { createScopedClientMock, logAuditEventMock, sendBulkEmailMock, sendBulkEmergencySmsMock, captureExceptionMock, tables } =
   vi.hoisted(() => ({
+    captureExceptionMock: vi.fn(),
     createScopedClientMock: vi.fn(),
     logAuditEventMock: vi.fn(),
     sendBulkEmailMock: vi.fn(),
@@ -54,6 +55,8 @@ vi.mock('@propertypro/db/filters', () => ({
   gte: (col: unknown, val: unknown) => ({ __gte: [col, val] }),
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
 }));
+
+vi.mock('@sentry/nextjs', () => ({ captureException: captureExceptionMock }));
 
 vi.mock('@propertypro/email', () => ({
   EmergencyAlertEmail: vi.fn(),
@@ -575,6 +578,75 @@ describe('executeBroadcast', () => {
     // The lost claim is the only write: no completedAt, no recipient status, no audit entry.
     expect(updates).toHaveLength(1);
     expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('an immediate send that THROWS after its claim is marked failed/send_error at once, audited without "scheduled", and rethrown', async () => {
+    const { scoped, updates } = mockScoped({ ...draftRow, initiatedBy: 'manager-1' }, [recipient]);
+    class PoolExhaustedError extends Error {}
+    scoped.update.mockImplementation(async (table: unknown, data: Record<string, unknown>, where: unknown) => {
+      updates.push({ table, data, where });
+      // The write that marks it sent fails, with a resident's address in the message.
+      if ('completedAt' in data) throw new PoolExhaustedError('could not write for owner@example.com');
+      return [{ id: 7 }];
+    });
+
+    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(PoolExhaustedError);
+
+    // Not left reading "Sending": the outcome is written in the same request...
+    const outcome = updates.find((u) => 'sendOutcome' in u.data);
+    expect(outcome?.data).toEqual({ sendOutcome: 'failed', sendOutcomeReason: 'send_error' });
+    // ...behind the guard that cannot relabel an alert that did get marked sent.
+    expect(outcome?.where).toEqual({
+      __and: [
+        { __eq: ['broadcasts.id', 7] },
+        { __isNull: 'broadcasts.sendOutcome' },
+        { __isNull: 'broadcasts.completedAt' },
+      ],
+    });
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      userId: 'manager-1',
+      action: 'emergency_broadcast_failed',
+      resourceType: 'emergency_broadcast',
+      resourceId: '7',
+      communityId: 42,
+      // An immediate alert: who started it, and no scheduling keys.
+      metadata: { reason: 'send_error', title: 'Water off tomorrow', initiatedBy: 'manager-1' },
+    });
+    const [captured, context] = captureExceptionMock.mock.calls[0]!;
+    expect(captured.message).toBe('Emergency alert send failed: PoolExhaustedError');
+    expect(context).toEqual({
+      tags: { emergency_broadcast: 'immediate_send_failed' },
+      extra: { broadcastId: 7, communityId: 42 },
+    });
+    expect(JSON.stringify([captured.message, captured.stack, logAuditEventMock.mock.calls])).not.toContain(
+      'owner@example.com',
+    );
+  });
+
+  it('a refusal BEFORE the claim (lost claim, canceled, scheduled) records no failure', async () => {
+    const { updates, setUpdateResult } = mockScoped({ ...draftRow, initiatedBy: 'manager-1' }, [recipient]);
+    setUpdateResult([]);
+
+    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(ConflictError);
+
+    expect(updates.some((u) => 'sendOutcome' in u.data)).toBe(false);
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it("a throw in the JOB's send is left to the job to record (it owns that claim)", async () => {
+    const { scoped, updates } = mockScoped({ ...scheduledRow, sendClaimedAt: NOW }, [recipient]);
+    scoped.update.mockImplementation(async (table: unknown, data: Record<string, unknown>, where: unknown) => {
+      updates.push({ table, data, where });
+      if ('completedAt' in data) throw new Error('boom');
+      return [{ id: 7 }];
+    });
+
+    await expect(executeBroadcast(7, 42, null, { scheduledBy: 'manager-1' })).rejects.toThrow('boom');
+
+    expect(updates.some((u) => 'sendOutcome' in u.data)).toBe(false);
+    expect(captureExceptionMock).not.toHaveBeenCalled();
   });
 
   it("the job's send takes no second claim: it already holds one", async () => {

@@ -224,7 +224,9 @@ export function BroadcastComposer({
           ? 'This alert was canceled, so it was not sent.'
           : alertNow.scheduledFor && !alertNow.sendOutcome
             ? 'This alert is scheduled, so it was not sent now. It will go out at its scheduled time.'
-            : 'This alert was not sent. Open the alert to see what happened.',
+            : alertNow.sendOutcome === 'failed'
+              ? 'This alert did not finish sending, and some residents may already have received it. Open the alert to see who, and use Send again later from there.'
+              : 'This alert was not sent. Open the alert to see what happened.',
     );
     setStep('send-failed');
   }

@@ -65,8 +65,8 @@ import {
   CLAIM_BUDGET_MS,
   CRON_MAX_DURATION_SECONDS,
   processDueScheduledBroadcasts,
-  sanitizedError,
 } from '../../src/lib/services/emergency-broadcast-schedule-service';
+import { sanitizedError } from '../../src/lib/services/emergency-broadcast-outcome';
 
 const hardDeleteMock = vi.fn(async (_table: unknown, _where: unknown) => []);
 
@@ -306,7 +306,7 @@ describe('processDueScheduledBroadcasts', () => {
     expect(captureExceptionMock).toHaveBeenCalledTimes(1);
     const [captured, context] = captureExceptionMock.mock.calls[0]!;
     expect(captured).not.toBeInstanceOf(EmailProviderDownError);
-    expect(captured.message).toBe('Scheduled emergency alert job failed: EmailProviderDownError');
+    expect(captured.message).toBe('Emergency alert send failed: EmailProviderDownError');
     expect(context).toMatchObject({ extra: { broadcastId: 1, communityId: 42 } });
     expect(JSON.stringify([captured.message, captured.stack, context])).not.toContain('owner@example.com');
     const failedAudit = logAuditEventMock.mock.calls
@@ -389,11 +389,12 @@ describe('processDueScheduledBroadcasts', () => {
 
     expect(summary).toMatchObject({ due: 0, failed: 1, interrupted: 1 });
     expect(row).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'interrupted' });
+    // Worded for an immediate alert: who started it, and nothing about scheduling.
+    expect(logAuditEventMock.mock.calls[0]![0]).toMatchObject({ userId: null, action: 'emergency_broadcast_failed' });
     expect(logAuditEventMock.mock.calls[0]![0].metadata).toEqual({
       reason: 'interrupted',
       title: 'Alert 1',
-      scheduledBy: 'manager-1',
-      scheduledFor: null,
+      initiatedBy: 'manager-1',
     });
   });
 
@@ -476,8 +477,8 @@ describe('processDueScheduledBroadcasts', () => {
 
     const [captured, context] = captureExceptionMock.mock.calls[0]!;
     expect(captured).not.toBe(thrown);
-    expect(captured.name).toBe('ScheduledBroadcastJobError');
-    expect(captured.message).toBe('Scheduled emergency alert job failed: DrizzleQueryError (SQLSTATE 23505)');
+    expect(captured.name).toBe('EmergencyBroadcastSendError');
+    expect(captured.message).toBe('Emergency alert send failed: DrizzleQueryError (SQLSTATE 23505)');
     expect(captured.cause).toBeUndefined();
     // Everything Sentry would serialise: own properties, message, stack, context.
     const payload = JSON.stringify([
@@ -493,10 +494,10 @@ describe('processDueScheduledBroadcasts', () => {
 
   it('sanitizedError copes with a thrown non-Error and ignores a code that is not a SQLSTATE', () => {
     expect(sanitizedError('pat@example.com went wrong').message).toBe(
-      'Scheduled emergency alert job failed: UnknownError',
+      'Emergency alert send failed: UnknownError',
     );
     expect(sanitizedError(Object.assign(new TypeError('x'), { code: 'pat@example.com' })).message).toBe(
-      'Scheduled emergency alert job failed: TypeError',
+      'Emergency alert send failed: TypeError',
     );
   });
 

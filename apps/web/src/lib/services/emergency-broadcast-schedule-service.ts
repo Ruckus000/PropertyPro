@@ -23,7 +23,7 @@
  * throws after the claim may already have reached some recipients, and
  * repeating a partial emergency alert is worse than reporting it. The row is
  * marked `failed` / `send_error` and stays claimed. Reasons are a fixed list
- * (`SendOutcomeReason`), never an error's class name or message.
+ * (`SendOutcomeReason` in `emergency-broadcast-outcome`), never an error's class name or message.
  *
  * ## A claim that never finished
  *
@@ -48,7 +48,6 @@ import {
   createScopedClient,
   emergencyBroadcastRecipients,
   emergencyBroadcasts,
-  logAuditEvent,
 } from '@propertypro/db';
 /*
  * The due-row scan and the claim are deliberately CROSS-TENANT — the job looks
@@ -59,8 +58,9 @@ import {
  */
 // AUTHZ: cross-tenant cron scan + claim behind requireCronSecret; every statement carries its own explicit predicate.
 import { createUnscopedClient } from '@propertypro/db/unsafe';
-import { and, eq, isNull, sql } from '@propertypro/db/filters';
+import { eq, sql } from '@propertypro/db/filters';
 import { isSmsDispatchGloballyEnabled } from '@/lib/sms/dispatch-flag';
+import { recordOutcome, sanitizedError } from './emergency-broadcast-outcome';
 import {
   executeBroadcast,
   resolveEmergencyRecipients,
@@ -84,14 +84,6 @@ export const CRON_MAX_DURATION_SECONDS = 300;
 
 /** Stop claiming new alerts once a tick has run this long (60% of the budget). */
 export const CLAIM_BUDGET_MS = CRON_MAX_DURATION_SECONDS * 1000 * 0.6;
-
-/** Every value `send_outcome_reason` can hold. */
-export type SendOutcomeReason =
-  | 'late'
-  | 'community_deleted'
-  | 'no_recipients'
-  | 'interrupted'
-  | 'send_error';
 
 /** How many due alerts one cron tick will process. */
 const BATCH_SIZE = 25;
@@ -303,36 +295,6 @@ export async function processDueScheduledBroadcasts(
 }
 
 /**
- * What this job reports to Sentry in place of a caught error.
- *
- * A database error raised while writing recipient rows can carry a resident's
- * address or phone: drizzle puts the bound values in the message (which
- * `scrubServerEvent` redacts) and postgres.js puts the offending row in
- * `detail` on the error and its `cause` (which nothing redacts). So the
- * original object is never handed over. The report keeps what triage needs:
- * the error's class, its SQLSTATE when it has one, and the call frames, which
- * are code locations. The alert and community ids travel in `extra`.
- */
-export function sanitizedError(error: unknown): Error {
-  const name = error instanceof Error ? error.constructor.name : 'UnknownError';
-  const withCode = (value: unknown): string | null => {
-    const code = (value as { code?: unknown } | null)?.code;
-    return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null;
-  };
-  const sqlState = withCode(error) ?? withCode((error as { cause?: unknown } | null)?.cause);
-  const safe = new Error(
-    `Scheduled emergency alert job failed: ${name}${sqlState ? ` (SQLSTATE ${sqlState})` : ''}`,
-  );
-  safe.name = 'ScheduledBroadcastJobError';
-  const frames =
-    error instanceof Error && typeof error.stack === 'string'
-      ? error.stack.split('\n').filter((line) => /^\s+at /.test(line))
-      : [];
-  safe.stack = [`${safe.name}: ${safe.message}`, ...frames].join('\n');
-  return safe;
-}
-
-/**
  * Mark every claimed alert that never reached an outcome as failed, with the
  * same system audit entry a failed send writes. Returns how many it marked.
  *
@@ -379,42 +341,4 @@ async function failInterruptedSends(
     }
   }
   return marked;
-}
-
-/**
- * Write the terminal outcome and its audit entry (system actor; the scheduler
- * is named in metadata).
- *
- * Guarded on "no outcome yet and not sent", so a failure after `completed_at`
- * was written cannot relabel a sent alert as failed, and an outcome is never
- * overwritten. The audit entry is written only when the row actually changed;
- * the return value says whether it did.
- */
-async function recordOutcome(
-  broadcastId: number,
-  communityId: number,
-  outcome: 'missed' | 'failed',
-  reason: SendOutcomeReason,
-  scheduler: { title: string; scheduledBy: string; scheduledFor: string | null },
-): Promise<boolean> {
-  const updated = await createScopedClient(communityId).update(
-    emergencyBroadcasts,
-    { sendOutcome: outcome, sendOutcomeReason: reason },
-    and(
-      eq(emergencyBroadcasts.id, broadcastId),
-      isNull(emergencyBroadcasts.sendOutcome),
-      isNull(emergencyBroadcasts.completedAt),
-    ),
-  );
-  if (updated.length === 0) return false;
-
-  await logAuditEvent({
-    userId: null,
-    action: outcome === 'missed' ? 'emergency_broadcast_missed' : 'emergency_broadcast_failed',
-    resourceType: 'emergency_broadcast',
-    resourceId: String(broadcastId),
-    communityId,
-    metadata: { reason, ...scheduler },
-  });
-  return true;
 }
