@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { assessments } from './assessments';
 import { communities } from './communities';
@@ -33,4 +34,12 @@ export const assessmentLineItems = pgTable('assessment_line_items', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+}, (table) => [
+  // One live charge per unit per assessment due date, so two concurrent
+  // generations cannot both charge a unit (the generator inserts with
+  // ON CONFLICT DO NOTHING). One-off fines carry a NULL assessment_id, and
+  // NULLs never collide, so they are unaffected.
+  uniqueIndex('assessment_line_items_unit_period_uniq')
+    .on(table.assessmentId, table.unitId, table.dueDate)
+    .where(sql`${table.deletedAt} IS NULL`),
+]);

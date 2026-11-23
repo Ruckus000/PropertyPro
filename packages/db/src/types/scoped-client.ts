@@ -96,8 +96,16 @@ export interface ScopedClient {
    */
   buildWhere: (table: ScopedTable, additionalWhere?: SQL) => SQL | undefined;
 
-  /** INSERT with communityId ownership enforced by scope. Supports bulk inserts. */
-  insert: (table: ScopedTable, data: ScopedRow | ScopedRow[]) => Promise<ScopedRow[]>;
+  /**
+   * INSERT with communityId ownership enforced by scope. Supports bulk inserts.
+   * `onConflictDoNothing` adds ON CONFLICT DO NOTHING: a row that would violate
+   * a unique index is skipped, and only the rows actually inserted come back.
+   */
+  insert: (
+    table: ScopedTable,
+    data: ScopedRow | ScopedRow[],
+    options?: { onConflictDoNothing?: boolean },
+  ) => Promise<ScopedRow[]>;
 
   /** UPDATE with tenant + soft-delete scoping applied to WHERE. */
   update: (

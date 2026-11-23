@@ -1544,7 +1544,7 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     expect(result).toEqual({ insertedCount: 1, skippedCount: 2, dueDate: '2026-04-01' });
     expect(insertMock).toHaveBeenCalledWith(assessmentLineItemsTable, [
       { assessmentId: 7, unitId: 3, amountCents: 30000, dueDate: '2026-04-01', status: 'pending', lateFeeCents: 0 },
-    ]);
+    ], { onConflictDoNothing: true });
     expect(postLedgerEntryMock).toHaveBeenCalledTimes(1);
     expect(postLedgerEntryMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
       entryType: 'assessment',
@@ -1672,7 +1672,7 @@ describe('9. line-item generation idempotency (generateAssessmentLineItemsForCom
     expect(result).toEqual({ insertedCount: 1, skippedCount: 2, dueDate: '2026-06-15' });
     expect(insertMock).toHaveBeenCalledWith(assessmentLineItemsTable, [
       { assessmentId: 7, unitId: 3, amountCents: 30000, dueDate: '2026-06-15', status: 'pending', lateFeeCents: 0 },
-    ]);
+    ], { onConflictDoNothing: true });
   });
 
   describe('a one-time charge cannot fall due before the community\'s today', () => {

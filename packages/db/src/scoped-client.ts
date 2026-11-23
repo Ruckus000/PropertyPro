@@ -169,14 +169,19 @@ async function execSelect(
   return rows as Record<string, unknown>[];
 }
 
-/** INSERT INTO table VALUES (data) RETURNING * → rows */
+/** INSERT INTO table VALUES (data) [ON CONFLICT DO NOTHING] RETURNING * → rows */
 async function execInsert(
   database: DbInstance,
   table: PgTable<TableConfig>,
   data: Record<string, unknown> | Record<string, unknown>[],
+  onConflictDoNothing = false,
 ): Promise<Record<string, unknown>[]> {
-  const q = (database as unknown as { insert(t: unknown): { values(d: unknown): { returning(): Promise<unknown[]> } } }).insert(table);
-  const rows = await q.values(data).returning();
+  type Returning = { returning(): Promise<unknown[]> };
+  const q = (database as unknown as {
+    insert(t: unknown): { values(d: unknown): Returning & { onConflictDoNothing(): Returning } };
+  }).insert(table);
+  const values = q.values(data);
+  const rows = await (onConflictDoNothing ? values.onConflictDoNothing() : values).returning();
   return rows as Record<string, unknown>[];
 }
 
@@ -398,7 +403,7 @@ export function createScopedClient(
       return withWhere.$dynamic() as ScopedDynamicBuilder<T>;
     },
 
-    async insert(table, data) {
+    async insert(table, data, options) {
       const columns = getTableColumns(table) as ColumnRecord;
       const requiresCommunityId = hasCommunityIdColumn(columns);
 
@@ -416,7 +421,7 @@ export function createScopedClient(
       // pp_rls_enforce_tenant_community_id returns early via pp_rls_is_privileged() and
       // never reads app.current_community_id, so set_config overhead is unnecessary.
       // Tenant isolation is enforced by communityId injection above and scoped WHERE filters.
-      return execInsert(database, table, insertData);
+      return execInsert(database, table, insertData, options?.onConflictDoNothing);
     },
 
     async update(table, data, additionalWhere?) {
