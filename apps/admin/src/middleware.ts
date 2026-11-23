@@ -308,6 +308,15 @@ async function handleRequest(request: NextRequest): Promise<Response> {
     user: middlewareUser,
   } = await createMiddlewareClient(modifiedRequest, ADMIN_COOKIE_OPTIONS);
 
+  // A refresh writes the new session cookie onto `modifiedRequest`, whose
+  // headers are a copy of `cleanHeaders`, not the same object. Forward the
+  // refreshed cookie, or pages and route handlers that verify the session
+  // themselves see the stale token and try to refresh it a second time.
+  const refreshedCookie = modifiedRequest.headers.get('cookie');
+  if (refreshedCookie !== null) {
+    cleanHeaders.set('cookie', refreshedCookie);
+  }
+
   // 4. Rate-limit BEFORE the public-path short-circuit.
   //
   // This used to sit after it, and was additionally gated on `isApiRoute`, so

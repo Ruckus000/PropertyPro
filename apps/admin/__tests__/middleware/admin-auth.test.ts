@@ -34,8 +34,15 @@ const mockGetClaims = vi.fn(async () => ({
   error: null,
 }));
 
+// When set, the mocked client "refreshes" the session the way the real one
+// does: it writes the new cookie onto the request it was handed.
+let refreshedSessionCookie: string | null = null;
+
 vi.mock('@propertypro/db/supabase/middleware', () => ({
   createMiddlewareClient: vi.fn(async (_req: NextRequest) => {
+    if (refreshedSessionCookie) {
+      _req.cookies.set('sb-admin-auth-token', refreshedSessionCookie);
+    }
     return {
       supabase: { auth: { getUser: mockGetUser, getClaims: mockGetClaims } },
       response: {
@@ -68,6 +75,27 @@ describe('admin middleware', () => {
     vi.clearAllMocks();
     middlewareUser = null;
     sessionAal = 'aal2';
+    refreshedSessionCookie = null;
+  });
+
+  // Pages and route handlers verify the session from the cookie they receive,
+  // so a token middleware just refreshed must be the one forwarded to them.
+  // Otherwise they see the pre-refresh token and try to refresh it again.
+  it('forwards the session cookie middleware just refreshed, not the stale one', async () => {
+    middlewareUser = { id: 'admin-456', email: 'admin@getpropertypro.com', emailVerified: true };
+    mockSingleFrom.mockResolvedValue({ data: { user_id: 'admin-456' } });
+    refreshedSessionCookie = 'refreshed-token';
+
+    const { middleware } = await import('@/middleware');
+    const req = new NextRequest(new URL('http://admin.getpropertypro.com/clients'), {
+      headers: { cookie: 'sb-admin-auth-token=stale-token' },
+    });
+    const res = await middleware(req);
+
+    expect(res.status).toBe(200);
+    const forwardedCookie = res.headers.get('x-middleware-request-cookie') ?? '';
+    expect(forwardedCookie).toContain('sb-admin-auth-token=refreshed-token');
+    expect(forwardedCookie).not.toContain('stale-token');
   });
 
   it('passes through /auth/login without session check', async () => {
