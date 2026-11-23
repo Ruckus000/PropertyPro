@@ -1,7 +1,9 @@
 /**
  * Route contract for `POST /api/v1/emergency-broadcasts/[id]/send`.
  *
- * Plan A1 drain #76. Executes a previously-created emergency broadcast.
+ * Executes a previously-created emergency broadcast. A SCHEDULED broadcast is
+ * refused with 409 `CONFLICT` (`executeBroadcast` throws `ConflictError`): only
+ * the scheduled-emergency-broadcasts cron sends those.
  * Service is `executeBroadcast(broadcastId, communityId, userId)` — note
  * `broadcastId` is the FIRST positional arg (matches drain #71 cancel pattern).
  *

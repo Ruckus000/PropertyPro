@@ -12,26 +12,44 @@ vi.mock('@/components/emergency/BroadcastComposer', () => ({
 
 import { EmergencyNewPage } from '@/components/emergency/emergency-new-page';
 
-function view() {
+const SOURCE = {
+  title: 'Pool closed',
+  body: 'The pool is closed.',
+  smsBody: null,
+  severity: 'urgent',
+  targetAudience: 'all',
+  channels: ['email'],
+};
+
+function view(source?: typeof SOURCE) {
   return render(
     <EmergencyNewPage
       communityId={7}
       communityName="Sunset Condos"
       communityType="condo_718"
       smsEnabled={true}
+      timeZone="America/New_York"
+      source={source}
     />,
   );
 }
 
 describe('EmergencyNewPage', () => {
-  it('passes the composer the same four props the page passes today', () => {
+  it('passes the composer the props the page was given, with the community zone and no source', () => {
     view();
     expect(composerProps).toHaveBeenCalledWith({
       communityId: 7,
       communityName: 'Sunset Condos',
       communityType: 'condo_718',
       smsEnabled: true,
+      timeZone: 'America/New_York',
+      source: undefined,
     });
+  });
+
+  it('hands the composer the alert to copy for "Send again later"', () => {
+    view(SOURCE);
+    expect(composerProps).toHaveBeenCalledWith(expect.objectContaining({ source: SOURCE }));
   });
 
   it('titles the page and describes it', () => {

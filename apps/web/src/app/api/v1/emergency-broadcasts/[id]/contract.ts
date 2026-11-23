@@ -1,7 +1,9 @@
 /**
  * Route contract for `GET /api/v1/emergency-broadcasts/[id]`.
  *
- * Managers get the broadcast with its delivery report. Everyone else with
+ * Managers get the broadcast with its delivery report, including
+ * `scheduledFor`, `sendClaimedAt`, `sendOutcome` and `sendOutcomeReason` for a
+ * "send later" alert. Everyone else with
  * read access (owners, board seats included) gets only the message, and only
  * for a broadcast that was sent to them — anything else is 404.
  *

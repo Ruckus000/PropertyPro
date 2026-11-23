@@ -18,6 +18,10 @@ interface BroadcastSummary {
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
+  scheduledFor: string | null;
+  sendClaimedAt: string | null;
+  sendOutcome: 'missed' | 'failed' | null;
+  sendOutcomeReason: string | null;
 }
 
 interface BroadcastReport {
@@ -38,6 +42,11 @@ interface BroadcastReport {
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
+  /** Set on a "send later" alert; the three below are written by the scheduled-send job. */
+  scheduledFor: string | null;
+  sendClaimedAt: string | null;
+  sendOutcome: 'missed' | 'failed' | null;
+  sendOutcomeReason: string | null;
   recipients: Array<{
     userId: string;
     email: string | null;
@@ -117,18 +126,32 @@ export function useEmergencyBroadcasts(communityId: number) {
   });
 }
 
+/**
+ * One alert, as the server has it now. Also used directly (outside the query
+ * cache) when a request's outcome is unknown and the UI must look before it
+ * tells the manager what happened.
+ */
+export function fetchEmergencyBroadcast(communityId: number, broadcastId: number) {
+  return requestJson<BroadcastView>(
+    `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
+  );
+}
+
 export function useEmergencyBroadcast(communityId: number, broadcastId: number) {
   return useQuery({
     queryKey: KEYS.detail(communityId, broadcastId),
-    queryFn: () =>
-      requestJson<BroadcastView>(
-        `/api/v1/emergency-broadcasts/${broadcastId}?communityId=${communityId}`,
-      ),
+    queryFn: () => fetchEmergencyBroadcast(communityId, broadcastId),
     enabled: communityId > 0 && broadcastId > 0,
     refetchInterval: (query) => {
       const data = query.state.data;
       // A resident's copy never changes: no delivery report to refresh.
       if (!data || !('recipients' in data)) return false;
+      // Missed or did not send: final, and there is no delivery to track.
+      if (data.sendOutcome) return false;
+      // Waiting for its time, possibly for days: a slow poll catches the send starting.
+      if (data.scheduledFor && !data.sendClaimedAt && !data.completedAt && !data.canceledAt) {
+        return 30_000;
+      }
       // Poll every 2s while broadcast is in-progress (not completed/canceled)
       if (!data.completedAt && !data.canceledAt) return 2000;
       // Poll every 5s after completion (for final delivery status updates)
@@ -177,6 +200,38 @@ export function useSendBroadcast() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ communityId }),
       });
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });
+      queryClient.invalidateQueries({
+        queryKey: KEYS.detail(variables.communityId, variables.broadcastId),
+      });
+    },
+  });
+}
+
+/** Turn a drafted alert into a scheduled one, in place. `scheduledFor` is an ISO instant. */
+export function useScheduleBroadcast() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      broadcastId,
+      communityId,
+      scheduledFor,
+    }: {
+      broadcastId: number;
+      communityId: number;
+      scheduledFor: string;
+    }) => {
+      return requestJson<{ scheduled: true; scheduledFor: string }>(
+        `/api/v1/emergency-broadcasts/${broadcastId}/schedule`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ communityId, scheduledFor }),
+        },
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: KEYS.list(variables.communityId) });

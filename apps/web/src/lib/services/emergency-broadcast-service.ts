@@ -47,6 +47,9 @@ import { sendBulkEmergencySms } from '@/lib/services/sms/sms-service';
 import { isStatusAdvancement } from '@/lib/services/sms/sms-types';
 import type { SmsDeliveryStatus } from '@/lib/services/sms/sms-types';
 import { getBaseUrl } from '@/lib/utils/url';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '@/lib/api/errors';
+import { captureException } from '@sentry/nextjs';
+import { recordOutcome, sanitizedError } from './emergency-broadcast-outcome';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,6 +82,21 @@ export interface CreateBroadcastParams {
    */
   smsAllowed: boolean;
   initiatedBy: string;
+  /**
+   * Set means "send later": the broadcast is stored with no recipient rows and
+   * the scheduled-emergency-broadcasts cron sends it. Must be 5 minutes to 365
+   * days ahead (`assertSchedulableTime`).
+   */
+  scheduledFor?: Date;
+}
+
+export interface CreateBroadcastResult {
+  broadcastId: number;
+  recipientCount: number;
+  smsEligibleCount: number;
+  emailCount: number;
+  /** ISO time the alert will send. Present only for a scheduled broadcast. */
+  scheduledFor?: string;
 }
 
 export interface BroadcastWithReport {
@@ -99,6 +117,14 @@ export interface BroadcastWithReport {
   initiatedAt: Date;
   completedAt: Date | null;
   canceledAt: Date | null;
+  /** Set for a "send later" alert. */
+  scheduledFor: Date | null;
+  /** Set once the cron has started sending; a claimed alert cannot be canceled. */
+  sendClaimedAt: Date | null;
+  /** Why a scheduled alert did not send: 'missed' | 'failed'. */
+  sendOutcome: string | null;
+  /** One of 'late', 'community_deleted', 'no_recipients', 'interrupted', 'send_error'. */
+  sendOutcomeReason: string | null;
   recipients: RecipientStatus[];
 }
 
@@ -114,7 +140,7 @@ export interface RecipientStatus {
   emailSentAt: Date | null;
 }
 
-interface ResolvedRecipient {
+export interface ResolvedRecipient {
   userId: string;
   email: string;
   fullName: string;
@@ -125,9 +151,25 @@ interface ResolvedRecipient {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-/** Undo window duration in milliseconds (10 seconds) */
-const UNDO_WINDOW_MS = 10_000;
-const MAX_BROADCAST_RECIPIENTS = 500;
+export const MAX_BROADCAST_RECIPIENTS = 500;
+
+/**
+ * Refuse to SCHEDULE an alert whose audience is over the per-alert cap. The
+ * send path enforces the cap too, but a scheduled alert sends unattended, so
+ * the manager has to hear it now, while they can still change the audience.
+ */
+function assertSchedulableAudience(recipientCount: number): void {
+  if (recipientCount > MAX_BROADCAST_RECIPIENTS) {
+    throw new ValidationError(
+      `This alert would go to ${recipientCount} people, and one alert can reach at most ${MAX_BROADCAST_RECIPIENTS}. Choose a smaller audience and schedule it again.`,
+    );
+  }
+}
+
+/** A scheduled alert must be at least this far ahead (the cron runs every 5 minutes). */
+export const MIN_SCHEDULE_LEAD_MS = 5 * 60 * 1000;
+/** ...and at most this far ahead. */
+export const MAX_SCHEDULE_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -141,6 +183,74 @@ function isAudienceMatch(
   return false;
 }
 
+/** Refuse a send-later time outside the 5-minute to 365-day window. */
+export function assertSchedulableTime(scheduledFor: Date, now: Date = new Date()): void {
+  const ahead = scheduledFor.getTime() - now.getTime();
+  // NaN (an unparseable date) fails both comparisons, so it is refused here too.
+  if (!(ahead >= MIN_SCHEDULE_LEAD_MS)) {
+    throw new ValidationError('Choose a time at least 5 minutes from now.', {
+      fields: [{ field: 'scheduledFor', message: 'Must be at least 5 minutes from now.' }],
+    });
+  }
+  if (ahead > MAX_SCHEDULE_AHEAD_MS) {
+    throw new ValidationError('Choose a time within the next 365 days.', {
+      fields: [{ field: 'scheduledFor', message: 'Must be within the next 365 days.' }],
+    });
+  }
+}
+
+/**
+ * Write one recipient row per resolved recipient and return the per-channel
+ * counts. With `persist: false` only the counts are computed — a scheduled
+ * broadcast stores no recipient rows until it sends.
+ *
+ * The SMS legal gate is applied HERE rather than on the route, and it DEGRADES
+ * rather than refuses: an admin who selected both channels still gets the email
+ * broadcast out. A route-level 403 would kill the email leg too, which would
+ * invert this feature's whole premise ("life-safety over revenue" — see the
+ * header comment on api/v1/emergency-broadcasts/route.ts). With SMS off every
+ * recipient is written `smsStatus: 'skipped'` with a null phone, so
+ * `executeBroadcast` finds nothing pending and the SMS path is never entered.
+ * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
+ */
+export async function writeBroadcastRecipients(params: {
+  communityId: number;
+  broadcastId: number;
+  recipients: ResolvedRecipient[];
+  channels: BroadcastChannel[];
+  smsAllowed: boolean;
+  persist: boolean;
+}): Promise<{ smsEligibleCount: number; emailCount: number }> {
+  const scoped = createScopedClient(params.communityId);
+  const smsEnabled = params.channels.includes('sms') && params.smsAllowed;
+  const emailEnabled = params.channels.includes('email');
+
+  let smsEligibleCount = 0;
+  let emailCount = 0;
+
+  for (const batch of chunk(params.recipients, 50)) {
+    const rows = batch.map((r) => {
+      const canReceiveSms = smsEnabled && r.phoneVerified && r.smsConsented && r.phone !== null;
+      const canReceiveEmail = emailEnabled && r.email !== null;
+
+      if (canReceiveSms) smsEligibleCount++;
+      if (canReceiveEmail) emailCount++;
+
+      return {
+        broadcastId: params.broadcastId,
+        userId: r.userId,
+        email: canReceiveEmail ? r.email : null,
+        phone: canReceiveSms ? r.phone : null,
+        smsStatus: canReceiveSms ? 'pending' : 'skipped',
+        emailStatus: canReceiveEmail ? 'pending' : 'skipped',
+      };
+    });
+    if (params.persist) await scoped.insert(emergencyBroadcastRecipients, rows);
+  }
+
+  return { smsEligibleCount, emailCount };
+}
+
 // ── Core service functions ──────────────────────────────────────────────────
 
 /**
@@ -150,15 +260,23 @@ function isAudienceMatch(
  * executeBroadcast() is called. Returns the broadcast with recipient count
  * for the confirmation UI.
  *
+ * With `scheduledFor` the broadcast is SCHEDULED instead: no recipient rows are
+ * written (recipients are worked out when it sends), the counts returned are
+ * "as of now", and the scheduled-emergency-broadcasts cron sends it.
+ *
  * Does NOT call requireActiveSubscriptionForMutation() — life-safety bypass.
  */
 export async function createBroadcast(
   params: CreateBroadcastParams,
-): Promise<{ broadcastId: number; recipientCount: number; smsEligibleCount: number; emailCount: number }> {
+): Promise<CreateBroadcastResult> {
+  const scheduledFor = params.scheduledFor;
+  if (scheduledFor) assertSchedulableTime(scheduledFor);
+
   const scoped = createScopedClient(params.communityId);
 
   // Resolve recipients (batch query — no N+1)
   const resolved = await resolveEmergencyRecipients(params.communityId, params.targetAudience, params.severity);
+  if (scheduledFor) assertSchedulableAudience(resolved.length);
 
   // Create broadcast record
   const broadcastRows = await scoped.insert(emergencyBroadcasts, {
@@ -175,53 +293,26 @@ export async function createBroadcast(
     failedCount: 0,
     initiatedBy: params.initiatedBy,
     initiatedAt: new Date(),
+    ...(scheduledFor ? { scheduledFor } : {}),
   });
 
   const broadcastId = Number(broadcastRows[0]?.['id']);
   if (!broadcastId) throw new Error('Failed to create broadcast record');
 
-  // Create recipient rows
-  //
-  // The SMS legal gate is applied HERE rather than on the route, and it DEGRADES
-  // rather than refuses: an admin who selected both channels still gets the email
-  // broadcast out. A route-level 403 would kill the email leg too, which would
-  // invert this feature's whole premise ("life-safety over revenue" — see the
-  // header comment on api/v1/emergency-broadcasts/route.ts). With SMS off every
-  // recipient is written `smsStatus: 'skipped'` with a null phone, so
-  // `executeBroadcast` finds nothing pending and the SMS path is never entered.
-  // See docs/audits/2026-08-09-legal-risk-audit.md F-10.
-  const smsEnabled = params.channels.includes('sms') && params.smsAllowed;
-  const emailEnabled = params.channels.includes('email');
-
-  let smsEligibleCount = 0;
-  let emailCount = 0;
-
-  for (const batch of chunk(resolved, 50)) {
-    await scoped.insert(
-      emergencyBroadcastRecipients,
-      batch.map((r) => {
-        const canReceiveSms = smsEnabled && r.phoneVerified && r.smsConsented && r.phone !== null;
-        const canReceiveEmail = emailEnabled && r.email !== null;
-
-        if (canReceiveSms) smsEligibleCount++;
-        if (canReceiveEmail) emailCount++;
-
-        return {
-          broadcastId,
-          userId: r.userId,
-          email: canReceiveEmail ? r.email : null,
-          phone: canReceiveSms ? r.phone : null,
-          smsStatus: canReceiveSms ? 'pending' : 'skipped',
-          emailStatus: canReceiveEmail ? 'pending' : 'skipped',
-        };
-      }),
-    );
-  }
+  // Create recipient rows (immediate), or only count them (scheduled).
+  const { smsEligibleCount, emailCount } = await writeBroadcastRecipients({
+    communityId: params.communityId,
+    broadcastId,
+    recipients: resolved,
+    channels: params.channels,
+    smsAllowed: params.smsAllowed,
+    persist: !scheduledFor,
+  });
 
   // Audit log (phone numbers masked)
   await logAuditEvent({
     userId: params.initiatedBy,
-    action: 'emergency_broadcast_created',
+    action: scheduledFor ? 'emergency_broadcast_scheduled' : 'emergency_broadcast_created',
     resourceType: 'emergency_broadcast',
     resourceId: String(broadcastId),
     communityId: params.communityId,
@@ -233,10 +324,100 @@ export async function createBroadcast(
       recipientCount: resolved.length,
       smsEligibleCount,
       emailCount,
+      ...(scheduledFor ? { scheduledFor: scheduledFor.toISOString() } : {}),
     },
   });
 
-  return { broadcastId, recipientCount: resolved.length, smsEligibleCount, emailCount };
+  return {
+    broadcastId,
+    recipientCount: resolved.length,
+    smsEligibleCount,
+    emailCount,
+    ...(scheduledFor ? { scheduledFor: scheduledFor.toISOString() } : {}),
+  };
+}
+
+/**
+ * Turn the draft the composer created into a scheduled ("send later") alert,
+ * in place: no second broadcast row is written.
+ *
+ * ONE conditional UPDATE is the whole decision. It matches only a draft that
+ * has not been sent, canceled, scheduled or claimed, so of two concurrent
+ * requests (two schedules, or a schedule racing a send's completion or a
+ * cancel) at most one schedule wins; the loser gets a 409.
+ *
+ * Then the draft's pre-resolved recipient rows are deleted, because recipients
+ * are worked out again when the alert sends. `recipient_count` is left as the
+ * "as of now" count the manager was shown.
+ *
+ * ## If the request dies between the two statements
+ *
+ * The alert is scheduled and still has its draft recipient rows. That is safe:
+ * the job replaces a claimed alert's recipient rows before sending
+ * (`processDueScheduledBroadcasts`), so the stale rows are never sent to and
+ * the unique (broadcast, user) constraint cannot fail the send. Until then
+ * they are invisible: no delivery report is drawn for an unsent alert.
+ */
+export async function scheduleBroadcast(
+  broadcastId: number,
+  communityId: number,
+  userId: string,
+  scheduledFor: Date,
+): Promise<{ scheduled: true; scheduledFor: string }> {
+  assertSchedulableTime(scheduledFor);
+
+  const scoped = createScopedClient(communityId);
+  // Read only to refuse an over-cap audience before anything is written; the
+  // UPDATE below, not this read, decides whether the draft can be scheduled.
+  const draft = (
+    await scoped.selectFrom<EmergencyBroadcast>(
+      emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
+    )
+  )[0];
+  if (!draft) throw new NotFoundError('This alert could not be found.');
+  assertSchedulableAudience(draft.recipientCount);
+
+  const converted = await scoped.update(
+    emergencyBroadcasts,
+    { scheduledFor },
+    and(
+      eq(emergencyBroadcasts.id, broadcastId),
+      isNull(emergencyBroadcasts.canceledAt),
+      isNull(emergencyBroadcasts.completedAt),
+      isNull(emergencyBroadcasts.scheduledFor),
+      isNull(emergencyBroadcasts.sendClaimedAt),
+    ),
+  );
+  const broadcast = converted[0] as EmergencyBroadcast | undefined;
+  if (!broadcast) {
+    throw new ConflictError('This alert has already been sent, scheduled or canceled.');
+  }
+
+  const draftRecipients = await scoped.hardDelete(
+    emergencyBroadcastRecipients,
+    eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+  );
+
+  // The same entry `createBroadcast` writes when it schedules.
+  await logAuditEvent({
+    userId,
+    action: 'emergency_broadcast_scheduled',
+    resourceType: 'emergency_broadcast',
+    resourceId: String(broadcastId),
+    communityId,
+    metadata: {
+      title: broadcast.title,
+      severity: broadcast.severity,
+      targetAudience: broadcast.targetAudience,
+      channels: broadcast.channels,
+      recipientCount: broadcast.recipientCount,
+      smsEligibleCount: draftRecipients.filter((r) => r['smsStatus'] === 'pending').length,
+      emailCount: draftRecipients.filter((r) => r['emailStatus'] === 'pending').length,
+      scheduledFor: scheduledFor.toISOString(),
+    },
+  });
+
+  return { scheduled: true, scheduledFor: scheduledFor.toISOString() };
 }
 
 /**
@@ -244,11 +425,78 @@ export async function createBroadcast(
  *
  * SMS and email are independent: one failing does not block the other.
  * Sets completedAt when all sends are initiated (delivery is async via webhooks).
+ *
+ * A scheduled broadcast is sent ONLY by the scheduled-emergency-broadcasts
+ * cron, which passes `scheduledSend` after winning the row's atomic claim.
+ * Without it a scheduled broadcast is refused — claimed or not — so a manager's
+ * "send" can never double a send the cron owns. The cron's send has no acting
+ * user (`userId` null, the system actor); the scheduler is named in metadata.
+ *
+ * ## The immediate send takes a claim too
+ *
+ * Without `scheduledSend` this function first claims the draft in ONE
+ * conditional UPDATE (`send_claimed_at`, only while the draft is unscheduled,
+ * unclaimed, unsent and uncanceled) and sends only if that statement returned
+ * the row. `scheduleBroadcast` and `cancelBroadcast` are guarded on
+ * `send_claimed_at IS NULL`, so of send / schedule / cancel on one draft
+ * exactly one wins, and two sends (a double click) send once. A loser gets a
+ * 409 and has changed nothing.
+ *
+ * Everything that can refuse the send (the recipient cap) runs BEFORE the
+ * claim. After it, a send that dies leaves the row claimed with no result; the
+ * cron's 15-minute sweep marks it failed / `interrupted`, exactly as for a
+ * scheduled send, and like one it is never retried. A send that THROWS after
+ * the claim does not wait for the sweep: it is marked failed / `send_error`
+ * at once, and a sanitised stand-in for the error is rethrown.
  */
 export async function executeBroadcast(
   broadcastId: number,
   communityId: number,
-  userId: string,
+  userId: string | null,
+  scheduledSend?: { scheduledBy: string },
+): Promise<{ smsQueued: number; emailSent: number }> {
+  // Set once the immediate path holds the claim: from then on a throw is a
+  // send that failed part-way, not a refusal.
+  const claim: { held: { title: string; initiatedBy: string } | null } = { held: null };
+  try {
+    return await sendBroadcast(broadcastId, communityId, userId, scheduledSend, (claimed) => {
+      claim.held = claimed;
+    });
+  } catch (error) {
+    // The job records its own failures (it owns the claim on a scheduled alert).
+    if (scheduledSend || !claim.held) throw error;
+    // Say so NOW rather than leave the alert reading "Sending" until the
+    // 15-minute sweep: mark it failed / send_error, exactly as the job would.
+    // The sweep is then only for a function that died without reaching here.
+    const failure = { broadcastId, communityId };
+    await recordOutcome(
+      broadcastId,
+      communityId,
+      'failed',
+      'send_error',
+      { title: claim.held.title, scheduledBy: claim.held.initiatedBy, scheduledFor: null },
+      userId,
+    ).catch((recordError: unknown) => {
+      captureException(sanitizedError(recordError), {
+        tags: { emergency_broadcast: 'immediate_outcome_not_recorded' },
+        extra: failure,
+      });
+    });
+    // The route still answers 500, but with a stand-in that cannot carry row
+    // data: `withErrorHandler` reports whatever leaves here to Sentry, raw, so
+    // rethrowing the original would send a postgres `detail` after all. That
+    // report is the ONE Sentry event for this failure. (An AppError's message
+    // is ours, so it passes through and keeps its status.)
+    throw error instanceof AppError ? error : sanitizedError(error);
+  }
+}
+
+async function sendBroadcast(
+  broadcastId: number,
+  communityId: number,
+  userId: string | null,
+  scheduledSend: { scheduledBy: string } | undefined,
+  onImmediateClaim: (claimed: { title: string; initiatedBy: string }) => void,
 ): Promise<{ smsQueued: number; emailSent: number }> {
   const scoped = createScopedClient(communityId);
 
@@ -257,17 +505,24 @@ export async function executeBroadcast(
     emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
   );
   const broadcast = broadcastRows[0];
-  if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast.canceledAt) throw new Error('Broadcast was canceled');
-  if (broadcast.completedAt) throw new Error('Broadcast already sent');
+  // Typed, because a manager can reach each of these from the send button
+  // (a second tab, a stale page); an untyped Error would be a 500.
+  if (!broadcast) throw new NotFoundError('This alert could not be found.');
+  if (broadcast.canceledAt) throw new ConflictError('This alert was canceled, so it cannot be sent.');
+  if (broadcast.completedAt) throw new ConflictError('This alert has already been sent.');
+  if (broadcast.scheduledFor && !scheduledSend) {
+    throw new ConflictError(
+      'This alert is scheduled and will be sent automatically at its scheduled time.',
+    );
+  }
 
   // Load recipients
   const recipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
     emergencyBroadcastRecipients, {}, eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
   );
   if (recipients.length > MAX_BROADCAST_RECIPIENTS) {
-    throw new Error(
-      `Broadcast exceeds maximum recipient limit of ${MAX_BROADCAST_RECIPIENTS}`,
+    throw new ValidationError(
+      `This alert would go to ${recipients.length} people, and one alert can reach at most ${MAX_BROADCAST_RECIPIENTS}. Create it again with a smaller audience.`,
     );
   }
 
@@ -291,6 +546,26 @@ export async function executeBroadcast(
     communities, {}, eq(communities.id, communityId),
   );
   const communityName = communityRows[0]?.name ?? 'PropertyPro';
+
+  if (!scheduledSend) {
+    const claimed = await scoped.update(
+      emergencyBroadcasts,
+      { sendClaimedAt: new Date() },
+      and(
+        eq(emergencyBroadcasts.id, broadcastId),
+        isNull(emergencyBroadcasts.scheduledFor),
+        isNull(emergencyBroadcasts.sendClaimedAt),
+        isNull(emergencyBroadcasts.completedAt),
+        isNull(emergencyBroadcasts.canceledAt),
+      ),
+    );
+    if (claimed.length === 0) {
+      throw new ConflictError(
+        'This alert is already being sent, or has been sent, scheduled or canceled.',
+      );
+    }
+    onImmediateClaim({ title: broadcast.title, initiatedBy: broadcast.initiatedBy });
+  }
 
   const statusCallbackUrl = `${getBaseUrl()}/api/v1/webhooks/twilio`;
   // Single timestamp shared across the entire batch so all `sentAt` /
@@ -447,6 +722,12 @@ export async function executeBroadcast(
       smsQueued,
       emailSent,
       totalRecipients: recipients.length,
+      ...(scheduledSend && broadcast.scheduledFor
+        ? {
+            scheduledBy: scheduledSend.scheduledBy,
+            scheduledFor: broadcast.scheduledFor.toISOString(),
+          }
+        : {}),
     },
   });
 
@@ -454,9 +735,20 @@ export async function executeBroadcast(
 }
 
 /**
- * Cancel a broadcast within the undo window (10 seconds).
+ * Cancel a broadcast.
  *
- * Returns true if successfully canceled, false if undo window expired.
+ * A draft or an immediate broadcast can be canceled any time before its send
+ * claims it (the composer's 10-second countdown is a client-side pause, not a
+ * server window). A scheduled broadcast can be canceled any time before the
+ * cron claims it. An alert that is already canceled or sent is a 409, and an
+ * unknown id a 404.
+ *
+ * Either way the cancel is ONE conditional UPDATE guarded on "not claimed, not
+ * sent, not canceled", so a cancel racing a send's claim or a schedule has one
+ * winner. The read before it only words the refusals; it decides nothing.
+ *
+ * Returns true if successfully canceled; false if the alert has started
+ * sending (or been missed), or another request got there first.
  */
 export async function cancelBroadcast(
   broadcastId: number,
@@ -469,24 +761,56 @@ export async function cancelBroadcast(
     emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
   );
   const broadcast = broadcastRows[0];
-  if (!broadcast) throw new Error('Broadcast not found');
-  if (broadcast.canceledAt) throw new Error('Broadcast already canceled');
-  if (broadcast.completedAt) throw new Error('Broadcast already sent — cannot cancel');
-
-  // Check undo window
-  const initiatedAt = broadcast.initiatedAt;
-  if (!(initiatedAt instanceof Date)) throw new Error('Invalid broadcast initiation time');
-
-  const elapsed = Date.now() - initiatedAt.getTime();
-  if (elapsed > UNDO_WINDOW_MS) {
-    return false; // Undo window expired
+  if (!broadcast) throw new NotFoundError('This alert could not be found.');
+  if (broadcast.canceledAt) throw new ConflictError('This alert was already canceled.');
+  if (broadcast.completedAt) {
+    throw new ConflictError('This alert has already been sent, so it cannot be canceled.');
   }
 
-  await scoped.update(
+  if (broadcast.scheduledFor) {
+    // ONE statement, atomic against the cron's claim: whichever of the two
+    // UPDATEs commits first makes the other match no row. No recipient rows
+    // exist yet, so there is nothing else to undo.
+    const won = await scoped.update(
+      emergencyBroadcasts,
+      { canceledAt: new Date() },
+      and(
+        eq(emergencyBroadcasts.id, broadcastId),
+        isNull(emergencyBroadcasts.sendClaimedAt),
+        isNull(emergencyBroadcasts.canceledAt),
+        isNull(emergencyBroadcasts.sendOutcome),
+      ),
+    );
+    if (won.length === 0) return false;
+
+    await logAuditEvent({
+      userId,
+      action: 'emergency_broadcast_canceled',
+      resourceType: 'emergency_broadcast',
+      resourceId: String(broadcastId),
+      communityId,
+      metadata: { scheduledFor: broadcast.scheduledFor.toISOString() },
+    });
+    return true;
+  }
+
+  // No time limit here. The composer makes the draft BEFORE its confirm step,
+  // so a server-side "10 seconds since it was created" window had usually run
+  // out before the manager could press Undo. What makes a cancel too late is
+  // the send's claim, and the UPDATE below is guarded on it.
+  const won = await scoped.update(
     emergencyBroadcasts,
     { canceledAt: new Date() },
-    eq(emergencyBroadcasts.id, broadcastId),
+    and(
+      eq(emergencyBroadcasts.id, broadcastId),
+      isNull(emergencyBroadcasts.canceledAt),
+      isNull(emergencyBroadcasts.completedAt),
+      isNull(emergencyBroadcasts.sendClaimedAt),
+      // Not scheduled since the read above: a scheduled alert takes the branch above.
+      isNull(emergencyBroadcasts.scheduledFor),
+    ),
   );
+  if (won.length === 0) return false;
 
   // Mark all pending recipients as skipped
   const pendingRecipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(
@@ -660,6 +984,10 @@ export async function getBroadcastWithReport(
     initiatedAt: broadcast.initiatedAt,
     completedAt: broadcast.completedAt ?? null,
     canceledAt: broadcast.canceledAt ?? null,
+    scheduledFor: broadcast.scheduledFor ?? null,
+    sendClaimedAt: broadcast.sendClaimedAt ?? null,
+    sendOutcome: broadcast.sendOutcome ?? null,
+    sendOutcomeReason: broadcast.sendOutcomeReason ?? null,
     recipients: recipients.map((r) => ({
       userId: r.userId,
       email: r.email ?? null,

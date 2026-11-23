@@ -5,6 +5,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
 const {
@@ -171,5 +172,99 @@ describe('POST /api/v1/emergency-broadcasts', () => {
         initiatedBy: USER_ID,
       }),
     );
+  });
+
+  it('without scheduledFor, calls createBroadcast exactly as before (no scheduling key)', async () => {
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/emergency-broadcasts', {
+        method: 'POST',
+        body: JSON.stringify(validPayload),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      data: { broadcastId: 5, recipientCount: 10, smsEligibleCount: 8, emailCount: 10 },
+    });
+    expect(createBroadcastMock).toHaveBeenCalledTimes(1);
+    expect(Object.keys(createBroadcastMock.mock.calls[0]![0]).sort()).toEqual([
+      'body',
+      'channels',
+      'communityId',
+      'initiatedBy',
+      'severity',
+      'smsAllowed',
+      'smsBody',
+      'targetAudience',
+      'templateKey',
+      'title',
+    ]);
+  });
+
+  it('with scheduledFor, schedules: passes the time as a Date and returns scheduledFor', async () => {
+    const scheduledFor = '2026-12-01T09:00:00-05:00';
+    createBroadcastMock.mockResolvedValue({
+      broadcastId: 6,
+      recipientCount: 10,
+      smsEligibleCount: 0,
+      emailCount: 10,
+      scheduledFor: '2026-12-01T14:00:00.000Z',
+    });
+
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/emergency-broadcasts', {
+        method: 'POST',
+        body: JSON.stringify({ ...validPayload, scheduledFor }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      broadcastId: 6,
+      recipientCount: 10,
+      smsEligibleCount: 0,
+      emailCount: 10,
+      scheduledFor: '2026-12-01T14:00:00.000Z',
+    });
+    expect(createBroadcastMock.mock.calls[0]![0].scheduledFor).toEqual(new Date(scheduledFor));
+    // Auth chain order is unchanged: demo-grace before membership, then permission.
+    expect(assertNotDemoGraceMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      requireCommunityMembershipMock.mock.invocationCallOrder[0]!,
+    );
+    expect(requirePermissionMock).toHaveBeenCalledWith(MEMBERSHIP, 'emergency_broadcasts', 'write');
+  });
+
+  it('refuses a scheduled broadcast in the demo grace window before touching the service', async () => {
+    assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo has ended'));
+
+    const res = await POST(
+      new NextRequest('http://localhost:3000/api/v1/emergency-broadcasts', {
+        method: 'POST',
+        body: JSON.stringify({ ...validPayload, scheduledFor: '2026-12-01T09:00:00Z' }),
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    expect(res.status).toBe(403);
+    expect(requireCommunityMembershipMock).not.toHaveBeenCalled();
+    expect(createBroadcastMock).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 VALIDATION_ERROR for a scheduledFor that is not an ISO time with an offset', async () => {
+    for (const scheduledFor of ['tomorrow at 9', '2026-12-01T09:00:00']) {
+      const res = await POST(
+        new NextRequest('http://localhost:3000/api/v1/emergency-broadcasts', {
+          method: 'POST',
+          body: JSON.stringify({ ...validPayload, scheduledFor }),
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe('VALIDATION_ERROR');
+    }
+    expect(createBroadcastMock).not.toHaveBeenCalled();
   });
 });

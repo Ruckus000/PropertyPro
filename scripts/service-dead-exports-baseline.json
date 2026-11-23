@@ -5,9 +5,6 @@
   "apps/web/src/lib/services/elections-service.ts": [
     "getElectionByIdForCommunity"
   ],
-  "apps/web/src/lib/services/emergency-broadcast-service.ts": [
-    "resolveEmergencyRecipients"
-  ],
   "apps/web/src/lib/services/export/export-job-service.ts": [
     "findActiveJob"
   ],

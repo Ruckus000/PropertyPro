@@ -115,6 +115,10 @@
     {
       "path": "/api/v1/internal/inbox-spam-scan",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/v1/internal/scheduled-emergency-broadcasts",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

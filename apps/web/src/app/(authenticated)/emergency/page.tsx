@@ -100,6 +100,12 @@ export default async function EmergencyPage({ searchParams }: PageProps) {
     initiatedAt: (r['initiatedAt'] as Date).toISOString(),
     completedAt: r['completedAt'] instanceof Date ? (r['completedAt'] as Date).toISOString() : null,
     canceledAt: r['canceledAt'] instanceof Date ? (r['canceledAt'] as Date).toISOString() : null,
+    // "Send later" alerts: when it goes, and what the scheduled-send job made of it.
+    scheduledFor: r['scheduledFor'] instanceof Date ? (r['scheduledFor'] as Date).toISOString() : null,
+    sendClaimedAt:
+      r['sendClaimedAt'] instanceof Date ? (r['sendClaimedAt'] as Date).toISOString() : null,
+    sendOutcome: typeof r['sendOutcome'] === 'string' ? r['sendOutcome'] : null,
+    sendOutcomeReason: typeof r['sendOutcomeReason'] === 'string' ? r['sendOutcomeReason'] : null,
   }));
 
   return (

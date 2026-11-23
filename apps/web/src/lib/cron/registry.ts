@@ -46,6 +46,7 @@ export type CronJobSlug =
   | 'payment-reminders'
   | 'provisioning-watchdog'
   | 'revenue-snapshot'
+  | 'scheduled-emergency-broadcasts'
   | 'scheduled-site-publish'
   | 'snowbird-digest'
   | 'visitor-auto-checkout';
@@ -149,6 +150,11 @@ export const CRON_JOBS: Record<CronJobSlug, CronJobDefinition> = {
     path: '/api/v1/internal/revenue-snapshot',
     schedule: '0 2 * * *',
     maxAgeMinutes: DAILY,
+  },
+  'scheduled-emergency-broadcasts': {
+    path: '/api/v1/internal/scheduled-emergency-broadcasts',
+    schedule: '*/5 * * * *',
+    maxAgeMinutes: EVERY_5_MIN,
   },
   'scheduled-site-publish': {
     path: '/api/v1/internal/scheduled-site-publish',

@@ -70,6 +70,35 @@ describe('describeAuditEvent', () => {
     expect(sentence).toBe('Maria Lopez did “mystery thing happened”');
   });
 
+  it('a failed emergency alert is called scheduled only when it was', () => {
+    const failed = (metadata: Record<string, unknown>, userId: string | null = null) =>
+      describeAuditEvent(
+        entry({ action: 'emergency_broadcast_failed', resourceType: 'emergency_broadcast', userId, metadata }),
+        ctx,
+      );
+
+    // The job could not send a scheduled alert.
+    const scheduled = failed({
+      reason: 'send_error',
+      title: 'Water off',
+      scheduledBy: MARIA,
+      scheduledFor: '2026-11-02T14:00:00.000Z',
+    });
+    expect(scheduled.verb).toBe('could not send the scheduled emergency alert');
+    expect(scheduled.sentence).toContain('could not send the scheduled emergency alert Water off');
+
+    // An immediate send failed in the manager's own request...
+    const immediate = failed({ reason: 'send_error', title: 'Water off', initiatedBy: MARIA }, MARIA);
+    expect(immediate.sentence).toBe('Maria Lopez could not send the emergency alert Water off');
+    // ...or died part-way and was found by the sweep. Neither says "scheduled".
+    const swept = failed({ reason: 'interrupted', title: 'Water off', initiatedBy: MARIA });
+    expect(swept.verb).toBe('could not send the emergency alert');
+    for (const described of [immediate, swept]) expect(described.sentence).not.toMatch(/scheduled/i);
+
+    // With no title to name, the stand-alone wording fits both.
+    expect(failed({ reason: 'interrupted', initiatedBy: MARIA }).sentence).not.toMatch(/scheduled/i);
+  });
+
   it('names the actor and the item, and lets the item narrow the page', () => {
     const described = describeAuditEvent(entry({ newValues: { title: 'Budget 2026.pdf' } }), ctx);
     expect(described.sentence).toBe('Maria Lopez posted the document Budget 2026.pdf');

@@ -1,22 +1,80 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { SmsPreview } from './SmsPreview';
 import {
   useEmergencyTemplates,
   useCreateBroadcast,
+  useScheduleBroadcast,
   useSendBroadcast,
   useCancelBroadcast,
+  fetchEmergencyBroadcast,
+  type BroadcastView,
 } from '@/hooks/use-emergency-broadcasts';
 import {
   fillTemplatePlaceholders,
 } from '@/lib/constants/emergency-templates';
 import type { CommunityType } from '@propertypro/shared';
+import { ApiRequestError } from '@/lib/api/request-json';
+import { utcDateToWallClockValue, wallClockValueToUtcIso } from '@/lib/utils/zoned-datetime';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   BROADCAST_AUDIENCE_LABELS,
   getBroadcastAudienceOptions,
   type BroadcastAudience,
 } from './broadcast-audience';
+import { formatDateTimeWithZone, timeZoneLabel } from './broadcast-status';
+
+type Severity = 'emergency' | 'urgent' | 'info';
+/** The manager's shape of an alert (the composer is manager-only). */
+type ManagerAlert = Extract<BroadcastView, { recipients: unknown }>;
+type Channel = 'sms' | 'email';
+
+/** An earlier alert to copy into the composer ("Send again later"). */
+export interface BroadcastSource {
+  title: string;
+  body: string;
+  smsBody: string | null;
+  severity: string;
+  targetAudience: string;
+  channels: string[];
+}
+
+/** The server's window (`assertSchedulableTime`), mirrored so the field can say so first. */
+const MIN_SCHEDULE_LEAD_MS = 5 * 60 * 1000;
+const MAX_SCHEDULE_AHEAD_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Turn the date-and-time field's value into the instant to send at.
+ *
+ * The field holds wall-clock time in the COMMUNITY's zone, never the
+ * browser's, so the conversion goes through `wallClockValueToUtcIso`, which
+ * resolves the zone's offset on that date (daylight saving included).
+ */
+function resolveScheduledTime(
+  value: string,
+  timeZone: string,
+  now: Date,
+): { iso: string } | { error: string } {
+  if (!value) return { error: 'Choose a date and time.' };
+  let iso: string;
+  try {
+    iso = wallClockValueToUtcIso(value, timeZone);
+  } catch {
+    return { error: 'Choose a date and time.' };
+  }
+  // A time skipped when the clocks go forward does not exist in this zone.
+  if (utcDateToWallClockValue(new Date(iso), timeZone) !== value) {
+    return { error: 'That time is skipped when the clocks change. Choose a different time.' };
+  }
+  const ahead = new Date(iso).getTime() - now.getTime();
+  if (ahead < MIN_SCHEDULE_LEAD_MS) return { error: 'Choose a time at least 5 minutes from now.' };
+  if (ahead > MAX_SCHEDULE_AHEAD_MS) return { error: 'Choose a time within the next 365 days.' };
+  return { iso };
+}
 
 interface Props {
   communityId: number;
@@ -34,24 +92,71 @@ interface Props {
    * See docs/audits/2026-08-09-legal-risk-audit.md F-10.
    */
   smsEnabled: boolean;
+  /** The community's IANA zone. "Send later" times are entered and shown in it. */
+  timeZone: string;
+  /**
+   * "Send again later": pre-fills the alert from an earlier one and opens on
+   * the compose step with "Send later" selected.
+   */
+  source?: BroadcastSource;
 }
 
-type Step = 'template' | 'compose' | 'recipients' | 'confirm' | 'sending' | 'sent';
+type Step =
+  | 'template'
+  | 'compose'
+  | 'recipients'
+  | 'confirm'
+  | 'sending'
+  | 'undoing'
+  | 'sent'
+  | 'send-failed';
 
-export function BroadcastComposer({ communityId, communityName, communityType, smsEnabled }: Props) {
+export function BroadcastComposer({
+  communityId,
+  communityName,
+  communityType,
+  smsEnabled,
+  timeZone,
+  source,
+}: Props) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('template');
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [smsBody, setSmsBody] = useState('');
-  const [severity, setSeverity] = useState<'emergency' | 'urgent' | 'info'>('emergency');
-  const [templateKey, setTemplateKey] = useState<string | undefined>();
-  const [targetAudience, setTargetAudience] = useState<BroadcastAudience>('all');
   const audienceOptions = getBroadcastAudienceOptions(communityType);
-  const [channels, setChannels] = useState<Array<'sms' | 'email'>>(
-    smsEnabled ? ['sms', 'email'] : ['email'],
+  const [step, setStep] = useState<Step>(source ? 'compose' : 'template');
+  const [title, setTitle] = useState(source?.title ?? '');
+  const [body, setBody] = useState(source?.body ?? '');
+  const [smsBody, setSmsBody] = useState(source?.smsBody ?? '');
+  const [severity, setSeverity] = useState<Severity>(
+    source && (['emergency', 'urgent', 'info'] as string[]).includes(source.severity)
+      ? (source.severity as Severity)
+      : 'emergency',
   );
+  const [templateKey, setTemplateKey] = useState<string | undefined>();
+  // A copied audience or channel is kept only if this community still offers it.
+  const [targetAudience, setTargetAudience] = useState<BroadcastAudience>(
+    audienceOptions.find((option) => option === source?.targetAudience) ?? 'all',
+  );
+  const [channels, setChannels] = useState<Channel[]>(() => {
+    const offered: Channel[] = smsEnabled ? ['sms', 'email'] : ['email'];
+    if (!source) return offered;
+    const copied = offered.filter((channel) => source.channels.includes(channel));
+    return copied.length > 0 ? copied : ['email'];
+  });
+  const [sendMode, setSendMode] = useState<'now' | 'later'>(source ? 'later' : 'now');
+  /** The date-and-time field's value: wall-clock time in the community zone. */
+  const [scheduledLocal, setScheduledLocal] = useState('');
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  /**
+   * 'busy' from the click until the outcome is KNOWN (which can mean asking the
+   * server what the alert is now); 'done' once it is scheduled; 'closed' when
+   * the server says this draft was already sent or canceled. The button is
+   * enabled only when 'idle', so a scheduled draft cannot be scheduled twice.
+   */
+  const [scheduleState, setScheduleState] = useState<'idle' | 'busy' | 'done' | 'closed'>('idle');
+  /** Why scheduling did not happen, when it verifiably did not. */
+  const [scheduleProblem, setScheduleProblem] = useState<string | null>(null);
+  /** Why "Send now" did not send from here. */
+  const [sendProblem, setSendProblem] = useState<string | null>(null);
   const [broadcastId, setBroadcastId] = useState<number | null>(null);
   const [recipientInfo, setRecipientInfo] = useState<{
     recipientCount: number;
@@ -63,6 +168,8 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
 
   const { data: templates } = useEmergencyTemplates(communityId);
   const createMutation = useCreateBroadcast();
+  // Scheduling converts the draft made at "Next: Confirm"; it creates nothing new.
+  const scheduleMutation = useScheduleBroadcast();
   const sendMutation = useSendBroadcast();
   const cancelMutation = useCancelBroadcast();
 
@@ -80,6 +187,9 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
           { broadcastId, communityId },
           {
             onSuccess: () => setStep('sent'),
+            // A refusal (409: sent by another click, scheduled, canceled) or a
+            // lost response must not leave the countdown sitting at 0.
+            onError: () => void handleSendFailed(broadcastId),
           },
         );
       }
@@ -107,6 +217,38 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
     setStep('compose');
   }
 
+  /** The send request failed or went unanswered: look at the alert, then say what is true. */
+  async function handleSendFailed(id: number) {
+    const alertNow = await lookUpAlert(id);
+    // It did go out (this request's answer was lost, or another click sent it).
+    if (alertNow && (alertNow.completedAt || (alertNow.sendClaimedAt && !alertNow.sendOutcome))) {
+      setStep('sent');
+      return;
+    }
+    setSendProblem(
+      !alertNow
+        ? "We couldn't confirm whether this alert was sent. Open the alert to check before you send another."
+        : alertNow.canceledAt
+          ? 'This alert was canceled, so it was not sent.'
+          : alertNow.scheduledFor && !alertNow.sendOutcome
+            ? 'This alert is scheduled, so it was not sent now. It will go out at its scheduled time.'
+            : alertNow.sendOutcome === 'failed'
+              ? 'This alert did not finish sending, and some residents may already have received it. Open the alert to see who, and use Send again later from there.'
+              : 'This alert was not sent. Open the alert to see what happened.',
+    );
+    setStep('send-failed');
+  }
+
+  /** The alert as the server has it now, or null when that cannot be read. */
+  async function lookUpAlert(id: number): Promise<ManagerAlert | null> {
+    try {
+      const alertNow = await fetchEmergencyBroadcast(communityId, id);
+      return 'recipients' in alertNow ? alertNow : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function handleCreateDraft() {
     const result = await createMutation.mutateAsync({
       communityId,
@@ -119,6 +261,11 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
       channels,
     });
 
+    // A new draft: nothing agreed to or attempted on the previous one carries over.
+    setConfirmed(false);
+    setScheduleState('idle');
+    setScheduleProblem(null);
+    scheduleMutation.reset();
     setBroadcastId(result.broadcastId);
     setRecipientInfo({
       recipientCount: result.recipientCount,
@@ -133,27 +280,116 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
     setUndoCountdown(10);
   }
 
-  function handleUndo() {
-    if (broadcastId) {
-      cancelMutation.mutate(
-        { broadcastId, communityId },
-        {
-          onSuccess: () => {
-            setStep('template');
-            setBroadcastId(null);
-            setRecipientInfo(null);
-          },
-          onError: () => {
-            // Cancel failed — broadcast was already sent or undo window expired
-            setStep('sent');
-          },
-        },
-      );
-    } else {
-      setStep('template');
-      setBroadcastId(null);
-      setRecipientInfo(null);
+  async function handleSchedule() {
+    if (!broadcastId) return;
+    const resolved = resolveScheduledTime(scheduledLocal, timeZone, new Date());
+    if ('error' in resolved) {
+      setScheduleError(resolved.error);
+      return;
     }
+    setScheduleError(null);
+    setScheduleProblem(null);
+    setScheduleState('busy');
+    const alertPage = `/emergency/${broadcastId}?communityId=${communityId}`;
+    try {
+      await scheduleMutation.mutateAsync({
+        broadcastId,
+        communityId,
+        scheduledFor: resolved.iso,
+      });
+      setScheduleState('done');
+      // No undo countdown: a scheduled alert is canceled from its own page.
+      router.push(alertPage);
+    } catch (error) {
+      // The server refused the time (its clock is the authority): same field, same message.
+      if (
+        error instanceof ApiRequestError &&
+        error.fields?.some((field) => field.field === 'scheduledFor')
+      ) {
+        setScheduleError(error.message);
+        setScheduleState('idle');
+        return;
+      }
+      // Anything else can hide a schedule that DID happen: a lost response, a
+      // second click answered 409, a failure after the row was written. Telling
+      // the manager to start over then sends residents the alert twice. So ask
+      // the server what this alert is now, and say only what that shows.
+      const alertNow = await lookUpAlert(broadcastId);
+      if (alertNow?.scheduledFor && !alertNow.canceledAt) {
+        setScheduleState('done');
+        router.push(alertPage);
+        return;
+      }
+      const refused = error instanceof ApiRequestError ? error : null;
+      if (!alertNow) {
+        // Not verifiable either way. Trying again is safe: if it was scheduled
+        // the server answers 409 and this same check then finds it.
+        setScheduleProblem(
+          "We couldn't confirm whether this alert was scheduled. Check your connection and try again, or open the alert to check.",
+        );
+        setScheduleState('idle');
+        return;
+      }
+      setScheduleProblem(
+        refused?.status === 409
+          ? 'This alert can no longer be scheduled: it has already been sent or canceled. Open the alert to see what happened.'
+          : refused?.status === 400
+            ? refused.message
+            : refused
+              ? `We couldn't schedule this alert. ${refused.message} Please try again.`
+              : "We couldn't reach the server, and this alert is not scheduled. Check your connection and try again.",
+      );
+      // Verified not scheduled. A 409 is final for this draft; anything else may be retried.
+      setScheduleState(refused?.status === 409 ? 'closed' : 'idle');
+    }
+  }
+
+  // Shown on the confirm step once the field holds a time that passes the checks.
+  const scheduledPreview =
+    sendMode === 'later' && scheduledLocal && !scheduleError
+      ? resolveScheduledTime(scheduledLocal, timeZone, new Date())
+      : null;
+  const scheduledIso = scheduledPreview && 'iso' in scheduledPreview ? scheduledPreview.iso : null;
+  const alertHref = broadcastId ? `/emergency/${broadcastId}?communityId=${communityId}` : null;
+
+  function backToStart() {
+    setStep('template');
+    setBroadcastId(null);
+    setRecipientInfo(null);
+  }
+
+  function handleUndo() {
+    if (!broadcastId) {
+      backToStart();
+      return;
+    }
+    const id = broadcastId;
+    // Leaving 'sending' stops the countdown, so it cannot run out and send
+    // while the cancel request is on its way.
+    setStep('undoing');
+    cancelMutation.mutate(
+      { broadcastId: id, communityId },
+      {
+        onSuccess: backToStart,
+        // A refusal or a lost answer says nothing about whether the alert went
+        // out. Look at it, and show what it is; never assume it was sent.
+        onError: async () => {
+          const alertNow = await lookUpAlert(id);
+          if (alertNow?.canceledAt) {
+            backToStart();
+          } else if (alertNow && (alertNow.completedAt || (alertNow.sendClaimedAt && !alertNow.sendOutcome))) {
+            setStep('sent');
+          } else {
+            setSendProblem(
+              alertNow
+                ? "We couldn't cancel this alert. It has not been sent. Open the alert to see where it stands."
+                : "We couldn't confirm whether this alert was canceled. Open the alert to check before you send another.",
+            );
+            setStep('send-failed');
+          }
+        },
+      },
+    );
   }
 
   return (
@@ -209,7 +445,7 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
             <select
               id="severity"
               value={severity}
-              onChange={(e) => setSeverity(e.target.value as 'emergency' | 'urgent' | 'info')}
+              onChange={(e) => setSeverity(e.target.value as Severity)}
               className="mt-1 w-full rounded border border-edge-strong px-3 py-2 text-sm"
             >
               <option value="emergency">Emergency</option>
@@ -390,23 +626,124 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
             </div>
           </div>
 
-          <label className="flex items-start gap-3 rounded-md border border-status-danger-border bg-status-danger-bg p-3">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              onChange={(e) => setConfirmed(e.target.checked)}
-              className="h-4 w-4 shrink-0 mt-1"
-            />
-            <span className="text-sm text-status-danger">
-              I understand this will immediately alert{' '}
-              <strong>{recipientInfo.recipientCount} people</strong> via{' '}
-              {channels.join(' and ')}.
-            </span>
-          </label>
+          <fieldset className="space-y-1">
+            <legend className="text-sm font-medium text-content-secondary">When to send</legend>
+            <label className="flex min-h-11 items-center gap-2 md:min-h-0">
+              <input
+                type="radio"
+                name="send-mode"
+                className="h-4 w-4 shrink-0"
+                checked={sendMode === 'now'}
+                // Not while a schedule request is out: its alert must not also be sent now.
+                disabled={scheduleState !== 'idle'}
+                onChange={() => {
+                  setSendMode('now');
+                  setConfirmed(false);
+                }}
+              />
+              <span className="text-sm text-content">Send now</span>
+            </label>
+            <label className="flex min-h-11 items-center gap-2 md:min-h-0">
+              <input
+                type="radio"
+                name="send-mode"
+                className="h-4 w-4 shrink-0"
+                checked={sendMode === 'later'}
+                disabled={scheduleState !== 'idle'}
+                onChange={() => {
+                  setSendMode('later');
+                  // The "I understand" tick was for sending now; it does not survive the switch.
+                  setConfirmed(false);
+                }}
+              />
+              <span className="text-sm text-content">Send later</span>
+            </label>
+          </fieldset>
+
+          {sendMode === 'now' ? (
+            <label className="flex items-start gap-3 rounded-md border border-status-danger-border bg-status-danger-bg p-3">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                className="h-4 w-4 shrink-0 mt-1"
+              />
+              <span className="text-sm text-status-danger">
+                I understand this will immediately alert{' '}
+                <strong>{recipientInfo.recipientCount} people</strong> via{' '}
+                {channels.join(' and ')}.
+              </span>
+            </label>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="scheduled-for">
+                  Send on
+                  <span aria-hidden="true" className="text-status-danger">
+                    {' '}
+                    *
+                  </span>
+                </Label>
+                <Input
+                  id="scheduled-for"
+                  type="datetime-local"
+                  required
+                  value={scheduledLocal}
+                  onChange={(e) => {
+                    setScheduledLocal(e.target.value);
+                    setScheduleError(null);
+                    if (scheduleState !== 'closed') setScheduleProblem(null);
+                  }}
+                  aria-invalid={scheduleError ? true : undefined}
+                  aria-describedby={
+                    scheduleError ? 'scheduled-for-help scheduled-for-error' : 'scheduled-for-help'
+                  }
+                  className={scheduleError ? 'border-status-danger' : undefined}
+                />
+                <p id="scheduled-for-help" className="text-xs text-content-secondary">
+                  Sends within 5 minutes after this time. Time zone: {timeZoneLabel(timeZone)}.
+                </p>
+                {scheduleError && (
+                  <p id="scheduled-for-error" role="alert" className="text-sm text-status-danger">
+                    {scheduleError}
+                  </p>
+                )}
+              </div>
+              <p className="rounded-md border border-edge bg-surface-card p-3 text-sm text-content">
+                {scheduledIso ? (
+                  <>
+                    This alert will be sent on{' '}
+                    <strong>{formatDateTimeWithZone(scheduledIso, timeZone)}</strong> to{' '}
+                    <strong>{recipientInfo.recipientCount} recipients as of now</strong>.
+                  </>
+                ) : (
+                  <>
+                    This alert will be sent at the time you choose to{' '}
+                    <strong>{recipientInfo.recipientCount} recipients as of now</strong>.
+                  </>
+                )}{' '}
+                Recipients are worked out again when it sends. You can cancel it until it starts
+                sending.
+              </p>
+            </div>
+          )}
 
           {createMutation.error && (
             <div className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger">
               {createMutation.error.message}
+            </div>
+          )}
+          {sendMode === 'later' && scheduleProblem && (
+            <div
+              role="alert"
+              className="rounded border border-status-danger-border bg-status-danger-bg p-2 text-sm text-status-danger"
+            >
+              {scheduleProblem}{' '}
+              {alertHref && (
+                <Link href={alertHref} className="font-medium underline">
+                  View the alert
+                </Link>
+              )}
             </div>
           )}
 
@@ -418,14 +755,20 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
             >
               Back
             </button>
-            <button
-              type="button"
-              onClick={handleConfirmSend}
-              disabled={!confirmed}
-              className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-danger hover:opacity-90 disabled:opacity-50"
-            >
-              Send Emergency Alert
-            </button>
+            {sendMode === 'now' ? (
+              <button
+                type="button"
+                onClick={handleConfirmSend}
+                disabled={!confirmed}
+                className="rounded bg-status-danger px-4 py-2 text-sm font-medium text-content-inverse hover:bg-status-danger hover:opacity-90 disabled:opacity-50"
+              >
+                Send Emergency Alert
+              </button>
+            ) : (
+              <Button type="button" onClick={handleSchedule} disabled={scheduleState !== 'idle'}>
+                {scheduleState === 'busy' ? 'Scheduling...' : 'Schedule alert'}
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -442,6 +785,26 @@ export function BroadcastComposer({ communityId, communityName, communityType, s
           >
             UNDO - Cancel Broadcast
           </button>
+        </div>
+      )}
+
+      {step === 'undoing' && (
+        <p role="status" className="text-center text-sm text-content-secondary">
+          Canceling the alert...
+        </p>
+      )}
+
+      {/* The send was refused or went unanswered, and the alert is not sent */}
+      {step === 'send-failed' && (
+        <div className="space-y-4 text-center">
+          <div role="alert" className="text-sm font-medium text-status-danger">
+            {sendProblem}
+          </div>
+          {alertHref && (
+            <Button asChild variant="outline">
+              <Link href={alertHref}>View the alert</Link>
+            </Button>
+          )}
         </div>
       )}
 

@@ -4,7 +4,7 @@
  * Added alongside Plan A1 drain #71. Covers the contracted runRoute envelope:
  * happy path (wire shape `{data: {canceled: true}}` with service called as
  * `(broadcastId, communityId, userId)` — id FIRST), 409 ConflictError when
- * the undo window has expired, 401 unauth, 400 invalid params.id
+ * the cancel loses to a send, 409/404 typed service refusals, 401 unauth, 400 invalid params.id
  * (non-numeric / zero, separate cases), 400 missing body communityId,
  * 403 demo-grace, 403 non-member, 403 permission denied.
  *
@@ -13,6 +13,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ConflictError, NotFoundError } from '../../src/lib/api/errors';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
@@ -119,7 +120,7 @@ describe('POST /api/v1/emergency-broadcasts/[id]/cancel', () => {
     expect(cancelBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
   });
 
-  it('returns 409 CONFLICT when the undo window has expired', async () => {
+  it('returns 409 CONFLICT when the cancel loses to a send that has started', async () => {
     cancelBroadcastMock.mockResolvedValueOnce(false);
 
     const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
@@ -128,8 +129,23 @@ describe('POST /api/v1/emergency-broadcasts/[id]/cancel', () => {
     const json = (await res.json()) as { error: { code: string; message: string } };
     expect(json.error.code).toBe('CONFLICT');
     expect(json.error.message).toBe(
-      'Undo window has expired. Broadcast cannot be canceled.',
+      'This alert can no longer be canceled: it has already started sending.',
     );
+  });
+
+  // Measured in a browser: each of these was an HTTP 500 while the service threw a plain Error.
+  it.each([
+    ['already canceled', new ConflictError('This alert was already canceled.'), 409, 'CONFLICT'],
+    ['already sent', new ConflictError('This alert has already been sent, so it cannot be canceled.'), 409, 'CONFLICT'],
+    ['an unknown id', new NotFoundError('This alert could not be found.'), 404, 'NOT_FOUND'],
+  ])('answers %s with a typed error, not a 500', async (_label, thrown, status, code) => {
+    cancelBroadcastMock.mockRejectedValueOnce(thrown);
+
+    const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
+
+    expect(res.status).toBe(status);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error).toMatchObject({ code, message: thrown.message });
   });
 
   it('returns 401 when unauthenticated', async () => {

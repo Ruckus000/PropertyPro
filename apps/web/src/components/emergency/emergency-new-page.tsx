@@ -15,7 +15,14 @@ import { BroadcastComposer } from '@/components/emergency/BroadcastComposer';
 
 type Props = ComponentProps<typeof BroadcastComposer>;
 
-export function EmergencyNewPage({ communityId, communityName, communityType, smsEnabled }: Props) {
+export function EmergencyNewPage({
+  communityId,
+  communityName,
+  communityType,
+  smsEnabled,
+  timeZone,
+  source,
+}: Props) {
   return (
     <PageLayout
       template="form"
@@ -37,6 +44,8 @@ export function EmergencyNewPage({ communityId, communityName, communityType, sm
         communityName={communityName}
         communityType={communityType}
         smsEnabled={smsEnabled}
+        timeZone={timeZone}
+        source={source}
       />
     </PageLayout>
   );

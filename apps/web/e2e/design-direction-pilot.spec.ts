@@ -66,13 +66,9 @@ test.describe('design direction pilot', () => {
     const communityId = await startPilot(page, 'cam');
     await open(page, 1440, `/emergency?communityId=${communityId}`, seededAlert);
     // An existing alert only: sending one from a test would message real recipients.
-    const href = await page
-      .locator('main a[href^="/emergency/"]')
-      .evaluateAll((links) =>
-        links
-          .map((a) => a.getAttribute('href') ?? '')
-          .find((h) => /^\/emergency\/\d+/.test(h)) ?? null,
-      );
+    // The SEEDED alert's own link, not the first row: a scheduled or canceled
+    // alert sorts above it and has no delivery report to wait for.
+    const href = await seededAlert(page).first().getAttribute('href');
     // The seed always has this alert (`open` just waited for it); a seed without it must fail.
     expect(href, 'the seeded emergency alert has a detail link').toBeTruthy();
     await checkPage(page, testInfo, {

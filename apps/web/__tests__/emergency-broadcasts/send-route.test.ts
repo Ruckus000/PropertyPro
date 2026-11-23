@@ -14,6 +14,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { ConflictError } from '../../src/lib/api/errors/ConflictError';
+import { NotFoundError, ValidationError } from '../../src/lib/api/errors';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 
@@ -124,6 +126,49 @@ describe('POST /api/v1/emergency-broadcasts/[id]/send', () => {
     );
     // Service signature: executeBroadcast(broadcastId, communityId, userId) — id FIRST.
     expect(executeBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
+  });
+
+  it('returns 409 CONFLICT for a scheduled broadcast (only the cron sends those)', async () => {
+    // The refusal itself lives in executeBroadcast and is asserted in
+    // emergency/emergency-broadcast-scheduling.test.ts; this pins the wire shape.
+    executeBroadcastMock.mockRejectedValueOnce(
+      new ConflictError('This alert is scheduled and will be sent automatically at its scheduled time.'),
+    );
+
+    const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
+
+    expect(res.status).toBe(409);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error.code).toBe('CONFLICT');
+    expect(json.error.message).toContain('scheduled');
+    // The manager's send reaches the service WITHOUT the cron's scheduledSend argument.
+    expect(executeBroadcastMock).toHaveBeenCalledWith(99, 42, 'user-admin-1');
+  });
+
+  it.each([
+    ['canceled', new ConflictError('This alert was canceled, so it cannot be sent.'), 409, 'CONFLICT'],
+    ['already sent', new ConflictError('This alert has already been sent.'), 409, 'CONFLICT'],
+    [
+      'already being sent (a second click)',
+      new ConflictError('This alert is already being sent, or has been sent, scheduled or canceled.'),
+      409,
+      'CONFLICT',
+    ],
+    ['an unknown id', new NotFoundError('This alert could not be found.'), 404, 'NOT_FOUND'],
+    [
+      'an audience over the cap',
+      new ValidationError('This alert would go to 501 people, and one alert can reach at most 500. Create it again with a smaller audience.'),
+      400,
+      'VALIDATION_ERROR',
+    ],
+  ])('answers %s with a typed error, not a 500', async (_label, thrown, status, code) => {
+    executeBroadcastMock.mockRejectedValueOnce(thrown);
+
+    const res = await POST(jsonPost(99, { communityId: 42 }), routeCtx('99'));
+
+    expect(res.status).toBe(status);
+    const json = (await res.json()) as { error: { code: string; message: string } };
+    expect(json.error).toMatchObject({ code, message: thrown.message });
   });
 
   it('returns 401 when unauthenticated', async () => {
