@@ -157,36 +157,41 @@ test.describe('design direction pilot', () => {
     expect(created.unit, 'the seed has at least one unit to host a visitor').toBeTruthy();
     expect(created.status, 'registering the visitor').toBeLessThan(300);
 
-    await open(page, 1280, url, (p) => p.locator('main tbody tr').filter({ hasText: name }));
     const row = page.locator('main tbody tr').filter({ hasText: name });
-    const checkIn = row.getByRole('button', { name: 'Check In', exact: true });
-    await expect(checkIn).toBeVisible();
+    // Both widths: 1440 is where the defect was found on production. The last
+    // pass is 1280, which the keyboard check below relies on.
+    for (const width of [1440, 1280] as const) {
+      const where = `visitors with a registered visitor @ ${width}px`;
+      await open(page, width, url, () => row);
+      await expectPaintedTitle(page, where);
+      await expect(row.getByRole('button', { name: 'Check In', exact: true })).toBeVisible();
 
-    const box = await row.evaluate((tr) => {
-      const scroller = tr.closest('table')!.parentElement!;
-      const button = [...tr.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Check In')!;
-      const s = scroller.getBoundingClientRect();
-      const b = button.getBoundingClientRect();
-      return {
-        scrollLeft: scroller.scrollLeft,
-        tableWidth: scroller.scrollWidth,
-        boxWidth: scroller.clientWidth,
-        buttonLeft: Math.round(b.left),
-        buttonRight: Math.round(b.right),
-        boxLeft: Math.round(s.left),
-        boxRight: Math.round(s.right),
-      };
-    });
-    expect(box.scrollLeft, 'the table has not been scrolled').toBe(0);
-    expect(
-      box.tableWidth,
-      `the table no longer overflows at 1280 (${box.tableWidth} in ${box.boxWidth}); this block proves nothing until it does`,
-    ).toBeGreaterThan(box.boxWidth + 1);
-    expect(
-      box.buttonLeft >= box.boxLeft && box.buttonRight <= box.boxRight + 1,
-      `Check In sits at ${box.buttonLeft}..${box.buttonRight}, outside the table's box ${box.boxLeft}..${box.boxRight}`,
-    ).toBe(true);
-    await shoot(page, testInfo, 'visitors-pinned-actions-cam-1280');
+      const box = await row.evaluate((tr) => {
+        const scroller = tr.closest('table')!.parentElement!;
+        const button = [...tr.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Check In')!;
+        const s = scroller.getBoundingClientRect();
+        const b = button.getBoundingClientRect();
+        return {
+          scrollLeft: scroller.scrollLeft,
+          tableWidth: scroller.scrollWidth,
+          boxWidth: scroller.clientWidth,
+          buttonLeft: Math.round(b.left),
+          buttonRight: Math.round(b.right),
+          boxLeft: Math.round(s.left),
+          boxRight: Math.round(s.right),
+        };
+      });
+      expect(box.scrollLeft, `${where}: the table has not been scrolled`).toBe(0);
+      expect(
+        box.tableWidth,
+        `${where}: the table no longer overflows (${box.tableWidth} in ${box.boxWidth}); this block proves nothing until it does`,
+      ).toBeGreaterThan(box.boxWidth + 1);
+      expect(
+        box.buttonLeft >= box.boxLeft && box.buttonRight <= box.boxRight + 1,
+        `${where}: Check In sits at ${box.buttonLeft}..${box.buttonRight}, outside the table's box ${box.boxLeft}..${box.boxRight}`,
+      ).toBe(true);
+      await shoot(page, testInfo, `visitors-pinned-actions-cam-${width}`);
+    }
 
     // Keyboard (WCAG 2.4.11): a control focused in a scrolling column must come
     // to rest clear of the pinned column, not underneath it. Visitors has no
