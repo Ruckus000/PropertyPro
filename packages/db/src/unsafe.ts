@@ -50,6 +50,7 @@ export {
   findPortfolioStatusInputsUnscoped,
   getMaintenanceVolumeReport,
   getComplianceStatusReport,
+  documentStatesFor,
   getOccupancyTrendsReport,
   getViolationSummaryReport,
   getDelinquencyAgingReport,

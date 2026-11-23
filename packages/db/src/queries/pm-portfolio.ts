@@ -617,6 +617,8 @@ export interface PortfolioChecklistRow {
 }
 
 export interface PortfolioLinkedDocumentState {
+  /** The community the document belongs to. Scores read only their own. */
+  communityId: number;
   deletedAt: Date | null;
   /** `posted_at` is null: owners cannot see it, so it satisfies nothing. */
   isDraft: boolean;
@@ -764,6 +766,7 @@ export async function findPortfolioStatusInputsUnscoped(
     const docRows = await db
       .select({
         id: documents.id,
+        communityId: documents.communityId,
         deletedAt: documents.deletedAt,
         postedAt: documents.postedAt,
         receivedAt: documents.receivedAt,
@@ -777,6 +780,7 @@ export async function findPortfolioStatusInputsUnscoped(
       );
     for (const row of docRows) {
       documentStates.set(row.id, {
+        communityId: row.communityId,
         deletedAt: row.deletedAt ?? null,
         isDraft: row.postedAt === null,
         postedAt: row.postedAt ?? null,
@@ -786,6 +790,24 @@ export async function findPortfolioStatusInputsUnscoped(
   }
 
   return { facts, checklistRows, documentStates, noticeMeetings };
+}
+
+/**
+ * One community's documents out of `PortfolioStatusInputs.documentStates`.
+ * The map spans every community read, so a checklist row or meeting that named
+ * another community's document (the app refuses to write one, but nothing in
+ * the schema stops it) would otherwise be scored with that document. Score a
+ * community only with this.
+ */
+export function documentStatesFor(
+  inputs: Pick<PortfolioStatusInputs, 'documentStates'>,
+  communityId: number,
+): Map<number, PortfolioLinkedDocumentState> {
+  const own = new Map<number, PortfolioLinkedDocumentState>();
+  for (const [id, state] of inputs.documentStates) {
+    if (state.communityId === communityId) own.set(id, state);
+  }
+  return own;
 }
 
 // ─── Report Query Types ───
@@ -1026,7 +1048,7 @@ export async function getComplianceStatusReport(
       communityType: (info?.type ?? 'condo_718') as CommunityType,
       unitCount: inputs.facts.get(communityId)?.unitCount ?? null,
       checklistRows: checklistByCommunity.get(communityId) ?? [],
-      documentStates: inputs.documentStates,
+      documentStates: documentStatesFor(inputs, communityId),
       meetings: inputs.noticeMeetings.get(communityId) ?? [],
       now,
     });

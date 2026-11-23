@@ -97,19 +97,23 @@ async function fetchLinkedDocuments(
   documentIds: readonly number[],
   communityIds: readonly number[],
 ): Promise<DocumentDbRow[]> {
-  const rows: DocumentDbRow[] = [];
+  const chunks: number[][] = [];
   for (let i = 0; i < documentIds.length; i += DOCUMENT_ID_CHUNK) {
-    const chunk = documentIds.slice(i, i + DOCUMENT_ID_CHUNK);
-    // No deleted_at filter on purpose: see the module comment.
-    const { data, error } = await db
-      .from('documents')
-      .select('id, community_id, deleted_at, posted_at, received_at')
-      .in('id', chunk)
-      .in('community_id', [...communityIds]);
-    if (error) throw new Error(`Failed to load linked documents: ${error.message}`);
-    rows.push(...((data ?? []) as DocumentDbRow[]));
+    chunks.push(documentIds.slice(i, i + DOCUMENT_ID_CHUNK));
   }
-  return rows;
+  const pages = await Promise.all(
+    chunks.map(async (chunk) => {
+      // No deleted_at filter on purpose: see the module comment.
+      const { data, error } = await db
+        .from('documents')
+        .select('id, community_id, deleted_at, posted_at, received_at')
+        .in('id', chunk)
+        .in('community_id', [...communityIds]);
+      if (error) throw new Error(`Failed to load linked documents: ${error.message}`);
+      return (data ?? []) as DocumentDbRow[];
+    }),
+  );
+  return pages.flat();
 }
 
 /**

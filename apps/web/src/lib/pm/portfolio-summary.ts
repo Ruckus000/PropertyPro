@@ -32,6 +32,7 @@ import {
 // (the actor's managed set), so these reads never reach outside it.
 // AUTHZ: PM portfolio — cross-community reads, gated by requirePmPortfolioAccess in the route
 import {
+  documentStatesFor,
   findPortfolioStatusInputsUnscoped,
   getPortfolioDashboard,
   type DashboardCommunityRow,
@@ -136,7 +137,7 @@ export function deriveAllCompliance(
       communityType: row.communityType,
       unitCount: inputs.facts.get(row.communityId)?.unitCount ?? null,
       checklistRows: checklistByCommunity.get(row.communityId) ?? [],
-      documentStates: inputs.documentStates,
+      documentStates: documentStatesFor(inputs, row.communityId),
       meetings: inputs.noticeMeetings.get(row.communityId) ?? [],
       now,
     });

@@ -812,12 +812,14 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     );
 
     expect(result.documentStates.get(posted!.id)).toEqual({
+      communityId: communityAId,
       deletedAt: null,
       isDraft: false,
       postedAt: expect.any(Date),
       receivedAt: null,
     });
     expect(result.documentStates.get(draft!.id)).toEqual({
+      communityId: communityAId,
       deletedAt: null,
       isDraft: true,
       postedAt: null,
@@ -885,6 +887,7 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
       expect.objectContaining({ title: 'Board 2', minutesApprovedAt: null, minutesDocumentId: foreignDoc!.id }),
     ]);
     expect(result.documentStates.get(minutesDoc!.id)).toEqual({
+      communityId: communityAId,
       deletedAt: null,
       isDraft: false,
       postedAt: expect.any(Date),
@@ -892,6 +895,10 @@ describeDb('pm portfolio unsafe query helper (integration)', () => {
     });
     // Read only within the checklist communities: the foreign document is not.
     expect(result.documentStates.has(foreignDoc!.id)).toBe(false);
+
+    const { documentStatesFor } = await import('../src/unsafe');
+    expect([...documentStatesFor(result, communityAId).keys()]).toEqual([minutesDoc!.id]);
+    expect(documentStatesFor(result, communityBId).size).toBe(0);
   });
 
   it('findPortfolioStatusInputsUnscoped reads nothing for an empty set', async () => {

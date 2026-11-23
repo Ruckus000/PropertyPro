@@ -69,6 +69,13 @@ export interface CommunityComplianceInputs {
   /**
    * Every document a row or a meeting names, soft-deleted ones included, and
    * only this community's (an id must never reach across tenants).
+   *
+   * ponytail: a row naming an id that is NOT in this map reads as posted, here
+   * and on the Compliance page alike (`withDerivedStatus` cannot tell "not
+   * loaded" from "not ours"). The app refuses to link another community's file
+   * (`assertDocumentInCommunity`, the minutes link checks), so no such row
+   * should exist. Trigger: any checklist row or meeting found naming another
+   * community's document.
    */
   documentStates: Map<number, LinkedDocumentState>;
   /**

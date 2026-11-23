@@ -17,6 +17,9 @@ const { getPortfolioDashboardMock, findPortfolioStatusInputsMock } = vi.hoisted(
 vi.mock('@propertypro/db/unsafe', () => ({
   getPortfolioDashboard: getPortfolioDashboardMock,
   findPortfolioStatusInputsUnscoped: findPortfolioStatusInputsMock,
+  // Same filter as packages/db's (pinned by pm-portfolio-unsafe.integration.test.ts).
+  documentStatesFor: (inputs: { documentStates: Map<number, { communityId: number }> }, communityId: number) =>
+    new Map([...inputs.documentStates].filter(([, state]) => state.communityId === communityId)),
 }));
 
 import {
@@ -185,7 +188,7 @@ describe('enrichRows', () => {
       documentPostedAt: new Date(),
       deadline: null,
     });
-    const documentStates = new Map([[8, { deletedAt: null, isDraft: false }]]);
+    const documentStates = new Map([[8, { communityId: 5, deletedAt: null, isDraft: false }]]);
     const missedMeeting = {
       id: 1,
       title: 'Annual Meeting',
@@ -205,6 +208,21 @@ describe('enrichRows', () => {
     );
     expect(withMissed!.pastDeadlineCount).toBe(1);
     expect(withMissed!.status).toBe('needs_attention');
+  });
+
+  it('scores a row only with its own community\'s document state', () => {
+    const facts = new Map([[5, { subscriptionPlan: 'professional', unitCount: 60, branding: null }]]);
+    const linked = item(5, { documentId: 8, documentPostedAt: new Date(), deadline: null });
+    // Document 8 is community 6's DRAFT. Its state must not decide community
+    // 5's row: 5's own Compliance page cannot see it either.
+    const foreignDraft = new Map([[8, { communityId: 6, deletedAt: null, isDraft: true }]]);
+    const ownDraft = new Map([[8, { communityId: 5, deletedAt: null, isDraft: true }]]);
+
+    const [own] = enrichRows([row({ communityId: 5 })], inputs({ facts, checklistRows: [linked], documentStates: ownDraft }));
+    const [foreign] = enrichRows([row({ communityId: 5 })], inputs({ facts, checklistRows: [linked], documentStates: foreignDraft }));
+
+    expect(own!.complianceScore).toBe(0);
+    expect(foreign!.complianceScore).not.toBe(own!.complianceScore);
   });
 
   it('uses the website size threshold: a 10-unit condo is never past a deadline', () => {
@@ -295,7 +313,7 @@ describe('buildPortfolioSummary', () => {
           [3, { subscriptionPlan: 'operations_plus', unitCount: 180, branding: null }],
         ]),
         checklistRows: [item(1, { deadline: PAST }), item(1), item(2, { documentId: 7, documentPostedAt: PAST })],
-        documentStates: new Map([[7, { deletedAt: null, isDraft: false }]]),
+        documentStates: new Map([[7, { communityId: 2, deletedAt: null, isDraft: false }]]),
       }),
     );
   });
