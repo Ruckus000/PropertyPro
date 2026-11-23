@@ -8,13 +8,14 @@
  * runner single-wraps to `{ data: { data, pagination } }` (B1 envelope).
  *
  * `q` has no `.min(1)` — empty/short queries are valid at the contract layer;
- * service handles ranking/filtering.
+ * service handles ranking/filtering. It is capped at 200 characters: it feeds
+ * both a full-text query and two ILIKE scans.
  */
 import { defineRoute, z } from '@propertypro/api-contract';
 
 const documentSearchQuerySchema = z.object({
   communityId: z.coerce.number().int().positive(),
-  q: z.string().optional(),
+  q: z.string().max(200).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
   mimeType: z.string().min(1).optional(),
   from: z.string().datetime().optional(),

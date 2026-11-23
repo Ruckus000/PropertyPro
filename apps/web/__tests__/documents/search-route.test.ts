@@ -89,6 +89,25 @@ describe('p1-14 document search route', () => {
     expect(res.status).toBe(403);
   });
 
+  it('refuses a query longer than 200 characters', async () => {
+    const req = new NextRequest(
+      `http://localhost:3000/api/v1/documents/search?communityId=42&q=${'a'.repeat(201)}`,
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(400);
+    expect(searchDocumentsMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts a 200-character query', async () => {
+    const req = new NextRequest(
+      `http://localhost:3000/api/v1/documents/search?communityId=42&q=${'a'.repeat(200)}`,
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+  });
+
   it('validates required communityId', async () => {
     const req = new NextRequest('http://localhost:3000/api/v1/documents/search?q=minutes');
     const res = await GET(req);

@@ -3,6 +3,7 @@ import type { CommunityRole, CommunityType } from '@propertypro/shared';
 import { createScopedClient } from '../scoped-client';
 import { documents } from '../schema/documents';
 import { buildDocumentAccessFilter } from './document-access';
+import { escapeLikePattern } from './like-pattern';
 
 export interface DocumentSearchParams {
   communityId: number;
@@ -108,7 +109,8 @@ export async function searchDocuments(params: DocumentSearchParams): Promise<Doc
   }
 
   if (hasTextQuery) {
-    const like = `%${textQuery}%`;
+    // Literal match: `%` and `_` in what the user typed are not wildcards.
+    const like = `%${escapeLikePattern(textQuery)}%`;
     additionalFilters.push(
       or(
         sql`${vectorExpr} @@ ${tsQueryExpr}`,

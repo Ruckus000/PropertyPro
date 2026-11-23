@@ -16,6 +16,8 @@ const FILE_NAMES = [
   '__test_doc_search_a_budget__.pdf',
   '__test_doc_search_b_minutes__.pdf',
   '__test_doc_search_hidden_evidence__.pdf',
+  '__test_doc_search_percent_literal__.pdf',
+  '__test_doc_search_percent_decoy__.pdf',
 ];
 
 describeDb('document search integration', () => {
@@ -122,6 +124,35 @@ describeDb('document search integration', () => {
 
     expect(result.data.every((row) => row.mimeType === 'application/pdf')).toBe(true);
     expect(result.data.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a literal % matches only titles containing %', async () => {
+    await db.insert(documents).values([
+      {
+        communityId: communityAId,
+        title: '50% Reserve Funding',
+        filePath: 'communities/a/documents/percent-literal.pdf',
+        fileName: '__test_doc_search_percent_literal__.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      },
+      {
+        // Unescaped, `%50%%` matched this title's "2050". Its full-text vector
+        // has "2050", not "50", so only the ILIKE branch could admit it.
+        communityId: communityAId,
+        title: 'Budget 2050 Plan',
+        filePath: 'communities/a/documents/percent-decoy.pdf',
+        fileName: '__test_doc_search_percent_decoy__.pdf',
+        fileSize: 1024,
+        mimeType: 'application/pdf',
+      },
+    ]);
+
+    const result = await searchDocuments({ communityId: communityAId, query: '50%', limit: 20 });
+    const names = result.data.map((row) => row.fileName);
+
+    expect(names).toContain('__test_doc_search_percent_literal__.pdf');
+    expect(names).not.toContain('__test_doc_search_percent_decoy__.pdf');
   });
 
   it('excludes hidden violation evidence from library search results', async () => {
