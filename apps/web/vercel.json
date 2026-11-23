@@ -35,10 +35,21 @@
     },
     {
       "source": "/(.*)",
+      "has": [{ "type": "host", "value": "^([a-z0-9-]+\\.)*getpropertypro\\.com$" }],
       "headers": [
         {
           "key": "Strict-Transport-Security",
           "value": "max-age=63072000; includeSubDomains; preload"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "missing": [{ "type": "host", "value": "^([a-z0-9-]+\\.)*getpropertypro\\.com$" }],
+      "headers": [
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000"
         }
       ]
     }
