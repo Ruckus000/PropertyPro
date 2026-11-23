@@ -33,6 +33,7 @@ import { MULTI_TENANT_USERS } from '../fixtures/multi-tenant-users';
 import {
   cancelBroadcast,
   createBroadcast,
+  executeBroadcast,
   getBroadcastForRecipient,
   getBroadcastWithReport,
   listBroadcastsForRecipient,
@@ -386,6 +387,167 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     expect(emailsFor(title)).toBe(2);
   });
 
+  /** An immediate draft, as the composer makes at "Next: Confirm": two recipient rows. */
+  async function draftAlert(title: string): Promise<number> {
+    const draft = await createBroadcast({
+      communityId,
+      title,
+      body: 'Water off 9 to noon.',
+      severity: 'info',
+      targetAudience: 'all',
+      channels: ['email'],
+      smsAllowed: false,
+      initiatedBy: managerId,
+    });
+    return draft.broadcastId;
+  }
+  const won = (r: PromiseSettledResult<unknown>) => r.status === 'fulfilled' && r.value !== false;
+
+  it('send racing schedule on one draft: exactly one wins, and the loser changes nothing', async () => {
+    const later = new Date(Date.now() + 30 * MINUTE);
+    let sendWins = 0;
+    let scheduleWins = 0;
+    // Both orders are forced once, then the pair is raced for real.
+    for (const order of ['send-first', 'schedule-first', 'race', 'race', 'race'] as const) {
+      const title = `Send vs schedule ${order} ${sendWins + scheduleWins} ${state.runSuffix}`;
+      const id = await draftAlert(title);
+      const send = () => executeBroadcast(id, communityId, managerId);
+      const schedule = () => scheduleBroadcast(id, communityId, managerId, later);
+
+      let results: PromiseSettledResult<unknown>[];
+      if (order === 'send-first') results = [...(await Promise.allSettled([send()])), ...(await Promise.allSettled([schedule()]))];
+      else if (order === 'schedule-first') {
+        const scheduled = await Promise.allSettled([schedule()]);
+        results = [...(await Promise.allSettled([send()])), ...scheduled];
+      } else results = await Promise.allSettled([send(), schedule()]);
+      const [sent, scheduled] = results as [PromiseSettledResult<unknown>, PromiseSettledResult<unknown>];
+
+      expect([won(sent), won(scheduled)].filter(Boolean)).toHaveLength(1);
+      const report = (await getBroadcastWithReport(id, communityId))!;
+      if (won(sent)) {
+        sendWins += 1;
+        // Sent now, once, with its delivery rows intact and never scheduled.
+        expect(report.completedAt).toBeInstanceOf(Date);
+        expect(report.scheduledFor).toBeNull();
+        expect(await recipientRowCount(id)).toBe(2);
+        expect(emailsFor(title)).toBe(2);
+        expect((scheduled as PromiseRejectedResult).reason.message).toBe(
+          'This alert has already been sent, scheduled or canceled.',
+        );
+      } else {
+        scheduleWins += 1;
+        // Scheduled, nothing sent, nothing claimed.
+        expect(report).toMatchObject({ scheduledFor: later, completedAt: null, sendClaimedAt: null });
+        expect(emailsFor(title)).toBe(0);
+        expect(await recipientRowCount(id)).toBe(0);
+        await cancelBroadcast(id, communityId, managerId);
+      }
+      // Whoever won, the job has nothing to send for this alert now.
+      await processDueScheduledBroadcasts();
+      expect(emailsFor(title)).toBe(won(sent) ? 2 : 0);
+    }
+    expect(sendWins).toBeGreaterThanOrEqual(1);
+    expect(scheduleWins).toBeGreaterThanOrEqual(1);
+  });
+
+  it('two concurrent sends of one draft send once', async () => {
+    const title = `Double send ${state.runSuffix}`;
+    const id = await draftAlert(title);
+
+    const results = await Promise.allSettled([
+      executeBroadcast(id, communityId, managerId),
+      executeBroadcast(id, communityId, managerId),
+      executeBroadcast(id, communityId, managerId),
+    ]);
+
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(emailsFor(title)).toBe(2);
+    expect(await recipientRowCount(id)).toBe(2);
+    // And a late third click is refused too.
+    await expect(executeBroadcast(id, communityId, managerId)).rejects.toThrow();
+    expect(emailsFor(title)).toBe(2);
+  });
+
+  it('cancel racing the immediate send: the alert ends canceled XOR sent', async () => {
+    let cancelWins = 0;
+    let sendWins = 0;
+    for (const order of ['cancel-first', 'send-first', 'race', 'race', 'race'] as const) {
+      const title = `Cancel vs send ${order} ${cancelWins + sendWins} ${state.runSuffix}`;
+      const id = await draftAlert(title);
+      const cancel = () => cancelBroadcast(id, communityId, managerId);
+      const send = () => executeBroadcast(id, communityId, managerId);
+
+      let canceled: PromiseSettledResult<unknown>;
+      let sent: PromiseSettledResult<unknown>;
+      if (order === 'cancel-first') {
+        [canceled] = await Promise.allSettled([cancel()]);
+        [sent] = await Promise.allSettled([send()]);
+      } else if (order === 'send-first') {
+        [sent] = await Promise.allSettled([send()]);
+        [canceled] = await Promise.allSettled([cancel()]);
+      } else [canceled, sent] = await Promise.allSettled([cancel(), send()]);
+
+      expect([won(canceled!), won(sent!)].filter(Boolean)).toHaveLength(1);
+      const row = (await load([id])).get(id)!;
+      if (won(canceled!)) {
+        cancelWins += 1;
+        expect(row.canceledAt).toBeInstanceOf(Date);
+        expect(row.completedAt).toBeNull();
+        expect(row.sendClaimedAt).toBeNull();
+        expect(emailsFor(title)).toBe(0);
+      } else {
+        sendWins += 1;
+        expect(row.canceledAt).toBeNull();
+        expect(row.completedAt).toBeInstanceOf(Date);
+        expect(emailsFor(title)).toBe(2);
+      }
+    }
+    expect(cancelWins).toBeGreaterThanOrEqual(1);
+    expect(sendWins).toBeGreaterThanOrEqual(1);
+  });
+
+  it('a send already in flight (claimed, not finished) beats a cancel inside the undo window', async () => {
+    const { emergencyBroadcasts } = state.dbModule;
+    const id = await draftAlert(`In flight ${state.runSuffix}`);
+    // What a cancel finds when the send's claim landed just before it: the
+    // draft is seconds old, not completed, not canceled, but claimed.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: new Date() })
+      .where(eq(emergencyBroadcasts.id, id));
+
+    await expect(cancelBroadcast(id, communityId, managerId)).resolves.toBe(false);
+
+    expect((await load([id])).get(id)!.canceledAt).toBeNull();
+    // The loser changed nothing: recipients are still pending, not skipped.
+    const { emergencyBroadcastRecipients } = state.dbModule;
+    const recipients = (await state.db
+      .select()
+      .from(emergencyBroadcastRecipients)
+      .where(eq(emergencyBroadcastRecipients.broadcastId, id))) as Array<{ emailStatus: string }>;
+    expect(recipients.map((r) => r.emailStatus)).toEqual(['pending', 'pending']);
+    // Finish it so later job runs in this file leave it alone.
+    await state.db.update(emergencyBroadcasts).set({ completedAt: new Date() }).where(eq(emergencyBroadcasts.id, id));
+  });
+
+  it('an immediate send that died after its claim is swept to failed/interrupted, with no scheduled time', async () => {
+    const { emergencyBroadcasts } = state.dbModule;
+    const title = `Died mid-send ${state.runSuffix}`;
+    const id = await draftAlert(title);
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ sendClaimedAt: new Date(Date.now() - 16 * MINUTE) })
+      .where(eq(emergencyBroadcasts.id, id));
+
+    const summary = await processDueScheduledBroadcasts();
+
+    expect(summary.interrupted).toBe(1);
+    expect((await load([id])).get(id)).toMatchObject({ sendOutcome: 'failed', sendOutcomeReason: 'interrupted' });
+    expect(emailsFor(title)).toBe(0);
+    // Still not sendable or schedulable afterwards: no retry of a possibly partial send.
+    await expect(executeBroadcast(id, communityId, managerId)).rejects.toThrow();
+  });
+
   it('an alert that has already gone out is never claimed, even with a due time and no claim', async () => {
     const { emergencyBroadcasts } = state.dbModule;
     const title = `Already sent ${state.runSuffix}`;
@@ -443,7 +605,7 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
       .where(eq(emergencyBroadcasts.id, missedId));
     await state.db
       .update(emergencyBroadcasts)
-      .set({ sendClaimedAt: claimedAt, sendOutcome: 'failed', sendOutcomeReason: 'Error' })
+      .set({ sendClaimedAt: claimedAt, sendOutcome: 'failed', sendOutcomeReason: 'send_error' })
       .where(eq(emergencyBroadcasts.id, failedId));
     // A send that threw part-way leaves recipient rows behind.
     await createScopedClient(communityId).insert(emergencyBroadcastRecipients, {
@@ -466,7 +628,7 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
     const byId = new Map(managerPage.data.map((b) => [Number(b['id']), b]));
     expect(byId.get(scheduledId)).toMatchObject({ scheduledFor: expect.any(Date), sendOutcome: null });
     expect(byId.get(missedId)).toMatchObject({ sendOutcome: 'missed', sendOutcomeReason: 'late' });
-    expect(byId.get(failedId)).toMatchObject({ sendOutcome: 'failed', sendOutcomeReason: 'Error' });
+    expect(byId.get(failedId)).toMatchObject({ sendOutcome: 'failed', sendOutcomeReason: 'send_error' });
 
     // Leave nothing claimable behind for other runs of the cron.
     await state.db

@@ -7,6 +7,8 @@
  * is a database fact and is proven in
  * `integration/scheduled-emergency-broadcasts.integration.test.ts`.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
@@ -59,7 +61,12 @@ vi.mock('../../src/lib/services/emergency-broadcast-service', () => ({
   writeBroadcastRecipients: writeBroadcastRecipientsMock,
 }));
 
-import { processDueScheduledBroadcasts } from '../../src/lib/services/emergency-broadcast-schedule-service';
+import {
+  CLAIM_BUDGET_MS,
+  CRON_MAX_DURATION_SECONDS,
+  processDueScheduledBroadcasts,
+  sanitizedError,
+} from '../../src/lib/services/emergency-broadcast-schedule-service';
 
 const hardDeleteMock = vi.fn(async (_table: unknown, _where: unknown) => []);
 
@@ -71,7 +78,7 @@ interface Row {
   community_id: number;
   initiated_by: string;
   title: string;
-  scheduled_for: Date;
+  scheduled_for: Date | null;
   severity: string;
   target_audience: string;
   channels: string;
@@ -133,8 +140,8 @@ beforeEach(() => {
       );
     }
     return rows
-      .filter((r) => claimable(r) && r.scheduled_for.getTime() <= cutoff)
-      .sort((a, b) => a.scheduled_for.getTime() - b.scheduled_for.getTime())
+      .filter((r) => claimable(r) && r.scheduled_for !== null && r.scheduled_for.getTime() <= cutoff)
+      .sort((a, b) => a.scheduled_for!.getTime() - b.scheduled_for!.getTime())
       .map((r) => ({ id: r.id }));
   });
   db.select.mockImplementation(() => ({
@@ -178,8 +185,8 @@ describe('processDueScheduledBroadcasts', () => {
     const first = await processDueScheduledBroadcasts(NOW);
     const second = await processDueScheduledBroadcasts(NOW);
 
-    expect(first).toEqual({ due: 1, sent: 1, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
-    expect(second).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
+    expect(first).toEqual({ due: 1, sent: 1, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
+    expect(second).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
     expect(executeBroadcastMock).toHaveBeenCalledTimes(1);
     // The immediate-send path, as the system actor, naming the scheduler.
     expect(executeBroadcastMock).toHaveBeenCalledWith(1, 42, null, { scheduledBy: 'manager-1' });
@@ -245,7 +252,7 @@ describe('processDueScheduledBroadcasts', () => {
 
     const summary = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 2, sent: 1, missed: 1, failed: 0, claimedElsewhere: 0, interrupted: 0 });
+    expect(summary).toEqual({ due: 2, sent: 1, missed: 1, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
     expect(late).toMatchObject({ send_outcome: 'missed', send_outcome_reason: 'late' });
     expect(onTheLine.send_outcome).toBeNull();
     expect(executeBroadcastMock).toHaveBeenCalledTimes(1);
@@ -260,7 +267,7 @@ describe('processDueScheduledBroadcasts', () => {
         reason: 'late',
         title: 'Alert 1',
         scheduledBy: 'manager-1',
-        scheduledFor: late.scheduled_for.toISOString(),
+        scheduledFor: late.scheduled_for!.toISOString(),
       },
     });
   });
@@ -277,7 +284,7 @@ describe('processDueScheduledBroadcasts', () => {
     expect(executeBroadcastMock).not.toHaveBeenCalled();
   });
 
-  it('a throwing send: marked failed with the error CLASS, not retried, and the next alert still goes', async () => {
+  it('a throwing send: marked failed/send_error, not retried, and the next alert still goes', async () => {
     class EmailProviderDownError extends Error {}
     const bad = seed(1, 3);
     const good = seed(2, 2);
@@ -288,22 +295,26 @@ describe('processDueScheduledBroadcasts', () => {
     const summary = await processDueScheduledBroadcasts(NOW);
     const again = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 2, sent: 1, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 0 });
-    expect(bad).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'EmailProviderDownError' });
+    expect(summary).toEqual({ due: 2, sent: 1, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
+    // A fixed reason, never the class name (which a production build can minify to a letter).
+    expect(bad).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'send_error' });
     expect(good.completed_at).not.toBeNull();
     // Not retried: the failed row stays claimed and the next run finds nothing.
     expect(again.due).toBe(0);
     expect(executeBroadcastMock).toHaveBeenCalledTimes(2);
-    expect(captureExceptionMock).toHaveBeenCalledWith(
-      expect.any(EmailProviderDownError),
-      expect.objectContaining({ extra: { broadcastId: 1, communityId: 42 } }),
-    );
+    // Sentry gets a sanitised stand-in, never the thrown object.
+    expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+    const [captured, context] = captureExceptionMock.mock.calls[0]!;
+    expect(captured).not.toBeInstanceOf(EmailProviderDownError);
+    expect(captured.message).toBe('Scheduled emergency alert job failed: EmailProviderDownError');
+    expect(context).toMatchObject({ extra: { broadcastId: 1, communityId: 42 } });
+    expect(JSON.stringify([captured.message, captured.stack, context])).not.toContain('owner@example.com');
     const failedAudit = logAuditEventMock.mock.calls
       .map(([entry]) => entry)
       .find((entry) => entry.action === 'emergency_broadcast_failed');
-    expect(failedAudit).toMatchObject({ userId: null, resourceId: '1' });
-    // The class name only: the message carried an address.
+    expect(failedAudit).toMatchObject({ userId: null, resourceId: '1', metadata: { reason: 'send_error' } });
     expect(JSON.stringify(failedAudit)).not.toContain('owner@example.com');
+    expect(JSON.stringify(failedAudit)).not.toContain('EmailProviderDownError');
   });
 
   it('a row claimed or canceled between the scan and the claim is left alone', async () => {
@@ -320,7 +331,7 @@ describe('processDueScheduledBroadcasts', () => {
 
     const summary = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 1, sent: 0, missed: 0, failed: 0, claimedElsewhere: 1, interrupted: 0 });
+    expect(summary).toEqual({ due: 1, sent: 0, missed: 0, failed: 0, claimedElsewhere: 1, interrupted: 0, deferred: 0 });
     expect(executeBroadcastMock).not.toHaveBeenCalled();
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
@@ -330,7 +341,7 @@ describe('processDueScheduledBroadcasts', () => {
 
     const summary = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0 });
+    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
     expect(row.send_outcome).toBeNull();
     expect(logAuditEventMock).not.toHaveBeenCalled();
   });
@@ -349,7 +360,7 @@ describe('processDueScheduledBroadcasts', () => {
     const summary = await processDueScheduledBroadcasts(NOW);
     const again = await processDueScheduledBroadcasts(NOW);
 
-    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 1 });
+    expect(summary).toEqual({ due: 0, sent: 0, missed: 0, failed: 1, claimedElsewhere: 0, interrupted: 1, deferred: 0 });
     expect(again.interrupted).toBe(0);
     expect(row).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'interrupted' });
     expect(sent.send_outcome).toBeNull();
@@ -366,9 +377,127 @@ describe('processDueScheduledBroadcasts', () => {
         reason: 'interrupted',
         title: 'Alert 1',
         scheduledBy: 'manager-1',
-        scheduledFor: row.scheduled_for.toISOString(),
+        scheduledFor: row.scheduled_for!.toISOString(),
       },
     });
+  });
+
+  it('an IMMEDIATE send that died after its claim (no scheduled time) is swept the same way', async () => {
+    const row = seed(1, 0, { scheduled_for: null, send_claimed_at: new Date(NOW.getTime() - 16 * MINUTE) });
+
+    const summary = await processDueScheduledBroadcasts(NOW);
+
+    expect(summary).toMatchObject({ due: 0, failed: 1, interrupted: 1 });
+    expect(row).toMatchObject({ send_outcome: 'failed', send_outcome_reason: 'interrupted' });
+    expect(logAuditEventMock.mock.calls[0]![0].metadata).toEqual({
+      reason: 'interrupted',
+      title: 'Alert 1',
+      scheduledBy: 'manager-1',
+      scheduledFor: null,
+    });
+  });
+
+  it('nobody in the audience at send time: missed/no_recipients, audited, and the send path is never entered', async () => {
+    const row = seed(1, 2);
+    resolveEmergencyRecipientsMock.mockResolvedValue([]);
+
+    const summary = await processDueScheduledBroadcasts(NOW);
+
+    expect(summary).toEqual({ due: 1, sent: 0, missed: 1, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 0 });
+    expect(row).toMatchObject({ send_outcome: 'missed', send_outcome_reason: 'no_recipients' });
+    expect(writeBroadcastRecipientsMock).not.toHaveBeenCalled();
+    expect(executeBroadcastMock).not.toHaveBeenCalled();
+    expect(logAuditEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        action: 'emergency_broadcast_missed',
+        resourceId: '1',
+        metadata: expect.objectContaining({ reason: 'no_recipients' }),
+      }),
+    );
+  });
+
+  it('stops CLAIMING once the time budget is spent: the rest stay unclaimed for the next tick', async () => {
+    const first = seed(1, 4);
+    const second = seed(2, 3);
+    const third = seed(3, 2);
+    // An injected clock: inside the budget for the first alert, past it afterwards.
+    const readings = [0, CLAIM_BUDGET_MS + 1];
+    const elapsedMs = vi.fn(() => readings.shift() ?? CLAIM_BUDGET_MS + 1);
+
+    const summary = await processDueScheduledBroadcasts(NOW, { elapsedMs });
+
+    expect(summary).toEqual({ due: 3, sent: 1, missed: 0, failed: 0, claimedElsewhere: 0, interrupted: 0, deferred: 2 });
+    expect(first.completed_at).not.toBeNull();
+    for (const waiting of [second, third]) {
+      expect(waiting.send_claimed_at).toBeNull();
+      expect(waiting.send_outcome).toBeNull();
+    }
+    // Nothing is lost: the next tick, with time in hand, sends them.
+    const next = await processDueScheduledBroadcasts(NOW, { elapsedMs: () => 0 });
+    expect(next).toMatchObject({ due: 2, sent: 2, deferred: 0 });
+  });
+
+  it('exactly at the budget still claims; the budget is 60% of the maxDuration the route declares', async () => {
+    seed(1, 2);
+    const summary = await processDueScheduledBroadcasts(NOW, { elapsedMs: () => CLAIM_BUDGET_MS });
+    expect(summary).toMatchObject({ sent: 1, deferred: 0 });
+
+    // Next needs a literal in the route file, so the two numbers are pinned here.
+    const route = readFileSync(
+      resolve(__dirname, '../../src/app/api/v1/internal/scheduled-emergency-broadcasts/route.ts'),
+      'utf8',
+    );
+    const declared = /^export const maxDuration = (\d+);$/m.exec(route);
+    expect(declared).not.toBeNull();
+    expect(Number(declared![1])).toBe(CRON_MAX_DURATION_SECONDS);
+    expect(CLAIM_BUDGET_MS).toBe(CRON_MAX_DURATION_SECONDS * 1000 * 0.6);
+  });
+
+  it('a database error from the recipient insert reaches Sentry with no address or phone in it', async () => {
+    seed(1, 2);
+    // What drizzle + postgres.js raise for a failed insert: bound values in the
+    // message, the offending row in `detail`, on the error and on its cause.
+    class DrizzleQueryError extends Error {
+      params = ['pat@example.com', '+13055551234'];
+      detail = 'Key (email)=(pat@example.com) already exists.';
+    }
+    const cause = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      detail: 'Failing row contains (pat@example.com, +13055551234).',
+    });
+    const thrown = new DrizzleQueryError(
+      'Failed query: insert into "emergency_broadcast_recipients" ...\nparams: pat@example.com,+13055551234',
+      { cause },
+    );
+    writeBroadcastRecipientsMock.mockRejectedValueOnce(thrown);
+
+    await processDueScheduledBroadcasts(NOW);
+
+    const [captured, context] = captureExceptionMock.mock.calls[0]!;
+    expect(captured).not.toBe(thrown);
+    expect(captured.name).toBe('ScheduledBroadcastJobError');
+    expect(captured.message).toBe('Scheduled emergency alert job failed: DrizzleQueryError (SQLSTATE 23505)');
+    expect(captured.cause).toBeUndefined();
+    // Everything Sentry would serialise: own properties, message, stack, context.
+    const payload = JSON.stringify([
+      { ...captured },
+      Object.getOwnPropertyNames(captured).map((key) => (captured as Record<string, unknown>)[key]),
+      context,
+    ]);
+    expect(payload).not.toContain('pat@example.com');
+    expect(payload).not.toContain('3055551234');
+    expect(payload).toContain('at '); // the call frames survive
+    expect(context.extra).toEqual({ broadcastId: 1, communityId: 42 });
+  });
+
+  it('sanitizedError copes with a thrown non-Error and ignores a code that is not a SQLSTATE', () => {
+    expect(sanitizedError('pat@example.com went wrong').message).toBe(
+      'Scheduled emergency alert job failed: UnknownError',
+    );
+    expect(sanitizedError(Object.assign(new TypeError('x'), { code: 'pat@example.com' })).message).toBe(
+      'Scheduled emergency alert job failed: TypeError',
+    );
   });
 
   it('does not relabel an alert as failed when the throw came after it was sent', async () => {

@@ -71,8 +71,9 @@ export const emergencyBroadcasts = pgTable('emergency_broadcasts', {
   /** Null, or why a scheduled alert did not send: 'missed' | 'failed'. */
   sendOutcome: text('send_outcome'),
   /**
-   * Short machine reason: 'late', 'community_deleted', or an error class name.
-   * Never a message body or an address.
+   * Short machine reason, one of a fixed list: 'late', 'community_deleted',
+   * 'no_recipients', 'interrupted' or 'send_error'. Never an error's class
+   * name or message, a message body or an address.
    */
   sendOutcomeReason: text('send_outcome_reason'),
 

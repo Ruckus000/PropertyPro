@@ -41,8 +41,8 @@ No editing. To change a scheduled alert: cancel it and make a new one.
   immediate alert. Today that means email only.
 - **One send, never two.** The job claims an alert before sending it, in one
   atomic statement. A claimed alert cannot be cancelled and cannot be claimed
-  again. If sending throws after the claim, the alert is marked failed with the
-  error class and is NOT retried: a partial send must not be repeated. It shows
+  again. If sending throws after the claim, the alert is marked failed
+  (`send_error`) and is NOT retried: a partial send must not be repeated. It shows
   as "Did not send"; the manager uses "Send again later" or sends a new one.
 - **Deleted or lapsed communities.** A soft-deleted community's scheduled alerts
   are not sent (marked missed with reason `community_deleted`). A lapsed
@@ -50,6 +50,17 @@ No editing. To change a scheduled alert: cancel it and make a new one.
   `createBroadcast` already documents.
 - **Who.** `emergency_broadcasts:write`, the same permission as sending now.
   Demo-grace communities are refused, as for sending now.
+- **No second permission check at send time.** The scheduler's permission and
+  the demo-grace refusal are checked when the alert is scheduled. The job does
+  not re-check them when it sends: an alert a manager was entitled to schedule
+  goes out even if that manager has since left.
+- **Over the cap.** An alert whose audience is over 500 people cannot be
+  scheduled; the manager is told to choose a smaller audience.
+- **Nobody in the audience.** If the audience is empty when the alert is due it
+  is marked missed (`no_recipients`), not sent.
+- **Immediate sends claim too.** "Send now" claims the draft with the same
+  atomic statement before sending, so sending, scheduling and cancelling one
+  draft has exactly one winner, and a double click sends once.
 - **Audit.** Scheduling, cancelling, sending by the job, missing and failing each
   write a `compliance_audit_log` entry. The job's entries have no user (system
   actor) and name the scheduler in metadata.
@@ -63,7 +74,7 @@ One migration on `emergency_broadcasts`, all nullable, no backfill:
 | `scheduled_for timestamptz` | Set means "send later at this time". Null for immediate alerts. |
 | `send_claimed_at timestamptz` | Set by the job's atomic claim. Null until then. |
 | `send_outcome text` | Null, or `missed`, or `failed` (CHECK constraint). |
-| `send_outcome_reason text` | Short machine reason: `late`, `community_deleted`, `interrupted` (claimed, then no outcome for 15 minutes: the job died mid-send), or an error class name. Never a message body or address. |
+| `send_outcome_reason text` | Short machine reason from a fixed list: `late`, `community_deleted`, `no_recipients` (the audience was empty at send time), `interrupted` (claimed, then no outcome for 15 minutes: the job died mid-send), `send_error` (sending threw). Never an error class name or message, a message body or an address. |
 
 Scheduling converts the composer's draft row in place (it sets `scheduled_for`
 and deletes the draft's recipient rows); no second row is written.

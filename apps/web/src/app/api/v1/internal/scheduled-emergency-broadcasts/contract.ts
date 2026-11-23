@@ -30,6 +30,8 @@ export const scheduledEmergencyBroadcastsResponseSchema = z.object({
   claimedElsewhere: count,
   /** The part of `failed` that was a claim over 15 minutes old with no outcome (`interrupted`). */
   interrupted: count,
+  /** Due but left unclaimed because the run's time budget was spent; the next run takes them. */
+  deferred: count,
 });
 
 export const scheduledEmergencyBroadcastsContract = defineRoute({

@@ -33,7 +33,7 @@ import type {
   User,
   UserRoleRecord,
 } from '@propertypro/db';
-import { eq, and, desc, inArray, isNotNull, isNull, type SQL } from '@propertypro/db/filters';
+import { eq, and, desc, gte, inArray, isNotNull, isNull, type SQL } from '@propertypro/db/filters';
 import { EmergencyAlertEmail, sendBulkEmail } from '@propertypro/email';
 import type { EmergencyAlertSeverity } from '@propertypro/email';
 import {
@@ -121,7 +121,7 @@ export interface BroadcastWithReport {
   sendClaimedAt: Date | null;
   /** Why a scheduled alert did not send: 'missed' | 'failed'. */
   sendOutcome: string | null;
-  /** 'late', 'community_deleted', or an error class name. */
+  /** One of 'late', 'community_deleted', 'no_recipients', 'interrupted', 'send_error'. */
   sendOutcomeReason: string | null;
   recipients: RecipientStatus[];
 }
@@ -151,7 +151,20 @@ export interface ResolvedRecipient {
 
 /** Undo window duration in milliseconds (10 seconds) */
 const UNDO_WINDOW_MS = 10_000;
-const MAX_BROADCAST_RECIPIENTS = 500;
+export const MAX_BROADCAST_RECIPIENTS = 500;
+
+/**
+ * Refuse to SCHEDULE an alert whose audience is over the per-alert cap. The
+ * send path enforces the cap too, but a scheduled alert sends unattended, so
+ * the manager has to hear it now, while they can still change the audience.
+ */
+function assertSchedulableAudience(recipientCount: number): void {
+  if (recipientCount > MAX_BROADCAST_RECIPIENTS) {
+    throw new ValidationError(
+      `This alert would go to ${recipientCount} people, and one alert can reach at most ${MAX_BROADCAST_RECIPIENTS}. Choose a smaller audience and schedule it again.`,
+    );
+  }
+}
 
 /** A scheduled alert must be at least this far ahead (the cron runs every 5 minutes). */
 export const MIN_SCHEDULE_LEAD_MS = 5 * 60 * 1000;
@@ -263,6 +276,7 @@ export async function createBroadcast(
 
   // Resolve recipients (batch query — no N+1)
   const resolved = await resolveEmergencyRecipients(params.communityId, params.targetAudience, params.severity);
+  if (scheduledFor) assertSchedulableAudience(resolved.length);
 
   // Create broadcast record
   const broadcastRows = await scoped.insert(emergencyBroadcasts, {
@@ -353,6 +367,15 @@ export async function scheduleBroadcast(
   assertSchedulableTime(scheduledFor);
 
   const scoped = createScopedClient(communityId);
+  // Read only to refuse an over-cap audience before anything is written; the
+  // UPDATE below, not this read, decides whether the draft can be scheduled.
+  const draft = (
+    await scoped.selectFrom<EmergencyBroadcast>(
+      emergencyBroadcasts, {}, eq(emergencyBroadcasts.id, broadcastId),
+    )
+  )[0];
+  if (draft) assertSchedulableAudience(draft.recipientCount);
+
   const converted = await scoped.update(
     emergencyBroadcasts,
     { scheduledFor },
@@ -407,6 +430,21 @@ export async function scheduleBroadcast(
  * Without it a scheduled broadcast is refused — claimed or not — so a manager's
  * "send" can never double a send the cron owns. The cron's send has no acting
  * user (`userId` null, the system actor); the scheduler is named in metadata.
+ *
+ * ## The immediate send takes a claim too
+ *
+ * Without `scheduledSend` this function first claims the draft in ONE
+ * conditional UPDATE (`send_claimed_at`, only while the draft is unscheduled,
+ * unclaimed, unsent and uncanceled) and sends only if that statement returned
+ * the row. `scheduleBroadcast` and `cancelBroadcast` are guarded on
+ * `send_claimed_at IS NULL`, so of send / schedule / cancel on one draft
+ * exactly one wins, and two sends (a double click) send once. A loser gets a
+ * 409 and has changed nothing.
+ *
+ * Everything that can refuse the send (the recipient cap) runs BEFORE the
+ * claim. After it, a send that dies leaves the row claimed with no result; the
+ * cron's 15-minute sweep marks it failed / `interrupted`, exactly as for a
+ * scheduled send, and like one it is never retried.
  */
 export async function executeBroadcast(
   broadcastId: number,
@@ -460,6 +498,25 @@ export async function executeBroadcast(
     communities, {}, eq(communities.id, communityId),
   );
   const communityName = communityRows[0]?.name ?? 'PropertyPro';
+
+  if (!scheduledSend) {
+    const claimed = await scoped.update(
+      emergencyBroadcasts,
+      { sendClaimedAt: new Date() },
+      and(
+        eq(emergencyBroadcasts.id, broadcastId),
+        isNull(emergencyBroadcasts.scheduledFor),
+        isNull(emergencyBroadcasts.sendClaimedAt),
+        isNull(emergencyBroadcasts.completedAt),
+        isNull(emergencyBroadcasts.canceledAt),
+      ),
+    );
+    if (claimed.length === 0) {
+      throw new ConflictError(
+        'This alert is already being sent, or has been sent, scheduled or canceled.',
+      );
+    }
+  }
 
   const statusCallbackUrl = `${getBaseUrl()}/api/v1/webhooks/twilio`;
   // Single timestamp shared across the entire batch so all `sentAt` /
@@ -634,8 +691,12 @@ export async function executeBroadcast(
  * An immediate broadcast can be canceled within the undo window (10 seconds).
  * A scheduled broadcast can be canceled any time before the cron claims it.
  *
- * Returns true if successfully canceled; false if the undo window expired or
- * the scheduled broadcast has already started sending (or been missed).
+ * Either way the cancel is ONE conditional UPDATE guarded on "not claimed, not
+ * sent, not canceled", so a cancel racing a send's claim or a schedule has one
+ * winner. The read before it only words the refusals; it decides nothing.
+ *
+ * Returns true if successfully canceled; false if the undo window expired, the
+ * alert has started sending (or been missed), or another request got there first.
  */
 export async function cancelBroadcast(
   broadcastId: number,
@@ -688,11 +749,20 @@ export async function cancelBroadcast(
     return false; // Undo window expired
   }
 
-  await scoped.update(
+  const won = await scoped.update(
     emergencyBroadcasts,
     { canceledAt: new Date() },
-    eq(emergencyBroadcasts.id, broadcastId),
+    and(
+      eq(emergencyBroadcasts.id, broadcastId),
+      isNull(emergencyBroadcasts.canceledAt),
+      isNull(emergencyBroadcasts.completedAt),
+      isNull(emergencyBroadcasts.sendClaimedAt),
+      // Not scheduled since the read above: a scheduled alert takes the branch above.
+      isNull(emergencyBroadcasts.scheduledFor),
+      gte(emergencyBroadcasts.initiatedAt, new Date(Date.now() - UNDO_WINDOW_MS)),
+    ),
   );
+  if (won.length === 0) return false;
 
   // Mark all pending recipients as skipped
   const pendingRecipients = await scoped.selectFrom<EmergencyBroadcastRecipient>(

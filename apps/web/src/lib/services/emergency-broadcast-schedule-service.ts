@@ -22,7 +22,8 @@
  * Unlike site publishes there is no lease and no second attempt: a send that
  * throws after the claim may already have reached some recipients, and
  * repeating a partial emergency alert is worse than reporting it. The row is
- * marked `failed` with the error's class name and stays claimed.
+ * marked `failed` / `send_error` and stays claimed. Reasons are a fixed list
+ * (`SendOutcomeReason`), never an error's class name or message.
  *
  * ## A claim that never finished
  *
@@ -30,7 +31,16 @@
  * deploy), the row is claimed with no outcome and would read "Sending"
  * forever. Each tick first marks such rows `failed` / `interrupted` once the
  * claim is older than `INTERRUPTED_AFTER_MS`. Same rule as any failed send:
- * reported, never retried.
+ * reported, never retried. This covers an IMMEDIATE send as well: the send
+ * route claims its draft the same way (`executeBroadcast`), and those rows
+ * have no `scheduled_for`.
+ *
+ * ## Time budget
+ *
+ * The route declares `maxDuration` (`CRON_MAX_DURATION_SECONDS`). Once a tick
+ * has used `CLAIM_BUDGET_MS` of it, it stops CLAIMING: a row it has not
+ * claimed simply waits for the next tick, whereas a row claimed and then cut
+ * off by the platform would be marked interrupted and never sent.
  */
 import { captureException } from '@sentry/nextjs';
 import {
@@ -69,6 +79,20 @@ export const MISSED_AFTER_MS = 60 * 60 * 1000;
  */
 export const INTERRUPTED_AFTER_MS = 15 * 60 * 1000;
 
+/** Must equal the route's `maxDuration`; a route test pins the two together. */
+export const CRON_MAX_DURATION_SECONDS = 300;
+
+/** Stop claiming new alerts once a tick has run this long (60% of the budget). */
+export const CLAIM_BUDGET_MS = CRON_MAX_DURATION_SECONDS * 1000 * 0.6;
+
+/** Every value `send_outcome_reason` can hold. */
+export type SendOutcomeReason =
+  | 'late'
+  | 'community_deleted'
+  | 'no_recipients'
+  | 'interrupted'
+  | 'send_error';
+
 /** How many due alerts one cron tick will process. */
 const BATCH_SIZE = 25;
 
@@ -87,6 +111,8 @@ export interface ProcessDueScheduledBroadcastsSummary {
   claimedElsewhere: number;
   /** The part of `failed` that was a claim over 15 minutes old with no outcome. */
   interrupted: number;
+  /** Due and found, but not claimed because the tick's time budget was spent. Next tick. */
+  deferred: number;
 }
 
 interface ClaimedRow {
@@ -94,7 +120,8 @@ interface ClaimedRow {
   community_id: number;
   initiated_by: string;
   title: string;
-  scheduled_for: Date | string;
+  /** Null for an immediate send, which the interrupted sweep also covers. */
+  scheduled_for: Date | string | null;
   severity: string;
   target_audience: string;
   channels: string;
@@ -121,7 +148,11 @@ function parseChannels(raw: unknown): BroadcastChannel[] {
  */
 export async function processDueScheduledBroadcasts(
   now: Date = new Date(),
+  budget: { claimBudgetMs?: number; elapsedMs?: () => number } = {},
 ): Promise<ProcessDueScheduledBroadcastsSummary> {
+  const startedAt = Date.now();
+  const elapsedMs = budget.elapsedMs ?? (() => Date.now() - startedAt);
+  const claimBudgetMs = budget.claimBudgetMs ?? CLAIM_BUDGET_MS;
   const db = createUnscopedClient();
   const interrupted = await failInterruptedSends(db, now);
 
@@ -149,9 +180,15 @@ export async function processDueScheduledBroadcasts(
     failed: interrupted,
     claimedElsewhere: 0,
     interrupted,
+    deferred: 0,
   };
 
-  for (const { id } of due) {
+  for (const [index, { id }] of due.entries()) {
+    // Out of time: leave the rest UNCLAIMED for the next tick (see "Time budget").
+    if (elapsedMs() > claimBudgetMs) {
+      summary.deferred = due.length - index;
+      break;
+    }
     const row = rowsOf<ClaimedRow>(
       await db.execute(sql`
         UPDATE emergency_broadcasts
@@ -171,7 +208,8 @@ export async function processDueScheduledBroadcasts(
 
     const broadcastId = Number(row.id);
     const communityId = Number(row.community_id);
-    const scheduledFor = new Date(row.scheduled_for);
+    // The scan selects `scheduled_for IS NOT NULL`, so a due row always has one.
+    const scheduledFor = new Date(row.scheduled_for as Date | string);
     // Audit metadata: the title (as the create entry records), never a body or an address.
     const scheduler = {
       title: row.title,
@@ -214,6 +252,13 @@ export async function processDueScheduledBroadcasts(
         { recipientCount: recipients.length },
         eq(emergencyBroadcasts.id, broadcastId),
       );
+      // Nobody is in the audience any more: there is nothing to send, and it
+      // must not read as Sent.
+      if (recipients.length === 0) {
+        await recordOutcome(broadcastId, communityId, 'missed', 'no_recipients', scheduler);
+        summary.missed += 1;
+        continue;
+      }
       // An alert scheduled from a draft can still hold the draft's recipient
       // rows if `scheduleBroadcast` died before deleting them. We hold the
       // claim, so nothing else writes these rows: clear them, then write the
@@ -238,16 +283,14 @@ export async function processDueScheduledBroadcasts(
       summary.sent += 1;
     } catch (error) {
       summary.failed += 1;
-      // The class name only: an error message can carry an address or a body.
-      const reason = error instanceof Error ? error.constructor.name : 'UnknownError';
-      captureException(error, {
+      captureException(sanitizedError(error), {
         tags: { emergency_broadcast: 'scheduled_send_failed' },
         extra: { broadcastId, communityId },
       });
       // A failure to RECORD the failure must not abort the remaining rows.
-      await recordOutcome(broadcastId, communityId, 'failed', reason, scheduler).catch(
+      await recordOutcome(broadcastId, communityId, 'failed', 'send_error', scheduler).catch(
         (recordError: unknown) => {
-          captureException(recordError, {
+          captureException(sanitizedError(recordError), {
             tags: { emergency_broadcast: 'scheduled_outcome_not_recorded' },
             extra: { broadcastId, communityId },
           });
@@ -257,6 +300,36 @@ export async function processDueScheduledBroadcasts(
   }
 
   return summary;
+}
+
+/**
+ * What this job reports to Sentry in place of a caught error.
+ *
+ * A database error raised while writing recipient rows can carry a resident's
+ * address or phone: drizzle puts the bound values in the message (which
+ * `scrubServerEvent` redacts) and postgres.js puts the offending row in
+ * `detail` on the error and its `cause` (which nothing redacts). So the
+ * original object is never handed over. The report keeps what triage needs:
+ * the error's class, its SQLSTATE when it has one, and the call frames, which
+ * are code locations. The alert and community ids travel in `extra`.
+ */
+export function sanitizedError(error: unknown): Error {
+  const name = error instanceof Error ? error.constructor.name : 'UnknownError';
+  const withCode = (value: unknown): string | null => {
+    const code = (value as { code?: unknown } | null)?.code;
+    return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null;
+  };
+  const sqlState = withCode(error) ?? withCode((error as { cause?: unknown } | null)?.cause);
+  const safe = new Error(
+    `Scheduled emergency alert job failed: ${name}${sqlState ? ` (SQLSTATE ${sqlState})` : ''}`,
+  );
+  safe.name = 'ScheduledBroadcastJobError';
+  const frames =
+    error instanceof Error && typeof error.stack === 'string'
+      ? error.stack.split('\n').filter((line) => /^\s+at /.test(line))
+      : [];
+  safe.stack = [`${safe.name}: ${safe.message}`, ...frames].join('\n');
+  return safe;
 }
 
 /**
@@ -294,11 +367,12 @@ async function failInterruptedSends(
       const recorded = await recordOutcome(broadcastId, communityId, 'failed', 'interrupted', {
         title: row.title,
         scheduledBy: row.initiated_by,
-        scheduledFor: new Date(row.scheduled_for).toISOString(),
+        // Null for an immediate send that died after its claim.
+        scheduledFor: row.scheduled_for ? new Date(row.scheduled_for).toISOString() : null,
       });
       if (recorded) marked += 1;
     } catch (error) {
-      captureException(error, {
+      captureException(sanitizedError(error), {
         tags: { emergency_broadcast: 'scheduled_outcome_not_recorded' },
         extra: { broadcastId, communityId },
       });
@@ -320,8 +394,8 @@ async function recordOutcome(
   broadcastId: number,
   communityId: number,
   outcome: 'missed' | 'failed',
-  reason: string,
-  scheduler: { title: string; scheduledBy: string; scheduledFor: string },
+  reason: SendOutcomeReason,
+  scheduler: { title: string; scheduledBy: string; scheduledFor: string | null },
 ): Promise<boolean> {
   const updated = await createScopedClient(communityId).update(
     emergencyBroadcasts,

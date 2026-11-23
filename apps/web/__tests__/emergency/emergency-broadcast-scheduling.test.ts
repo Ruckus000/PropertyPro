@@ -24,6 +24,7 @@ const { createScopedClientMock, logAuditEventMock, sendBulkEmailMock, sendBulkEm
       emergencyBroadcasts: {
         __table: 'broadcasts',
         id: 'broadcasts.id',
+        initiatedAt: 'broadcasts.initiatedAt',
         completedAt: 'broadcasts.completedAt',
         canceledAt: 'broadcasts.canceledAt',
         scheduledFor: 'broadcasts.scheduledFor',
@@ -50,6 +51,7 @@ vi.mock('@propertypro/db/filters', () => ({
   desc: (col: unknown) => ({ __desc: col }),
   inArray: (col: unknown, vals: unknown) => ({ __inArray: [col, vals] }),
   isNull: (col: unknown) => ({ __isNull: col }),
+  gte: (col: unknown, val: unknown) => ({ __gte: [col, val] }),
   isNotNull: (col: unknown) => ({ __isNotNull: col }),
 }));
 
@@ -195,6 +197,29 @@ describe('assertSchedulableTime — 5 minutes to 365 days ahead', () => {
 });
 
 describe('createBroadcast', () => {
+  it('refuses to schedule for an audience over the 500 cap, before anything is stored', async () => {
+    const { scoped, inserts } = mockScoped();
+    const people = Array.from({ length: 501 }, (_, i) => `u${i}`);
+    scoped.selectFrom.mockImplementation((table: unknown) => {
+      if (table === tables.userRoles) {
+        return Promise.resolve(people.map((userId) => ({ userId, role: 'resident', isUnitOwner: true })));
+      }
+      if (table === tables.users) {
+        return Promise.resolve(
+          people.map((id) => ({ id, email: `${id}@example.com`, fullName: id, phone: null, phoneVerifiedAt: null })),
+        );
+      }
+      return Promise.resolve([]);
+    });
+
+    await expect(
+      createBroadcast({ ...baseParams, scheduledFor: new Date(NOW.getTime() + 60 * MINUTE) }),
+    ).rejects.toThrow(/would go to 501 people.*Choose a smaller audience/);
+
+    expect(inserts).toHaveLength(0);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
   it('schedules: stores scheduledFor, writes NO recipient rows, counts recipients as of now', async () => {
     const { inserts } = mockScoped();
     const scheduledFor = new Date(NOW.getTime() + 60 * MINUTE);
@@ -344,6 +369,27 @@ describe('scheduleBroadcast — converts the draft in place', () => {
     });
   });
 
+  it('refuses an audience over the 500 cap, saying what to do, before any write', async () => {
+    const { updates, deletes } = mockScoped({ ...draft, scheduledFor: null, recipientCount: 501 }, draftRecipients);
+
+    const attempt = scheduleBroadcast(7, 42, 'manager-1', when);
+    await expect(attempt).rejects.toBeInstanceOf(ValidationError);
+    await expect(attempt).rejects.toThrow(
+      'This alert would go to 501 people, and one alert can reach at most 500. Choose a smaller audience and schedule it again.',
+    );
+
+    expect(updates).toHaveLength(0);
+    expect(deletes).toHaveLength(0);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it('exactly 500 recipients can be scheduled', async () => {
+    const { setUpdateResult } = mockScoped({ ...draft, scheduledFor: null, recipientCount: 500 }, draftRecipients);
+    setUpdateResult([{ ...draft, recipientCount: 500 }]);
+
+    await expect(scheduleBroadcast(7, 42, 'manager-1', when)).resolves.toMatchObject({ scheduled: true });
+  });
+
   it('already sent, scheduled or canceled (the UPDATE matches no row): 409, nothing deleted, no audit entry', async () => {
     const { deletes, setUpdateResult } = mockScoped(undefined, draftRecipients);
     setUpdateResult([]);
@@ -422,8 +468,34 @@ describe('cancelBroadcast', () => {
 
     await expect(cancelBroadcast(7, 42, 'manager-1')).resolves.toBe(true);
 
-    // The unconditional immediate-path UPDATE, not the claim-guarded one.
-    expect(updates[0]?.where).toEqual({ __eq: ['broadcasts.id', 7] });
+    // ONE conditional UPDATE: not canceled, not sent, not claimed by a send,
+    // not scheduled meanwhile, and still inside the undo window.
+    expect(updates[0]?.data).toEqual({ canceledAt: NOW });
+    expect(updates[0]?.where).toEqual({
+      __and: [
+        { __eq: ['broadcasts.id', 7] },
+        { __isNull: 'broadcasts.canceledAt' },
+        { __isNull: 'broadcasts.completedAt' },
+        { __isNull: 'broadcasts.sendClaimedAt' },
+        { __isNull: 'broadcasts.scheduledFor' },
+        { __gte: ['broadcasts.initiatedAt', new Date(NOW.getTime() - 10_000)] },
+      ],
+    });
+  });
+
+  it('immediate broadcast: a cancel that loses to a send or a schedule returns false and touches nothing else', async () => {
+    const { updates, scoped, setUpdateResult } = mockScoped(
+      { id: 7, scheduledFor: null, initiatedAt: new Date(NOW.getTime() - 3_000), canceledAt: null, completedAt: null },
+      [{ userId: 'u1', smsStatus: 'pending', emailStatus: 'pending' }],
+    );
+    setUpdateResult([]);
+
+    await expect(cancelBroadcast(7, 42, 'manager-1')).resolves.toBe(false);
+
+    // Only the lost conditional UPDATE: recipients are not marked skipped, and nothing is audited.
+    expect(updates).toHaveLength(1);
+    expect(scoped.selectFrom.mock.calls.filter(([t]) => t === tables.emergencyBroadcastRecipients)).toHaveLength(0);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 
   it('immediate broadcast: refused after the undo window, with no write', async () => {
@@ -469,6 +541,48 @@ describe('executeBroadcast', () => {
     }
     expect(sendBulkEmailMock).not.toHaveBeenCalled();
     expect(sendBulkEmergencySmsMock).not.toHaveBeenCalled();
+  });
+
+  const draftRow = { ...scheduledRow, scheduledFor: null, sendClaimedAt: null };
+
+  it('an immediate send first claims the draft in one conditional UPDATE, then sends', async () => {
+    const { updates } = mockScoped(draftRow, [recipient]);
+
+    await expect(executeBroadcast(7, 42, 'manager-1')).resolves.toEqual({ smsQueued: 0, emailSent: 1 });
+
+    expect(updates[0]?.table).toBe(tables.emergencyBroadcasts);
+    expect(updates[0]?.data).toEqual({ sendClaimedAt: NOW });
+    expect(updates[0]?.where).toEqual({
+      __and: [
+        { __eq: ['broadcasts.id', 7] },
+        { __isNull: 'broadcasts.scheduledFor' },
+        { __isNull: 'broadcasts.sendClaimedAt' },
+        { __isNull: 'broadcasts.completedAt' },
+        { __isNull: 'broadcasts.canceledAt' },
+      ],
+    });
+    expect(sendBulkEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('an immediate send that loses the claim (a second click, a schedule, a cancel) sends NOTHING: 409', async () => {
+    const { updates, setUpdateResult } = mockScoped(draftRow, [recipient]);
+    setUpdateResult([]);
+
+    await expect(executeBroadcast(7, 42, 'manager-1')).rejects.toBeInstanceOf(ConflictError);
+
+    expect(sendBulkEmailMock).not.toHaveBeenCalled();
+    expect(sendBulkEmergencySmsMock).not.toHaveBeenCalled();
+    // The lost claim is the only write: no completedAt, no recipient status, no audit entry.
+    expect(updates).toHaveLength(1);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it("the job's send takes no second claim: it already holds one", async () => {
+    const { updates } = mockScoped({ ...scheduledRow, sendClaimedAt: NOW }, [recipient]);
+
+    await executeBroadcast(7, 42, null, { scheduledBy: 'manager-1' });
+
+    expect(updates.some((u) => 'sendClaimedAt' in u.data)).toBe(false);
   });
 
   it("sends for the job, with a system-actor audit entry naming the scheduler", async () => {

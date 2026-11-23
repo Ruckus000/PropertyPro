@@ -14,6 +14,14 @@ import { withCronJob } from '@/lib/cron/with-cron-job';
 import { processDueScheduledBroadcasts } from '@/lib/services/emergency-broadcast-schedule-service';
 import { scheduledEmergencyBroadcastsContract } from './contract';
 
+/**
+ * Explicit, not the platform default: the job stops claiming alerts at 60% of
+ * this (`CLAIM_BUDGET_MS`), so the number has to be known. Next requires a
+ * literal here; `CRON_MAX_DURATION_SECONDS` in the service must match it, and
+ * the route test fails if they drift.
+ */
+export const maxDuration = 300;
+
 const handler = withErrorHandler(
   runRoute(scheduledEmergencyBroadcastsContract, async ({ req }) => {
     requireCronSecret(
