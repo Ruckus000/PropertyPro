@@ -44,6 +44,15 @@ const PNG = Buffer.from(
   'hex',
 );
 
+// A 1x1 animated PNG (acTL before IDAT): file-type reports image/apng.
+const APNG = Buffer.from(
+  '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489000000086163544c0000000100000000b42de9a00000000b49444154789c6360000200000500017a5eab3f0000000049454e44ae426082',
+  'hex',
+);
+
+// A PNG signature cut off mid-header: file-type throws EndOfStreamError on it.
+const TRUNCATED_PNG = Buffer.from('89504e470d0a1a0a0000', 'hex');
+
 const entryPoints = [
   ['transformSiteImage', (b: Buffer) => transformSiteImage(b)],
   ['transformSiteImage with a crop', (b: Buffer) =>
@@ -69,6 +78,17 @@ describe('site image byte sniff', () => {
       const err = await run(Buffer.from('not an image at all')).catch((e: unknown) => e);
       expect(err).toBeInstanceOf(ValidationError);
       expect(sharpMock).not.toHaveBeenCalled();
+    });
+
+    it('truncated bytes are a 400, not a thrown sniffer error', async () => {
+      const err = await run(TRUNCATED_PNG).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ValidationError);
+      expect(sharpMock).not.toHaveBeenCalled();
+    });
+
+    it('an animated PNG is a PNG and reaches sharp', async () => {
+      await run(APNG);
+      expect(sharpMock).toHaveBeenCalled();
     });
 
     it('real PNG bytes reach sharp', async () => {

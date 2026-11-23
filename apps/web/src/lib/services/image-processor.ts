@@ -25,8 +25,18 @@ const SITE_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
  * check. A 400, not the 500 a sharp decode error would surface as.
  */
 export async function assertSiteImageBytes(input: Buffer): Promise<void> {
-  const detected = await fileTypeFromBuffer(input);
-  if (!detected || !SITE_IMAGE_MIME_TYPES.has(detected.mime)) {
+  let sniffed: string | undefined;
+  try {
+    sniffed = (await fileTypeFromBuffer(input))?.mime;
+  } catch {
+    // file-type throws (e.g. EndOfStreamError) on truncated input; an
+    // unreadable header is undetectable → 400, never an unhandled 500.
+    sniffed = undefined;
+  }
+  // An animated PNG sniffs as image/apng; it is a PNG to sharp and to the
+  // presign allowlist (same mapping as the document-draft image route).
+  const mime = sniffed === 'image/apng' ? 'image/png' : sniffed;
+  if (!mime || !SITE_IMAGE_MIME_TYPES.has(mime)) {
     throw new ValidationError('The uploaded file is not a PNG, JPEG or WebP image.');
   }
 }
