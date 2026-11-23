@@ -96,7 +96,9 @@
     ],
     "overrides": {
       "isomorphic-dompurify>jsdom": "25.0.1",
-      "isomorphic-dompurify>dompurify": "^3.4.15",
+      "isomorphic-dompurify>dompurify": "^3.4.17",
+      "next>postcss": "^8.5.33",
+      "next>sharp": "^0.35.5",
       "prosemirror-view": "^1.42.3"
     },
     "patchedDependencies": {
@@ -122,6 +124,6 @@
     "turbo": "^2.3.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.6.7"
   }
 }
