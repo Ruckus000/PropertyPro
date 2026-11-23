@@ -92,6 +92,69 @@ describe('EmergencyDetailPage, canceling a scheduled alert', () => {
     expect(JSON.parse(String(cancelRequests()[0]![1]!.body))).toEqual({ communityId: 42 });
   });
 
+  it('after a successful cancel, focus lands on the notice that says so, not on <body>', async () => {
+    cancelResponse = () => {
+      alertNow = { ...SCHEDULED, canceledAt: '2026-03-06T12:00:00.000Z' };
+      return json(200, { data: { canceled: true } });
+    };
+    view();
+    await confirmCancel();
+
+    const notice = await screen.findByText('This broadcast was canceled.');
+    await waitFor(() => expect(notice).toHaveFocus());
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  const CONFLICT = () =>
+    json(409, {
+      error: {
+        code: 'CONFLICT',
+        message:
+          'This alert can no longer be canceled: the undo window has expired or it has already started sending.',
+      },
+    });
+
+  it('a refused cancel on an alert someone else already canceled says that, and never "try again"', async () => {
+    cancelResponse = () => {
+      alertNow = { ...SCHEDULED, canceledAt: '2026-03-06T12:00:00.000Z' };
+      return CONFLICT();
+    };
+    const { container } = view();
+    await confirmCancel();
+
+    expect(await screen.findByText('This alert was already canceled.')).toBeVisible();
+    expect(container.textContent).not.toMatch(/try again|started sending/i);
+    expect(screen.getByText('This broadcast was canceled.')).toBeVisible();
+  });
+
+  it('a refused cancel on an alert that has gone out says it was sent', async () => {
+    cancelResponse = () => {
+      alertNow = { ...SCHEDULED, sendClaimedAt: GOES_AT, completedAt: '2026-03-10T13:02:00.000Z' };
+      return CONFLICT();
+    };
+    const { container } = view();
+    await confirmCancel();
+
+    expect(
+      await screen.findByText('This alert has already been sent, so it can no longer be canceled.'),
+    ).toBeVisible();
+    expect(container.textContent).not.toMatch(/try again/i);
+    expect(screen.getByRole('heading', { name: 'Delivery' })).toBeVisible();
+  });
+
+  it('a refused cancel on an alert that was missed says there is nothing to cancel', async () => {
+    cancelResponse = () => {
+      alertNow = { ...SCHEDULED, sendClaimedAt: GOES_AT, sendOutcome: 'missed', sendOutcomeReason: 'late' };
+      return CONFLICT();
+    };
+    view();
+    await confirmCancel();
+
+    expect(
+      await screen.findByText('This alert was missed and will not be sent, so there is nothing to cancel.'),
+    ).toBeVisible();
+  });
+
   it('a 409 says it already started sending and refreshes the alert', async () => {
     cancelResponse = () => {
       // The job claimed it between the page loading and the click.

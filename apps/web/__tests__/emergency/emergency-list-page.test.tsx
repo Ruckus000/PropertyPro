@@ -155,14 +155,14 @@ describe('EmergencyListPage, manager view of "send later" alerts', () => {
   it('a scheduled alert says Scheduled, when it will go, and the count as of now', () => {
     manager([later({ id: 1, title: 'Water off tomorrow' })]);
     expect(item('Water off tomorrow')).toHaveTextContent(
-      'Scheduled · Urgent · Scheduled for Mar 10, 2026, 9:00 AM',
+      'Scheduled · Urgent · Scheduled for Mar 10, 2026, 9:00 AM EDT',
     );
     expect(item('Water off tomorrow')).toHaveTextContent('48 recipients as of now');
   });
 
   it('an alert the job has claimed says Sending and claims no recipient count yet', () => {
     manager([later({ id: 1, title: 'Going now', sendClaimedAt: GOES_AT })]);
-    expect(item('Going now')).toHaveTextContent('Sending · Urgent · Scheduled for Mar 10, 2026, 9:00 AM');
+    expect(item('Going now')).toHaveTextContent('Sending · Urgent · Scheduled for Mar 10, 2026, 9:00 AM EDT');
     expect(item('Going now')).not.toHaveTextContent(/recipients/);
   });
 
@@ -178,11 +178,46 @@ describe('EmergencyListPage, manager view of "send later" alerts', () => {
       }),
     ]);
     expect(item('Too late')).toHaveTextContent(
-      'Missed · Urgent · Scheduled for Mar 10, 2026, 9:00 AM · The send time passed while the system was unavailable.',
+      'Missed · Urgent · Scheduled for Mar 10, 2026, 9:00 AM EDT · The send time passed while the system was unavailable.',
     );
     expect(item('Too late')).not.toHaveTextContent(/recipients/);
     expect(item('Gone community')).toHaveTextContent('Missed');
     expect(item('Gone community')).toHaveTextContent('The community was deleted before the send time.');
+  });
+
+  it('names the zone on the other side of a clock change too (EST in winter)', () => {
+    manager([later({ id: 1, title: 'Winter', scheduledFor: '2026-01-10T14:00:00.000Z' })]);
+    expect(item('Winter')).toHaveTextContent('Scheduled for Jan 10, 2026, 9:00 AM EST');
+  });
+
+  it('an empty audience at send time is Missed, with that reason', () => {
+    manager([
+      later({ id: 1, title: 'Nobody', sendClaimedAt: GOES_AT, sendOutcome: 'missed', sendOutcomeReason: 'no_recipients' }),
+    ]);
+    expect(item('Nobody')).toHaveTextContent('Nobody was in the audience at the send time.');
+  });
+
+  it('an IMMEDIATE send that died part-way reads Did not send with its reason, dated when it was started', () => {
+    manager([
+      row({
+        id: 1,
+        title: 'Cut off',
+        completedAt: null,
+        scheduledFor: null,
+        sendClaimedAt: SENT_AT,
+        sendOutcome: 'failed',
+        sendOutcomeReason: 'interrupted',
+      }),
+    ]);
+    expect(item('Cut off')).toHaveTextContent(
+      'Did not send · Urgent · Mar 1, 2026, 9:30 PM · Sending was interrupted before it finished.',
+    );
+    expect(item('Cut off')).not.toHaveTextContent(/recipients|Scheduled for/);
+  });
+
+  it('an immediate send in flight reads Sending', () => {
+    manager([row({ id: 1, title: 'Going out', completedAt: null, sendClaimedAt: SENT_AT })]);
+    expect(item('Going out')).toHaveTextContent('Sending · Urgent · Mar 1, 2026, 9:30 PM');
   });
 
   it('a failed alert says Did not send and never prints the error class name', () => {
@@ -192,7 +227,15 @@ describe('EmergencyListPage, manager view of "send later" alerts', () => {
         title: 'Provider down',
         sendClaimedAt: GOES_AT,
         sendOutcome: 'failed',
+        // A row written before reasons were a fixed list.
         sendOutcomeReason: 'EmailProviderDownError',
+      }),
+      later({
+        id: 3,
+        title: 'Send error',
+        sendClaimedAt: GOES_AT,
+        sendOutcome: 'failed',
+        sendOutcomeReason: 'send_error',
       }),
       later({
         id: 2,
@@ -203,9 +246,11 @@ describe('EmergencyListPage, manager view of "send later" alerts', () => {
       }),
     ]);
     expect(item('Provider down')).toHaveTextContent(
-      'Did not send · Urgent · Scheduled for Mar 10, 2026, 9:00 AM · Something went wrong while sending.',
+      'Did not send · Urgent · Scheduled for Mar 10, 2026, 9:00 AM EDT · Something went wrong while sending.',
     );
+    expect(item('Send error')).toHaveTextContent('Something went wrong while sending.');
     expect(item('Cut short')).toHaveTextContent('Sending was interrupted before it finished.');
+    expect(container.textContent).not.toContain('send_error');
     expect(container.textContent).not.toContain('EmailProviderDownError');
     expect(container.textContent).not.toMatch(/as of now/);
   });

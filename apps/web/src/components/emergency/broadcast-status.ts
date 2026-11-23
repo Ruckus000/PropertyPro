@@ -51,6 +51,9 @@ export function sendOutcomeReasonText(reason: string | null | undefined): string
       return 'The community was deleted before the send time.';
     case 'interrupted':
       return 'Sending was interrupted before it finished.';
+    case 'no_recipients':
+      return 'Nobody was in the audience at the send time.';
+    // 'send_error', and anything unrecognised (older rows stored an error class name).
     default:
       return 'Something went wrong while sending.';
   }
@@ -70,6 +73,19 @@ export function formatDateTime(iso: string, timeZone: string): string {
 /** "Mar 1, 2026" in the community time zone. */
 export function formatDate(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone }).format(new Date(iso));
+}
+
+/** "Mar 9, 2026, 9:00 AM EDT": a scheduled time always names its zone. */
+export function formatScheduledTime(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+    timeZone,
+  }).format(new Date(iso));
 }
 
 /** "Mon, Mar 9, 2026, 9:00 AM EDT" in the community time zone. */

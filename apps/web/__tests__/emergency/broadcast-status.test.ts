@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   broadcastStatus,
   formatDateTimeWithZone,
+  formatScheduledTime,
   sendOutcomeReasonText,
   timeZoneLabel,
 } from '@/components/emergency/broadcast-status';
@@ -84,6 +85,8 @@ describe('sendOutcomeReasonText', () => {
     expect(sendOutcomeReasonText('late')).toBe('The send time passed while the system was unavailable.');
     expect(sendOutcomeReasonText('community_deleted')).toBe('The community was deleted before the send time.');
     expect(sendOutcomeReasonText('interrupted')).toBe('Sending was interrupted before it finished.');
+    expect(sendOutcomeReasonText('no_recipients')).toBe('Nobody was in the audience at the send time.');
+    expect(sendOutcomeReasonText('send_error')).toBe('Something went wrong while sending.');
   });
 
   it('never prints an error class name', () => {
@@ -101,6 +104,12 @@ describe('zone formatting', () => {
     expect(formatDateTimeWithZone('2026-03-09T13:00:00.000Z', 'America/New_York')).toBe(
       'Mon, Mar 9, 2026, 9:00 AM EDT',
     );
+  });
+
+  it('a scheduled time always carries its zone abbreviation', () => {
+    expect(formatScheduledTime('2026-03-07T14:00:00.000Z', 'America/New_York')).toBe('Mar 7, 2026, 9:00 AM EST');
+    expect(formatScheduledTime('2026-03-09T13:00:00.000Z', 'America/New_York')).toBe('Mar 9, 2026, 9:00 AM EDT');
+    expect(formatScheduledTime('2026-03-09T13:00:00.000Z', 'America/Chicago')).toBe('Mar 9, 2026, 8:00 AM CDT');
   });
 
   it('names the zone in everyday words with its identifier', () => {

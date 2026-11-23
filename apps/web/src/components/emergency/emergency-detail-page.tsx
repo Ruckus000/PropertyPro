@@ -12,7 +12,7 @@
  * later". A missed or failed alert shows why in plain words. The Delivery
  * section is drawn only for an alert that was actually sent.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { Siren } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
@@ -38,10 +38,10 @@ import {
   capitalise,
   formatDateTime,
   formatDateTimeWithZone,
+  formatScheduledTime,
   sendOutcomeReasonText,
 } from '@/components/emergency/broadcast-status';
 import { DeliveryReport } from '@/components/emergency/DeliveryReport';
-import { ApiRequestError } from '@/lib/api/request-json';
 import { cn } from '@/lib/utils';
 import { useCancelBroadcast, useEmergencyBroadcast } from '@/hooks/use-emergency-broadcasts';
 
@@ -56,22 +56,32 @@ interface Props {
 export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZone, about }: Props) {
   const { data: report, isLoading, error, refetch } = useEmergencyBroadcast(communityId, broadcastId);
   const cancelMutation = useCancelBroadcast();
-  const [cancelError, setCancelError] = useState<string | null>(null);
+  /** A cancel request failed; what to SAY is read off the refreshed alert, below. */
+  const [cancelFailed, setCancelFailed] = useState(false);
+  const [justCanceled, setJustCanceled] = useState(false);
+  const canceledNoticeRef = useRef<HTMLParagraphElement>(null);
+  const isCanceled = Boolean(report && 'canceledAt' in report && report.canceledAt);
+
+  // The cancel button (and the dialog that held focus) is gone once the alert
+  // is canceled. Put focus on the notice that says so, not on <body>.
+  useEffect(() => {
+    if (justCanceled && isCanceled) {
+      canceledNoticeRef.current?.focus();
+      setJustCanceled(false);
+    }
+  }, [justCanceled, isCanceled]);
 
   function handleCancelScheduled() {
-    setCancelError(null);
+    setCancelFailed(false);
     cancelMutation.mutate(
       { broadcastId, communityId },
       {
         // Success invalidates this alert's query (in the hook), so the page turns Canceled.
-        onError: (cancelFailure) => {
-          setCancelError(
-            cancelFailure instanceof ApiRequestError && cancelFailure.status === 409
-              ? 'This alert has already started sending, so it can no longer be canceled.'
-              : "We couldn't cancel this alert. Please try again.",
-          );
-          // Show what the alert has become (sending, sent, missed) without a reload.
-          void refetch();
+        onSuccess: () => setJustCanceled(true),
+        onError: async () => {
+          // Refresh first: the message depends on what the alert has become.
+          await refetch();
+          setCancelFailed(true);
         },
       },
     );
@@ -117,7 +127,40 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
   const isScheduled = status.word === 'Scheduled';
   const neverSent = status.word === 'Missed' || status.word === 'Did not send';
   // Spec: a sent or scheduled alert (missed and failed ones were scheduled) can be sent again.
-  const canSendAgain = Boolean(managerReport && (managerReport.completedAt || scheduledFor));
+  // (An immediate send that died part-way has no scheduled time but is offered it too.)
+  const canSendAgain = Boolean(
+    managerReport && (managerReport.completedAt || scheduledFor || neverSent),
+  );
+  // A send that failed part-way may have reached some people: show who.
+  const reachedBeforeFailing =
+    managerReport?.sendOutcome === 'failed' &&
+    managerReport.recipients.some(
+      (r) =>
+        ['sent', 'delivered'].includes(r.emailStatus) ||
+        ['queued', 'sent', 'delivered'].includes(r.smsStatus),
+    );
+
+  // After a failed cancel the alert was refetched; say what it is NOW.
+  let cancelNotice: { status: 'danger' | 'info'; text: string } | null = null;
+  if (cancelFailed && managerReport) {
+    if (managerReport.canceledAt) {
+      cancelNotice = { status: 'info', text: 'This alert was already canceled.' };
+    } else if (managerReport.completedAt) {
+      cancelNotice = {
+        status: 'danger',
+        text: 'This alert has already been sent, so it can no longer be canceled.',
+      };
+    } else if (managerReport.sendOutcome === 'missed') {
+      cancelNotice = { status: 'info', text: 'This alert was missed and will not be sent, so there is nothing to cancel.' };
+    } else if (managerReport.sendClaimedAt || managerReport.sendOutcome) {
+      cancelNotice = {
+        status: 'danger',
+        text: 'This alert has already started sending, so it can no longer be canceled.',
+      };
+    } else {
+      cancelNotice = { status: 'danger', text: "We couldn't cancel this alert. Please try again." };
+    }
+  }
 
   const noticeClass = 'rounded-md border border-edge p-3 text-sm';
   let notice: ReactNode;
@@ -125,7 +168,11 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
     notice = undefined;
   } else if (managerReport.canceledAt) {
     notice = (
-      <p className={cn(noticeClass, 'bg-surface-hover text-content-secondary')}>
+      <p
+        ref={canceledNoticeRef}
+        tabIndex={-1}
+        className={cn(noticeClass, 'bg-surface-hover text-content-secondary')}
+      >
         This broadcast was canceled.
       </p>
     );
@@ -167,9 +214,9 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
   }
 
   const banner =
-    notice || cancelError ? (
+    notice || cancelNotice ? (
       <div className="flex flex-col gap-3">
-        {cancelError ? <AlertBanner status="danger" title={cancelError} /> : null}
+        {cancelNotice ? <AlertBanner status={cancelNotice.status} title={cancelNotice.text} /> : null}
         {notice}
       </div>
     ) : undefined;
@@ -238,7 +285,7 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
                   {scheduledFor ? (
                     <>
                       <dt className="text-content-secondary">Scheduled for</dt>
-                      <dd className="text-content">{formatDateTime(scheduledFor, timeZone)}</dd>
+                      <dd className="text-content">{formatScheduledTime(scheduledFor, timeZone)}</dd>
                     </>
                   ) : null}
                   {isScheduled ? (
@@ -278,9 +325,9 @@ export function EmergencyDetailPage({ communityId, broadcastId, isAdmin, timeZon
             ) : null}
           </div>
         </Section>
-        {managerReport?.completedAt ? (
+        {managerReport && (managerReport.completedAt || reachedBeforeFailing) ? (
           <Section>
-            <SectionHeader title="Delivery" />
+            <SectionHeader title={managerReport.completedAt ? 'Delivery' : 'Delivery before it stopped'} />
             <div className="px-4 py-4">
               <DeliveryReport
                 recipients={managerReport.recipients}

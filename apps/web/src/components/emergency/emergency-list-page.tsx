@@ -29,6 +29,7 @@ import {
   capitalise,
   formatDate,
   formatDateTime,
+  formatScheduledTime,
   sendOutcomeReasonText,
 } from '@/components/emergency/broadcast-status';
 import { PageHeader } from '@/components/shared/page-header';
@@ -88,13 +89,14 @@ function EmergencyRow({
 
   let meta: string[];
   if (m.scheduledFor && (waiting || neverSent)) {
-    meta = [capitalise(b.severity), `Scheduled for ${formatDateTime(m.scheduledFor, timeZone)}`];
-    if (neverSent) meta.push(sendOutcomeReasonText(m.sendOutcomeReason));
+    meta = [capitalise(b.severity), `Scheduled for ${formatScheduledTime(m.scheduledFor, timeZone)}`];
   } else {
     // A scheduled alert that went out is dated when it was sent, not when it was written.
     const when = m.scheduledFor && b.completedAt ? b.completedAt : b.initiatedAt;
     meta = [capitalise(b.severity), formatDateTime(when, timeZone)];
   }
+  // Also an immediate send that died part-way: it has no scheduled time but does have a reason.
+  if (neverSent) meta.push(sendOutcomeReasonText(m.sendOutcomeReason));
 
   let outcome: string | undefined;
   if (m.recipientCount !== undefined && !neverSent && status.word !== 'Sending') {

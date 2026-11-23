@@ -228,7 +228,7 @@ describe('EmergencyDetailPage, a scheduled alert (manager)', () => {
     expect(screen.getByText(/It sends\s+within 5 minutes after that time/)).toBeVisible();
     const aside = container.querySelector('aside')!;
     expect(aside).toHaveTextContent('Scheduled for');
-    expect(aside).toHaveTextContent('Mar 10, 2026, 9:00 AM');
+    expect(aside).toHaveTextContent('Mar 10, 2026, 9:00 AM EDT');
     expect(aside).toHaveTextContent('48 as of now');
     // Not the wording of an immediate alert waiting on its sender.
     expect(screen.queryByText('Pending')).toBeNull();
@@ -310,13 +310,65 @@ describe('EmergencyDetailPage, a scheduled alert (manager)', () => {
     expect(screen.queryByRole('heading', { name: 'Delivery' })).toBeNull();
   });
 
-  it('a failed alert says Did not send without the error class name, and shows no delivery', () => {
+  it('a failed alert that reached someone shows who, under the banner', () => {
+    show({
+      ...SCHEDULED,
+      sendClaimedAt: GOES_AT,
+      sendOutcome: 'failed',
+      sendOutcomeReason: 'send_error',
+      // Pat's email went out before the send stopped.
+      recipients: REPORT.recipients,
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Some residents may already have received it.');
+    expect(screen.getByRole('heading', { name: 'Delivery before it stopped' })).toBeVisible();
+    expect(screen.getByText('Pat Resident')).toBeVisible();
+    expect(screen.queryByRole('heading', { name: 'Delivery' })).toBeNull();
+  });
+
+  it('a missed alert never shows a delivery report, whatever rows it carries', () => {
+    show({
+      ...SCHEDULED,
+      sendClaimedAt: GOES_AT,
+      sendOutcome: 'missed',
+      sendOutcomeReason: 'no_recipients',
+      recipients: REPORT.recipients,
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('Nobody was in the audience at the send time.');
+    expect(screen.queryByRole('heading', { name: /Delivery/ })).toBeNull();
+    expect(screen.queryByText('Pat Resident')).toBeNull();
+  });
+
+  it('an IMMEDIATE send that died part-way reads Did not send and offers Send again later', () => {
+    show({
+      ...REPORT,
+      completedAt: null,
+      scheduledFor: null,
+      sendClaimedAt: SENT_AT,
+      sendOutcome: 'failed',
+      sendOutcomeReason: 'interrupted',
+      recipients: [],
+    });
+    expect(screen.getAllByText('Did not send').length).toBeGreaterThan(0);
+    expect(screen.getByRole('alert')).toHaveTextContent('Sending was interrupted before it finished.');
+    expect(screen.getByRole('link', { name: 'Send again later' })).toBeVisible();
+    expect(screen.queryByText('This broadcast is pending confirmation.')).toBeNull();
+    expect(screen.queryByText('Pending')).toBeNull();
+  });
+
+  it('an immediate send in flight reads Sending, not Pending', () => {
+    show({ ...REPORT, completedAt: null, scheduledFor: null, sendClaimedAt: SENT_AT, sendOutcome: null });
+    expect(screen.getAllByText('Sending').length).toBeGreaterThan(0);
+    expect(screen.getByText('This alert is being sent now.')).toBeVisible();
+    expect(screen.queryByText('This broadcast is pending confirmation.')).toBeNull();
+  });
+
+  it('a failed alert that reached nobody says Did not send without the error class name, and shows no delivery', () => {
     const { container } = show({
       ...SCHEDULED,
       sendClaimedAt: GOES_AT,
       sendOutcome: 'failed',
       sendOutcomeReason: 'EmailProviderDownError',
-      recipients: REPORT.recipients,
+      recipients: [{ ...REPORT.recipients[0]!, emailStatus: 'pending', emailSentAt: null }],
     });
     expect(screen.getAllByText('Did not send').length).toBeGreaterThan(0);
     const alert = screen.getByRole('alert');
@@ -324,7 +376,7 @@ describe('EmergencyDetailPage, a scheduled alert (manager)', () => {
     expect(alert).toHaveTextContent('Something went wrong while sending.');
     expect(container.textContent).not.toContain('EmailProviderDownError');
     expect(screen.getByRole('link', { name: 'Send again later' })).toBeVisible();
-    expect(screen.queryByRole('heading', { name: 'Delivery' })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /Delivery/ })).toBeNull();
     expect(screen.queryByText('Pat Resident')).toBeNull();
   });
 
