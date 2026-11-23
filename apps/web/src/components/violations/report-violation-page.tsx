@@ -74,11 +74,13 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
     const files = Array.from(e.target.files ?? []);
     if (photos.length + files.length > MAX_PHOTOS) {
       setServerError(`Maximum ${MAX_PHOTOS} photos allowed`);
+      e.target.value = '';
       return;
     }
     const oversized = files.find((f) => f.size > MAX_PHOTO_SIZE_BYTES);
     if (oversized) {
       setServerError(`${oversized.name} exceeds the 10 MB size limit`);
+      e.target.value = '';
       return;
     }
     setPhotos((prev) => [...prev, ...files].slice(0, MAX_PHOTOS));
@@ -141,7 +143,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
     }
   }
 
-  const description_ = staff ? (
+  const headerDescription = staff ? (
     "File a report on a resident's behalf. Your name is recorded as the reporter."
   ) : (
     <>
@@ -168,7 +170,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
         <PageHeader
           title="Report a violation"
           icon={<TriangleAlert />}
-          description={description_}
+          description={headerDescription}
           actions={
             <Button asChild variant="outline">
               <Link href={cancelHref}>Cancel</Link>
@@ -219,13 +221,15 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
 
               <div>
                 <label htmlFor="violation-category" className={LABEL_CLASS}>
-                  Category
+                  Category <span aria-hidden="true" className="text-status-danger">*</span>
                 </label>
                 <select
                   id="violation-category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className={INPUT_CLASS}
+                  aria-invalid={fieldErrors['category'] ? true : undefined}
+                  aria-describedby={fieldErrors['category'] ? 'violation-category-error' : undefined}
+                  className={`${INPUT_CLASS} min-h-11 md:min-h-0`}
                 >
                   <option value="">Select a category…</option>
                   {VIOLATION_CATEGORIES.map((c) => (
@@ -235,7 +239,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
                   ))}
                 </select>
                 {fieldErrors['category'] && (
-                  <p className="mt-1 text-xs text-status-danger">{fieldErrors['category']}</p>
+                  <p id="violation-category-error" className="mt-1 text-xs text-status-danger">{fieldErrors['category']}</p>
                 )}
               </div>
 
@@ -262,7 +266,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
 
               <div>
                 <label htmlFor="violation-description" className={LABEL_CLASS}>
-                  Description
+                  Description <span aria-hidden="true" className="text-status-danger">*</span>
                 </label>
                 <textarea
                   id="violation-description"
@@ -270,6 +274,8 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
                   onChange={(e) => setDescription(e.target.value)}
                   rows={4}
                   maxLength={4000}
+                  aria-invalid={fieldErrors['description'] ? true : undefined}
+                  aria-describedby={fieldErrors['description'] ? 'violation-description-error' : undefined}
                   placeholder="Describe what you saw…"
                   className={INPUT_CLASS}
                 />
@@ -277,7 +283,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
                   {description.length}/4000
                 </p>
                 {fieldErrors['description'] && (
-                  <p className="mt-1 text-xs text-status-danger">{fieldErrors['description']}</p>
+                  <p id="violation-description-error" className="mt-1 text-xs text-status-danger">{fieldErrors['description']}</p>
                 )}
               </div>
 
@@ -292,7 +298,7 @@ export function ReportViolationPage({ communityId, mode, ownUnitIds }: ReportVio
                   multiple
                   disabled={photos.length >= MAX_PHOTOS}
                   onChange={handlePhotoChange}
-                  className="block w-full text-sm text-content-secondary file:mr-2 file:rounded-sm file:border-0 file:bg-interactive-subtle file:px-3 file:py-1 file:text-sm file:font-medium file:text-content-link disabled:opacity-50"
+                  className="block min-h-11 w-full text-sm text-content-secondary md:min-h-0 file:mr-2 file:rounded-sm file:border-0 file:bg-interactive-subtle file:px-3 file:py-1 file:text-sm file:font-medium file:text-content-link disabled:opacity-50"
                 />
                 <p className="mt-1 text-xs text-content-secondary">
                   JPEG, PNG, WebP, or GIF. Up to 10 MB each.

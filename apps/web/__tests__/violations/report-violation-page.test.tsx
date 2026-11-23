@@ -43,9 +43,9 @@ function view(mode: 'resident' | 'resident_no_unit' | 'staff' = 'resident') {
 
 function fillValid(description = 'Loud music after midnight') {
   fireEvent.change(screen.getByLabelText(/unit/i), { target: { value: '7' } });
-  fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'noise' } });
+  fireEvent.change(screen.getByLabelText(/Category/), { target: { value: 'noise' } });
   fireEvent.click(screen.getByRole('radio', { name: 'Major' }));
-  fireEvent.change(screen.getByLabelText('Description'), { target: { value: description } });
+  fireEvent.change(screen.getByLabelText(/Description/), { target: { value: description } });
 }
 
 beforeEach(() => {
@@ -96,6 +96,16 @@ describe('ReportViolationPage', () => {
     expect(createViolationMock).not.toHaveBeenCalled();
   });
 
+  it('links the description error to its textarea', async () => {
+    view();
+    fireEvent.click(screen.getByRole('button', { name: 'Submit report' }));
+    const msg = await screen.findByText('Description is required');
+    const area = screen.getByLabelText(/Description/);
+    expect(area).toHaveAttribute('aria-invalid', 'true');
+    expect(area.getAttribute('aria-describedby')).toBe(msg.id);
+    expect(msg.id).not.toBe('');
+  });
+
   it('upload failure: shows the error, keeps the form, does not navigate', async () => {
     uploadMock.mockResolvedValueOnce(900).mockRejectedValueOnce(new Error('Photo two failed'));
     view();
@@ -110,7 +120,7 @@ describe('ReportViolationPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Photo two failed');
     expect(pushMock).not.toHaveBeenCalled();
     expect(createViolationMock).not.toHaveBeenCalled();
-    expect(screen.getByLabelText('Description')).toHaveValue('Keep this text');
+    expect(screen.getByLabelText(/Description/)).toHaveValue('Keep this text');
   });
 
   it('double submit: a second click while pending creates one violation', async () => {
