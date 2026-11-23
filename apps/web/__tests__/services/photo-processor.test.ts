@@ -117,8 +117,22 @@ describe('photo-processor', () => {
       const result = await getMaintenancePhotoUploadUrl(42, 1, 'photo.jpg');
 
       expect(result.uploadUrl).toBe('https://example.com/upload');
-      // storagePath: maintenance/42/1/{timestamp}_photo.jpg
-      expect(result.storagePath).toMatch(/^maintenance\/42\/1\/\d+_photo\.jpg$/);
+      // storagePath: maintenance/42/1/{uuid}_photo.jpg
+      expect(result.storagePath).toMatch(/^maintenance\/42\/1\/[0-9a-f-]{36}_photo\.jpg$/);
+    });
+
+    it('maintenance upload paths contain a v4 uuid', async () => {
+      createPresignedUploadUrlMock.mockResolvedValue({ signedUrl: 'https://example.com/upload' });
+
+      const a = await getMaintenancePhotoUploadUrl(42, 1, 'photo.jpg');
+      const b = await getMaintenancePhotoUploadUrl(42, 1, 'photo.jpg');
+
+      const v4 = /^maintenance\/42\/1\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}_photo\.jpg$/;
+      expect(a.storagePath).toMatch(v4);
+      expect(b.storagePath).toMatch(v4);
+      // The path is not derivable from the upload time: two uploads in the
+      // same millisecond still get distinct, unguessable segments.
+      expect(a.storagePath).not.toBe(b.storagePath);
     });
 
     it("uses 'pre-upload' folder when requestId is null", async () => {
