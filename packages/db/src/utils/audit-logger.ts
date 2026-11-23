@@ -29,6 +29,10 @@ export type AuditAction =
   // Emergency broadcast audit actions (Phase 1B)
   | 'emergency_broadcast_created' | 'emergency_broadcast_sent'  // Broadcast lifecycle
   | 'emergency_broadcast_canceled'                               // Broadcast cancellation
+  // Scheduled ("send later") alerts. `_missed` and `_failed` are written by the
+  // scheduled-emergency-broadcasts cron with a null user (system actor).
+  | 'emergency_broadcast_scheduled'
+  | 'emergency_broadcast_missed' | 'emergency_broadcast_failed'
   // Election audit actions (Phase 1D)
   | 'election_created' | 'election_updated'                      // Election lifecycle
   | 'election_opened' | 'election_closed'                        // Election state transitions

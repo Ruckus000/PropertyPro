@@ -261,6 +261,19 @@ const ACTION_PHRASES: Record<AuditAction, PhraseSpec> = {
     trailing: (e) => recipients(e.metadata?.['recipientCount']),
   },
   emergency_broadcast_canceled: { verb: 'cancelled the emergency alert', verbAlone: 'cancelled an emergency alert', object: titleFromMetadata },
+  emergency_broadcast_scheduled: { verb: 'scheduled the emergency alert', verbAlone: 'scheduled an emergency alert', object: titleFromMetadata },
+  emergency_broadcast_missed: {
+    verb: 'did not send the scheduled emergency alert',
+    verbAlone: 'did not send a scheduled emergency alert',
+    object: titleFromMetadata,
+    badge: { tone: 'warning', label: 'Missed' },
+  },
+  emergency_broadcast_failed: {
+    verb: 'could not send the scheduled emergency alert',
+    verbAlone: 'could not send a scheduled emergency alert',
+    object: titleFromMetadata,
+    badge: { tone: 'danger', label: 'Did not send' },
+  },
 
   election_created: { verb: 'created the election', verbAlone: 'created an election' },
   election_updated: { verb: 'edited the election', verbAlone: 'edited an election' },
