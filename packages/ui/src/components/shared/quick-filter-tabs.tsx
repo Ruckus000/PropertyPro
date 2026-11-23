@@ -25,7 +25,9 @@ interface QuickFilterTabsProps {
 const ACTIVE_BRAND = 'bg-interactive text-content-inverse shadow-sm';
 // A quiet fill with ink text. The first version was a solid ink fill
 // (`bg-surface-inverse`), which the owner found too heavy on the pilot pages.
-const ACTIVE_INK = 'bg-surface-muted text-content';
+// The fill alone is only about 1.15:1 against a card, so the selected tab is
+// also heavier (font-semibold) and darker than the others: three cues, not one.
+const ACTIVE_INK = 'bg-surface-muted font-semibold text-content';
 
 export function QuickFilterTabs({
   tabs,
@@ -63,7 +65,9 @@ export function QuickFilterTabs({
             {tab.label}
             {tab.count !== undefined && (
               <ShadcnBadge
-                variant={isActive ? 'secondary' : 'outline'}
+                // 'secondary' is a surface-muted chip, which vanishes on the ink
+                // tone's surface-muted fill; the outlined chip keeps its edge.
+                variant={isActive && tone !== 'ink' ? 'secondary' : 'outline'}
                 className="ml-0.5 h-5 min-w-[20px] justify-center px-1.5 text-xs"
               >
                 {tab.count}

@@ -60,7 +60,7 @@ function ExampleRow({ headers }: { headers: string[] }) {
     'Picked Up': '—',
   };
   return (
-    <Table className="w-full text-left text-sm">
+    <Table className="w-full text-left">
       <thead>
         <tr className="border-b border-edge text-xs text-content-secondary">
           {headers.map((h) => (

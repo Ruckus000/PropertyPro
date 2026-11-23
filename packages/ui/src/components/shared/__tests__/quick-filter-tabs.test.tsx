@@ -17,7 +17,9 @@ describe('QuickFilterTabs tone', () => {
   it('paints the active tab in ink with tone="ink", with no interactive class', () => {
     render(<QuickFilterTabs tabs={tabs} active="all" onChange={() => {}} tone="ink" />);
     const active = screen.getByRole('button', { name: 'All' });
-    expect(active).toHaveClass('bg-surface-muted', 'text-content');
+    // The fill is faint against a card, so weight marks the selection as well.
+    expect(active).toHaveClass('bg-surface-muted', 'text-content', 'font-semibold');
+    expect(screen.getByRole('button', { name: 'Open' })).not.toHaveClass('font-semibold');
     expect(active.className).not.toContain('interactive');
     expect(screen.getByRole('button', { name: 'Open' }).className).not.toContain('interactive');
   });
