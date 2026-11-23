@@ -94,6 +94,12 @@ describe('violations route view selection', () => {
     );
   });
 
+  it('sends a plain resident to insufficient-permissions, not feature-unavailable, in a type without violations (gate off)', async () => {
+    await expect(run({ ...RESIDENT, communityType: 'apartment' }, false, [])).rejects.toThrow(
+      'NEXT_REDIRECT:/dashboard?reason=insufficient-permissions',
+    );
+  });
+
   it('gives a manager the old inbox when the gate is off', async () => {
     await run(MANAGER, false, []);
     expect(screen.getByTestId('old-inbox')).toBeInTheDocument();
@@ -120,6 +126,14 @@ describe('violations route view selection', () => {
       yourReports: [{ id: 2 }],
     });
     expect(listsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a board resident with no units empty Mine and runs no list query', async () => {
+    await run(BOARD, true, []);
+    const props = propsOf();
+    expect(props['tabs']).toEqual(['review', 'mine']);
+    expect(props['mine']).toEqual({ residentUnitIds: [], onYourUnit: [], yourReports: [] });
+    expect(listsMock).not.toHaveBeenCalled();
   });
 
   it('gives a plain resident Mine even when they type ?tab=review', async () => {

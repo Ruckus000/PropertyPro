@@ -57,6 +57,15 @@ export default async function ViolationsRoute({ searchParams }: PageProps) {
 
   const membership = await requireCommunityMembership(communityId, userId);
 
+  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
+  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
+  const preview = await isDesignPreviewOn(userId);
+
+  // Gate off: the board rule runs before the type gate, as it always did.
+  if (!preview && !canActAsBoard(membership)) {
+    redirect('/dashboard?reason=insufficient-permissions');
+  }
+
   // Type-gate: if the community type doesn't support violations, redirect.
   // Plan-gate is delegated to <FeatureGate>, which renders the marketing surface
   // for non-tenants and redirects tenants to /dashboard.
@@ -64,10 +73,6 @@ export default async function ViolationsRoute({ searchParams }: PageProps) {
   if (!typeFeatures.hasViolations) {
     redirect('/dashboard?reason=feature-unavailable');
   }
-
-  // ponytail: two views of this page while the pilot is judged. Trigger: the owner
-  // approves or rejects the pilot (plan Task 19), or 30 days after the pilot merges.
-  const preview = await isDesignPreviewOn(userId);
 
   if (preview) {
     // The gate picks a view, never authorization: tabs come from the same board
@@ -107,10 +112,6 @@ export default async function ViolationsRoute({ searchParams }: PageProps) {
         />
       </FeatureGate>
     );
-  }
-
-  if (!canActAsBoard(membership)) {
-    redirect('/dashboard?reason=insufficient-permissions');
   }
 
   return (
