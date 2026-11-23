@@ -18,6 +18,10 @@ interface BroadcastSummary {
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
+  scheduledFor: string | null;
+  sendClaimedAt: string | null;
+  sendOutcome: 'missed' | 'failed' | null;
+  sendOutcomeReason: string | null;
 }
 
 interface BroadcastReport {
@@ -38,6 +42,11 @@ interface BroadcastReport {
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
+  /** Set on a "send later" alert; the three below are written by the scheduled-send job. */
+  scheduledFor: string | null;
+  sendClaimedAt: string | null;
+  sendOutcome: 'missed' | 'failed' | null;
+  sendOutcomeReason: string | null;
   recipients: Array<{
     userId: string;
     email: string | null;
@@ -71,6 +80,8 @@ interface CreateBroadcastParams {
   templateKey?: string;
   targetAudience: 'all' | 'owners_only';
   channels: Array<'sms' | 'email'>;
+  /** ISO instant. Present = schedule the alert for this time instead of drafting it. */
+  scheduledFor?: string;
 }
 
 interface CreateBroadcastResult {
@@ -78,6 +89,7 @@ interface CreateBroadcastResult {
   recipientCount: number;
   smsEligibleCount: number;
   emailCount: number;
+  scheduledFor?: string;
 }
 
 interface EmergencyTemplate {
@@ -129,6 +141,12 @@ export function useEmergencyBroadcast(communityId: number, broadcastId: number) 
       const data = query.state.data;
       // A resident's copy never changes: no delivery report to refresh.
       if (!data || !('recipients' in data)) return false;
+      // Missed or did not send: final, and there is no delivery to track.
+      if (data.sendOutcome) return false;
+      // Waiting for its time, possibly for days: a slow poll catches the send starting.
+      if (data.scheduledFor && !data.sendClaimedAt && !data.completedAt && !data.canceledAt) {
+        return 30_000;
+      }
       // Poll every 2s while broadcast is in-progress (not completed/canceled)
       if (!data.completedAt && !data.canceledAt) return 2000;
       // Poll every 5s after completion (for final delivery status updates)

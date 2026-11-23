@@ -2,9 +2,15 @@
  * Emergency Alerts list on the page kit. A server component: it renders client
  * parts (PageLayout, PageHeader) and hands them elements and plain data only.
  *
- * It states a title, a severity,
- * a recipient count and one of three statuses. It adds no delivery or reach
- * figure; whether a resident was not reached is on the detail page.
+ * It states a title, a severity, a recipient count and one status word. A
+ * manager also sees "send later" alerts: Scheduled with the time it will go
+ * and the count "as of now", and Missed / Did not send with the reason in
+ * plain words. A recipient's rows never carry those fields. It adds no
+ * delivery or reach figure; whether a resident was not reached is on the
+ * detail page.
+ *
+ * Order is the page's: newest first by when the alert was created, so an alert
+ * scheduled today sits at the top.
  */
 import Link from 'next/link';
 import { Siren } from 'lucide-react';
@@ -18,7 +24,13 @@ import {
 } from '@propertypro/ui/components/shared/section';
 import { PanelGlance, type AccessSentence } from '@propertypro/ui/components/shared/side-panel';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
-import { broadcastStatus, capitalise, formatDate, formatDateTime } from '@/components/emergency/broadcast-status';
+import {
+  broadcastStatus,
+  capitalise,
+  formatDate,
+  formatDateTime,
+  sendOutcomeReasonText,
+} from '@/components/emergency/broadcast-status';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 
@@ -31,7 +43,13 @@ type Row = {
   canceledAt: string | null;
 };
 
-type ManagerRow = Row & { recipientCount: number };
+type ManagerRow = Row & {
+  recipientCount: number;
+  scheduledFor?: string | null;
+  sendClaimedAt?: string | null;
+  sendOutcome?: string | null;
+  sendOutcomeReason?: string | null;
+};
 
 type Props =
   | {
@@ -55,8 +73,36 @@ function EmergencyRow({
   timeZone: string;
   showCount: boolean;
 }) {
-  const status = broadcastStatus(b);
-  const when = formatDateTime(b.initiatedAt, timeZone);
+  // Only the manager view reads the scheduling fields; a recipient's row is
+  // judged on sent / canceled alone, whatever else it happens to carry.
+  const m: Partial<ManagerRow> = showCount ? b : {};
+  const status = broadcastStatus({
+    canceledAt: b.canceledAt,
+    completedAt: b.completedAt,
+    scheduledFor: m.scheduledFor,
+    sendClaimedAt: m.sendClaimedAt,
+    sendOutcome: m.sendOutcome,
+  });
+  const neverSent = status.word === 'Missed' || status.word === 'Did not send';
+  const waiting = status.word === 'Scheduled' || status.word === 'Sending';
+
+  let meta: string[];
+  if (m.scheduledFor && (waiting || neverSent)) {
+    meta = [capitalise(b.severity), `Scheduled for ${formatDateTime(m.scheduledFor, timeZone)}`];
+    if (neverSent) meta.push(sendOutcomeReasonText(m.sendOutcomeReason));
+  } else {
+    // A scheduled alert that went out is dated when it was sent, not when it was written.
+    const when = m.scheduledFor && b.completedAt ? b.completedAt : b.initiatedAt;
+    meta = [capitalise(b.severity), formatDateTime(when, timeZone)];
+  }
+
+  let outcome: string | undefined;
+  if (m.recipientCount !== undefined && !neverSent && status.word !== 'Sending') {
+    outcome =
+      status.word === 'Scheduled'
+        ? `${m.recipientCount} recipients as of now`
+        : `${m.recipientCount} recipients`;
+  }
   return (
     <RecordRow
       lead={<StatusGlyph kind={status.kind} label={status.word} hideLabel />}
@@ -69,8 +115,8 @@ function EmergencyRow({
         </Link>
       }
       statusWord={status.word}
-      meta={[capitalise(b.severity), when]}
-      outcome={showCount && 'recipientCount' in b ? `${b.recipientCount} recipients` : undefined}
+      meta={meta}
+      outcome={outcome}
     />
   );
 }

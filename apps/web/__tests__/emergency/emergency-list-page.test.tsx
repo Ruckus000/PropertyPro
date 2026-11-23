@@ -17,6 +17,10 @@ type ManagerRow = {
   initiatedAt: string;
   completedAt: string | null;
   canceledAt: string | null;
+  scheduledFor?: string | null;
+  sendClaimedAt?: string | null;
+  sendOutcome?: string | null;
+  sendOutcomeReason?: string | null;
 };
 
 function row(over: Partial<ManagerRow> & { id: number }): ManagerRow {
@@ -140,6 +144,106 @@ describe('EmergencyListPage, manager view', () => {
   });
 });
 
+describe('EmergencyListPage, manager view of "send later" alerts', () => {
+  // 13:00Z on 10 March 2026 is 9:00 AM in New York (daylight time).
+  const GOES_AT = '2026-03-10T13:00:00.000Z';
+  const WRITTEN_AT = '2026-03-05T12:00:00.000Z';
+  const later = (over: Partial<ManagerRow> & { id: number }) =>
+    row({ initiatedAt: WRITTEN_AT, completedAt: null, scheduledFor: GOES_AT, recipientCount: 48, ...over });
+  const item = (name: string) => screen.getByRole('link', { name }).closest('li')!;
+
+  it('a scheduled alert says Scheduled, when it will go, and the count as of now', () => {
+    manager([later({ id: 1, title: 'Water off tomorrow' })]);
+    expect(item('Water off tomorrow')).toHaveTextContent(
+      'Scheduled · Urgent · Scheduled for Mar 10, 2026, 9:00 AM',
+    );
+    expect(item('Water off tomorrow')).toHaveTextContent('48 recipients as of now');
+  });
+
+  it('an alert the job has claimed says Sending and claims no recipient count yet', () => {
+    manager([later({ id: 1, title: 'Going now', sendClaimedAt: GOES_AT })]);
+    expect(item('Going now')).toHaveTextContent('Sending · Urgent · Scheduled for Mar 10, 2026, 9:00 AM');
+    expect(item('Going now')).not.toHaveTextContent(/recipients/);
+  });
+
+  it('a missed alert says Missed and why, in plain words, with no recipient count', () => {
+    manager([
+      later({ id: 1, title: 'Too late', sendClaimedAt: GOES_AT, sendOutcome: 'missed', sendOutcomeReason: 'late' }),
+      later({
+        id: 2,
+        title: 'Gone community',
+        sendClaimedAt: GOES_AT,
+        sendOutcome: 'missed',
+        sendOutcomeReason: 'community_deleted',
+      }),
+    ]);
+    expect(item('Too late')).toHaveTextContent(
+      'Missed · Urgent · Scheduled for Mar 10, 2026, 9:00 AM · The send time passed while the system was unavailable.',
+    );
+    expect(item('Too late')).not.toHaveTextContent(/recipients/);
+    expect(item('Gone community')).toHaveTextContent('Missed');
+    expect(item('Gone community')).toHaveTextContent('The community was deleted before the send time.');
+  });
+
+  it('a failed alert says Did not send and never prints the error class name', () => {
+    const { container } = manager([
+      later({
+        id: 1,
+        title: 'Provider down',
+        sendClaimedAt: GOES_AT,
+        sendOutcome: 'failed',
+        sendOutcomeReason: 'EmailProviderDownError',
+      }),
+      later({
+        id: 2,
+        title: 'Cut short',
+        sendClaimedAt: GOES_AT,
+        sendOutcome: 'failed',
+        sendOutcomeReason: 'interrupted',
+      }),
+    ]);
+    expect(item('Provider down')).toHaveTextContent(
+      'Did not send · Urgent · Scheduled for Mar 10, 2026, 9:00 AM · Something went wrong while sending.',
+    );
+    expect(item('Cut short')).toHaveTextContent('Sending was interrupted before it finished.');
+    expect(container.textContent).not.toContain('EmailProviderDownError');
+    expect(container.textContent).not.toMatch(/as of now/);
+  });
+
+  it('a scheduled alert that went out reads as an ordinary sent alert, dated when it was sent', () => {
+    manager([later({ id: 1, title: 'Went out', sendClaimedAt: GOES_AT, completedAt: '2026-03-10T13:03:00.000Z' })]);
+    expect(item('Went out')).toHaveTextContent('Sent · Urgent · Mar 10, 2026, 9:03 AM');
+    expect(item('Went out')).toHaveTextContent('48 recipients');
+    expect(item('Went out')).not.toHaveTextContent(/as of now|Scheduled for/);
+  });
+
+  it('a canceled scheduled alert reads Canceled', () => {
+    manager([later({ id: 1, title: 'Called off', canceledAt: '2026-03-06T12:00:00.000Z' })]);
+    expect(item('Called off')).toHaveTextContent(/^.*Canceled · Urgent · Mar 5, 2026/);
+    expect(item('Called off')).not.toHaveTextContent(/as of now|Scheduled for/);
+  });
+
+  it('never counts a scheduled, missed or failed alert as the last alert sent', () => {
+    const { container } = manager([
+      later({ id: 3 }),
+      later({ id: 2, sendClaimedAt: GOES_AT, sendOutcome: 'missed', sendOutcomeReason: 'late' }),
+    ]);
+    expect(container.querySelector('[data-source]')).toBeNull();
+  });
+
+  it('has no axe violations with every scheduling state on the page', async () => {
+    const { container } = manager([
+      later({ id: 4, title: 'Waiting' }),
+      later({ id: 3, title: 'Going', sendClaimedAt: GOES_AT }),
+      later({ id: 2, title: 'Late', sendClaimedAt: GOES_AT, sendOutcome: 'missed', sendOutcomeReason: 'late' }),
+      later({ id: 1, title: 'Broke', sendClaimedAt: GOES_AT, sendOutcome: 'failed', sendOutcomeReason: 'Error' }),
+    ]);
+    expect(screen.getByText(/Scheduled · Urgent/)).toBeVisible();
+    expect(screen.getByText(/Did not send · Urgent/)).toBeVisible();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
 describe('EmergencyListPage, recipient view', () => {
   // A manager row (with recipientCount) passed to the recipient view must still not leak the count.
   const received = [
@@ -155,6 +259,26 @@ describe('EmergencyListPage, recipient view', () => {
     expect(screen.queryByRole('link', { name: 'Send alert' })).toBeNull();
     const item = screen.getByRole('link', { name: 'Water shutoff' }).closest('li')!;
     expect(item).toHaveTextContent('Sent · Urgent · Mar 1, 2026, 9:30 PM');
+  });
+
+  it('reads no scheduling state, even from a row that carries the fields', () => {
+    // The server sends a recipient sent alerts only; this pins that the view
+    // itself would not surface the manager-only fields if one slipped through.
+    const leaked = [
+      {
+        ...received[0]!,
+        scheduledFor: '2026-03-10T13:00:00.000Z',
+        sendClaimedAt: '2026-03-10T13:00:00.000Z',
+        sendOutcome: 'missed',
+        sendOutcomeReason: 'late',
+      },
+    ];
+    const { container } = render(
+      <EmergencyListPage view="recipient" broadcasts={leaked} communityId={7} timeZone="America/New_York" />,
+    );
+    const item = screen.getByRole('link', { name: 'Water shutoff' }).closest('li')!;
+    expect(item).toHaveTextContent('Sent · Urgent · Mar 1, 2026, 9:30 PM');
+    expect(container.textContent).not.toMatch(/Scheduled|Missed|Did not send|Sending|as of now|recipients/);
   });
 
   it('says No alerts yet when none were sent to them', () => {
