@@ -65,7 +65,11 @@ const Table = React.forwardRef<
     >
       <table
         ref={ref}
-        className={cn("w-full caption-bottom text-sm tabular-nums", className)}
+        // text-base, not text-sm: table text is the content people came to read, and
+        // the owner found text-sm too small at every width (2026-11-23). Column
+        // titles stay text-sm (TableHead): at text-base they wrapped to two lines
+        // and widened every table (Visitors: 1126px in a 1092px box while empty).
+        className={cn("w-full caption-bottom text-base tabular-nums", className)}
         {...props}
       />
     </div>
@@ -134,7 +138,7 @@ const TableHead = React.forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-8 px-3 text-left align-middle font-medium text-content-secondary [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+      "h-8 px-3 text-left align-middle text-sm font-medium text-content-secondary [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
       className
     )}
     {...props}

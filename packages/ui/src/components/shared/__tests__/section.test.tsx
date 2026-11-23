@@ -19,6 +19,10 @@ describe('Section kit', () => {
     const { container } = render(<SectionToolbar filters={<span>All</span>} />);
     expect(container.querySelector('[data-filters]')).toHaveClass('overflow-x-auto');
   });
+  it('pads the filter row, so a filter pill never touches the section border', () => {
+    const { container } = render(<SectionToolbar filters={<span>All</span>} />);
+    expect(container.querySelector('[data-filters]')).toHaveClass('py-2');
+  });
   it('drops its box when bare', () => {
     const { container } = render(<Section bare>cards</Section>);
     expect(container.firstChild).not.toHaveClass('border');

@@ -1,6 +1,7 @@
 /**
- * Table density. A body row is 40px (16px text at a 1.5 line height plus 8px
- * top and bottom) and a header is 32px. The 52px rows this replaces left a
+ * Table density. A body row is 8px of padding above and below one line of
+ * `text-base` (43px in large text at a 16px root; it was 40px at `text-sm`
+ * until the owner asked for bigger table text, 2026-11-23) and a header is 32px. The 52px rows this replaces left a
  * table of 25 rows needing a scroll on a laptop screen.
  *
  * The heights come from the classes on the cells themselves: TableHead carries
@@ -35,6 +36,19 @@ function renderTable() {
 }
 
 describe('Table density', () => {
+  it('sets table text one step above interface text (text-base, not text-sm)', () => {
+    renderTable();
+    const table = screen.getByRole('table');
+    expect(table.classList.contains('text-base')).toBe(true);
+    expect(table.classList.contains('text-sm')).toBe(false);
+  });
+
+  it('keeps column titles at interface size (text-sm), so they do not widen the table', () => {
+    renderTable();
+    expect(screen.getByRole('columnheader').classList.contains('text-sm')).toBe(true);
+  });
+
+
   it('gives the header cell a 32px height (h-8)', () => {
     renderTable();
     const header = screen.getByRole('columnheader');
