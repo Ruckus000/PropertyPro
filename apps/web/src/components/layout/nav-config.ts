@@ -221,7 +221,6 @@ export const NAV_ITEMS: readonly NavItemConfig[] = [
     label: 'Report Violation',
     icon: AlertTriangle,
     href: (cid) => `/violations/report?communityId=${cid}`,
-    children: ['violations-inbox'],
     featureKey: 'hasViolations',
     navTier: 'more',
     matchPrefixes: ['/violations/report'],

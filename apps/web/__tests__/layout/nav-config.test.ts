@@ -129,6 +129,12 @@ describe('NAV_SECTIONS', () => {
       }
     }
   });
+
+  it('does not nest the violations inbox under Report Violation', () => {
+    const report = NAV_ITEMS.find((i) => i.id === 'violations-report');
+    expect(report?.children ?? []).not.toContain('violations-inbox');
+    expect(NAV_SECTIONS.find((s) => s.label === 'Admin')?.items.map((i) => i.id)).toContain('violations-inbox');
+  });
 });
 
 describe('getVisibleItems', () => {
