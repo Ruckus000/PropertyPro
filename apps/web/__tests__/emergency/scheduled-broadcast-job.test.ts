@@ -30,6 +30,7 @@ const {
   smsGloballyEnabledMock: vi.fn(),
   tables: {
     communities: { id: 'communities.id', deletedAt: 'communities.deletedAt', communitySettings: 'communities.settings' },
+    emergencyBroadcastRecipients: { broadcastId: 'recipients.broadcastId' },
     emergencyBroadcasts: {
       id: 'broadcasts.id',
       completedAt: 'broadcasts.completedAt',
@@ -59,6 +60,8 @@ vi.mock('../../src/lib/services/emergency-broadcast-service', () => ({
 }));
 
 import { processDueScheduledBroadcasts } from '../../src/lib/services/emergency-broadcast-schedule-service';
+
+const hardDeleteMock = vi.fn(async (_table: unknown, _where: unknown) => []);
 
 const NOW = new Date('2026-11-23T15:00:00.000Z');
 const MINUTE = 60_000;
@@ -143,6 +146,7 @@ beforeEach(() => {
     }),
   }));
   createScopedClientMock.mockImplementation(() => ({
+    hardDelete: hardDeleteMock,
     update: vi.fn(async (_table: unknown, data: Record<string, unknown>, where: { __eq?: unknown[]; __and?: Array<{ __eq?: unknown[] }> }) => {
       const id = (where.__and?.[0]?.__eq ?? where.__eq)?.[1];
       const row = rows.find((r) => r.id === id);
@@ -195,6 +199,23 @@ describe('processDueScheduledBroadcasts', () => {
       smsAllowed: false,
       persist: true,
     });
+    expect(writeBroadcastRecipientsMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      executeBroadcastMock.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it('clears any recipient rows left on the alert (a draft scheduled in place) before writing the send-time list', async () => {
+    seed(1, 2);
+
+    await processDueScheduledBroadcasts(NOW);
+
+    expect(hardDeleteMock).toHaveBeenCalledTimes(1);
+    expect(hardDeleteMock).toHaveBeenCalledWith(tables.emergencyBroadcastRecipients, {
+      __eq: ['recipients.broadcastId', 1],
+    });
+    expect(hardDeleteMock.mock.invocationCallOrder[0]!).toBeLessThan(
+      writeBroadcastRecipientsMock.mock.invocationCallOrder[0]!,
+    );
     expect(writeBroadcastRecipientsMock.mock.invocationCallOrder[0]!).toBeLessThan(
       executeBroadcastMock.mock.invocationCallOrder[0]!,
     );

@@ -37,6 +37,7 @@ import {
   getBroadcastWithReport,
   listBroadcastsForRecipient,
   paginateEmergencyBroadcasts,
+  scheduleBroadcast,
 } from '@/lib/services/emergency-broadcast-service';
 import { processDueScheduledBroadcasts } from '@/lib/services/emergency-broadcast-schedule-service';
 
@@ -310,6 +311,95 @@ describeDb('scheduled emergency alerts — claim, cancel and the Missed rule in 
       state.db.update(emergencyBroadcasts).set({ sendOutcome: 'sent' }).where(eq(emergencyBroadcasts.id, id)),
     ).rejects.toThrow();
     await state.db.update(emergencyBroadcasts).set({ canceledAt: new Date() }).where(eq(emergencyBroadcasts.id, id));
+  });
+
+  it('a draft scheduled in place is one row, sent exactly once, with recipients resolved at send time', async () => {
+    const { emergencyBroadcasts, emergencyBroadcastRecipients, createScopedClient } = state.dbModule;
+    const title = `From draft ${state.runSuffix}`;
+    const before = (await state.db.select().from(emergencyBroadcasts)).length;
+    const draft = await createBroadcast({
+      communityId,
+      title,
+      body: 'Water off 9 to noon.',
+      severity: 'info',
+      targetAudience: 'all',
+      channels: ['email'],
+      smsAllowed: false,
+      initiatedBy: managerId,
+    });
+    expect(await recipientRowCount(draft.broadcastId)).toBe(2);
+
+    const scheduledFor = new Date(Date.now() + 30 * MINUTE);
+    await expect(scheduleBroadcast(draft.broadcastId, communityId, managerId, scheduledFor)).resolves.toEqual({
+      scheduled: true,
+      scheduledFor: scheduledFor.toISOString(),
+    });
+
+    // Converted, not copied: still one row, now scheduled, its draft recipients gone.
+    expect((await state.db.select().from(emergencyBroadcasts)).length).toBe(before + 1);
+    expect(await getBroadcastWithReport(draft.broadcastId, communityId)).toMatchObject({
+      scheduledFor,
+      recipientCount: 2,
+      sendClaimedAt: null,
+      completedAt: null,
+    });
+    expect(await recipientRowCount(draft.broadcastId)).toBe(0);
+
+    // The predicate in Postgres: a second schedule, and an immediate send, are both refused.
+    await expect(
+      scheduleBroadcast(draft.broadcastId, communityId, managerId, scheduledFor),
+    ).rejects.toThrow('This alert has already been sent, scheduled or canceled.');
+
+    // The crash case: the draft's rows were never deleted. One stale row, for a
+    // resident, with an address the send must not use.
+    await createScopedClient(communityId).insert(emergencyBroadcastRecipients, {
+      broadcastId: draft.broadcastId,
+      userId: residentId,
+      email: 'stale-draft-address@example.com',
+      phone: null,
+      smsStatus: 'skipped',
+      emailStatus: 'pending',
+    });
+    // Make it due without waiting 30 minutes.
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ scheduledFor: new Date(Date.now() - 2 * MINUTE) })
+      .where(eq(emergencyBroadcasts.id, draft.broadcastId));
+
+    const summaries = await Promise.all([processDueScheduledBroadcasts(), processDueScheduledBroadcasts()]);
+
+    expect(summaries.reduce((n, s) => n + s.sent, 0)).toBe(1);
+    expect(summaries.reduce((n, s) => n + s.failed, 0)).toBe(0);
+    const row = (await load([draft.broadcastId])).get(draft.broadcastId)!;
+    expect(row.completedAt).toBeInstanceOf(Date);
+    expect(row.sendOutcome).toBeNull();
+    // The send-time list replaced the stale row: two recipients, two emails, once.
+    expect(await recipientRowCount(draft.broadcastId)).toBe(2);
+    expect(emailsFor(title)).toBe(2);
+    expect(testInbox.filter((m) => JSON.stringify(m).includes('stale-draft-address@example.com'))).toHaveLength(0);
+
+    // Sent: it can no longer be scheduled, and another run does not send it again.
+    await expect(
+      scheduleBroadcast(draft.broadcastId, communityId, managerId, scheduledFor),
+    ).rejects.toThrow('This alert has already been sent, scheduled or canceled.');
+    await processDueScheduledBroadcasts();
+    expect(emailsFor(title)).toBe(2);
+  });
+
+  it('an alert that has already gone out is never claimed, even with a due time and no claim', async () => {
+    const { emergencyBroadcasts } = state.dbModule;
+    const title = `Already sent ${state.runSuffix}`;
+    const id = await seedDue(title, 2);
+    await state.db
+      .update(emergencyBroadcasts)
+      .set({ completedAt: new Date() })
+      .where(eq(emergencyBroadcasts.id, id));
+
+    await processDueScheduledBroadcasts();
+
+    const row = (await load([id])).get(id)!;
+    expect(row.sendClaimedAt).toBeNull();
+    expect(emailsFor(title)).toBe(0);
   });
 
   it('schedules through createBroadcast: no recipient rows, visible to the manager, invisible to the resident', async () => {

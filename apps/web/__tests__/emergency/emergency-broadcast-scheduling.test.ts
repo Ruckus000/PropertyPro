@@ -26,6 +26,7 @@ const { createScopedClientMock, logAuditEventMock, sendBulkEmailMock, sendBulkEm
         id: 'broadcasts.id',
         completedAt: 'broadcasts.completedAt',
         canceledAt: 'broadcasts.canceledAt',
+        scheduledFor: 'broadcasts.scheduledFor',
         sendClaimedAt: 'broadcasts.sendClaimedAt',
         sendOutcome: 'broadcasts.sendOutcome',
       },
@@ -69,6 +70,7 @@ import {
   getBroadcastForRecipient,
   getBroadcastWithReport,
   listBroadcastsForRecipient,
+  scheduleBroadcast,
 } from '../../src/lib/services/emergency-broadcast-service';
 import { ConflictError, ValidationError } from '../../src/lib/api/errors';
 
@@ -91,6 +93,9 @@ const baseParams = {
 function mockScoped(broadcastRow?: Record<string, unknown>, recipientRows: Record<string, unknown>[] = []) {
   const inserts: Array<{ table: unknown; data: unknown }> = [];
   const updates: Array<{ table: unknown; data: Record<string, unknown>; where: unknown }> = [];
+  const deletes: Array<{ table: unknown; where: unknown }> = [];
+  /** Every write, in order, so a test can assert which statement came first. */
+  const writes: string[] = [];
   let updateResult: unknown[] = [{ id: 7 }];
   const selectFrom = vi.fn((table: unknown, _columns?: unknown, _where?: unknown) => {
     if (table === tables.userRoles) return Promise.resolve([{ userId: 'u1', role: 'resident', isUnitOwner: true }]);
@@ -112,7 +117,14 @@ function mockScoped(broadcastRow?: Record<string, unknown>, recipientRows: Recor
     }),
     update: vi.fn(async (table: unknown, data: Record<string, unknown>, where: unknown) => {
       updates.push({ table, data, where });
+      writes.push('update');
       return updateResult;
+    }),
+    // Returns the deleted rows, as the real client does.
+    hardDelete: vi.fn(async (table: unknown, where: unknown) => {
+      deletes.push({ table, where });
+      writes.push('delete');
+      return recipientRows;
     }),
   };
   createScopedClientMock.mockReturnValue(scoped);
@@ -120,6 +132,8 @@ function mockScoped(broadcastRow?: Record<string, unknown>, recipientRows: Recor
     scoped,
     inserts,
     updates,
+    deletes,
+    writes,
     setUpdateResult: (rows: unknown[]) => {
       updateResult = rows;
     },
@@ -247,6 +261,114 @@ describe('createBroadcast', () => {
       expect.objectContaining({ action: 'emergency_broadcast_created' }),
     );
     expect(logAuditEventMock.mock.calls[0]?.[0].metadata).not.toHaveProperty('scheduledFor');
+  });
+});
+
+describe('scheduleBroadcast — converts the draft in place', () => {
+  const when = new Date(NOW.getTime() + 60 * MINUTE);
+  const draft = {
+    id: 7,
+    title: 'Water off tomorrow',
+    severity: 'info',
+    targetAudience: 'all',
+    channels: ['sms', 'email'],
+    recipientCount: 2,
+    scheduledFor: when,
+  };
+  const draftRecipients = [
+    { userId: 'u1', smsStatus: 'pending', emailStatus: 'pending' },
+    { userId: 'u2', smsStatus: 'skipped', emailStatus: 'pending' },
+  ];
+
+  it('one UPDATE guarded on unsent, uncanceled, unscheduled and unclaimed; no insert', async () => {
+    const { updates, inserts, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    setUpdateResult([draft]);
+
+    await expect(scheduleBroadcast(7, 42, 'manager-1', when)).resolves.toEqual({
+      scheduled: true,
+      scheduledFor: when.toISOString(),
+    });
+
+    expect(createScopedClientMock).toHaveBeenCalledWith(42);
+    expect(inserts).toHaveLength(0);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.table).toBe(tables.emergencyBroadcasts);
+    // Only the time is written: recipient_count stays the as-of-now count.
+    expect(updates[0]?.data).toEqual({ scheduledFor: when });
+    expect(updates[0]?.where).toEqual({
+      __and: [
+        { __eq: ['broadcasts.id', 7] },
+        { __isNull: 'broadcasts.canceledAt' },
+        { __isNull: 'broadcasts.completedAt' },
+        { __isNull: 'broadcasts.scheduledFor' },
+        { __isNull: 'broadcasts.sendClaimedAt' },
+      ],
+    });
+  });
+
+  it("deletes the draft's recipient rows AFTER the update, and only that broadcast's", async () => {
+    const { deletes, writes, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    setUpdateResult([draft]);
+
+    await scheduleBroadcast(7, 42, 'manager-1', when);
+
+    expect(writes).toEqual(['update', 'delete']);
+    expect(deletes).toEqual([
+      { table: tables.emergencyBroadcastRecipients, where: { __eq: ['recipients.broadcastId', 7] } },
+    ]);
+  });
+
+  it('writes the scheduling audit entry, with the counts the draft held', async () => {
+    const { setUpdateResult } = mockScoped(undefined, draftRecipients);
+    setUpdateResult([draft]);
+
+    await scheduleBroadcast(7, 42, 'manager-1', when);
+
+    expect(logAuditEventMock).toHaveBeenCalledTimes(1);
+    expect(logAuditEventMock).toHaveBeenCalledWith({
+      userId: 'manager-1',
+      action: 'emergency_broadcast_scheduled',
+      resourceType: 'emergency_broadcast',
+      resourceId: '7',
+      communityId: 42,
+      metadata: {
+        title: 'Water off tomorrow',
+        severity: 'info',
+        targetAudience: 'all',
+        channels: ['sms', 'email'],
+        recipientCount: 2,
+        smsEligibleCount: 1,
+        emailCount: 2,
+        scheduledFor: when.toISOString(),
+      },
+    });
+  });
+
+  it('already sent, scheduled or canceled (the UPDATE matches no row): 409, nothing deleted, no audit entry', async () => {
+    const { deletes, setUpdateResult } = mockScoped(undefined, draftRecipients);
+    setUpdateResult([]);
+
+    const attempt = scheduleBroadcast(7, 42, 'manager-1', when);
+    await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+    await expect(attempt).rejects.toThrow('This alert has already been sent, scheduled or canceled.');
+
+    expect(deletes).toHaveLength(0);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['too soon', 4 * MINUTE],
+    ['too far', 365 * DAY + MINUTE],
+  ])('a time that is %s is refused before any write', async (_label, ahead) => {
+    const { updates, deletes } = mockScoped(undefined, draftRecipients);
+
+    await expect(
+      scheduleBroadcast(7, 42, 'manager-1', new Date(NOW.getTime() + ahead)),
+    ).rejects.toBeInstanceOf(ValidationError);
+
+    expect(updates).toHaveLength(0);
+    expect(deletes).toHaveLength(0);
+    expect(logAuditEventMock).not.toHaveBeenCalled();
   });
 });
 

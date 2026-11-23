@@ -324,6 +324,79 @@ export async function createBroadcast(
 }
 
 /**
+ * Turn the draft the composer created into a scheduled ("send later") alert,
+ * in place: no second broadcast row is written.
+ *
+ * ONE conditional UPDATE is the whole decision. It matches only a draft that
+ * has not been sent, canceled, scheduled or claimed, so of two concurrent
+ * requests (two schedules, or a schedule racing a send's completion or a
+ * cancel) at most one schedule wins; the loser gets a 409.
+ *
+ * Then the draft's pre-resolved recipient rows are deleted, because recipients
+ * are worked out again when the alert sends. `recipient_count` is left as the
+ * "as of now" count the manager was shown.
+ *
+ * ## If the request dies between the two statements
+ *
+ * The alert is scheduled and still has its draft recipient rows. That is safe:
+ * the job replaces a claimed alert's recipient rows before sending
+ * (`processDueScheduledBroadcasts`), so the stale rows are never sent to and
+ * the unique (broadcast, user) constraint cannot fail the send. Until then
+ * they are invisible: no delivery report is drawn for an unsent alert.
+ */
+export async function scheduleBroadcast(
+  broadcastId: number,
+  communityId: number,
+  userId: string,
+  scheduledFor: Date,
+): Promise<{ scheduled: true; scheduledFor: string }> {
+  assertSchedulableTime(scheduledFor);
+
+  const scoped = createScopedClient(communityId);
+  const converted = await scoped.update(
+    emergencyBroadcasts,
+    { scheduledFor },
+    and(
+      eq(emergencyBroadcasts.id, broadcastId),
+      isNull(emergencyBroadcasts.canceledAt),
+      isNull(emergencyBroadcasts.completedAt),
+      isNull(emergencyBroadcasts.scheduledFor),
+      isNull(emergencyBroadcasts.sendClaimedAt),
+    ),
+  );
+  const broadcast = converted[0] as EmergencyBroadcast | undefined;
+  if (!broadcast) {
+    throw new ConflictError('This alert has already been sent, scheduled or canceled.');
+  }
+
+  const draftRecipients = await scoped.hardDelete(
+    emergencyBroadcastRecipients,
+    eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
+  );
+
+  // The same entry `createBroadcast` writes when it schedules.
+  await logAuditEvent({
+    userId,
+    action: 'emergency_broadcast_scheduled',
+    resourceType: 'emergency_broadcast',
+    resourceId: String(broadcastId),
+    communityId,
+    metadata: {
+      title: broadcast.title,
+      severity: broadcast.severity,
+      targetAudience: broadcast.targetAudience,
+      channels: broadcast.channels,
+      recipientCount: broadcast.recipientCount,
+      smsEligibleCount: draftRecipients.filter((r) => r['smsStatus'] === 'pending').length,
+      emailCount: draftRecipients.filter((r) => r['emailStatus'] === 'pending').length,
+      scheduledFor: scheduledFor.toISOString(),
+    },
+  });
+
+  return { scheduled: true, scheduledFor: scheduledFor.toISOString() };
+}
+
+/**
  * Execute a broadcast — sends SMS + email in parallel.
  *
  * SMS and email are independent: one failing does not block the other.

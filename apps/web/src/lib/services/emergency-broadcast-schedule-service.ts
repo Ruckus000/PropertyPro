@@ -11,7 +11,10 @@
  * Vercel Cron delivers at-least-once and a slow tick can overlap the next. The
  * claim is one statement — `SET send_claimed_at = now() WHERE send_claimed_at
  * IS NULL AND canceled_at IS NULL AND send_outcome IS NULL` — and only the
- * tick whose statement returns the row may send it. Cancel is the mirror image
+ * tick whose statement returns the row may send it. The scan and the claim also
+ * require `completed_at IS NULL`: a draft can be scheduled in place
+ * (`scheduleBroadcast`), and an alert that has gone out must never be claimed.
+ * Cancel is the mirror image
  * (`cancelBroadcast`), so exactly one of claim and cancel wins.
  *
  * ## No retry
@@ -30,7 +33,13 @@
  * reported, never retried.
  */
 import { captureException } from '@sentry/nextjs';
-import { communities, createScopedClient, emergencyBroadcasts, logAuditEvent } from '@propertypro/db';
+import {
+  communities,
+  createScopedClient,
+  emergencyBroadcastRecipients,
+  emergencyBroadcasts,
+  logAuditEvent,
+} from '@propertypro/db';
 /*
  * The due-row scan and the claim are deliberately CROSS-TENANT — the job looks
  * for due alerts in every community — so they cannot go through a
@@ -126,6 +135,7 @@ export async function processDueScheduledBroadcasts(
          AND send_claimed_at IS NULL
          AND canceled_at IS NULL
          AND send_outcome IS NULL
+         AND completed_at IS NULL
          AND deleted_at IS NULL
        ORDER BY scheduled_for ASC
        LIMIT ${BATCH_SIZE}
@@ -150,6 +160,7 @@ export async function processDueScheduledBroadcasts(
            AND send_claimed_at IS NULL
            AND canceled_at IS NULL
            AND send_outcome IS NULL
+           AND completed_at IS NULL
         RETURNING id, community_id, initiated_by, title, scheduled_for, severity, target_audience, channels
       `),
     )[0];
@@ -197,10 +208,20 @@ export async function processDueScheduledBroadcasts(
         row.target_audience as BroadcastAudience,
         row.severity as BroadcastSeverity,
       );
-      await createScopedClient(communityId).update(
+      const scoped = createScopedClient(communityId);
+      await scoped.update(
         emergencyBroadcasts,
         { recipientCount: recipients.length },
         eq(emergencyBroadcasts.id, broadcastId),
+      );
+      // An alert scheduled from a draft can still hold the draft's recipient
+      // rows if `scheduleBroadcast` died before deleting them. We hold the
+      // claim, so nothing else writes these rows: clear them, then write the
+      // send-time list. Without this the unique (broadcast, user) constraint
+      // would fail the send.
+      await scoped.hardDelete(
+        emergencyBroadcastRecipients,
+        eq(emergencyBroadcastRecipients.broadcastId, broadcastId),
       );
       await writeBroadcastRecipients({
         communityId,
