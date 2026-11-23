@@ -86,6 +86,12 @@ function result(over: Record<string, unknown>) {
 const ABOUT = 'Managers can add and change these.' as never;
 const mount = () => render(<VisitorsStaffPage communityId={1} about={ABOUT} />);
 
+/** Revoke sits in the row's "More actions" menu. */
+async function openRevoke(user: ReturnType<typeof userEvent.setup>, name = 'Guest 1') {
+  await user.click(screen.getByRole('button', { name: `More actions for ${name}` }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Revoke pass' }));
+}
+
 describe('VisitorsStaffPage', () => {
   let replaceState: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
@@ -188,10 +194,10 @@ describe('VisitorsStaffPage', () => {
     const { container } = mount();
     await user.click(screen.getByRole('button', { name: 'All' }));
     const mark = (word: string) => {
-      const td = Array.from(container.querySelectorAll('tbody td')).find(
+      const label = Array.from(container.querySelectorAll('tbody td span')).find(
         (c) => c.textContent?.trim() === word && c.querySelector('svg'),
       );
-      return td?.querySelector('svg')?.outerHTML;
+      return label?.querySelector('svg')?.outerHTML;
     };
     expect(mark('Expected')).toBeDefined();
     expect(mark('Expired')).toBeDefined();
@@ -215,6 +221,71 @@ describe('VisitorsStaffPage', () => {
     expect(await screen.findByRole('dialog')).toBeVisible();
   });
 
+  it('shows five columns: visitor, host, status, passcode and the actions', () => {
+    mount();
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Visitor',
+      'Host',
+      'Status',
+      'Passcode',
+      'Actions',
+    ]);
+  });
+
+  it('puts guest type, purpose and the vehicle under the name', () => {
+    useVisitorsMock.mockReturnValue(
+      result({
+        data: [
+          visitor(1, {
+            guestType: 'vendor',
+            purpose: 'AC repair',
+            vehicleColor: 'White',
+            vehicleMake: 'Ford',
+            vehicleModel: 'Transit',
+            vehiclePlate: 'HVAC118',
+          }),
+          visitor(2),
+        ],
+      }),
+    );
+    mount();
+    const first = screen.getByText('Guest 1').closest('td')!;
+    expect(first).toHaveTextContent('Vendor · AC repair');
+    expect(first).toHaveTextContent('White Ford Transit · HVAC118');
+    // No vehicle on the pass: no third line and no placeholder dash.
+    const second = screen.getByText('Guest 2').closest('td')!;
+    expect(second.textContent).toBe('Guest 2One-Time · Dinner');
+  });
+
+  it('keeps the passcode and its QR button on the row', () => {
+    mount();
+    const cell = screen.getAllByText('AB12')[0]!.closest('td')!;
+    expect(within(cell).getByRole('button', { name: 'Open QR code' })).toBeVisible();
+  });
+
+  it('puts the time that matters under the status', () => {
+    const at = new Date();
+    at.setHours(9, 5, 0, 0);
+    useVisitorsMock.mockReturnValue(
+      result({ data: [visitor(1, { checkedInAt: at.toISOString(), expectedDurationMinutes: 90 })] }),
+    );
+    mount();
+    const cell = screen.getByText('Checked In', { selector: 'tbody *' }).closest('td')!;
+    expect(cell).toHaveTextContent('Since 9:05 AM · 1h 30m stay');
+  });
+
+  it('offers no Revoke where the pass is already over', async () => {
+    const user = userEvent.setup();
+    const past = new Date(Date.now() - 3_600_000).toISOString();
+    useVisitorsMock.mockReturnValue(
+      result({ data: [visitor(1, { checkedInAt: past, checkedOutAt: past }), visitor(2)] }),
+    );
+    mount();
+    await user.click(screen.getByRole('button', { name: 'All' }));
+    expect(screen.queryByRole('button', { name: 'More actions for Guest 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'More actions for Guest 2' })).toBeVisible();
+  });
+
   it('checks a visitor in', async () => {
     const user = userEvent.setup();
     mount();
@@ -236,14 +307,14 @@ describe('VisitorsStaffPage', () => {
   it('asks for a reason before revoking', async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
+    await openRevoke(user);
     expect(await screen.findByRole('dialog')).toHaveTextContent('Revoke Visitor Pass');
   });
 
   it('keeps Revoke Pass disabled until a reason is typed', async () => {
     const user = userEvent.setup();
     mount();
-    await user.click(screen.getAllByRole('button', { name: 'Revoke' })[0]!);
+    await openRevoke(user);
     const dialog = await screen.findByRole('dialog');
     const confirm = within(dialog).getByRole('button', { name: 'Revoke Pass' });
     expect(confirm).toBeDisabled();

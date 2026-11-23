@@ -96,9 +96,8 @@ export interface ColumnDef<TData, TValue = unknown> {
   id?: string;
   /**
    * Reads `row.original[accessorKey]`. Also the column's identity when `id` is
-   * absent, and — when there is no `cell` — what gets rendered. Two real
-   * columns depend on that default: `purpose` in `visitor-columns.tsx` and
-   * `carrier` in `package-columns.tsx`.
+   * absent, and — when there is no `cell` — what gets rendered. One real
+   * column depends on that default: `carrier` in `package-columns.tsx`.
    */
   accessorKey?: string;
   header?: ReactNode | (() => ReactNode);
