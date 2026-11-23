@@ -32,8 +32,11 @@ import { cn } from "@/lib/utils"
  */
 const Table = React.forwardRef<
   HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => {
+  React.HTMLAttributes<HTMLTableElement> & {
+    /** Classes for the scrolling wrapper (the table itself takes `className`). */
+    wrapperClassName?: string
+  }
+>(({ className, wrapperClassName, ...props }, ref) => {
   const wrapperRef = React.useRef<HTMLDivElement>(null)
   const [scrollable, setScrollable] = React.useState(false)
 
@@ -55,7 +58,10 @@ const Table = React.forwardRef<
   return (
     <div
       ref={wrapperRef}
-      className="relative w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-interactive"
+      className={cn(
+        "relative w-full overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-interactive",
+        wrapperClassName
+      )}
       {...(scrollable ? { tabIndex: 0 } : {})}
     >
       <table

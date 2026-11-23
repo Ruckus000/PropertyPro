@@ -176,6 +176,24 @@ describe('DataTable — a column pinned to the end', () => {
     expect(cellIn('Budget 2026', 4).className).toContain('[tr:hover>&]:bg-surface-hover');
   });
 
+  it('repeats the hover tint on the pinned header too', () => {
+    renderTable({ columns: PINNED });
+
+    expect(screen.getByRole('columnheader', { name: 'Actions' }).className).toContain(
+      '[tr:hover>&]:bg-surface-hover',
+    );
+  });
+
+  it('pads the scroll box so a focused control stops short of the pinned column', () => {
+    const { container } = renderTable({ columns: PINNED });
+    expect(container.querySelector('table')!.parentElement!.className).toContain('scroll-pr-48');
+  });
+
+  it('leaves the scroll box unpadded when no column is pinned', () => {
+    const { container } = renderTable();
+    expect(container.querySelector('table')!.parentElement!.className).not.toContain('scroll-pr');
+  });
+
   it('pins nothing on a column that does not ask for it', () => {
     renderTable({ columns: PINNED });
 
