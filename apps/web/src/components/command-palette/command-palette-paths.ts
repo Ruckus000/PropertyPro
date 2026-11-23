@@ -3,6 +3,7 @@ import { directoryHref } from '@/lib/directory/directory-href';
 
 interface EntityListPathOptions {
   communityId: number | null;
+  /** No group branches on it today: each list page scopes by role itself. */
   isAdmin: boolean;
   query?: string;
 }
@@ -27,7 +28,7 @@ function withCommunityQuery(pathname: string, communityId: number, query?: strin
 
 export function getEntityListPath(
   groupKey: string,
-  { communityId, isAdmin, query }: EntityListPathOptions,
+  { communityId, query }: EntityListPathOptions,
 ): string | null {
   switch (groupKey) {
     case 'documents':
@@ -50,11 +51,10 @@ export function getEntityListPath(
       if (!query?.trim()) return base;
       return `${base}&q=${encodeURIComponent(query.trim())}`;
     }
+    // Everyone goes to the list: /violations picks Review and/or Mine by role.
     case 'violations':
       if (!communityId) return null;
-      return isAdmin
-        ? withCommunityQuery('/violations', communityId, query)
-        : withCommunityQuery('/violations/report', communityId, query);
+      return withCommunityQuery('/violations', communityId, query);
     case 'residents':
       if (!communityId) return null;
       return directoryHref('residents', { communityId, q: query?.trim() || undefined });

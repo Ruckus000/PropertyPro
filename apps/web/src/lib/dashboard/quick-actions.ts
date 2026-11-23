@@ -107,7 +107,8 @@ export function buildMetricTiles(input: {
       id: 'violations',
       title: 'Open violations',
       value: String(input.violationOpenCount),
-      // The violations list admits board seats and managers only; residents report instead.
+      // Residents go straight to the report form (owner decision, 2026-11-23); their
+      // Mine tab is one click away on /violations. Managers and board seats get the list.
       href: audience === 'resident' ? `/violations/report${cid}` : `/violations${cid}`,
     });
   }

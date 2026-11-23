@@ -48,7 +48,7 @@ describe('getEntityListPath', () => {
     ).toBe('/dashboard/directory?communityId=9&q=smith&tab=residents');
   });
 
-  it('routes violations search hits to inbox vs resident report paths', () => {
+  it('routes violations search hits to the one list for everyone', () => {
     expect(
       getEntityListPath('violations', {
         communityId: 5,
@@ -63,7 +63,7 @@ describe('getEntityListPath', () => {
         isAdmin: false,
         query: '',
       }),
-    ).toBe('/violations/report?communityId=5');
+    ).toBe('/violations?communityId=5');
   });
 
   it('returns null when a list view requires a community but none is selected', () => {

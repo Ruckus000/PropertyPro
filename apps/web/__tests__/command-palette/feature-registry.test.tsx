@@ -122,6 +122,7 @@ describe('useFilteredRegistry', () => {
     const ids = result.current.map((item) => item.id);
     // admin-audience pages (roles: 'admin')
     expect(ids).toContain('page-compliance');
+    // an all-audience page, shown to managers too
     expect(ids).toContain('page-violations-inbox');
     // admin-audience quick action (roles: 'admin')
     expect(ids).toContain('action-upload-document');
@@ -161,10 +162,11 @@ describe('useFilteredRegistry', () => {
 
     const ids = result.current.map((item) => item.id);
     expect(ids).not.toContain('page-compliance');
-    expect(ids).not.toContain('page-violations-inbox');
     expect(ids).not.toContain('action-upload-document');
-    // resident still sees audience: 'all' entries
+    // resident still sees audience: 'all' entries, Violations among them
+    // (/violations gives a resident the Mine tab)
     expect(ids).toContain('page-dashboard');
+    expect(ids).toContain('page-violations-inbox');
   });
 
   it('resolves the announcements page entry to the scoped announcements list', () => {
