@@ -6,6 +6,17 @@ Parent spec: `2026-11-21-page-anatomy-design.md` (section numbers below, §, ref
 Precedent: Plan A pilot (`docs/superpowers/plans/2026-11-21-design-direction-a-foundation-and-pilot.md`):
 Packages, Emergency Alerts, Visitors.
 
+> **Update 2026-11-23 (later the same day):** the owner approved the design pilot,
+> so the preview gate is gone (#1531 deleted `isDesignPreviewOn`). The redesigned
+> Report a violation page and the Violations page (Review / Mine tabs) shipped to
+> everyone and the old views were deleted. A plain resident now reaches
+> `/violations` with Mine only. The sidebar is ONE "Violations" item, in the
+> Management section, for everyone (owner), opening `/violations`; the separate
+> "Report Violation" item is removed and reporting is the page's header button.
+> The dashboard tile and the command palette's "Report a Violation" still open
+> `/violations/report`. Sections below that describe the gate, two flat nav
+> items or a manager-only Violations entry are superseded by this note.
+
 Lines marked **(owner)** are the owner's decisions from the 2026-11-23 conversation.
 Everything else is the author's call and may be challenged.
 
