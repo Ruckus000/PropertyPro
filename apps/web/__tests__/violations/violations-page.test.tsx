@@ -6,16 +6,17 @@ import type { ViolationItem } from '@/lib/api/violations';
 import type { ViolationCardFields } from '@/lib/violations/resident-lists';
 import type { ViolationsTab } from '@/lib/violations/violations-view';
 
-const { useReviewMock, replaceMock, refetchMock, searchParamsRef } = vi.hoisted(() => ({
+const { useReviewMock, replaceMock, routerReplaceMock, refetchMock, searchParamsRef } = vi.hoisted(() => ({
   useReviewMock: vi.fn(),
   replaceMock: vi.fn(),
+  routerReplaceMock: vi.fn(),
   refetchMock: vi.fn(),
   searchParamsRef: { current: new URLSearchParams('communityId=1') },
 }));
 
 vi.mock('@/hooks/use-violations-review', () => ({ useViolationsReview: useReviewMock }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: replaceMock }),
+  useRouter: () => ({ replace: routerReplaceMock }),
   useSearchParams: () => searchParamsRef.current,
   usePathname: () => '/violations',
 }));
@@ -134,6 +135,8 @@ function caseLinks() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Tab, ?reported= and ?unitId= changes use native history (the page need not re-render on the server).
+  vi.spyOn(window.history, 'replaceState').mockImplementation(replaceMock);
   searchParamsRef.current = new URLSearchParams('communityId=1');
   reviewReturns(SIX);
 });
@@ -150,12 +153,13 @@ describe('ViolationsPage — tabs', () => {
     );
   });
 
-  it('draws two tabs, and choosing Mine writes tab=mine with router.replace', async () => {
+  it('draws two tabs, and choosing Mine writes tab=mine with history.replaceState, not router.replace', async () => {
     const user = userEvent.setup();
     mount({ tabs: ['review', 'mine'] });
     expect(screen.getAllByRole('tab')).toHaveLength(2);
     await user.click(screen.getByRole('tab', { name: 'Mine' }));
-    expect(replaceMock).toHaveBeenCalledWith(expect.stringContaining('tab=mine'), { scroll: false });
+    expect(replaceMock).toHaveBeenCalledWith(null, '', expect.stringContaining('tab=mine'));
+    expect(routerReplaceMock).not.toHaveBeenCalled();
     expect(screen.getByRole('heading', { level: 2, name: 'On your unit' })).toBeVisible();
     expect(screen.queryByText('open cases')).toBeNull();
   });
@@ -278,9 +282,7 @@ describe('ViolationsPage — Review', () => {
     reviewReturns([item(4)]);
     mount({ initialUnitId: 4 });
     fireEvent.click(screen.getByRole('button', { name: 'Show all units' }));
-    expect(replaceMock).toHaveBeenLastCalledWith('/violations?communityId=1&tab=review', {
-      scroll: false,
-    });
+    expect(replaceMock).toHaveBeenLastCalledWith(null, '', '/violations?communityId=1&tab=review');
   });
 
   it('Clear filters drops ?unitId= from the URL, keeping the rest', () => {
@@ -291,9 +293,7 @@ describe('ViolationsPage — Review', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Dismissed/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
     expect(useReviewMock.mock.calls.at(-1)![1].unitId).toBeUndefined();
-    expect(replaceMock).toHaveBeenLastCalledWith('/violations?communityId=1&tab=review', {
-      scroll: false,
-    });
+    expect(replaceMock).toHaveBeenLastCalledWith(null, '', '/violations?communityId=1&tab=review');
   });
 
   it('Needs attention selects the Reported filter', () => {
@@ -347,9 +347,10 @@ describe('ViolationsPage — Mine', () => {
     expect(screen.getByRole('link', { name: 'Back to dashboard' })).toBeInTheDocument();
   });
 
-  it('shows Nothing here yet when both lists are empty', () => {
+  it('shows Nothing here yet when both lists are empty, with one Report a violation button', () => {
     mount({ tabs: ['mine'], mine: { residentUnitIds: [3], onYourUnit: [], yourReports: [] } });
     expect(screen.getByRole('heading', { level: 2, name: 'Nothing here yet' })).toBeVisible();
+    expect(screen.getAllByRole('link', { name: 'Report a violation' })).toHaveLength(1);
   });
 });
 
@@ -358,7 +359,7 @@ describe('ViolationsPage — confirmation', () => {
     searchParamsRef.current = new URLSearchParams('communityId=1&tab=mine&reported=42');
     mount({ tabs: ['mine'] });
     expect(screen.getByText('Report #42 sent to the board.')).toBeInTheDocument();
-    expect(replaceMock).toHaveBeenCalledWith('/violations?communityId=1&tab=mine', { scroll: false });
+    expect(replaceMock).toHaveBeenCalledWith(null, '', '/violations?communityId=1&tab=mine');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByText('Report #42 sent to the board.')).toBeNull();
   });

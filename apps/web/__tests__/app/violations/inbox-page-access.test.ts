@@ -19,6 +19,16 @@ vi.mock('@/lib/request/page-community-context', () => ({
 }));
 vi.mock('@/components/violations/ViolationsAdminInbox', () => ({ ViolationsAdminInbox: () => null }));
 vi.mock('@/components/billing/feature-gate', () => ({ FeatureGate: () => null }));
+// The page imports the data layer at runtime; stub it so the file loads without DATABASE_URL.
+vi.mock('@/lib/design-preview', () => ({ isDesignPreviewOn: vi.fn(async () => false) }));
+vi.mock('@propertypro/db', async () => ({
+  ...(await import('../../../../../packages/db/src/schema')),
+  createScopedClient: () => ({ selectFrom: async () => [] }),
+}));
+vi.mock('@/lib/units/actor-units', () => ({ getActorUnitIds: vi.fn(async () => []), requireActorUnitId: vi.fn() }));
+vi.mock('@/lib/middleware/plan-guard', () => ({ requirePlanFeature: vi.fn() }));
+vi.mock('@/lib/violations/resident-lists', () => ({ loadResidentViolationLists: vi.fn() }));
+vi.mock('@/components/violations/violations-page', () => ({ ViolationsPage: () => null }));
 vi.mock('next/navigation', () => ({ redirect: redirectMock }));
 
 import ViolationsPage from '../../../src/app/(authenticated)/violations/page';

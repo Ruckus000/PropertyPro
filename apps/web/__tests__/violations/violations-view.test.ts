@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ViolationStatus } from '@propertypro/db';
+import { canActAsBoard } from '@/lib/db/access-control';
 import { pickTab, reviewFigures, violationsTabs } from '@/lib/violations/violations-view';
 
 const rows = (...s: ViolationStatus[]) => s.map((status) => ({ status }));
@@ -56,5 +57,30 @@ describe('reviewFigures', () => {
   });
   it('counts hearings', () => {
     expect(reviewFigures(rows('hearing_scheduled', 'hearing_scheduled'), true).hearings).toBe(2);
+  });
+});
+
+describe('violationsTabs parity with canActAsBoard', () => {
+  const roles = ['resident', 'property_manager', 'root_manager'] as const;
+  const designations = [null, 'board_member', 'board_president'] as const;
+  for (const role of roles)
+    for (const isAdmin of [true, false])
+      for (const designation of designations)
+        it(`${role} isAdmin=${isAdmin} designation=${designation}`, () => {
+          const m = { role, isAdmin, designation };
+          expect(violationsTabs(m).includes('review')).toBe(canActAsBoard(m));
+        });
+});
+
+describe('reviewFigures with an unknown status', () => {
+  it('skips the row entirely: no NaN, and it is not counted in all', () => {
+    const f = reviewFigures(
+      [...rows('reported', 'noticed'), { status: 'bogus' as unknown as ViolationStatus }],
+      false,
+    );
+    expect(f.counts.all).toBe(2);
+    expect(f.counts.reported).toBe(1);
+    expect(f.open).toBe(2);
+    expect(Object.values(f.counts).some(Number.isNaN)).toBe(false);
   });
 });

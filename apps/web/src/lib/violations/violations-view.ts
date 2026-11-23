@@ -54,9 +54,14 @@ export function reviewFigures(
   hearings: number;
   filters: ViolationStatus[];
 } {
-  const counts = { all: rows.length } as Record<ViolationStatus | 'all', number>;
+  const counts = { all: 0 } as Record<ViolationStatus | 'all', number>;
   for (const s of ALL_STATUSES) counts[s] = 0;
-  for (const r of rows) counts[r.status] += 1;
+  for (const r of rows) {
+    // An unknown status is skipped entirely (as ViolationRow's isStatus guard does), never NaN.
+    if (!ALL_STATUSES.includes(r.status)) continue;
+    counts[r.status] += 1;
+    counts.all += 1;
+  }
 
   const open = OPEN_STATUSES.reduce((sum, s) => sum + counts[s], 0);
   return {

@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { CircleCheck, TriangleAlert } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import type { AccessSentence } from '@propertypro/ui/components/shared/side-panel';
@@ -54,7 +54,6 @@ export function ViolationsPage({
   initialUnitId,
   mine,
 }: ViolationsPageProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<ViolationsTab>(initialTab);
@@ -69,7 +68,8 @@ export function ViolationsPage({
     if (!searchParams.has('reported')) return;
     const params = new URLSearchParams(searchParams.toString());
     params.delete('reported');
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // Native history, not router.replace: the server page need not re-run for state held here.
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -81,7 +81,8 @@ export function ViolationsPage({
     const params = new URLSearchParams(searchParams.toString());
     params.delete('reported');
     params.set('tab', value);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // Native history, not router.replace: the server page need not re-run for state held here.
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   // A cleared unit filter leaves the URL too, so a reload or tab switch does not re-narrow.
@@ -90,7 +91,8 @@ export function ViolationsPage({
     const params = new URLSearchParams(searchParams.toString());
     params.delete('unitId');
     params.delete('reported');
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    // Native history, not router.replace: the server page need not re-run for state held here.
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
   }
 
   // Review data is fetched only for a viewer the server gave the Review tab.
@@ -110,11 +112,14 @@ export function ViolationsPage({
           <Link href={reportHref}>New violation</Link>
         </Button>
       ) : undefined
-    ) : mine && mine.residentUnitIds.length > 0 ? (
+    ) : mine &&
+      mine.residentUnitIds.length > 0 &&
+      // Empty Mine: the first run's own button is the way in.
+      (mine.onYourUnit.length > 0 || mine.yourReports.length > 0) ? (
       <Button asChild>
         <Link href={reportHref}>Report a violation</Link>
       </Button>
-    ) : // No unit: the first run's "Back to dashboard" is the way out.
+    ) : // No unit, or nothing yet: the first run's own action is the way in.
     undefined;
 
   const confirmation = reportedId ? (

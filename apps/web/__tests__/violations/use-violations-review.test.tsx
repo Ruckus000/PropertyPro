@@ -44,4 +44,20 @@ describe('useViolationsReview', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(listViolationsMock.mock.calls[0]![2]).toBeInstanceOf(AbortSignal);
   });
+
+  it('refetches on a second mount, however fresh the cache (staleTime 0, refetchOnMount always)', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+    });
+    const wrap = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const first = renderHook(() => useViolationsReview(7, {}, true), { wrapper: wrap });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+    expect(listViolationsMock).toHaveBeenCalledTimes(1);
+    const second = renderHook(() => useViolationsReview(7, {}, true), { wrapper: wrap });
+    await waitFor(() => expect(listViolationsMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(second.result.current.isFetching).toBe(false));
+  });
 });
