@@ -25,7 +25,7 @@ function trigger(className?: string) {
 describe('SelectTrigger matches Input', () => {
   it('is 44px on touch and 32px from md, with the Input radius and border', () => {
     const classes = trigger();
-    for (const cls of ['h-11', 'md:h-8', 'rounded-sm', 'border-edge-strong']) {
+    for (const cls of ['h-11', 'md:h-8', 'rounded-sm', 'border-edge-control']) {
       expect(classes).toContain(cls);
     }
     for (const stale of ['h-9', 'rounded-md', 'border-edge']) {

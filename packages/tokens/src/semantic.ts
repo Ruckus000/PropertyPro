@@ -89,6 +89,9 @@ export const tokenDefinitions = {
     default: prim('sand', 200),
     subtle:  prim('sand', 100),
     strong:  prim('sand', 300),
+    // The edge of a form control (input, textarea, select). Not for rules,
+    // cards or tables: those stay on default/strong.
+    control: prim('sand', 500),
     muted:   prim('sand', 50),
     focus:   prim('coral', 500),
     error:   prim('red', 500),

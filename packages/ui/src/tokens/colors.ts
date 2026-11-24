@@ -32,6 +32,7 @@ export const semanticColors = {
     default: "var(--border-default)",
     subtle: "var(--border-subtle)",
     strong: "var(--border-strong)",
+    control: "var(--border-control)",
     muted: "var(--border-muted)",
     focus: "var(--border-focus)",
     error: "var(--border-error)",
