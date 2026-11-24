@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/audit/audit-trail-page.tsx
 /**
  * Audit trail: a permanent, plain-language record of what happened in the
  * community and who did it.
@@ -13,9 +14,8 @@ import type { SearchParams } from 'next/dist/server/request/search-params';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole } from '@propertypro/shared';
-import { AuditTrailViewer } from '@/components/audit/AuditTrailViewer';
-import { PageHeader } from '@/components/shared/page-header';
-import { PageBody } from '@/components/shared/page-body';
+import { AuditTrailPage as AuditTrailPageView } from '@/components/audit/audit-trail-page';
+import { describeAccess } from '@/lib/access/describe-access';
 
 interface PageProps {
   searchParams: Promise<SearchParams>;
@@ -45,11 +45,11 @@ export default async function AuditTrailPage({ searchParams }: PageProps) {
   }
 
   return (
-    <>
-      <PageHeader title="Audit Trail" />
-      <PageBody width="content">
-        <AuditTrailViewer communityId={communityId} timeZone={membership.timezone} />
-      </PageBody>
-    </>
+    <AuditTrailPageView
+      communityId={communityId}
+      timeZone={membership.timezone}
+      // No resident can read the audit log, so the scope names nobody.
+      about={describeAccess(membership.communityType, 'audit', 'all')}
+    />
   );
 }

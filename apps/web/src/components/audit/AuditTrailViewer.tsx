@@ -11,7 +11,7 @@
  * record. The URL holds view, period, scope and the open entry, so a link
  * reopens exactly what was on screen.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { Download, EyeOff, Lock, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,39 @@ interface AuditTrailViewerProps {
    * page's history dialog, pass false and keep it in memory instead.
    */
   syncUrl?: boolean;
+  /**
+   * Lays the viewer's parts out in a different frame. The route's page passes
+   * one (`audit-trail-page.tsx`, which puts them in a `PageLayout`); without it
+   * the viewer draws its own stacked layout, as the compliance dialog shows it.
+   */
+  frame?: (parts: AuditTrailParts) => ReactNode;
 }
+
+/** The viewer's pieces, already wired to its state. A frame only places them. */
+export interface AuditTrailParts {
+  /** The person or item the list is narrowed to, by name; null when it is not narrowed. */
+  subject: string | null;
+  /** One sentence saying what the list holds. */
+  intro: string;
+  /** Print record when narrowed, otherwise the CSV download. Pass `csvLabel` to rename the latter. */
+  exportAction: (options?: { csvLabel?: string }) => ReactNode;
+  search: ReactNode;
+  period: ReactNode;
+  view: AuditView;
+  onView: (view: AuditView) => void;
+  isPending: boolean;
+  /** Skeleton, error banner, empty state or the day-grouped list. */
+  body: ReactNode;
+  /** "Show older activity", when there is more. */
+  loadMore: ReactNode | null;
+  /** The hidden-routine count or the permanence sentence; null unless the list has entries. */
+  footerNote: ReactNode | null;
+  /** The details sheet. It is a dialog, so it can sit anywhere. */
+  sheet: ReactNode;
+}
+
+/** What the trail is, in one sentence. Also the route page's header description. */
+export const AUDIT_TRAIL_INTRO = 'A permanent record of what happened in your community and who did it.';
 
 function readState(params: URLSearchParams): AuditQueryState {
   try {
@@ -88,7 +120,7 @@ function useAuditViewState(syncUrl: boolean) {
     : { state: local.state, openEntry: local.entry, navigate };
 }
 
-export function AuditTrailViewer({ communityId, timeZone, syncUrl = true }: AuditTrailViewerProps) {
+export function AuditTrailViewer({ communityId, timeZone, syncUrl = true, frame }: AuditTrailViewerProps) {
   const { state, openEntry, navigate } = useAuditViewState(syncUrl);
   // The label of a scope picked from search, until the server's arrives.
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
@@ -126,80 +158,69 @@ export function AuditTrailViewer({ communityId, timeZone, syncUrl = true }: Audi
 
   const intro = state.scope
     ? `Everything that happened ${state.scope.kind === 'person' ? 'by or to' : 'to'} ${scopeLabel ?? `this ${state.scope.kind === 'person' ? 'person' : itemTypeLabel(state.scope.entityType).toLowerCase()}`}, newest first.`
-    : 'A permanent record of what happened in your community and who did it.';
+    : AUDIT_TRAIL_INTRO;
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          {state.scope && <p className="truncate font-semibold tracking-tight text-2xl text-content">{scopeLabel ?? 'Selected'}</p>}
-          <p className="text-base text-content-secondary">{intro}</p>
-        </div>
-        {state.scope ? (
-          <Button asChild className="shrink-0">
-            <a href={printHref} target="_blank" rel="noopener">
-              <Printer aria-hidden="true" />
-              Print record
-            </a>
+  const hasEntries = !isPending && !isError && items.length > 0;
+
+  const parts: AuditTrailParts = {
+    subject: state.scope ? (scopeLabel ?? 'Selected') : null,
+    intro,
+    exportAction: ({ csvLabel = 'Download' } = {}) =>
+      state.scope ? (
+        <Button asChild className="shrink-0">
+          <a href={printHref} target="_blank" rel="noopener">
+            <Printer aria-hidden="true" />
+            Print record
+          </a>
+        </Button>
+      ) : (
+        <Button asChild variant="outline" className="shrink-0">
+          <a href={csvHref} download>
+            <Download aria-hidden="true" />
+            {csvLabel}
+          </a>
+        </Button>
+      ),
+    search: <AuditSearch communityId={communityId} scope={state.scope} scopeLabel={scopeLabel} onScope={setScope} />,
+    period: <AuditPeriodPicker period={state.period} onPeriod={setPeriod} />,
+    view: state.view,
+    onView: setView,
+    isPending,
+    body: isPending ? (
+      <AuditListSkeleton />
+    ) : isError ? (
+      <AlertBanner
+        status="danger"
+        className="mt-4"
+        title="We couldn’t load the audit trail"
+        description="No entries are lost. Try again in a moment."
+        action={
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
           </Button>
-        ) : (
-          <Button asChild variant="outline" className="shrink-0">
-            <a href={csvHref} download>
-              <Download aria-hidden="true" />
-              Download
-            </a>
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-          <div className="min-w-0 flex-1">
-            <AuditSearch communityId={communityId} scope={state.scope} scopeLabel={scopeLabel} onScope={setScope} />
-          </div>
-          <AuditPeriodPicker period={state.period} onPeriod={setPeriod} />
-        </div>
-        <AuditViewPicker view={state.view} onView={setView} />
-      </div>
-
-      <div aria-live="polite" aria-busy={isPending}>
-        {isPending ? (
-          <AuditListSkeleton />
-        ) : isError ? (
-          <AlertBanner
-            status="danger"
-            className="mt-4"
-            title="We couldn’t load the audit trail"
-            description="No entries are lost. Try again in a moment."
-            action={
-              <Button variant="outline" size="sm" onClick={() => void refetch()}>
-                Try again
-              </Button>
-            }
-          />
-        ) : items.length === 0 ? (
-          <AuditEmpty state={state} onView={setView} onPeriod={setPeriod} hidden={auditData?.hiddenRoutineCount ?? 0} />
-        ) : (
-          <>
-            <AuditEventList
-              items={items}
-              timeZone={timeZone}
-              selectedKey={selected?.key ?? null}
-              onOpen={(item: AuditListItem) => navigate(state, item.key)}
-              onScope={setScope}
-            />
-            {hasNextPage && (
-              <div className="pt-4">
-                <Button variant="outline" onClick={() => void fetchNextPage()} loading={isFetchingNextPage}>
-                  Show older activity
-                </Button>
-              </div>
-            )}
-            <AuditFooter state={state} hidden={auditData?.hiddenRoutineCount ?? null} onView={setView} />
-          </>
-        )}
-      </div>
-
+        }
+      />
+    ) : items.length === 0 ? (
+      <AuditEmpty state={state} onView={setView} onPeriod={setPeriod} hidden={auditData?.hiddenRoutineCount ?? 0} />
+    ) : (
+      <AuditEventList
+        items={items}
+        timeZone={timeZone}
+        selectedKey={selected?.key ?? null}
+        onOpen={(item: AuditListItem) => navigate(state, item.key)}
+        onScope={setScope}
+      />
+    ),
+    loadMore:
+      hasEntries && hasNextPage ? (
+        <Button variant="outline" onClick={() => void fetchNextPage()} loading={isFetchingNextPage}>
+          Show older activity
+        </Button>
+      ) : null,
+    footerNote: hasEntries ? (
+      <AuditFooterNote state={state} hidden={auditData?.hiddenRoutineCount ?? null} onView={setView} />
+    ) : null,
+    sheet: (
       <AuditDetailSheet
         communityId={communityId}
         item={selected}
@@ -207,11 +228,48 @@ export function AuditTrailViewer({ communityId, timeZone, syncUrl = true }: Audi
         onClose={() => navigate(state, null)}
         onScope={setScope}
       />
+    ),
+  };
+
+  if (frame) return <>{frame(parts)}</>;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          {parts.subject !== null && (
+            <p className="truncate font-semibold tracking-tight text-2xl text-content">{parts.subject}</p>
+          )}
+          <p className="text-base text-content-secondary">{intro}</p>
+        </div>
+        {parts.exportAction()}
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+          <div className="min-w-0 flex-1">{parts.search}</div>
+          {parts.period}
+        </div>
+        <AuditViewPicker view={state.view} onView={setView} />
+      </div>
+
+      <div aria-live="polite" aria-busy={isPending}>
+        {parts.body}
+        {parts.loadMore && <div className="pt-4">{parts.loadMore}</div>}
+        {parts.footerNote && (
+          <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-edge pt-4 text-sm text-content-secondary">
+            {parts.footerNote}
+          </p>
+        )}
+      </div>
+
+      {parts.sheet}
     </div>
   );
 }
 
-function AuditFooter({
+/** The words under the list. The frame supplies the element around them. */
+function AuditFooterNote({
   state,
   hidden,
   onView,
@@ -220,30 +278,26 @@ function AuditFooter({
   hidden: number | null;
   onView: (view: AuditView) => void;
 }) {
-  return (
-    <p className="mt-6 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-edge pt-4 text-sm text-content-secondary">
-      {state.view === 'important' && hidden !== null && hidden > 0 ? (
-        <>
-          <EyeOff className="size-4" aria-hidden="true" />
-          <span>
-            {hidden.toLocaleString('en-US')} routine {hidden === 1 ? 'event' : 'events'}, like document views and automatic
-            charges, {hidden === 1 ? 'is' : 'are'} hidden.
-          </span>
-          <button
-            type="button"
-            onClick={() => onView('all')}
-            className="rounded-sm font-medium text-content-link underline underline-offset-4 hover:text-content-link-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            Show everything
-          </button>
-        </>
-      ) : (
-        <>
-          <Lock className="size-4" aria-hidden="true" />
-          <span>Entries are permanent. Nobody can edit or delete them.</span>
-        </>
-      )}
-    </p>
+  return state.view === 'important' && hidden !== null && hidden > 0 ? (
+    <>
+      <EyeOff className="size-4" aria-hidden="true" />
+      <span>
+        {hidden.toLocaleString('en-US')} routine {hidden === 1 ? 'event' : 'events'}, like document views and automatic
+        charges, {hidden === 1 ? 'is' : 'are'} hidden.
+      </span>
+      <button
+        type="button"
+        onClick={() => onView('all')}
+        className="rounded-sm font-medium text-content-link underline underline-offset-4 hover:text-content-link-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+      >
+        Show everything
+      </button>
+    </>
+  ) : (
+    <>
+      <Lock className="size-4" aria-hidden="true" />
+      <span>Entries are permanent. Nobody can edit or delete them.</span>
+    </>
   );
 }
 
