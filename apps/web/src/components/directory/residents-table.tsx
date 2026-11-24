@@ -2,19 +2,27 @@
 
 import { BadgeCheck } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Section } from '@propertypro/ui/components/shared/section';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { Avatar, NoticeConsentBadge, PortalBadge, avatarToneFor } from './directory-badges';
 import { residentTypeLabel, type DirectoryResidentRow } from './directory-model';
 
-// Columns by breakpoint: <md name · portal (unit · type · board in the subline),
-// md adds unit · type, xl adds board · phone.
+// Five columns from 768px up: select · name · unit · type · portal (owner
+// decision, 2026-11-24). The Name cell carries the email and, beneath it, the
+// board seat; the phone number is in the resident sheet only. Below md the table
+// is name · portal, and the subline carries unit · type · board. The Name cell
+// is the one that takes the spare width and the one that gives: `w-full` on its
+// header claims every pixel the other columns do not need, and `max-w-0` on its
+// cells lets it shrink and truncate instead of widening the table (the same
+// pair DataTable's `absorbSlack` uses). Unit, Type and Portal stay on one line,
+// so they are exactly as wide as their content.
 const MD = 'hidden md:table-cell';
-const XL = 'hidden xl:table-cell';
+const FIT = 'whitespace-nowrap';
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
 
-const DESIGNATION_SHORT = { board_president: 'President', board_member: 'Member' } as const;
+const DESIGNATION_LABEL = { board_president: 'Board president', board_member: 'Board member' } as const;
 
 export function ResidentsTable({
   rows,
@@ -37,30 +45,28 @@ export function ResidentsTable({
   const selectedCount = rows.filter((r) => selected.has(r.userId)).length;
   const allState = selectedCount === 0 ? false : selectedCount === rows.length ? true : 'indeterminate';
   return (
-    <div className="overflow-hidden rounded-lg border border-edge bg-surface-card">
+    <Section>
       <Table aria-label="Residents">
         <TableHeader className="bg-surface-subtle">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-11 pr-0">
               <Checkbox checked={allState} onCheckedChange={onToggleAll} aria-label="Select all shown residents" />
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className={MD}>Unit</TableHead>
-            <TableHead className={MD}>Type</TableHead>
-            <TableHead className={XL}>Board</TableHead>
-            <TableHead className="text-right md:text-left">Portal</TableHead>
-            <TableHead className={XL}>Phone</TableHead>
+            <TableHead className="w-full">Name</TableHead>
+            <TableHead className={cn(MD, FIT)}>Unit</TableHead>
+            <TableHead className={cn(MD, FIT)}>Type</TableHead>
+            <TableHead className={cn(FIT, 'text-right md:text-left')}>Portal</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
             const isOwner = hasOwnerRole && r.isUnitOwner;
             const typeLabel = residentTypeLabel(r, hasOwnerRole);
-            const board = r.designation ? DESIGNATION_SHORT[r.designation] : null;
+            const board = r.designation ? DESIGNATION_LABEL[r.designation] : null;
             const mobileSubline = [
               r.unit ? `Unit ${r.unit.unitNumber}` : 'No unit',
               typeLabel,
-              board && `Board ${board.toLowerCase()}`,
+              board,
             ]
               .filter(Boolean)
               .join(' · ');
@@ -85,16 +91,21 @@ export function ResidentsTable({
                       <span className="truncate font-semibold" title={r.displayName}>
                         {r.displayName}
                       </span>
-                      {/* Email on tablet+; on phones the subline carries unit · type · board. */}
+                      {/* Email, then the board seat, on tablet+; on phones the subline carries unit · type · board. */}
                       <span className="hidden truncate text-xs text-content-tertiary md:block" title={r.email ?? undefined}>
                         {r.email}
-                        {board ? <span className="xl:hidden"> · Board {board.toLowerCase()}</span> : null}
                       </span>
+                      {board ? (
+                        <span className="hidden items-center gap-1 text-xs text-content-secondary md:inline-flex">
+                          <BadgeCheck className="size-3.5 shrink-0 text-content-tertiary" aria-hidden="true" />
+                          <span className="truncate">{board}</span>
+                        </span>
+                      ) : null}
                       <span className="truncate text-xs text-content-tertiary md:hidden">{mobileSubline}</span>
                     </span>
                   </button>
                 </TableCell>
-                <TableCell className={MD}>
+                <TableCell className={cn(MD, FIT)}>
                   {r.unit ? (
                     <button
                       type="button"
@@ -108,7 +119,7 @@ export function ResidentsTable({
                     <span className="text-content-tertiary">—</span>
                   )}
                 </TableCell>
-                <TableCell className={MD}>
+                <TableCell className={cn(MD, FIT)}>
                   <span
                     className={cn(
                       'inline-flex h-6 items-center rounded-full px-2 text-xs font-medium',
@@ -123,23 +134,14 @@ export function ResidentsTable({
                   </span>
                   {isOwner && r.noticeConsent ? <span className="ml-2"><NoticeConsentBadge /></span> : null}
                 </TableCell>
-                <TableCell className={cn(XL, 'text-xs text-content-secondary')}>
-                  <span className="inline-flex items-center gap-1.5">
-                    {board ? <BadgeCheck size={14} className="text-content-tertiary" aria-hidden="true" /> : null}
-                    {board ?? '—'}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right md:text-left">
+                <TableCell className={cn(FIT, 'text-right md:text-left')}>
                   <PortalBadge status={r.portalStatus} />
-                </TableCell>
-                <TableCell className={cn(XL, 'whitespace-nowrap text-xs text-content-secondary')}>
-                  {r.phone ?? '—'}
                 </TableCell>
               </TableRow>
             );
           })}
         </TableBody>
       </Table>
-    </div>
+    </Section>
   );
 }

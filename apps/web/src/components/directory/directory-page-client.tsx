@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { AlertTriangle, DollarSign, Download, MoreHorizontal, Plus, Upload } from 'lucide-react';
+import { DollarSign, Download, MoreHorizontal, Plus, Upload, Users } from 'lucide-react';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
+import { Section } from '@propertypro/ui/components/shared/section';
 import type { CommunityType } from '@propertypro/shared';
 import { PageHeader } from '@/components/shared/page-header';
-import { PageHeaderHelpButton } from '@/components/shared/page-header-help-button';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
@@ -33,7 +35,6 @@ import {
   useResidentsList,
 } from '@/hooks/use-residents-management';
 import { useIsDesktop } from '@/hooks/use-media-query';
-import { cn } from '@/lib/utils';
 import { useDirectoryExport, type DirectoryExportInput } from '@/hooks/use-directory-export';
 import { occupantIdOf, occupantToResident, useCreateOccupant, useOccupants, useRemoveOccupant } from '@/hooks/use-occupants';
 import { ConfirmDialog } from '@/components/pm/site-editor-v3/ConfirmDialog';
@@ -85,9 +86,9 @@ const DirectorySetup = dynamic(() => import('./directory-setup').then((m) => m.D
   loading: () => <div className="min-h-96 animate-pulse rounded-md bg-surface-muted" aria-hidden="true" />,
 });
 
-// ponytail: this route sits ~35 KiB under the 1160 KiB hard per-route budget
-// (perf:check on a local production build, 2026-10-13; enforced on this
-// unbudgeted route since 2026-10-12). Lazy-loading the dialogs below via
+// ponytail: this route sits ~21 KiB under the 1160 KiB hard per-route budget
+// (1138.7 KiB on a local production build, 2026-11-24, after the move onto
+// PageLayout added 4.6 KiB; enforced on this unbudgeted route since 2026-10-12). Lazy-loading the dialogs below via
 // next/dynamic was measured and made things WORSE: it reshuffled shared chunks
 // and pushed the web aggregate budget (1435 KiB now, routes this page is not
 // even in) over. Re-measure both numbers before adding weight here.
@@ -134,21 +135,29 @@ const RESIDENT_STATUS_LABEL: Record<ResidentStatusFilter, string> = {
   not_active: 'Not activated',
 };
 
-const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
+// Ink, not coral: the selected tab is marked by an underline (design §11.3).
+// Same overrides as the Visitors page: every one has the primitive's variant
+// (none, or data-[state=active]) so tailwind-merge replaces rather than stacks.
+const TAB_LIST_CLASS =
+  'flex w-full justify-start gap-1 rounded-none border-b border-edge-strong bg-transparent p-0';
+const TAB_TRIGGER_CLASS =
+  'gap-2 rounded-none border-b-2 border-transparent py-2 data-[state=active]:border-content data-[state=active]:bg-transparent data-[state=active]:shadow-none';
 
+// The page's "no results" state (spec §5.7): the toolbar stays, the section
+// says nothing matches and offers the way back.
 function NoMatches({ noun, onClear }: { noun: string; onClear: () => void }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed border-edge-strong px-6 py-12 text-center">
-      <span className="text-sm font-medium text-content">No {noun} match</span>
-      <span className="text-xs text-content-secondary">Try a different search or filter.</span>
-      <button
-        type="button"
-        onClick={onClear}
-        className={cn('mt-2 h-9 rounded-md px-3 text-xs font-medium text-content-link hover:bg-interactive-subtle', FOCUS)}
-      >
-        Clear filters
-      </button>
-    </div>
+    <Section>
+      <div className="flex flex-col items-start gap-3 px-4 py-6">
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-content">No {noun} match</p>
+          <p className="text-sm text-content-secondary">Try a different search or filter.</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onClear}>
+          Clear filters
+        </Button>
+      </div>
+    </Section>
   );
 }
 
@@ -645,482 +654,506 @@ export function DirectoryPageClient({
     guideWasShown.current = guideShown;
   }, [guideShown]);
 
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title="Directory" hideHelpButton />
-
-      {showContinueBar ? (
-        <ContinueSetupBar
-          done={setupDone}
-          total={3}
-          countLabel="setup steps done"
-          next={nextSetupStep ?? undefined}
-          onContinue={() => setSetupOpen(true)}
-          onDismiss={setupDismissal.dismiss}
-        />
-      ) : null}
-
-      {guideShown ? (
-        <DirectorySetup
-          communityId={communityId}
-          communityType={communityType}
-          unitCount={dirUnits.length}
-          residentCount={residentRows.length}
-          notInvitedCount={notInvitedCount}
-          onAddUnit={() => setUnitForm({ open: true, unitId: null })}
-          onAddResident={() => openAddResident(null)}
-          onReviewInvites={() => {
-            setSetupOpen(false);
-            setTab('residents');
-            setResidentStatus('not_active');
-          }}
-          {...(inSetup ? {} : { onClose: () => setSetupOpen(false) })}
-        />
-      ) : null}
-
-      {/* The strip counts units: on an empty community it would only show zeros (F-4). */}
-      {isAdmin && loaded && dirUnits.length > 0 ? (
-        <OverviewStrip
-          stats={stats}
-          requestCount={joinRequestsQ.data ? pendingRequests : null}
-          canSeeBalances={balancesVisible}
-          unsetLabel={communityType === 'apartment' ? 'offline' : 'not set'}
-          onOccupancy={() => {
-            setTab('units');
-            setUnitStatus('vacant');
-          }}
-          onPastDue={() => {
-            setTab('units');
-            setUnitStatus('past_due');
-          }}
-          onPortal={() => {
-            setTab('residents');
-            setResidentStatus('not_active');
-          }}
-          onRequests={() => setTab('requests')}
-        />
-      ) : null}
-
-      {inSetup ? null : (
-      <Tabs value={tab} onValueChange={setTab} className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          {isAdmin ? (
-            <TabsList aria-label="Directory sections" className="h-12 flex-nowrap md:h-10">
-              <TabsTrigger value="units" className="h-full gap-2 px-3.5">
-                Units
-                <span className="text-xs font-medium text-content-tertiary">{dirUnits.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="residents" className="h-full gap-2 px-3.5">
-                Residents
-                <span className="text-xs font-medium text-content-tertiary">{residentRows.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="requests" className="h-full gap-2 px-3.5">
-                Join requests
-                {pendingRequests > 0 ? (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-interactive px-1.5 text-xs font-semibold text-content-inverse">
-                    {pendingRequests}
-                  </span>
-                ) : null}
-              </TabsTrigger>
-            </TabsList>
-          ) : (
-            <span />
-          )}
-          <div className="flex shrink-0 items-center gap-2">
-            {tab === 'residents' || tab === 'units' ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label="More actions"
-                    className={cn(
-                      'flex h-12 w-12 items-center justify-center rounded-md border border-edge text-content hover:bg-surface-hover md:h-10 md:w-10',
-                      FOCUS,
-                    )}
-                  >
-                    <MoreHorizontal size={18} aria-hidden="true" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52">
-                  {tab === 'residents' ? (
-                    <DropdownMenuItem asChild>
-                      <Link href={`/dashboard/import-residents?communityId=${communityId}`}>
-                        <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
-                        Import from CSV
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : tab === 'units' && canWrite ? (
-                    <DropdownMenuItem asChild>
-                      <Link href={`/dashboard/import-units?communityId=${communityId}`}>
-                        <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
-                        Import from CSV
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : null}
-                  <DropdownMenuItem
-                    disabled={exporter.isPending}
-                    onSelect={() => runExport({ kind: tab === 'residents' ? 'residents' : 'units' })}
-                  >
-                    <Download size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
-                    {tab === 'residents' ? 'Export residents (CSV)' : 'Export units (CSV)'}
-                  </DropdownMenuItem>
-                  {tab === 'units' && balancesVisible ? (
-                    <DropdownMenuItem onSelect={() => setRuleOpen(true)}>
-                      <DollarSign size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
-                      Past-due rule
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-            {showPrimary ? (
-              <button
-                type="button"
-                aria-label={primaryLabel}
-                onClick={() => (tab === 'units' ? setUnitForm({ open: true, unitId: null }) : openAddResident(null))}
-                className={cn(
-                  'inline-flex h-12 min-w-12 items-center justify-center gap-2 rounded-md bg-interactive px-0 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:h-10 md:px-4',
-                  FOCUS,
-                )}
-              >
-                <Plus size={16} aria-hidden="true" />
-                <span className="hidden md:inline">{primaryLabel}</span>
-              </button>
-            ) : null}
-            <PageHeaderHelpButton />
-          </div>
-        </div>
-
-        {inviteWarning ? (
-          <div
-            role="alert"
-            className="flex flex-wrap items-start gap-3 rounded-md border border-status-warning-border bg-status-warning-bg px-4 py-3.5 text-status-warning"
+  // Header actions: "More actions" (outline) beside the tab's Add button (the
+  // page's one filled primary). The setup guide carries its own actions, and
+  // the Join requests tab has none.
+  const moreActions =
+    tab === 'residents' || tab === 'units' ? (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="icon" aria-label="More actions">
+            <MoreHorizontal aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-52">
+          {tab === 'residents' ? (
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/import-residents?communityId=${communityId}`}>
+                <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                Import from CSV
+              </Link>
+            </DropdownMenuItem>
+          ) : tab === 'units' && canWrite ? (
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/import-units?communityId=${communityId}`}>
+                <Upload size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+                Import from CSV
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem
+            disabled={exporter.isPending}
+            onSelect={() => runExport({ kind: tab === 'residents' ? 'residents' : 'units' })}
           >
-            <AlertTriangle size={20} className="shrink-0" aria-hidden="true" />
-            <div className="flex min-w-60 flex-1 flex-col gap-0.5">
-              <strong className="text-sm font-semibold">Invitation not sent</strong>
-              <span className="text-sm">
-                {inviteWarning.name} was added, but the invitation email failed to send.
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => void sendInvite(inviteWarning.userId)}
-                disabled={invitingUserId === inviteWarning.userId}
-                className={cn('h-10 rounded-md border border-edge bg-surface-card px-3.5 text-sm font-medium text-content disabled:opacity-60', FOCUS)}
-              >
-                Resend invite
-              </button>
-              <button
-                type="button"
-                onClick={() => setInviteWarning(null)}
-                className={cn('h-10 rounded-md border border-edge bg-surface-card px-3.5 text-sm font-medium text-content-secondary', FOCUS)}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        ) : null}
+            <Download size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+            {tab === 'residents' ? 'Export residents (CSV)' : 'Export units (CSV)'}
+          </DropdownMenuItem>
+          {tab === 'units' && balancesVisible ? (
+            <DropdownMenuItem onSelect={() => setRuleOpen(true)}>
+              <DollarSign size={16} className="mr-2 text-content-tertiary" aria-hidden="true" />
+              Past-due rule
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ) : null;
+  const addButton = showPrimary ? (
+    <Button
+      type="button"
+      onClick={() => (tab === 'units' ? setUnitForm({ open: true, unitId: null }) : openAddResident(null))}
+    >
+      <Plus aria-hidden="true" />
+      {primaryLabel}
+    </Button>
+  ) : null;
+  const headerActions =
+    inSetup || (moreActions === null && addButton === null) ? undefined : (
+      <>
+        {moreActions}
+        {addButton}
+      </>
+    );
 
-        {/* ─────────── Units ─────────── */}
-        <TabsContent value="units" className="mt-0 flex flex-col gap-4">
-          {unitsLoading || residentsLoading ? (
-            <ListSkeleton />
-          ) : unitsQ.isError ? (
-            <AlertBanner
-              status="danger"
-              title="We couldn't load units"
-              description="An unexpected error occurred. Please try again."
-              action={
-                <button
-                  type="button"
-                  onClick={() => void unitsQ.refetch()}
-                  className={cn('h-10 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
-                >
-                  Retry
-                </button>
-              }
-            />
-          ) : dirUnits.length === 0 ? (
-            <EmptyState
-              icon="building"
-              title="No units yet"
+  const showTabs = isAdmin && !inSetup;
+  // Each alternative is a complete literal so Tailwind's scanner sees it.
+  const splitHeightClass = showTabs
+    ? TOP_NAV_ENABLED
+      ? 'h-[calc(100dvh-25.5rem)]'
+      : 'h-[calc(100dvh-25.5rem)] lg:h-[calc(100dvh-22.5rem)]'
+    : TOP_NAV_ENABLED
+      ? 'h-[calc(100dvh-21.65rem)]'
+      : 'h-[calc(100dvh-21.65rem)] lg:h-[calc(100dvh-18.65rem)]';
+
+  return (
+    <>
+      <Tabs value={tab} onValueChange={setTab}>
+        <PageLayout
+          template="list"
+          banner={
+            showContinueBar ? (
+              <ContinueSetupBar
+                done={setupDone}
+                total={3}
+                countLabel="setup steps done"
+                next={nextSetupStep ?? undefined}
+                onContinue={() => setSetupOpen(true)}
+                onDismiss={setupDismissal.dismiss}
+              />
+            ) : undefined
+          }
+          header={
+            <PageHeader
+              title="Directory"
+              icon={<Users />}
+              // A non-admin sees units only, so the sentence promises no more.
               description={
-                canWrite
-                  ? 'Add your first unit to start managing residents, leases, and compliance.'
-                  : 'No units have been added to this community yet.'
+                isAdmin
+                  ? 'The units in this community and the people who live in them.'
+                  : 'The units in this community.'
               }
-              action={
-                canWrite ? (
-                  <button
-                    type="button"
-                    onClick={() => setUnitForm({ open: true, unitId: null })}
-                    className={cn('inline-flex h-11 items-center gap-2 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
-                  >
-                    <Plus size={16} aria-hidden="true" />
-                    Add unit
-                  </button>
-                ) : undefined
-              }
+              actions={headerActions}
             />
-          ) : (
-            <>
-              {isAdmin && (residentsQ.isError || occupantsQ.isError) ? (
+          }
+          // No side panel and no generated "About": describeAccess reads the
+          // permission matrix, where a resident may read `residents`, but this
+          // page shows residents to admins only. The sentence would promise more
+          // than the page gives.
+          tabs={
+            showTabs ? (
+              <TabsList aria-label="Directory sections" className={TAB_LIST_CLASS}>
+                <TabsTrigger value="units" className={TAB_TRIGGER_CLASS}>
+                  Units
+                  <span className="text-xs font-medium text-content-tertiary">{dirUnits.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="residents" className={TAB_TRIGGER_CLASS}>
+                  Residents
+                  <span className="text-xs font-medium text-content-tertiary">{residentRows.length}</span>
+                </TabsTrigger>
+                <TabsTrigger value="requests" className={TAB_TRIGGER_CLASS}>
+                  Join requests
+                  {pendingRequests > 0 ? (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-interactive px-1.5 text-xs font-semibold text-content-inverse">
+                      {pendingRequests}
+                    </span>
+                  ) : null}
+                </TabsTrigger>
+              </TabsList>
+            ) : undefined
+          }
+        >
+          <div className="flex flex-col gap-4">
+            {guideShown ? (
+              <DirectorySetup
+                communityId={communityId}
+                communityType={communityType}
+                unitCount={dirUnits.length}
+                residentCount={residentRows.length}
+                notInvitedCount={notInvitedCount}
+                onAddUnit={() => setUnitForm({ open: true, unitId: null })}
+                onAddResident={() => openAddResident(null)}
+                onReviewInvites={() => {
+                  setSetupOpen(false);
+                  setTab('residents');
+                  setResidentStatus('not_active');
+                }}
+                {...(inSetup ? {} : { onClose: () => setSetupOpen(false) })}
+              />
+            ) : null}
+
+            {/* The strip counts units: on an empty community it would only show zeros (F-4). */}
+            {isAdmin && loaded && dirUnits.length > 0 ? (
+              <OverviewStrip
+                stats={stats}
+                requestCount={joinRequestsQ.data ? pendingRequests : null}
+                canSeeBalances={balancesVisible}
+                unsetLabel={communityType === 'apartment' ? 'offline' : 'not set'}
+                onOccupancy={() => {
+                  setTab('units');
+                  setUnitStatus('vacant');
+                }}
+                onPastDue={() => {
+                  setTab('units');
+                  setUnitStatus('past_due');
+                }}
+                onPortal={() => {
+                  setTab('residents');
+                  setResidentStatus('not_active');
+                }}
+                onRequests={() => setTab('requests')}
+              />
+            ) : null}
+
+            {inSetup ? null : (
+              <>
+                {inviteWarning ? (
+                  <AlertBanner
+                    status="warning"
+                    title="Invitation not sent"
+                    description={`${inviteWarning.name} was added, but the invitation email failed to send.`}
+                    actionPlacement="below"
+                    action={
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void sendInvite(inviteWarning.userId)}
+                          disabled={invitingUserId === inviteWarning.userId}
+                        >
+                          Resend invite
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setInviteWarning(null)}>
+                          Dismiss
+                        </Button>
+                      </div>
+                    }
+                  />
+                ) : null}
+
+            {/* ─────────── Units ─────────── */}
+            <TabsContent value="units" className="mt-0 flex flex-col gap-4">
+              {unitsLoading || residentsLoading ? (
+                <ListSkeleton />
+              ) : unitsQ.isError ? (
                 <AlertBanner
-                  status="warning"
-                  title="Residents didn't load"
-                  description="Units are shown without who lives in them."
+                  status="danger"
+                  title="We couldn't load units"
+                  description="An unexpected error occurred. Please try again."
                   action={
-                    <button
+                    <Button
                       type="button"
-                      onClick={() => {
-                      void residentsQ.refetch();
-                      void occupantsQ.refetch();
-                    }}
-                      className={cn('h-10 rounded-md border border-edge bg-surface-card px-3.5 text-sm font-medium text-content', FOCUS)}
+                      onClick={() => void unitsQ.refetch()}
                     >
                       Retry
-                    </button>
+                    </Button>
                   }
                 />
-              ) : null}
-              <DirectoryToolbar
-                query={unitQuery}
-                onQueryChange={setUnitQuery}
-                placeholder="Search unit or owner"
-                tokens={tokens}
-                statusOptions={unitStatusOptions}
-                status={unitStatus}
-                onStatusChange={setUnitStatus}
-                buildings={buildings}
-                building={activeBuilding}
-                onBuildingChange={setBuilding}
-                onClearAll={clearFilters}
-                resultsLabel={`Show ${plural(filteredUnits.length, 'unit')}`}
-                statusNote={
-                  balancesVisible ? (
-                    <span>
-                      Past due means {describeRule(rule)}.{' '}
-                      <button
+              ) : dirUnits.length === 0 ? (
+                <EmptyState
+                  icon="building"
+                  title="No units yet"
+                  description={
+                    canWrite
+                      ? 'Add your first unit to start managing residents, leases, and compliance.'
+                      : 'No units have been added to this community yet.'
+                  }
+                  action={
+                    canWrite ? (
+                      <Button
                         type="button"
-                        onClick={() => setRuleOpen(true)}
-                        className={cn('font-semibold text-content-link hover:underline', FOCUS)}
+                        onClick={() => setUnitForm({ open: true, unitId: null })}
                       >
-                        Change rule
-                      </button>
-                    </span>
-                  ) : undefined
-                }
-                view={effectiveView}
-                onViewChange={changeView}
-              />
-              <p className="sr-only" role="status">
-                {plural(filteredUnits.length, 'unit')} shown
-              </p>
-              {filteredUnits.length === 0 ? (
-                <NoMatches noun="units" onClear={clearFilters} />
-              ) : effectiveView === 'cards' ? (
-                <UnitCards units={filteredUnits} hasOwnerRole={hasOwnerRole} canSeeBalances={balancesVisible} onOpenUnit={openUnit} />
-              ) : effectiveView === 'building' ? (
-                <UnitsByBuilding
-                  units={filteredUnits}
-                  hasOwnerRole={hasOwnerRole}
-                  canSeeBalances={balancesVisible}
-                  onOpenUnit={openUnit}
-                  collapsed={collapsed}
-                  onToggleBuilding={toggleBuilding}
+                        <Plus aria-hidden="true" />
+                        Add unit
+                      </Button>
+                    ) : undefined
+                  }
                 />
               ) : (
-                // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it: always below lg (phones navigate with the tabs), and at lg+ only with the top-nav flag. Trigger: the top-nav flag is removed.
-                <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-19rem)]' : 'h-[calc(100dvh-19rem)] lg:h-[calc(100dvh-16rem)]'} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
-                  <UnitsSplitList
-                    units={filteredUnits}
-                    hasOwnerRole={hasOwnerRole}
-                    canSeeBalances={balancesVisible}
-                    selectedId={splitSelected?.id ?? null}
-                    onOpenUnit={setSplitId}
-                  />
-                  <div className="min-h-0 overflow-hidden rounded-lg border border-edge" aria-live="polite">
-                    {splitSelected ? <UnitDetailPanel unit={splitSelected} {...unitPanelProps} /> : null}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </TabsContent>
-
-        {/* ─────────── Residents (admins only) ─────────── */}
-        {isAdmin ? (
-          <TabsContent value="residents" className="mt-0 flex flex-col gap-4">
-            {residentsLoading ? (
-              <ListSkeleton />
-            ) : (residentsQ.isError || occupantsQ.isError) ? (
-              <AlertBanner
-                status="danger"
-                title="We couldn't load residents"
-                description="An unexpected error occurred. Please try again."
-                action={
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void residentsQ.refetch();
-                      void occupantsQ.refetch();
-                    }}
-                    className={cn('h-10 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
-                  >
-                    Retry
-                  </button>
-                }
-              />
-            ) : residentRows.length === 0 ? (
-              <EmptyState
-                preset="no_residents"
-                action={
-                  <div className="flex flex-col items-center gap-2 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={() => openAddResident(null)}
-                      className={cn('inline-flex h-11 items-center gap-2 rounded-md bg-interactive px-4 text-sm font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
-                    >
-                      <Plus size={16} aria-hidden="true" />
-                      Add resident
-                    </button>
-                    <Link
-                      href={`/dashboard/import-residents?communityId=${communityId}`}
-                      className={cn('inline-flex h-11 items-center gap-2 rounded-md border border-edge bg-surface-card px-4 text-sm font-medium text-content hover:bg-surface-hover', FOCUS)}
-                    >
-                      <Upload size={16} aria-hidden="true" />
-                      Import CSV
-                    </Link>
-                  </div>
-                }
-              />
-            ) : (
-              <>
-                <DirectoryToolbar
-                  query={residentQuery}
-                  onQueryChange={setResidentQuery}
-                  placeholder="Search name, email, unit or phone"
-                  tokens={tokens}
-                  statusOptions={residentStatusOptions}
-                  status={residentStatus}
-                  onStatusChange={setResidentStatus}
-                  buildings={buildings}
-                  building={activeBuilding}
-                  onBuildingChange={setBuilding}
-                  onClearAll={clearFilters}
-                  resultsLabel={`Show ${plural(filteredResidents.length, 'resident')}`}
-                />
-                <p className="sr-only" role="status">
-                  {plural(filteredResidents.length, 'resident')} shown
-                </p>
-                {filteredResidents.length === 0 ? (
-                  <NoMatches noun="residents" onClear={clearFilters} />
-                ) : (
-                  <>
-                    {visibleSelection.length > 0 ? (
-                      <div className="sticky bottom-3 z-10 order-last flex flex-wrap items-center gap-2 rounded-md border border-edge-strong bg-surface-card py-1.5 pl-4 pr-2 shadow-e1 md:top-0 md:order-none">
-                        <span className="mr-2 text-sm font-semibold" role="status">
-                          {visibleSelection.length} selected
-                        </span>
-                        <button
+                <>
+                  {isAdmin && (residentsQ.isError || occupantsQ.isError) ? (
+                    <AlertBanner
+                      status="warning"
+                      title="Residents didn't load"
+                      description="Units are shown without who lives in them."
+                      action={
+                        <Button
                           type="button"
                           onClick={() => {
-                            const toInvite = visibleSelection.filter(canBeInvited);
-                            const household = visibleSelection.filter(isHouseholdMember).length;
-                            if (toInvite.length === 0) {
-                              toast.info(
-                                household === visibleSelection.length
-                                  ? 'Household members have no portal login, so there is no invitation to send.'
-                                  : 'Everyone selected has already signed in.',
-                              );
-                              return;
-                            }
-                            askConfirm({
-                              kind: 'bulk-invite',
-                              userIds: toInvite.map((r) => r.userId),
-                              skippedActive: visibleSelection.length - toInvite.length - household,
-                              skippedHousehold: household,
-                            });
-                          }}
-                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
+                          void residentsQ.refetch();
+                          void occupantsQ.refetch();
+                        }}
+                          variant="outline"
                         >
-                          Resend invites
-                        </button>
-                        {canSendDocuments ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openSendDocs(
-                                visibleSelection.map((r) => r.userId),
-                                visibleSelection.length === 1
-                                  ? visibleSelection[0]!.displayName
-                                  : plural(visibleSelection.length, 'resident'),
-                              )
-                            }
-                            className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover md:h-9', FOCUS)}
-                          >
-                            Send documents
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            runExport({
-                              kind: 'residents',
-                              userIds: visibleSelection.filter((r) => !isHouseholdMember(r)).map((r) => r.userId),
-                              occupantIds: visibleSelection.flatMap((r) => (r.occupantId !== undefined ? [r.occupantId] : [])),
-                            })
-                          }
-                          disabled={exporter.isPending}
-                          className={cn('inline-flex h-11 items-center gap-1.5 rounded-md border border-edge bg-surface-card px-3 text-xs font-medium text-content hover:bg-surface-hover disabled:opacity-60 md:h-9', FOCUS)}
-                        >
-                          <Download size={14} aria-hidden="true" />
-                          Export CSV
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSelection(new Set())}
-                          className={cn('ml-auto h-11 rounded-md px-3 text-xs font-medium text-content-secondary hover:bg-surface-hover md:h-9', FOCUS)}
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    ) : null}
-                    <ResidentsTable
-                      rows={filteredResidents}
-                      hasOwnerRole={hasOwnerRole}
-                      onOpenResident={openResident}
-                      onOpenUnit={openUnit}
-                      selected={visibleSelectedIds}
-                      onToggle={toggleSelected}
-                      onToggleAll={() =>
-                        setSelection(
-                          visibleSelection.length === filteredResidents.length
-                            ? new Set()
-                            : new Set(filteredResidents.map((r) => r.userId)),
-                        )
+                          Retry
+                        </Button>
                       }
                     />
+                  ) : null}
+                  <DirectoryToolbar
+                    query={unitQuery}
+                    onQueryChange={setUnitQuery}
+                    placeholder="Search unit or owner"
+                    tokens={tokens}
+                    statusOptions={unitStatusOptions}
+                    status={unitStatus}
+                    onStatusChange={setUnitStatus}
+                    buildings={buildings}
+                    building={activeBuilding}
+                    onBuildingChange={setBuilding}
+                    onClearAll={clearFilters}
+                    resultsLabel={`Show ${plural(filteredUnits.length, 'unit')}`}
+                    statusNote={
+                      balancesVisible ? (
+                        <span>
+                          Past due means {describeRule(rule)}.{' '}
+                          <Button
+                            type="button"
+                            onClick={() => setRuleOpen(true)}
+                            variant="link"
+                            className="h-auto p-0 text-xs font-semibold text-content-link md:h-auto"
+                          >
+                            Change rule
+                          </Button>
+                        </span>
+                      ) : undefined
+                    }
+                    view={effectiveView}
+                    onViewChange={changeView}
+                  />
+                  <p className="sr-only" role="status">
+                    {plural(filteredUnits.length, 'unit')} shown
+                  </p>
+                  {filteredUnits.length === 0 ? (
+                    <NoMatches noun="units" onClear={clearFilters} />
+                  ) : effectiveView === 'cards' ? (
+                    <UnitCards units={filteredUnits} hasOwnerRole={hasOwnerRole} canSeeBalances={balancesVisible} onOpenUnit={openUnit} />
+                  ) : effectiveView === 'building' ? (
+                    <UnitsByBuilding
+                      units={filteredUnits}
+                      hasOwnerRole={hasOwnerRole}
+                      canSeeBalances={balancesVisible}
+                      onOpenUnit={openUnit}
+                      collapsed={collapsed}
+                      onToggleBuilding={toggleBuilding}
+                    />
+                  ) : (
+                    // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it: always below lg (phones navigate with the tabs), and at lg+ only with the top-nav flag. Trigger: the top-nav flag is removed.
+                    // ponytail: 22.5rem / 25.5rem are the old 16rem / 19rem plus 6.5rem for the painted page header. Worked out from the class heights (title row 2.8, gap 0.75, description 1.25, padding 1, two 1.25 layout gaps and the 2.6 underline tab row come to 11; the old action row and its gaps were 4.5), not measured in a browser. A non-admin has no tabs row, so its 3.85rem (2.6 plus one 1.25 gap) stays in the pane: 18.65rem / 21.65rem. Trigger: a screenshot at 1280 or 1440 shows the pane ending short of, or past, the bottom of the window.
+                    <div className={`grid ${splitHeightClass} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
+                      <UnitsSplitList
+                        units={filteredUnits}
+                        hasOwnerRole={hasOwnerRole}
+                        canSeeBalances={balancesVisible}
+                        selectedId={splitSelected?.id ?? null}
+                        onOpenUnit={setSplitId}
+                      />
+                      <div className="min-h-0 overflow-hidden rounded-lg border border-edge" aria-live="polite">
+                        {splitSelected ? <UnitDetailPanel unit={splitSelected} {...unitPanelProps} /> : null}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </TabsContent>
+
+            {/* ─────────── Residents (admins only) ─────────── */}
+            {isAdmin ? (
+              <TabsContent value="residents" className="mt-0 flex flex-col gap-4">
+                {residentsLoading ? (
+                  <ListSkeleton />
+                ) : (residentsQ.isError || occupantsQ.isError) ? (
+                  <AlertBanner
+                    status="danger"
+                    title="We couldn't load residents"
+                    description="An unexpected error occurred. Please try again."
+                    action={
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          void residentsQ.refetch();
+                          void occupantsQ.refetch();
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    }
+                  />
+                ) : residentRows.length === 0 ? (
+                  <EmptyState
+                    preset="no_residents"
+                    action={
+                      <div className="flex flex-col items-center gap-2 sm:flex-row">
+                        <Button
+                          type="button"
+                          onClick={() => openAddResident(null)}
+                        >
+                          <Plus aria-hidden="true" />
+                          Add resident
+                        </Button>
+                        <Button variant="outline" asChild>
+                          <Link href={`/dashboard/import-residents?communityId=${communityId}`}>
+                            <Upload aria-hidden="true" />
+                            Import CSV
+                          </Link>
+                        </Button>
+                      </div>
+                    }
+                  />
+                ) : (
+                  <>
+                    <DirectoryToolbar
+                      query={residentQuery}
+                      onQueryChange={setResidentQuery}
+                      placeholder="Search name, email, unit or phone"
+                      tokens={tokens}
+                      statusOptions={residentStatusOptions}
+                      status={residentStatus}
+                      onStatusChange={setResidentStatus}
+                      buildings={buildings}
+                      building={activeBuilding}
+                      onBuildingChange={setBuilding}
+                      onClearAll={clearFilters}
+                      resultsLabel={`Show ${plural(filteredResidents.length, 'resident')}`}
+                    />
+                    <p className="sr-only" role="status">
+                      {plural(filteredResidents.length, 'resident')} shown
+                    </p>
+                    {filteredResidents.length === 0 ? (
+                      <NoMatches noun="residents" onClear={clearFilters} />
+                    ) : (
+                      <>
+                        {visibleSelection.length > 0 ? (
+                          <div className="sticky bottom-3 z-10 order-last flex flex-wrap items-center gap-2 rounded-md border border-edge-strong bg-surface-card py-1.5 pl-4 pr-2 shadow-e1 md:top-0 md:order-none">
+                            <span className="mr-2 text-sm font-semibold" role="status">
+                              {visibleSelection.length} selected
+                            </span>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                const toInvite = visibleSelection.filter(canBeInvited);
+                                const household = visibleSelection.filter(isHouseholdMember).length;
+                                if (toInvite.length === 0) {
+                                  toast.info(
+                                    household === visibleSelection.length
+                                      ? 'Household members have no portal login, so there is no invitation to send.'
+                                      : 'Everyone selected has already signed in.',
+                                  );
+                                  return;
+                                }
+                                askConfirm({
+                                  kind: 'bulk-invite',
+                                  userIds: toInvite.map((r) => r.userId),
+                                  skippedActive: visibleSelection.length - toInvite.length - household,
+                                  skippedHousehold: household,
+                                });
+                              }}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Resend invites
+                            </Button>
+                            {canSendDocuments ? (
+                              <Button
+                                type="button"
+                                onClick={() =>
+                                  openSendDocs(
+                                    visibleSelection.map((r) => r.userId),
+                                    visibleSelection.length === 1
+                                      ? visibleSelection[0]!.displayName
+                                      : plural(visibleSelection.length, 'resident'),
+                                  )
+                                }
+                                variant="outline"
+                                size="sm"
+                              >
+                                Send documents
+                              </Button>
+                            ) : null}
+                            <Button
+                              type="button"
+                              onClick={() =>
+                                runExport({
+                                  kind: 'residents',
+                                  userIds: visibleSelection.filter((r) => !isHouseholdMember(r)).map((r) => r.userId),
+                                  occupantIds: visibleSelection.flatMap((r) => (r.occupantId !== undefined ? [r.occupantId] : [])),
+                                })
+                              }
+                              disabled={exporter.isPending}
+                              variant="outline"
+                              size="sm"
+                            >
+                              <Download aria-hidden="true" />
+                              Export CSV
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => setSelection(new Set())}
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto text-content-secondary"
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        ) : null}
+                        <ResidentsTable
+                          rows={filteredResidents}
+                          hasOwnerRole={hasOwnerRole}
+                          onOpenResident={openResident}
+                          onOpenUnit={openUnit}
+                          selected={visibleSelectedIds}
+                          onToggle={toggleSelected}
+                          onToggleAll={() =>
+                            setSelection(
+                              visibleSelection.length === filteredResidents.length
+                                ? new Set()
+                                : new Set(filteredResidents.map((r) => r.userId)),
+                            )
+                          }
+                        />
+                      </>
+                    )}
                   </>
                 )}
+              </TabsContent>
+            ) : null}
+
+            {/* ─────────── Join requests (admins only) ─────────── */}
+            {isAdmin ? (
+              <TabsContent value="requests" className="mt-0 flex flex-col gap-4">
+                <p className="text-sm text-content-secondary">
+                  People with a PropertyPro account who asked to join this community. Approving gives them portal access; a denied person must wait 30 days to ask again.
+                </p>
+                <AdminReviewList communityId={communityId} />
+              </TabsContent>
+            ) : null}
               </>
             )}
-          </TabsContent>
-        ) : null}
-
-        {/* ─────────── Join requests (admins only) ─────────── */}
-        {isAdmin ? (
-          <TabsContent value="requests" className="mt-0 flex flex-col gap-4">
-            <p className="text-sm text-content-secondary">
-              People with a PropertyPro account who asked to join this community. Approving gives them portal access; a denied person must wait 30 days to ask again.
-            </p>
-            <AdminReviewList communityId={communityId} />
-          </TabsContent>
-        ) : null}
+          </div>
+        </PageLayout>
       </Tabs>
-      )}
+
 
       {/* ─────────── Drawers ─────────── */}
       <DirectorySheet
@@ -1241,6 +1274,6 @@ export function DirectoryPageClient({
           defaultUnitId={addResident.unitId}
         />
       ) : null}
-    </div>
+    </>
   );
 }

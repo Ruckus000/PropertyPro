@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/directory/directory-page-client.tsx
 /**
  * Directory — Units, Residents and Join requests on one page.
  *

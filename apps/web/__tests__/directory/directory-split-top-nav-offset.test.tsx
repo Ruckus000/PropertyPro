@@ -1,6 +1,8 @@
 /**
  * D30: the Directory split view is the one pane sized from the viewport, so with
- * the top-nav flag on the tab row's height comes off it (19rem, not 16rem).
+ * the top-nav flag on the tab row's height comes off it (25.5rem, not 22.5rem).
+ * Both figures are 6.5rem more than before the page moved onto PageLayout
+ * (19 / 16): the header now paints a title and description above the tabs.
  * Mocks mirror directory-page-client.test.tsx.
  */
 import type { ReactNode } from 'react';
@@ -202,9 +204,9 @@ beforeEach(() => {
 
 
 describe('DirectoryPageClient — split view offset (D30)', () => {
-  async function openSplit() {
+  async function openSplit(props: Parameters<typeof renderClient>[0] = {}) {
     const user = userEvent.setup();
-    renderClient();
+    renderClient(props);
     await user.click(screen.getByRole('button', { name: 'Split' }));
     const list = document.querySelector('[class*="grid-cols-[300px"]');
     expect(list).not.toBeNull();
@@ -215,13 +217,29 @@ describe('DirectoryPageClient — split view offset (D30)', () => {
     flag.on = false;
     const off = await openSplit();
     // A phone has the tab row in every build; the desktop has the rail (no row).
-    expect(off.className).toContain('h-[calc(100dvh-19rem)]');
-    expect(off.className).toContain('lg:h-[calc(100dvh-16rem)]');
+    expect(off.className).toContain('h-[calc(100dvh-25.5rem)]');
+    expect(off.className).toContain('lg:h-[calc(100dvh-22.5rem)]');
     cleanup();
 
     flag.on = true;
     const on = await openSplit();
-    expect(on.className).toContain('h-[calc(100dvh-19rem)]');
-    expect(on.className).not.toContain('h-[calc(100dvh-16rem)]');
+    expect(on.className).toContain('h-[calc(100dvh-25.5rem)]');
+    expect(on.className).not.toContain('h-[calc(100dvh-22.5rem)]');
+  });
+
+  it('a non-admin has no tabs row, so its 3.85rem is not taken off the pane', async () => {
+    const nonAdmin = { isAdmin: false, canSeeBalances: false };
+    flag.on = false;
+    const off = await openSplit(nonAdmin);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(off.className).toContain('h-[calc(100dvh-21.65rem)]');
+    expect(off.className).toContain('lg:h-[calc(100dvh-18.65rem)]');
+    expect(off.className).not.toContain('25.5rem');
+    cleanup();
+
+    flag.on = true;
+    const on = await openSplit(nonAdmin);
+    expect(on.className).toContain('h-[calc(100dvh-21.65rem)]');
+    expect(on.className).not.toContain('18.65rem');
   });
 });
