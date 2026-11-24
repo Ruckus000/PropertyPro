@@ -30,10 +30,14 @@ const STEP_NAMES = ['Choose file', 'Review', 'Done'];
 /** Padding for content that sits in a Section outside its header, table and footer. */
 const BODY = 'space-y-4 px-4 py-4';
 
+/** Form width (the cap the announcement form uses). The review step, with its table, takes the full width. */
+const FORM_WIDTH = 'w-full max-w-4xl';
+
 // Five columns (owner decision, 2026-11-24): building and floor sit under the
-// unit number. Unit takes the spare width and truncates (`w-full` header,
-// `max-w-0` cells); the others are as wide as their content. In a box under
-// 480px (`cq-sm`) Beds, Baths and Sq ft move under the unit number too.
+// unit number. Unit takes the spare width (`w-full` header, `max-w-0` cells)
+// and wraps: people check their file here, so no value is ever cut. The other
+// columns are as wide as their content. In a box under 480px (`cq-sm`) Beds,
+// Baths and Sq ft move under the unit number too.
 const FIT = 'whitespace-nowrap';
 const WIDE = 'hidden cq-sm:table-cell';
 
@@ -127,7 +131,7 @@ export function ImportUnitsClient({ communityId }: { communityId: number }) {
     >
       <div ref={stepRef} tabIndex={-1} role="group" aria-label="Import step" className="space-y-5">
         {!shown ? (
-          <Section>
+          <Section className={FORM_WIDTH}>
             <SectionHeader title="Choose a CSV file" />
             <div className={BODY}>
               <p className="text-sm text-content-secondary">
@@ -153,11 +157,11 @@ export function ImportUnitsClient({ communityId }: { communityId: number }) {
         ) : null}
 
         {importer.error ? (
-          <AlertBanner status="danger" title="Couldn't read that file" description={importer.error.message} />
+          <AlertBanner className={FORM_WIDTH} status="danger" title="Couldn't read that file" description={importer.error.message} />
         ) : null}
 
         {shown ? (
-          <Section className="cq" aria-live="polite">
+          <Section className={cn('cq', result && FORM_WIDTH)} aria-live="polite">
             <SectionHeader title={result ? 'Import finished' : 'Review the file'} description={fileName || undefined} />
             <div className={BODY}>
               {result ? (
@@ -206,13 +210,13 @@ export function ImportUnitsClient({ communityId }: { communityId: number }) {
                     return (
                       <TableRow key={u.rowNumber}>
                         <TableCell className="max-w-0">
-                          <span data-unit className="block truncate font-medium text-content">{u.unitNumber}</span>
+                          <span data-unit className="block break-words font-medium text-content">{u.unitNumber}</span>
                           {place ? (
-                            <span data-place className="block truncate text-sm text-content-secondary">{place}</span>
+                            <span data-place className="block break-words text-sm text-content-secondary">{place}</span>
                           ) : null}
                           {/* Narrow boxes only: what the three hidden columns say. */}
                           {size ? (
-                            <span data-narrow className="block truncate text-sm text-content-secondary cq-sm:hidden">{size}</span>
+                            <span data-narrow className="block break-words text-sm text-content-secondary cq-sm:hidden">{size}</span>
                           ) : null}
                         </TableCell>
                         <TableCell className={cn(WIDE, FIT, 'text-right')}>{u.bedrooms ?? '—'}</TableCell>

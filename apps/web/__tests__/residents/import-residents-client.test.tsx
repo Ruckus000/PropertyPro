@@ -397,6 +397,33 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     expect(within(resident!).getByText('ann@x.com')).toBeInTheDocument();
   });
 
+  it('never cuts a value in the review table: long names, emails and units wrap', async () => {
+    const email = 'a.very.long.resident.email.address.for.checking@a-long-management-company-domain.example.com';
+    const unit = 'Penthouse-North-Tower-Level-42-Suite-4201-B';
+    const name = 'Maximiliana Alexandrina Featherstonehaugh-Cholmondeley';
+    await previewOf(`name,email,role,unit_number\n${name},${email},owner,${unit}`, {
+      data: {
+        preview: [{ name, email, role: 'owner', unit_number: unit, rowNumber: 2, existingAccount: false }],
+        errors: [],
+        header: ['name', 'email', 'role', 'unit_number'],
+      },
+    });
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+
+    const table = screen.getByRole('table');
+    const [, row] = within(table).getAllByRole('row');
+    const cells = within(row!).getAllByRole('cell');
+    expect(cells[1]!.querySelector('[data-name]')).toHaveTextContent(name);
+    expect(cells[1]!.querySelector('[data-email]')).toHaveTextContent(email);
+    expect(cells[3]).toHaveTextContent(unit);
+    // Wrapping, not clipping: a clipped value cannot be checked.
+    expect(cells[1]!.querySelector('[data-name]')).toHaveClass('break-words');
+    expect(cells[1]!.querySelector('[data-email]')).toHaveClass('break-all');
+    expect(cells[3]).toHaveClass('break-words');
+    const clipped = table.querySelectorAll('tbody .truncate, tbody .whitespace-nowrap, tbody .line-clamp-1, tbody .overflow-hidden');
+    expect(clipped).toHaveLength(0);
+  });
+
   it('carries role, unit and details under the name for a narrow box, where those columns are hidden', async () => {
     await previewOf(MIXED, MIXED_RESPONSE);
     await waitFor(() => expect(screen.getByText('2 ready to import')).toBeInTheDocument());

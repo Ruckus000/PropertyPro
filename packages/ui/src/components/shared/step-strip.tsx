@@ -13,7 +13,7 @@ import * as React from "react";
 import { cn } from "../../utils/cn";
 
 export interface StepStripProps {
-  /** Step names, in order. Names must be unique. */
+  /** Step names, in order. */
   steps: string[];
   /** Zero-based index of the current step. Steps before it are done. */
   current: number;
@@ -47,7 +47,7 @@ export function StepStrip({ steps, current, label = "Steps", className }: StepSt
           index < current ? "done" : index === current ? "current" : "upcoming";
         return (
           <li
-            key={name}
+            key={index}
             data-state={state}
             aria-current={state === "current" ? "step" : undefined}
             className="flex items-center gap-2"

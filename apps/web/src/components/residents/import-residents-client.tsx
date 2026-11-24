@@ -57,6 +57,9 @@ const STEP_INDEX: Record<WizardStep, number> = { upload: 0, preview: 1, importin
 /** Padding for content that sits in a Section outside its header, table and footer. */
 const BODY = 'space-y-4 px-4 py-4';
 
+/** Form width (the cap the announcement form uses). The review step, with its table, takes the full width. */
+const FORM_WIDTH = 'w-full max-w-4xl';
+
 /* ─────── CSV Template ─────── */
 
 const CSV_TEMPLATE = 'name,email,role,unit_number\nJane Doe,jane@example.com,owner,101\nJohn Smith,john@example.com,tenant,102';
@@ -262,7 +265,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
 
       {/* Step 3: Import */}
       {step === 'importing' && !importError && (
-        <Section>
+        <Section className={FORM_WIDTH}>
           <div className="flex flex-col items-center gap-4 px-4 py-16">
             <Loader2 className="size-10 animate-spin text-interactive" aria-hidden="true" />
             <p className="text-sm text-content-secondary">Importing residents...</p>
@@ -270,7 +273,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
         </Section>
       )}
       {step === 'importing' && importError && !mayHavePartlyImported && (
-        <Section>
+        <Section className={FORM_WIDTH}>
           <div className={BODY}>
             <AlertBanner
               status="danger"
@@ -291,7 +294,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
         </Section>
       )}
       {step === 'importing' && importError && mayHavePartlyImported && (
-        <Section>
+        <Section className={FORM_WIDTH}>
           <div className={BODY}>
             <AlertBanner
               status="danger"
@@ -361,7 +364,7 @@ function UploadStep({
   onDragLeave,
 }: UploadStepProps) {
   return (
-    <Section>
+    <Section className={FORM_WIDTH}>
       <SectionHeader title="Choose a CSV file" />
       <div className={BODY}>
         {/* Instructions */}
@@ -476,11 +479,13 @@ function rowDetails(row: ImportDisplayRow): string {
 }
 
 // Five columns (owner decision, 2026-11-24): the line number sits under the
-// status and the email under the name. The table is `table-fixed`, so it can
-// never be wider than its Section: Status, Role and Unit have set widths,
-// Details takes two fifths and wraps, and Resident takes the rest and
-// truncates. In a box under 720px (`cq-md`) only Status and Resident are
-// columns, and the Resident cell carries role, unit and details beneath.
+// status and the email under the name. This step exists so people can check
+// what is in their file, so no value is ever cut: every cell wraps. The table
+// is `table-fixed`, so it can never be wider than its Section: Status, Role
+// and Unit have set widths, Details takes a quarter, and Resident takes the
+// rest, which is the largest share (about 250px in a 720px box). In a box
+// under 720px (`cq-md`) only Status and Resident are columns, and the
+// Resident cell carries role, unit and details beneath.
 const WIDE = 'hidden cq-md:table-cell';
 
 interface PreviewStepProps {
@@ -552,9 +557,9 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onBack }: P
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-28">Status</TableHead>
                 <TableHead>Resident</TableHead>
-                <TableHead className={cn(WIDE, 'w-24')}>Role</TableHead>
-                <TableHead className={cn(WIDE, 'w-20')}>Unit</TableHead>
-                <TableHead className={cn(WIDE, 'w-2/5')}>Details</TableHead>
+                <TableHead className={cn(WIDE, 'w-20')}>Role</TableHead>
+                <TableHead className={cn(WIDE, 'w-24')}>Unit</TableHead>
+                <TableHead className={cn(WIDE, 'w-1/4')}>Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -577,20 +582,20 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onBack }: P
                       </span>
                     </TableCell>
                     <TableCell className="align-top">
-                      <span data-name className="block truncate font-medium text-content">
+                      <span data-name className="block break-words font-medium text-content">
                         {row.name || '-'}
                       </span>
-                      <span data-email className="block truncate text-sm text-content-secondary">
+                      <span data-email className="block break-all text-sm text-content-secondary">
                         {row.email || '-'}
                       </span>
                       {/* Narrow boxes only: what the three hidden columns say. */}
                       <span data-narrow className="block text-sm text-content-secondary cq-md:hidden">
-                        {roleAndUnit ? <span className="block truncate">{roleAndUnit}</span> : null}
+                        {roleAndUnit ? <span className="block break-words">{roleAndUnit}</span> : null}
                         <span className="block break-words">{details}</span>
                       </span>
                     </TableCell>
-                    <TableCell className={cn(WIDE, 'truncate align-top')}>{row.role || '-'}</TableCell>
-                    <TableCell className={cn(WIDE, 'truncate align-top')}>{row.unitNumber || '-'}</TableCell>
+                    <TableCell className={cn(WIDE, 'break-words align-top')}>{row.role || '-'}</TableCell>
+                    <TableCell data-unit className={cn(WIDE, 'break-words align-top')}>{row.unitNumber || '-'}</TableCell>
                     <TableCell className={cn(WIDE, 'break-words align-top text-sm text-content-secondary')}>
                       {details}
                     </TableCell>
@@ -635,7 +640,7 @@ interface ResultsStepProps {
 
 function ResultsStep({ csvText, fileName, result, communityId, onImportMore }: ResultsStepProps) {
   return (
-    <Section>
+    <Section className={FORM_WIDTH}>
       <SectionHeader title="Import finished" />
       <div className={BODY}>
         {/* Success summary */}

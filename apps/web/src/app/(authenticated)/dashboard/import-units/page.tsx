@@ -12,6 +12,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2 } from '@/lib/db/access-control';
 import { ImportUnitsClient } from '@/components/units/import-units-client';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -27,12 +28,11 @@ export default async function ImportUnitsPage({ searchParams }: PageProps) {
 
   if (!context.communityId) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Import units" />
-        <p className="mt-2 text-sm text-content-secondary">
+      <PageLayout template="focus" header={<PageHeader title="Import units" />}>
+        <p className="text-sm text-content-secondary">
           Add a valid <code className="rounded bg-surface-muted px-1">communityId</code> query parameter to import units.
         </p>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -44,10 +44,9 @@ export default async function ImportUnitsPage({ searchParams }: PageProps) {
 
   if (!canWrite) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Import units" />
-        <p className="mt-2 text-sm text-content-secondary">You do not have permission to add units.</p>
-      </div>
+      <PageLayout template="focus" header={<PageHeader title="Import units" />}>
+        <p className="text-sm text-content-secondary">You do not have permission to add units.</p>
+      </PageLayout>
     );
   }
 

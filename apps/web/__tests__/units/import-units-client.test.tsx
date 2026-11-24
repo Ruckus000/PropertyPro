@@ -104,6 +104,22 @@ describe('ImportUnitsClient', () => {
     expect(within(second!).getAllByRole('cell')[0]!.querySelector('[data-place]')).toBeNull();
   });
 
+  it('never cuts a unit label in the review table: it wraps', async () => {
+    const long = 'Penthouse-North-Tower-Level-42-Suite-4201-B';
+    mutateAsyncMock.mockResolvedValueOnce({ units: [{ ...unit, unitNumber: long, building: 'North Tower Annex Building' }], errors: [], importedCount: 0, skippedCount: 0, dryRun: true });
+    const user = userEvent.setup();
+    render(<ImportUnitsClient communityId={42} />);
+    await user.upload(screen.getByLabelText(/choose csv file/i), new File(['unit_number\n101\n'], 'units.csv', { type: 'text/csv' }));
+    await screen.findByText(/ready to import/);
+
+    const table = screen.getByRole('table');
+    const unitCell = within(within(table).getAllByRole('row')[1]!).getAllByRole('cell')[0]!;
+    expect(unitCell.querySelector('[data-unit]')).toHaveTextContent(long);
+    expect(unitCell.querySelector('[data-unit]')).toHaveClass('break-words');
+    expect(unitCell.querySelector('[data-place]')).toHaveTextContent('Building North Tower Annex Building · Floor 1');
+    expect(unitCell.querySelectorAll('.truncate, .line-clamp-1, .overflow-hidden')).toHaveLength(0);
+  });
+
   it('Back from the review returns to the file chooser', async () => {
     const user = userEvent.setup();
     await toReview(user);
