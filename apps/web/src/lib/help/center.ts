@@ -133,7 +133,7 @@ const TOPIC_NAV: Record<string, string | Partial<Record<HelpReader['section'], s
   compliance: 'compliance',
   payments: 'payments',
   maintenance: 'operations',
-  violations: { manager: 'violations-inbox', resident: 'violations-report' },
+  violations: 'violations-inbox',
   board: 'board',
   esign: 'esign',
   residents: 'residents',

@@ -86,11 +86,10 @@ describe('buildSlimNavSections', () => {
       'packages',
       'visitors',
       'payments',
-      'violations-report',
+      'violations-inbox',
       'arc-requests',
       'contracts',
       'esign',
-      'violations-inbox',
       'audit-trail',
     ]);
   });

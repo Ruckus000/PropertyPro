@@ -153,6 +153,16 @@
     "overflows. `design-direction-pilot-known-issues.spec.ts` is deleted: its only fixme",
     "was this table's sideways scroll.",
     "",
+    "2026-11-23, Violations redesign: `design-direction-pilot.spec.ts` grows from 8 blocks to 12,",
+    "so expectedTestCount goes 77 -> 81. IN: the report form as staff (`root_sunset`) and",
+    "as a resident (`tenant`, whose \"See your reports\" link lands on Mine), the Review",
+    "list as a manager (a seeded case row, the \"open cases\" panel at 1440, no tab row)",
+    "and the board member's Review and Mine tabs. None signs in as `cam`, whose",
+    "100-reads-a-minute budget the other blocks spend. MEASURED 2026-11-23 (no preview",
+    "cookie; the gate is gone): `--list` on playwright.ci.config.ts gives 81 chromium",
+    "(+1 warmup), 12 of them the pilot spec; all four violations blocks green on the",
+    "agent sandbox.",
+    "",
     "Deliberately absent:",
     "  - signup-trialing / signup-failure-paths / signup-trial-end — self-skip without",
     "    Stripe secrets and are owned by stripe-e2e.yml. A skip here would be a green",
@@ -178,5 +188,5 @@
     "target-size-detector.spec.ts",
     "design-direction-pilot.spec.ts"
   ],
-  "expectedTestCount": 77
+  "expectedTestCount": 81
 }

@@ -3,9 +3,8 @@
 /**
  * Resident-facing ARC application form.
  *
- * Modelled on `ViolationReportForm` — the sibling resident-submit flow — down to
- * the unit handling: a resident with one unit never sees a picker, and a
- * resident with several picks from their own, never from the community roster.
+ * Unit handling: a resident with one unit never sees a picker, and a resident
+ * with several picks from their own, never from the community roster.
  * The server re-checks that (`createArcSubmissionForCommunity` rejects a unit
  * the submitter does not hold), so this is convenience, not the control.
  *

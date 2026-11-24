@@ -15,7 +15,7 @@ import {
 
 /**
  * The redesigned pilot pages (Packages, Emergency Alerts list / detail / new,
- * Visitors) at the app's real text size.
+ * Visitors, Violations report / review / mine) at the app's real text size.
  *
  * Large text is the default and the signed-in app scales its root with the
  * screen (`:root:has([data-app-shell])`, 18px at 1440), so these widths are the
@@ -324,5 +324,122 @@ test.describe('design direction pilot', () => {
     await expect(page.getByRole('link', { name: /send alert/i })).toHaveCount(0);
     await expectNoBleed(page, 'emergency (recipient) @ 1440px');
     await shoot(page, testInfo, 'emergency-list-owner-1440');
+  });
+
+  // Violations. None of these sign in as `cam`: reads are limited to 100 a
+  // minute per user, and the blocks above already spend cam's budget.
+
+  test('report form (manager) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'root_sunset');
+    // Opened and measured only; nothing is filed.
+    await checkPage(page, testInfo, {
+      label: 'violation report (staff)',
+      shot: 'violation-report-form',
+      role: 'root_sunset',
+      url: `/violations/report?communityId=${communityId}`,
+      // Enabled, not just visible: the button stays disabled until the unit
+      // picker has loaded, so a visible one can still be over "Loading units…".
+      ready: (p) => p.getByRole('button', { name: 'File report', exact: true, disabled: false }),
+    });
+    await expect(page.locator('main h1').first()).toHaveText('Report a violation');
+    await expect(page.getByRole('button', { name: 'Submit report', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'See your reports' })).toHaveCount(0);
+  });
+
+  test('report form (resident) holds and links to Mine', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'tenant');
+    await checkPage(page, testInfo, {
+      label: 'violation report (resident)',
+      shot: 'violation-report-form',
+      role: 'tenant',
+      url: `/violations/report?communityId=${communityId}`,
+      // Enabled, not just visible: the button stays disabled until the unit
+      // picker has loaded, so a visible one can still be over "Loading units…".
+      ready: (p) => p.getByRole('button', { name: 'Submit report', exact: true, disabled: false }),
+    });
+    await expect(page.locator('main h1').first()).toHaveText('Report a violation');
+    await expect(page.getByRole('button', { name: 'File report', exact: true })).toHaveCount(0);
+
+    const link = page.getByRole('link', { name: 'See your reports' });
+    await expect(link).toHaveAttribute('href', `/violations?tab=mine&communityId=${communityId}`);
+    await clickWhenHydrated(link);
+    await page.waitForURL(/\/violations\?tab=mine/);
+    // A plain resident has Mine only: no tab row, and Mine's content renders.
+    await expect(
+      page
+        .getByRole('heading', { name: /^(On your unit|Your reports|Nothing here yet)$/ })
+        .first(),
+    ).toBeVisible();
+    await expect(page.getByRole('tab')).toHaveCount(0);
+    await expectPaintedTitle(page, 'violations mine (resident) @ 1440px');
+    await expectNoBleed(page, 'violations mine (resident) @ 1440px');
+    await shoot(page, testInfo, 'violations-mine-tenant-1440');
+  });
+
+  test('violations review (manager) holds at 1280 and 1440', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'root_sunset');
+    const url = `/violations?communityId=${communityId}`;
+    // A case row links to its detail page; the header's "New violation" goes to
+    // /violations/report and is not inside a list item.
+    const caseLink = (p: Page) => p.locator('main li a[href^="/violations/"]');
+    for (const width of WIDTHS) {
+      const where = `violations review @ ${width}px`;
+      // Both are drawn only once the client query settles, so either proves the data arrived.
+      await open(page, width, url, (p) =>
+        caseLink(p).first().or(p.getByText('No violation cases yet')).first(),
+      );
+      await expectPaintedTitle(page, where);
+      // The demo seed gives Sunset Condos violations (scripts/seed-demo.ts), so an
+      // empty list here is a failure, not a pass.
+      await expect(caseLink(page).first(), `${where}: no case row`).toBeVisible();
+      // A manager sees Review only: no tab row.
+      await expect(page.getByRole('tab')).toHaveCount(0);
+      if (width === 1440) {
+        await expect(
+          page.getByRole('complementary', { name: 'Summary' }).getByText('open cases', { exact: true }),
+        ).toBeVisible();
+      }
+      await expectNoBleed(page, where);
+      await recordSummaryPlacement(page, testInfo, 'violations review', width);
+      await shoot(page, testInfo, `violations-review-root_sunset-${width}`);
+    }
+  });
+
+  test('violations (board member) shows Review and Mine tabs', async ({ page }, testInfo) => {
+    const communityId = await startPilot(page, 'board_member');
+    const url = `/violations?communityId=${communityId}`;
+    for (const width of WIDTHS) {
+      const where = `violations (board member) @ ${width}px`;
+      await open(page, width, url, (p) =>
+        p
+          .locator('main li a[href^="/violations/"]')
+          .first()
+          .or(p.getByText('No violation cases yet'))
+          .first(),
+      );
+      await expectPaintedTitle(page, where);
+      const reviewTab = page.getByRole('tab', { name: 'Review', exact: true });
+      const mineTab = page.getByRole('tab', { name: 'Mine', exact: true });
+      await expect(reviewTab).toBeVisible();
+      await expect(mineTab).toBeVisible();
+      await expect(reviewTab).toHaveAttribute('aria-selected', 'true');
+      await expectNoBleed(page, `${where} (Review)`);
+      await shoot(page, testInfo, `violations-review-board_member-${width}`);
+
+      // The ready locator above is drawn by the client query, so the tabs are
+      // hydrated by now. (Radix tabs select on mousedown, so clickWhenHydrated's
+      // onClick probe does not apply.)
+      await mineTab.click();
+      await expect(mineTab).toHaveAttribute('aria-selected', 'true');
+      await expect(page).toHaveURL(/[?&]tab=mine/);
+      await expect(
+        page
+          .getByRole('tabpanel')
+          .getByRole('heading', { name: /^(On your unit|Your reports|Nothing here yet)$/ })
+          .first(),
+      ).toBeVisible();
+      await expectNoBleed(page, `${where} (Mine)`);
+      await shoot(page, testInfo, `violations-mine-board_member-${width}`);
+    }
   });
 });

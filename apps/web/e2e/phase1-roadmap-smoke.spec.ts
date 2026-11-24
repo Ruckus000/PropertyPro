@@ -201,21 +201,17 @@ test.describe('phase 1 roadmap smoke', () => {
     await expect(page.getByText('Email')).toBeVisible();
   });
 
-  test('Phase 1C violations inbox renders filters and content shell for a board user', async ({ page }) => {
+  test('Phase 1C violations review renders filters and content shell for a board user', async ({ page }) => {
     const communityId = await loginAs(page, 'board_president');
 
     await page.goto(`/violations?communityId=${communityId}`);
 
-    await expect(
-      page.locator('#main-content').getByRole('heading', { name: 'Violations' }),
-    ).toBeVisible();
-    await expect(page.getByRole('combobox').nth(0)).toBeVisible();
-    await expect(page.getByRole('combobox').nth(1)).toBeVisible();
-    await expect(page.getByLabel('Filter violations from date')).toBeVisible();
-    await expect(page.getByLabel('Filter violations until date')).toBeVisible();
+    await expect(page.locator('main h1').first()).toHaveText('Violations');
 
-    const rows = page.getByRole('button', { name: /Violation #/i });
-    const emptyState = page.getByText(/No violations have been reported/i);
+    // A case row links to its detail page; the header's "New violation" is not
+    // inside a list item.
+    const rows = page.locator('main li a[href^="/violations/"]');
+    const emptyState = page.getByText('No violation cases yet');
 
     // `count()` does NOT auto-wait, unlike `expect()`. Branching on it directly
     // races the list render: against a seeded community the rows are still
@@ -225,13 +221,24 @@ test.describe('phase 1 roadmap smoke', () => {
     await expect
       .poll(async () => ((await rows.count()) > 0 ? 'rows' : (await emptyState.count()) > 0 ? 'empty' : 'pending'), {
         timeout: 15_000,
-        message: 'violations inbox rendered neither a violation row nor its empty state',
+        message: 'violations review rendered neither a case row nor its first run',
       })
       .not.toBe('pending');
 
+    // The demo `board_president` is a property_manager with a board seat, not a
+    // resident, so it gets Review only: no tab row.
+    await expect(page.getByRole('tab')).toHaveCount(0);
+
     if ((await rows.count()) > 0) {
+      // The filters are drawn only beside a list, never over the first run.
+      await expect(page.getByLabel('Filter by severity')).toBeVisible();
+      await expect(page.getByLabel('Filter violations from date')).toBeVisible();
+      await expect(page.getByLabel('Filter violations until date')).toBeVisible();
+
+      // Rows are drawn by the client query, so the page is hydrated by now.
       await rows.first().click();
-      await expect(page.getByText('Description')).toBeVisible();
+      await page.waitForURL(/\/violations\/\d+/);
+      await expect(page.getByRole('heading', { name: 'Description' })).toBeVisible();
     } else {
       await expect(emptyState).toBeVisible();
     }
@@ -264,7 +271,7 @@ test.describe('phase 1 roadmap smoke', () => {
 
     await page.goto(`/violations/report?communityId=${communityId}`);
 
-    await expect(page.getByRole('heading', { name: 'Report a Violation' })).toBeVisible();
+    await expect(page.locator('main h1').first()).toHaveText('Report a violation');
     await expect(page.getByLabel('Category')).toBeVisible();
     await expect(page.getByLabel('Description')).toBeVisible();
 
@@ -279,7 +286,7 @@ test.describe('phase 1 roadmap smoke', () => {
     // Submit renders disabled from the server and enables only once the client
     // has fetched the unit list.
     await expect(page.getByLabel(/Unit the report is about/)).toBeVisible();
-    const submit = page.getByRole('button', { name: 'Submit Violation Report' });
+    const submit = page.getByRole('button', { name: 'Submit report', exact: true });
     await expect(submit).toBeEnabled();
 
     await submit.click();

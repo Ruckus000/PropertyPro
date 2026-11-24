@@ -68,8 +68,6 @@
   "apps/web/src/app/(authenticated)/settings/roles/page.tsx",
   "apps/web/src/app/(authenticated)/settings/transparency/page.tsx",
   "apps/web/src/app/(authenticated)/violations/[id]/page.tsx",
-  "apps/web/src/app/(authenticated)/violations/page.tsx",
-  "apps/web/src/app/(authenticated)/violations/report/page.tsx",
   "apps/web/src/app/(authenticated)/welcome/page.tsx",
   "apps/web/src/app/(help)/help/[category]/[slug]/page.tsx",
   "apps/web/src/app/(help)/help/[category]/page.tsx",
