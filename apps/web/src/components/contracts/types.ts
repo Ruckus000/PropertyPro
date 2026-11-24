@@ -1,6 +1,7 @@
 /**
- * Shared types for the contracts feature (P3-52).
- * Single source of truth imported by ContractTable, BidTracker, and ContractForm.
+ * The contracts list as `GET /api/v1/contracts` returns it (P3-52). One
+ * contract's own page has its own shape: `ContractRecordData` in
+ * `lib/services/contract-service.ts`.
  */
 
 export interface Bid {
