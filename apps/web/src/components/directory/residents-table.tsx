@@ -12,9 +12,13 @@ import { residentTypeLabel, type DirectoryResidentRow } from './directory-model'
 // decision, 2026-11-24). The Name cell carries the email and, beneath it, the
 // board seat; the phone number is in the resident sheet only. Below md the table
 // is name · portal, and the subline carries unit · type · board. The Name cell
-// is the one that gives (max-w-0 + truncate), so the table never needs a
-// sideways scroll.
+// is the one that takes the spare width and the one that gives: `w-full` on its
+// header claims every pixel the other columns do not need, and `max-w-0` on its
+// cells lets it shrink and truncate instead of widening the table (the same
+// pair DataTable's `absorbSlack` uses). Unit, Type and Portal stay on one line,
+// so they are exactly as wide as their content.
 const MD = 'hidden md:table-cell';
+const FIT = 'whitespace-nowrap';
 
 const FOCUS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
 
@@ -48,10 +52,10 @@ export function ResidentsTable({
             <TableHead className="w-11 pr-0">
               <Checkbox checked={allState} onCheckedChange={onToggleAll} aria-label="Select all shown residents" />
             </TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead className={MD}>Unit</TableHead>
-            <TableHead className={MD}>Type</TableHead>
-            <TableHead className="text-right md:text-left">Portal</TableHead>
+            <TableHead className="w-full">Name</TableHead>
+            <TableHead className={cn(MD, FIT)}>Unit</TableHead>
+            <TableHead className={cn(MD, FIT)}>Type</TableHead>
+            <TableHead className={cn(FIT, 'text-right md:text-left')}>Portal</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,7 +105,7 @@ export function ResidentsTable({
                     </span>
                   </button>
                 </TableCell>
-                <TableCell className={MD}>
+                <TableCell className={cn(MD, FIT)}>
                   {r.unit ? (
                     <button
                       type="button"
@@ -115,7 +119,7 @@ export function ResidentsTable({
                     <span className="text-content-tertiary">—</span>
                   )}
                 </TableCell>
-                <TableCell className={MD}>
+                <TableCell className={cn(MD, FIT)}>
                   <span
                     className={cn(
                       'inline-flex h-6 items-center rounded-full px-2 text-xs font-medium',
@@ -130,7 +134,7 @@ export function ResidentsTable({
                   </span>
                   {isOwner && r.noticeConsent ? <span className="ml-2"><NoticeConsentBadge /></span> : null}
                 </TableCell>
-                <TableCell className="text-right md:text-left">
+                <TableCell className={cn(FIT, 'text-right md:text-left')}>
                   <PortalBadge status={r.portalStatus} />
                 </TableCell>
               </TableRow>

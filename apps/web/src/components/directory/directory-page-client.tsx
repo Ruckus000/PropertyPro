@@ -714,6 +714,16 @@ export function DirectoryPageClient({
       </>
     );
 
+  const showTabs = isAdmin && !inSetup;
+  // Each alternative is a complete literal so Tailwind's scanner sees it.
+  const splitHeightClass = showTabs
+    ? TOP_NAV_ENABLED
+      ? 'h-[calc(100dvh-25.5rem)]'
+      : 'h-[calc(100dvh-25.5rem)] lg:h-[calc(100dvh-22.5rem)]'
+    : TOP_NAV_ENABLED
+      ? 'h-[calc(100dvh-21.65rem)]'
+      : 'h-[calc(100dvh-21.65rem)] lg:h-[calc(100dvh-18.65rem)]';
+
   return (
     <>
       <Tabs value={tab} onValueChange={setTab}>
@@ -749,7 +759,7 @@ export function DirectoryPageClient({
           // page shows residents to admins only. The sentence would promise more
           // than the page gives.
           tabs={
-            isAdmin && !inSetup ? (
+            showTabs ? (
               <TabsList aria-label="Directory sections" className={TAB_LIST_CLASS}>
                 <TabsTrigger value="units" className={TAB_TRIGGER_CLASS}>
                   Units
@@ -841,7 +851,7 @@ export function DirectoryPageClient({
                 ) : null}
 
             {/* ─────────── Units ─────────── */}
-            <TabsContent value="units" className="mt-0 flex flex-col gap-4 data-[state=inactive]:hidden">
+            <TabsContent value="units" className="mt-0 flex flex-col gap-4">
               {unitsLoading || residentsLoading ? (
                 <ListSkeleton />
               ) : unitsQ.isError ? (
@@ -949,8 +959,8 @@ export function DirectoryPageClient({
                     />
                   ) : (
                     // ponytail: the split pane is sized from the viewport, so the tab row's extra height must come off it: always below lg (phones navigate with the tabs), and at lg+ only with the top-nav flag. Trigger: the top-nav flag is removed.
-                    // ponytail: 22.5rem / 25.5rem are the old 16rem / 19rem plus 6.5rem for the painted page header. Worked out from the class heights (title row 2.8, gap 0.75, description 1.25, padding 1, two 1.25 layout gaps and the 2.6 underline tab row come to 11; the old action row and its gaps were 4.5), not measured in a browser. Trigger: a screenshot at 1280 or 1440 shows the pane ending short of, or past, the bottom of the window.
-                    <div className={`grid ${TOP_NAV_ENABLED ? 'h-[calc(100dvh-25.5rem)]' : 'h-[calc(100dvh-25.5rem)] lg:h-[calc(100dvh-22.5rem)]'} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
+                    // ponytail: 22.5rem / 25.5rem are the old 16rem / 19rem plus 6.5rem for the painted page header. Worked out from the class heights (title row 2.8, gap 0.75, description 1.25, padding 1, two 1.25 layout gaps and the 2.6 underline tab row come to 11; the old action row and its gaps were 4.5), not measured in a browser. A non-admin has no tabs row, so its 3.85rem (2.6 plus one 1.25 gap) stays in the pane: 18.65rem / 21.65rem. Trigger: a screenshot at 1280 or 1440 shows the pane ending short of, or past, the bottom of the window.
+                    <div className={`grid ${splitHeightClass} min-h-[28rem] grid-cols-[300px_minmax(0,1fr)] gap-4 xl:grid-cols-[380px_minmax(0,1fr)]`}>
                       <UnitsSplitList
                         units={filteredUnits}
                         hasOwnerRole={hasOwnerRole}
@@ -969,7 +979,7 @@ export function DirectoryPageClient({
 
             {/* ─────────── Residents (admins only) ─────────── */}
             {isAdmin ? (
-              <TabsContent value="residents" className="mt-0 flex flex-col gap-4 data-[state=inactive]:hidden">
+              <TabsContent value="residents" className="mt-0 flex flex-col gap-4">
                 {residentsLoading ? (
                   <ListSkeleton />
                 ) : (residentsQ.isError || occupantsQ.isError) ? (
@@ -1131,7 +1141,7 @@ export function DirectoryPageClient({
 
             {/* ─────────── Join requests (admins only) ─────────── */}
             {isAdmin ? (
-              <TabsContent value="requests" className="mt-0 flex flex-col gap-4 data-[state=inactive]:hidden">
+              <TabsContent value="requests" className="mt-0 flex flex-col gap-4">
                 <p className="text-sm text-content-secondary">
                   People with a PropertyPro account who asked to join this community. Approving gives them portal access; a denied person must wait 30 days to ask again.
                 </p>

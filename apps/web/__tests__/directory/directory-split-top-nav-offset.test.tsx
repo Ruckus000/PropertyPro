@@ -204,9 +204,9 @@ beforeEach(() => {
 
 
 describe('DirectoryPageClient — split view offset (D30)', () => {
-  async function openSplit() {
+  async function openSplit(props: Parameters<typeof renderClient>[0] = {}) {
     const user = userEvent.setup();
-    renderClient();
+    renderClient(props);
     await user.click(screen.getByRole('button', { name: 'Split' }));
     const list = document.querySelector('[class*="grid-cols-[300px"]');
     expect(list).not.toBeNull();
@@ -225,5 +225,21 @@ describe('DirectoryPageClient — split view offset (D30)', () => {
     const on = await openSplit();
     expect(on.className).toContain('h-[calc(100dvh-25.5rem)]');
     expect(on.className).not.toContain('h-[calc(100dvh-22.5rem)]');
+  });
+
+  it('a non-admin has no tabs row, so its 3.85rem is not taken off the pane', async () => {
+    const nonAdmin = { isAdmin: false, canSeeBalances: false };
+    flag.on = false;
+    const off = await openSplit(nonAdmin);
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(off.className).toContain('h-[calc(100dvh-21.65rem)]');
+    expect(off.className).toContain('lg:h-[calc(100dvh-18.65rem)]');
+    expect(off.className).not.toContain('25.5rem');
+    cleanup();
+
+    flag.on = true;
+    const on = await openSplit(nonAdmin);
+    expect(on.className).toContain('h-[calc(100dvh-21.65rem)]');
+    expect(on.className).not.toContain('18.65rem');
   });
 });

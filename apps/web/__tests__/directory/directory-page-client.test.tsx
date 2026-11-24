@@ -936,6 +936,47 @@ describe('DirectoryPageClient — page kit', () => {
     expect(within(table).queryByText('305-555-0101')).not.toBeInTheDocument();
   });
 
+  it('the Name column takes the spare width; select, Unit, Type and Portal are content-sized', () => {
+    searchState.value = 'tab=residents';
+    renderClient();
+    const table = screen.getByRole('table', { name: 'Residents' });
+    const [select, name, ...rest] = within(table).getAllByRole('columnheader');
+    expect(name!.className).toMatch(/(^|\s)w-full(\s|$)/);
+    expect(select!.className).toMatch(/(^|\s)w-11(\s|$)/);
+    for (const h of rest) {
+      expect(h.className).not.toMatch(/(^|\s)w-(full|1\/2)(\s|$)/);
+      expect(h.className).toContain('whitespace-nowrap');
+    }
+    // The Name cell may shrink and truncate; the others never wrap.
+    const cells = within(within(table).getAllByRole('row')[1]!).getAllByRole('cell');
+    expect(cells).toHaveLength(5);
+    expect(cells[1]!.className).toContain('max-w-0');
+    for (const c of cells.slice(2)) expect(c.className).toContain('whitespace-nowrap');
+  });
+
+  it('the overview strip is two columns until its own box is 960px, and no cell can spill into the next', () => {
+    renderClient();
+    const strip = screen.getByRole('group', { name: /directory overview/i });
+    expect(strip.parentElement!.className).toMatch(/(^|\s)cq(\s|$)/);
+    expect(strip.className).toContain('grid-cols-2');
+    expect(strip.className).toContain('cq-lg:grid-flow-col');
+    expect(strip.className).toContain('cq-lg:auto-cols-fr');
+    expect(strip.className).not.toContain('overflow-x-auto');
+    const cells = within(strip).getAllByRole('button');
+    expect(cells.map((c) => c.textContent)).toEqual([
+      '2 / 3units occupied · 1 vacant',
+      '$1,250past due · 1 unit · oldest 62 days',
+      '50%using the portal · 1 not yet',
+      '0join requests to review',
+    ]);
+    for (const cell of cells) {
+      expect(cell.className).toMatch(/(^|\s)min-w-0(\s|$)/);
+      expect(cell.className).not.toMatch(/(^|\s)(md:)?min-w-44(\s|$)/);
+      // The caption (second line) wraps inside its cell.
+      expect(cell.lastElementChild!.className).not.toContain('whitespace-nowrap');
+    }
+  });
+
   it('the phone number is still in the resident sheet', async () => {
     useResidentsListMock.mockReturnValue(ok([resident('Olive Owner', { unitId: 1, phone: '305-555-0101' })]));
     searchState.value = 'tab=residents';

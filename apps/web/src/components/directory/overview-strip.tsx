@@ -19,17 +19,21 @@ function Cell({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-44 flex-1 flex-col gap-0.5 px-4 py-3 text-left text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus md:min-w-0"
+      // min-w-0 so a cell is never wider than its track; the caption wraps
+      // inside it. The -1px margins put each cell's top and left rule under its
+      // neighbour's edge (or the strip's own border), in both arrangements.
+      className="-ml-px -mt-px flex min-w-0 flex-col gap-0.5 border-l border-t border-edge-subtle px-4 py-3 text-left text-content hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
     >
       <span className={cn('whitespace-nowrap text-lg font-semibold leading-tight tabular-nums', valueClassName)}>{value}</span>
-      <span className="whitespace-nowrap text-xs text-content-secondary">{label}</span>
+      <span className="text-xs text-content-secondary">{label}</span>
     </button>
   );
 }
 
 /**
  * One slim strip instead of four summary cards: each figure jumps to the
- * matching filter. Scrolls sideways on phones.
+ * matching filter. Two columns by two rows until its own box is 960px wide
+ * (`cq-lg`), then one row of equal cells. Nothing scrolls sideways.
  */
 export function OverviewStrip({
   stats,
@@ -52,10 +56,11 @@ export function OverviewStrip({
   onRequests: () => void;
 }) {
   return (
+    <div className="cq">
     <div
       role="group"
       aria-label="Directory overview"
-      className="flex divide-x divide-edge-subtle overflow-x-auto rounded-lg border border-edge bg-surface-card"
+      className="grid grid-cols-2 overflow-hidden rounded-lg border border-edge bg-surface-card cq-lg:grid-flow-col cq-lg:auto-cols-fr cq-lg:grid-cols-none"
     >
       <Cell
         onClick={onOccupancy}
@@ -95,6 +100,7 @@ export function OverviewStrip({
         valueClassName={requestCount ? 'text-content-brand' : undefined}
         label="join requests to review"
       />
+    </div>
     </div>
   );
 }
