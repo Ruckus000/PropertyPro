@@ -7,10 +7,10 @@
  * new row) comes back through the one sealing rule. Nothing about any bid is
  * kept or shown here.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAddContractBid } from '@/hooks/use-contracts';
-import { contractAmountError } from '@/lib/contracts/contract-rules';
+import { CONTRACT_VENDOR_REQUIRED_MESSAGE, contractAmountError } from '@/lib/contracts/contract-rules';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,12 +23,25 @@ export function ContractAddBid({ communityId, contractId }: { communityId: numbe
   const [bidAmount, setBidAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [amountError, setAmountError] = useState<string | null>(null);
+  const [vendorError, setVendorError] = useState<string | null>(null);
+  // The form replaces the button that opened it; when it closes (saved or
+  // cancelled), focus goes back to that button and is not dropped on the page.
+  const openButton = useRef<HTMLButtonElement>(null);
+  const [returnFocus, setReturnFocus] = useState(false);
+  useEffect(() => {
+    if (!open && returnFocus) {
+      openButton.current?.focus();
+      setReturnFocus(false);
+    }
+  }, [open, returnFocus]);
 
   const addBid = useAddContractBid(communityId);
   const saveError = addBid.error instanceof Error ? addBid.error.message : null;
 
   function close() {
     setOpen(false);
+    setReturnFocus(true);
+    setVendorError(null);
     setVendorName('');
     setBidAmount('');
     setNotes('');
@@ -40,8 +53,11 @@ export function ContractAddBid({ communityId, contractId }: { communityId: numbe
     event.preventDefault();
     const amount = bidAmount.trim();
     const problem = contractAmountError(amount);
+    // `required` lets a name made only of spaces through; the server would refuse it.
+    const vendorProblem = vendorName.trim() === '' ? CONTRACT_VENDOR_REQUIRED_MESSAGE : null;
     setAmountError(problem);
-    if (problem) return;
+    setVendorError(vendorProblem);
+    if (problem || vendorProblem) return;
 
     try {
       await addBid.mutateAsync({
@@ -60,7 +76,7 @@ export function ContractAddBid({ communityId, contractId }: { communityId: numbe
   if (!open) {
     return (
       <div className="border-t border-edge px-4 py-3">
-        <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        <Button ref={openButton} type="button" variant="outline" onClick={() => setOpen(true)}>
           Add bid
         </Button>
       </div>
@@ -91,7 +107,14 @@ export function ContractAddBid({ communityId, contractId }: { communityId: numbe
             autoFocus
             value={vendorName}
             onChange={(event) => setVendorName(event.target.value)}
+            aria-invalid={vendorError ? true : undefined}
+            aria-describedby={vendorError ? 'bid-vendor-error' : undefined}
           />
+          {vendorError ? (
+            <p id="bid-vendor-error" role="alert" className="text-sm text-status-danger">
+              {vendorError}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="bid-amount">

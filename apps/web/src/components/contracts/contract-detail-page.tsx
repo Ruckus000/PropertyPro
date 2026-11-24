@@ -22,9 +22,9 @@ import {
   contractTimeLeft,
   formatContractDate,
   formatContractDateTime,
-  formatContractMoney,
   todayInTimeZone,
 } from '@/lib/contracts/contract-rules';
+import { formatMoney } from '@/lib/utils/format-money';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { ContractAddBid } from './contract-add-bid';
@@ -41,8 +41,9 @@ interface ContractDetailPageProps {
   about?: AccessSentence;
 }
 
+// inline-flex with a 44px floor below 768px: a link standing alone is a touch target.
 const LINK =
-  'rounded-sm font-medium text-content-link underline underline-offset-2 hover:text-content-link-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
+  'inline-flex min-h-11 items-center md:min-h-0 rounded-sm font-medium text-content-link underline underline-offset-2 hover:text-content-link-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
 const TERM = 'text-content-secondary';
 
 export function ContractDetailPage({ communityId, contract, timeZone, canWrite, about }: ContractDetailPageProps) {
@@ -110,7 +111,7 @@ export function ContractDetailPage({ communityId, contract, timeZone, canWrite, 
             <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
               <dt className={TERM}>Value</dt>
               <dd className="tabular-nums text-content">
-                {contract.contractValue ? formatContractMoney(contract.contractValue) : 'Not set'}
+                {contract.contractValue ? formatMoney(contract.contractValue) : 'Not set'}
               </dd>
               <dt className={TERM}>Dates</dt>
               <dd className="text-content">

@@ -341,6 +341,18 @@ describe('Contracts pages', () => {
       expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/contracts/7?communityId=42');
     });
 
+    it('a community whose stored time zone Intl does not know still opens its contract and its edit page', async () => {
+      h.requireMembership.mockResolvedValue({ ...MANAGER, timezone: 'Not/A_Zone' });
+
+      const record = render((await detail('7')) as ReactElement);
+      // Eastern time, the fallback the other zoned helpers use.
+      expect(screen.getByTestId('bids-sealed')).toHaveTextContent('Opens Dec 12, 2026, 5:00 PM EST.');
+      record.unmount();
+
+      render((await edit('7')) as ReactElement);
+      expect(screen.getByLabelText('Bidding closes at')).toHaveValue('2026-12-12T17:00');
+    });
+
     it("opens a contract with its title, status, Edit, and the linked document's title", async () => {
       h.rows.contracts = [contractRow({ documentId: 100, complianceChecklistItemId: 200 })];
       h.rows.documents = [{ id: 100, communityId: 42, title: 'Signed roofing agreement' }];

@@ -4,6 +4,7 @@
  * Pure: no database, no React.
  */
 import type { StatusGlyphKind } from '@propertypro/ui/components/shared/status-glyph';
+import { resolveTimezone } from '@/lib/utils/timezone';
 
 export const CONTRACT_STATUSES = ['draft', 'active', 'expired', 'terminated'] as const;
 export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
@@ -21,32 +22,41 @@ export function contractStatus(status: string): { word: string; kind: StatusGlyp
   return CONTRACT_STATUS[status as ContractStatus] ?? { word: status, kind: 'not-started' };
 }
 
-/** numeric(12,2) as the API takes it: digits, optionally a point and one or two more. */
-export const CONTRACT_AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
+/** Digits, optionally a point and one or two more. */
+const AMOUNT_SHAPE = /^(\d+)(\.\d{1,2})?$/;
+/** The column is numeric(12,2): ten digits before the point, and no more. */
+const AMOUNT_MAX_WHOLE_DIGITS = 10;
 
 export const CONTRACT_AMOUNT_MESSAGE =
   'Enter a plain amount with no commas or symbols, for example 12500 or 12500.00.';
+export const CONTRACT_AMOUNT_TOO_LARGE_MESSAGE =
+  'Enter an amount under 10 billion dollars (at most 10 digits before the decimal point).';
 
 export const CONTRACT_END_BEFORE_START_MESSAGE = 'The end date cannot be before the start date.';
+export const CONTRACT_TITLE_REQUIRED_MESSAGE = 'Enter a title.';
+export const CONTRACT_VENDOR_REQUIRED_MESSAGE = 'Enter the vendor name.';
+export const CONTRACT_CLOSING_TIME_MESSAGE = 'Enter a valid date and time for when bidding closes.';
 
-/** The message for a typed amount the server would refuse, or null. Empty is not an error here. */
+/**
+ * What is wrong with an amount as the API must store it, or null. Strict: an
+ * empty string is not an amount. The server schemas use this, so the form and
+ * the API cannot disagree.
+ */
+export function contractAmountIssue(raw: string): string | null {
+  const match = AMOUNT_SHAPE.exec(raw);
+  if (!match) return CONTRACT_AMOUNT_MESSAGE;
+  return match[1]!.length > AMOUNT_MAX_WHOLE_DIGITS ? CONTRACT_AMOUNT_TOO_LARGE_MESSAGE : null;
+}
+
+/** The same check for a form field, where empty means "no amount" and is not an error. */
 export function contractAmountError(raw: string): string | null {
-  if (raw === '') return null;
-  return CONTRACT_AMOUNT_PATTERN.test(raw) ? null : CONTRACT_AMOUNT_MESSAGE;
+  return raw === '' ? null : contractAmountIssue(raw);
 }
 
 /** Both are 'YYYY-MM-DD', which sorts as text. An open-ended contract has no end to compare. */
 export function isEndBeforeStart(startDate: string, endDate: string | null | undefined): boolean {
   if (!endDate || !startDate) return false;
   return endDate < startDate;
-}
-
-/** `"12500"` or `"12500.00"` → `"$12,500.00"`; nothing → an em dash. */
-export function formatContractMoney(value: string | null | undefined): string {
-  if (value == null || value === '') return '—';
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) return value;
-  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
 /** `"2026-12-12"` → `"Dec 12, 2026"`. A calendar date, so no time zone is applied. */
@@ -61,7 +71,10 @@ export function formatContractDate(value: string): string {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-/** `"Dec 12, 2026, 5:00 PM EST"` in the community's time zone. */
+/**
+ * `"Dec 12, 2026, 5:00 PM EST"` in the community's time zone. A stored zone
+ * that `Intl` does not know falls back (`resolveTimezone`) and does not throw.
+ */
 export function formatContractDateTime(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
@@ -70,7 +83,7 @@ export function formatContractDateTime(iso: string, timeZone: string): string {
     hour: 'numeric',
     minute: '2-digit',
     timeZoneName: 'short',
-    timeZone,
+    timeZone: resolveTimezone(timeZone),
   }).format(new Date(iso));
 }
 
@@ -78,7 +91,7 @@ export function formatContractDateTime(iso: string, timeZone: string): string {
 export function todayInTimeZone(timeZone: string, now: Date = new Date()): string {
   // en-CA prints a date as YYYY-MM-DD.
   return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+    timeZone: resolveTimezone(timeZone),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

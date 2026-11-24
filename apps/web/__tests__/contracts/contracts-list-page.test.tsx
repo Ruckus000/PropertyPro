@@ -157,6 +157,11 @@ describe('ContractsListPage', () => {
     const links = screen.getAllByRole('link', { name: 'Expiring Soon' });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute('href', '/contracts/5?communityId=42');
+    // Links standing alone are touch targets: 44px below 768px, in the notice and in the table.
+    for (const link of links) {
+      expect(link.className).toContain('min-h-11');
+      expect(link.className).toContain('md:min-h-0');
+    }
   });
 
   it('a manager who can write gets "Add contract" in the header, a link to the New page', () => {

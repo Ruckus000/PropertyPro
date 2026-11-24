@@ -21,9 +21,9 @@ import {
   contractStatus,
   contractTimeLeft,
   formatContractDate,
-  formatContractMoney,
   todayInTimeZone,
 } from '@/lib/contracts/contract-rules';
+import { formatMoney } from '@/lib/utils/format-money';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -63,6 +63,8 @@ export function contractHref(communityId: number, contractId: number): string {
 // wide as its content. Value and Bids wait for 768px, so a phone does not scroll sideways.
 const FIT = 'whitespace-nowrap';
 const MD = 'hidden md:table-cell';
+// A link standing alone is a touch target: 44px tall below 768px.
+const TOUCH = 'inline-flex min-h-11 items-center md:min-h-0';
 const FOCUS =
   'rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2';
 
@@ -155,9 +157,9 @@ function ExpirationAlerts({ alerts, communityId }: { alerts: ExpirationAlert[]; 
             />
             <Link
               href={contractHref(communityId, alert.contractId)}
-              className={`min-w-0 truncate font-medium text-content hover:underline ${FOCUS}`}
+              className={`${TOUCH} min-w-0 font-medium text-content hover:underline ${FOCUS}`}
             >
-              {alert.title}
+              <span className="truncate">{alert.title}</span>
             </Link>
             <span className="text-sm text-content-secondary">{alert.vendorName}</span>
           </li>
@@ -196,16 +198,16 @@ function ContractsTable({
                 <TableCell className="max-w-0">
                   <Link
                     href={contractHref(communityId, contract.id)}
-                    className={`block truncate font-medium text-content hover:underline ${FOCUS}`}
+                    className={`${TOUCH} max-w-full font-medium text-content hover:underline ${FOCUS}`}
                   >
-                    {contract.title}
+                    <span className="truncate">{contract.title}</span>
                   </Link>
                   <span className="block truncate text-sm text-content-secondary">
                     {contract.vendorName}
                     {contract.conflictOfInterest ? ' · Conflict declared' : ''}
                   </span>
                 </TableCell>
-                <TableCell className={`${MD} ${FIT}`}>{formatContractMoney(contract.contractValue)}</TableCell>
+                <TableCell className={`${MD} ${FIT}`}>{formatMoney(contract.contractValue)}</TableCell>
                 <TableCell className={FIT}>
                   {contract.endDate ? (
                     <>

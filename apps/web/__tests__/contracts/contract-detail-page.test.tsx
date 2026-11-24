@@ -8,7 +8,10 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { describeAccess } from '@/lib/access/describe-access';
 import type { ContractRecordData } from '../../src/lib/services/contract-service';
-import { CONTRACT_AMOUNT_MESSAGE } from '../../src/lib/contracts/contract-rules';
+import {
+  CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
+} from '../../src/lib/contracts/contract-rules';
 
 const h = vi.hoisted(() => ({
   addBid: vi.fn(),
@@ -145,6 +148,8 @@ describe('ContractDetailPage', () => {
       'href',
       '/communities/42/documents?doc=100',
     );
+    // A link standing alone is a touch target: 44px below 768px.
+    expect(screen.getByRole('link', { name: 'Signed roofing agreement' }).className).toContain('min-h-11 ');
     expect(screen.getByText('Contracts and bids')).toBeInTheDocument();
     linked.unmount();
 
@@ -184,9 +189,20 @@ describe('ContractDetailPage', () => {
         notes: 'Two-year warranty',
       });
       await waitFor(() => expect(h.router.refresh).toHaveBeenCalledTimes(1));
-      // Closed again, back to the button.
+      // Closed again, back to the button, and focus is on it, not lost to the page.
       expect(screen.queryByRole('form', { name: 'Add bid' })).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Add bid' })).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Add bid' })).toHaveFocus());
+    });
+
+    it('refuses a vendor name made only of spaces, naming the field, and sends nothing', async () => {
+      renderPage();
+      await openForm();
+      type(/^Vendor name/, '   ');
+      type(/^Bid amount/, '100');
+      await userEvent.click(screen.getByRole('button', { name: 'Save bid' }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent(CONTRACT_VENDOR_REQUIRED_MESSAGE);
+      expect(h.addBid).not.toHaveBeenCalled();
     });
 
     it('is still offered while bidding is sealed and after it has closed (recording a bid is never blocked)', () => {
@@ -234,6 +250,7 @@ describe('ContractDetailPage', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByRole('form', { name: 'Add bid' })).not.toBeInTheDocument();
       expect(h.addBid).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Add bid' })).toHaveFocus());
     });
   });
 });

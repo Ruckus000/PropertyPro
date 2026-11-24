@@ -79,11 +79,17 @@
  * (`packages/shared/src/rbac-matrix.ts`).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
-import {
-  CONTRACT_AMOUNT_MESSAGE,
-  CONTRACT_AMOUNT_PATTERN,
-  CONTRACT_STATUSES,
-} from '@/lib/contracts/contract-rules';
+import { CONTRACT_STATUSES, contractAmountIssue } from '@/lib/contracts/contract-rules';
+
+/**
+ * A money amount as numeric(12,2) can hold it. Shared by the PATCH body here
+ * and the two POST bodies in the route, so all three refuse the same values
+ * (commas, symbols, more than ten whole digits) in the same words.
+ */
+export const contractAmountSchema = z.string().superRefine((value, ctx) => {
+  const issue = contractAmountIssue(value);
+  if (issue) ctx.addIssue({ code: 'custom', message: issue });
+});
 
 
 /**
@@ -97,11 +103,7 @@ export const updateContractBodySchema = z.object({
   title: z.string().min(1).max(500).optional(),
   vendorName: z.string().min(1).max(500).optional(),
   description: z.string().nullable().optional(),
-  contractValue: z
-    .string()
-    .regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE)
-    .nullable()
-    .optional(),
+  contractValue: contractAmountSchema.nullable().optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)

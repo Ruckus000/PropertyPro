@@ -46,13 +46,14 @@ import {
   updateContractById,
 } from '@/lib/services/contract-service';
 import {
-  CONTRACT_AMOUNT_MESSAGE,
-  CONTRACT_AMOUNT_PATTERN,
   CONTRACT_END_BEFORE_START_MESSAGE,
   CONTRACT_STATUSES,
+  CONTRACT_TITLE_REQUIRED_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
   isEndBeforeStart,
 } from '@/lib/contracts/contract-rules';
 import {
+  contractAmountSchema,
   contractsCreateContract,
   contractsListContract,
   contractsUpdateContract,
@@ -67,11 +68,7 @@ const createContractSchema = z.object({
   title: z.string().min(1, 'Title is required').max(500),
   vendorName: z.string().min(1, 'Vendor name is required').max(500),
   description: z.string().nullable().optional(),
-  contractValue: z
-    .string()
-    .regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE)
-    .nullable()
-    .optional(),
+  contractValue: contractAmountSchema.nullable().optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format'),
   endDate: z
     .string()
@@ -90,7 +87,7 @@ const createBidSchema = z.object({
   communityId: z.number().int().positive(),
   contractId: z.number().int().positive(),
   vendorName: z.string().min(1, 'Vendor name is required').max(500),
-  bidAmount: z.string().regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE),
+  bidAmount: contractAmountSchema,
   notes: z.string().nullable().optional(),
 });
 
@@ -105,6 +102,20 @@ function requireEndNotBeforeStart(startDate: string, endDate: string | null | un
       fields: [{ field: 'endDate', message: CONTRACT_END_BEFORE_START_MESSAGE }],
     });
   }
+}
+
+/**
+ * A name with the spaces around it removed. One made only of spaces passes the
+ * schema's `min(1)` and would be stored as blank, so it is refused here, with a
+ * message that names the field.
+ */
+function requireName(value: string, field: 'title' | 'vendorName'): string {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    const message = field === 'title' ? CONTRACT_TITLE_REQUIRED_MESSAGE : CONTRACT_VENDOR_REQUIRED_MESSAGE;
+    throw new ValidationError(message, { fields: [{ field, message }] });
+  }
+  return trimmed;
 }
 
 function requireComplianceCommunity(communityType: CommunityType): void {
@@ -236,6 +247,8 @@ export const PATCH = withErrorHandler(
   runRoute(contractsUpdateContract, async ({ body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const { id, communityId: rawCommunityId, ...fields } = body;
+    if (fields.title !== undefined) fields.title = requireName(fields.title, 'title');
+    if (fields.vendorName !== undefined) fields.vendorName = requireName(fields.vendorName, 'vendorName');
     const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -329,6 +342,8 @@ async function handleCreateContract(
   }
 
   const payload = parseResult.data;
+  payload.title = requireName(payload.title, 'title');
+  payload.vendorName = requireName(payload.vendorName, 'vendorName');
   requireEndNotBeforeStart(payload.startDate, payload.endDate);
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await assertNotDemoGrace(communityId);
@@ -406,6 +421,7 @@ async function handleCreateBid(
   }
 
   const payload = parseResult.data;
+  payload.vendorName = requireName(payload.vendorName, 'vendorName');
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);

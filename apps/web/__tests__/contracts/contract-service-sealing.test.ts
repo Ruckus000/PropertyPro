@@ -99,6 +99,24 @@ describe('applyBidEmbargo', () => {
 
   it('opens at the closing instant itself, not after it', () => {
     expect(applyBidEmbargo({ biddingClosesAt: NOW }, BIDS, NOW).embargoed).toBe(false);
+    expect(applyBidEmbargo({ biddingClosesAt: new Date(NOW.getTime() + 1) }, BIDS, NOW).embargoed).toBe(true);
+  });
+
+  describe('fails closed: a closing time it cannot read is not proof that bidding closed', () => {
+    const unreadable: Array<[string, unknown]> = [
+      ['an Invalid Date', new Date('not a date')],
+      ['text, even of a past time', '2020-01-01T00:00:00.000Z'],
+      ['a number', 0],
+      ['undefined', undefined],
+    ];
+    for (const [name, value] of unreadable) {
+      it(`${name} keeps the bids sealed`, () => {
+        const result = applyBidEmbargo({ biddingClosesAt: value as Date | null }, BIDS.slice(0, 2), NOW);
+        expect(result.embargoed).toBe(true);
+        expect(result.bids).toEqual([]);
+        expect(result.bidCount).toBe(2);
+      });
+    }
   });
 });
 
@@ -138,6 +156,31 @@ describe('getContractRecord', () => {
       { id: 1, vendorName: 'Zephyr Roofing', bidAmount: '48250.00', submittedAt: '2026-11-28T14:00:00.000Z', notes: 'Includes tear-off' },
       { id: 2, vendorName: 'Quarry Builders', bidAmount: '51900.50', submittedAt: '2026-11-29T14:00:00.000Z', notes: null },
     ]);
+  });
+
+  it('a stored closing time that cannot be read: sealed, and nothing a bid says is returned', async () => {
+    for (const stored of [new Date('garbage'), 'garbage']) {
+      const scoped = scopedOver({ contracts: [contractRow({ biddingClosesAt: stored })], bids: BIDS });
+      const record = await getContractRecord(scoped, 7, NOW);
+      expect(record!.bidSummary).toEqual({ bids: [], embargoed: true, bidCount: 2 });
+      expect(record!.biddingClosesAt).toBeNull();
+      expect(JSON.stringify(record)).not.toContain('Zephyr Roofing');
+    }
+  });
+
+  it('a closing time stored as readable text is honoured in both directions', async () => {
+    const later = await getContractRecord(
+      scopedOver({ contracts: [contractRow({ biddingClosesAt: '2026-12-12T22:00:00.000Z' })], bids: BIDS }),
+      7,
+      NOW,
+    );
+    expect(later!.bidSummary.embargoed).toBe(true);
+    const earlier = await getContractRecord(
+      scopedOver({ contracts: [contractRow({ biddingClosesAt: '2026-11-20T22:00:00.000Z' })], bids: BIDS }),
+      7,
+      NOW,
+    );
+    expect(earlier!.bidSummary.embargoed).toBe(false);
   });
 
   it('lists the bids in the order they were recorded', async () => {

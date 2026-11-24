@@ -10,7 +10,8 @@
  * sealed the page does not render this at all, and has no bid to give it.
  */
 import type { ContractRecordBid } from '@/lib/services/contract-service';
-import { formatContractDateTime, formatContractMoney } from '@/lib/contracts/contract-rules';
+import { formatContractDateTime } from '@/lib/contracts/contract-rules';
+import { formatMoney } from '@/lib/utils/format-money';
 import {
   Table,
   TableBody,
@@ -37,7 +38,7 @@ export function ContractBidsTable({ bids, timeZone }: { bids: ContractRecordBid[
         {bids.map((bid) => (
           <TableRow key={bid.id}>
             <TableCell className="font-medium text-content">{bid.vendorName}</TableCell>
-            <TableCell className={FIT}>{formatContractMoney(bid.bidAmount)}</TableCell>
+            <TableCell className={FIT}>{formatMoney(bid.bidAmount)}</TableCell>
             <TableCell className={FIT}>
               {bid.submittedAt ? formatContractDateTime(bid.submittedAt, timeZone) : '—'}
             </TableCell>

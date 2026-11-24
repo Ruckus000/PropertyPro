@@ -137,7 +137,14 @@ export function applyBidEmbargo<Bid>(
   bids: Bid[],
   now: Date = new Date(),
 ): SealedBids<Bid> {
-  const embargoed = contract.biddingClosesAt !== null && contract.biddingClosesAt > now;
+  // Fails CLOSED. Bids are open only when no closing time was set, or it is a
+  // real time at or before now. Anything else the column could hand back (an
+  // Invalid Date, text, undefined) is not proof that bidding has closed, so the
+  // bids stay sealed.
+  const closesAt: unknown = contract.biddingClosesAt;
+  const open =
+    closesAt === null || (closesAt instanceof Date && closesAt.getTime() <= now.getTime());
+  const embargoed = !open;
   return {
     bids: embargoed ? [] : bids,
     embargoed,
@@ -190,9 +197,17 @@ export interface ContractRecordData {
   };
 }
 
+/** A stored time as a Date. Null stays null; anything unreadable becomes an Invalid Date, never null. */
+function toDate(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value;
+  return new Date(typeof value === 'string' && value !== '' ? value : Number.NaN);
+}
+
+/** ISO text for a readable time; null for none or for one that cannot be read. */
 function toIso(value: unknown): string | null {
-  if (value instanceof Date) return value.toISOString();
-  return typeof value === 'string' && value !== '' ? new Date(value).toISOString() : null;
+  const date = toDate(value);
+  return date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
 }
 
 /**
@@ -222,11 +237,8 @@ export async function getContractRecord(
     : null;
 
   const closesAt = toIso(row['biddingClosesAt']);
-  const sealed = applyBidEmbargo(
-    { biddingClosesAt: closesAt ? new Date(closesAt) : null },
-    bidRows,
-    now,
-  );
+  // The stored value itself, not the readable text: an unreadable time must reach the rule as unreadable.
+  const sealed = applyBidEmbargo({ biddingClosesAt: toDate(row['biddingClosesAt']) }, bidRows, now);
 
   return {
     id: row['id'] as number,

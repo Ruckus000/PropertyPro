@@ -5,7 +5,7 @@
  * `useUpdateMobileSettings`. These tests mock that hook with a controllable
  * mutation state and assert the form render, save interaction, pending /
  * disabled state, success state, and error literal — mirroring
- * `contracts/contract-table.test.tsx`.
+ * `contracts/contracts-list-page.test.tsx`.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';

@@ -5,28 +5,30 @@
 import { describe, expect, it } from 'vitest';
 import {
   CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_AMOUNT_TOO_LARGE_MESSAGE,
+  contractAmountIssue,
   bidCountLabel,
   contractAmountError,
   contractStatus,
   contractTimeLeft,
   formatContractDate,
   formatContractDateTime,
-  formatContractMoney,
   isEndBeforeStart,
   todayInTimeZone,
 } from '../../src/lib/contracts/contract-rules';
+import { formatMoney } from '../../src/lib/utils/format-money';
 
-describe('formatContractMoney', () => {
+describe('formatMoney', () => {
   it('prints a stored amount as dollars with separators and cents', () => {
-    expect(formatContractMoney('12500')).toBe('$12,500.00');
-    expect(formatContractMoney('12500.00')).toBe('$12,500.00');
-    expect(formatContractMoney('1234567.5')).toBe('$1,234,567.50');
-    expect(formatContractMoney('0.99')).toBe('$0.99');
+    expect(formatMoney('12500')).toBe('$12,500.00');
+    expect(formatMoney('12500.00')).toBe('$12,500.00');
+    expect(formatMoney('1234567.5')).toBe('$1,234,567.50');
+    expect(formatMoney('0.99')).toBe('$0.99');
   });
 
   it('prints a dash for no amount', () => {
-    expect(formatContractMoney(null)).toBe('—');
-    expect(formatContractMoney('')).toBe('—');
+    expect(formatMoney(null)).toBe('—');
+    expect(formatMoney('')).toBe('—');
   });
 });
 
@@ -42,6 +44,23 @@ describe('contractAmountError', () => {
     for (const bad of ['1,200', '$1200', '1200.505', '-5', '12 00', 'abc']) {
       expect(contractAmountError(bad)).toBe(CONTRACT_AMOUNT_MESSAGE);
     }
+  });
+});
+
+describe('amounts the column cannot hold', () => {
+  it('accepts ten digits before the point, the most numeric(12,2) holds', () => {
+    expect(contractAmountError('9999999999.99')).toBeNull();
+    expect(contractAmountIssue('9999999999')).toBeNull();
+  });
+
+  it('refuses an eleventh digit with a message about size, not about commas', () => {
+    expect(contractAmountError('10000000000')).toBe(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+    expect(contractAmountError('12345678901.50')).toBe(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+  });
+
+  it('the strict check (the server\'s) also refuses an empty string', () => {
+    expect(contractAmountIssue('')).toBe(CONTRACT_AMOUNT_MESSAGE);
+    expect(contractAmountError('')).toBeNull();
   });
 });
 
@@ -74,6 +93,13 @@ describe('dates', () => {
   it("gives the community's today, not UTC's", () => {
     // 02:30 UTC on the 2nd is still the evening of the 1st in Florida.
     expect(todayInTimeZone('America/New_York', new Date('2026-12-02T02:30:00Z'))).toBe('2026-12-01');
+  });
+
+  it('a stored time zone Intl does not know falls back and does not throw', () => {
+    // Without the fallback both of these throw RangeError: Invalid time zone.
+    expect(formatContractDateTime('2026-12-12T22:00:00.000Z', 'Not/A_Zone')).toBe('Dec 12, 2026, 5:00 PM EST');
+    expect(todayInTimeZone('Not/A_Zone', new Date('2026-12-02T02:30:00Z'))).toBe('2026-12-01');
+    expect(todayInTimeZone('', new Date('2026-12-02T02:30:00Z'))).toBe('2026-12-01');
   });
 
   it('counts the time left in calendar days', () => {

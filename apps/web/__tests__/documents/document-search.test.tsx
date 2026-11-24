@@ -5,7 +5,7 @@
  * initialQuery auto-search ref guard. Data fetching lives in
  * `useDocumentSearch`. These tests mock the hook and assert the presenter
  * wiring (form submit / Load more / list render / error / disabled /
- * initialQuery-once). Mirrors __tests__/contracts/contract-table.test.tsx.
+ * initialQuery-once). Mirrors __tests__/contracts/contracts-list-page.test.tsx.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';

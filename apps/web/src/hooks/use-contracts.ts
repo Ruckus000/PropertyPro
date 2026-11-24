@@ -91,7 +91,8 @@ export interface CreateContractInput {
   complianceChecklistItemId?: number | null;
 }
 
-export type UpdateContractInput = CreateContractInput & { id: number };
+/** Only the fields being changed: the API updates, and audits, exactly what it is sent. */
+export type UpdateContractInput = Partial<CreateContractInput> & { id: number };
 
 export interface AddBidInput {
   contractId: number;

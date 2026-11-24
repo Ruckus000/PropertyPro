@@ -15,8 +15,9 @@
 // geometry (content column 327px):
 //   finance/recent-payments      490px table in a 325px box, no scroller  → 165px unreachable
 //   emergency/BroadcastHistory   518px table in a 325px box, no scroller  → 193px unreachable
-//   contracts/BidTracker         437px table, no wrapper at all           → bleeds out of the card
-//   contracts/ContractTable     1552px table, scroller present, tabIndex -1 → keyboard-unreachable
+//   contracts' bid tracker       437px table, no wrapper at all           → bleeds out of the card
+//   contracts' list table       1552px table, scroller present, tabIndex -1 → keyboard-unreachable
+//   (both contracts components are gone: the list and bids tables are on the `Table` primitive)
 //
 // Deliberately NOT enforced here: unprefixed `grid-cols-N`, and `truncate`
 // without `min-w-0`. Both are guesses about LAYOUT inferred from TEXT —

@@ -42,7 +42,10 @@ import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
 import {
   CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_AMOUNT_TOO_LARGE_MESSAGE,
   CONTRACT_END_BEFORE_START_MESSAGE,
+  CONTRACT_TITLE_REQUIRED_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
 } from '../../src/lib/contracts/contract-rules';
 
 const {
@@ -518,6 +521,59 @@ describe('contracts route (runRoute)', () => {
       expect(createContractForCommunityMock).not.toHaveBeenCalled();
     });
 
+    it('refuses an amount numeric(12,2) cannot hold with a 400 that says so, and accepts the largest it can', async () => {
+      const tooLarge = await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-01-01',
+          contractValue: '10000000000',
+        }),
+      );
+      expect(tooLarge.status).toBe(400);
+      expect(await tooLarge.text()).toContain(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+      expect(createContractForCommunityMock).not.toHaveBeenCalled();
+
+      const largest = await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-01-01',
+          contractValue: '9999999999.99',
+        }),
+      );
+      expect(largest.status).toBe(200);
+    });
+
+    it('refuses a title or vendor name made only of spaces, naming the field, and stores names trimmed', async () => {
+      const blankTitle = await POST(
+        jsonReq('POST', { communityId: 42, title: '   ', vendorName: 'A', startDate: '2026-01-01' }),
+      );
+      expect(blankTitle.status).toBe(400);
+      expect(((await blankTitle.json()) as { error: { message: string } }).error.message).toBe(
+        CONTRACT_TITLE_REQUIRED_MESSAGE,
+      );
+
+      const blankVendor = await POST(
+        jsonReq('POST', { communityId: 42, title: 'T', vendorName: ' \t ', startDate: '2026-01-01' }),
+      );
+      expect(blankVendor.status).toBe(400);
+      expect(((await blankVendor.json()) as { error: { message: string } }).error.message).toBe(
+        CONTRACT_VENDOR_REQUIRED_MESSAGE,
+      );
+      expect(createContractForCommunityMock).not.toHaveBeenCalled();
+
+      await POST(
+        jsonReq('POST', { communityId: 42, title: '  Roof  ', vendorName: ' RoofCo ', startDate: '2026-01-01' }),
+      );
+      expect(createContractForCommunityMock).toHaveBeenCalledWith(
+        SCOPED,
+        expect.objectContaining({ title: 'Roof', vendorName: 'RoofCo' }),
+      );
+    });
+
     it('refuses an end date before the start date, with the stated message', async () => {
       const res = await POST(
         jsonReq('POST', {
@@ -723,6 +779,36 @@ describe('contracts route (runRoute)', () => {
       expect(createContractBidForCommunityMock).not.toHaveBeenCalled();
     });
 
+    it('refuses a bid amount numeric(12,2) cannot hold, and a vendor name made only of spaces', async () => {
+      getContractByIdMock.mockResolvedValue({ id: 10, communityId: 42 });
+      const tooLarge = await POST(
+        jsonReq('POST', {
+          action: 'add_bid',
+          communityId: 42,
+          contractId: 10,
+          vendorName: 'BidCo',
+          bidAmount: '12345678901.00',
+        }),
+      );
+      expect(tooLarge.status).toBe(400);
+      expect(await tooLarge.text()).toContain(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+
+      const blankVendor = await POST(
+        jsonReq('POST', {
+          action: 'add_bid',
+          communityId: 42,
+          contractId: 10,
+          vendorName: '   ',
+          bidAmount: '100',
+        }),
+      );
+      expect(blankVendor.status).toBe(400);
+      expect(((await blankVendor.json()) as { error: { message: string } }).error.message).toBe(
+        CONTRACT_VENDOR_REQUIRED_MESSAGE,
+      );
+      expect(createContractBidForCommunityMock).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for a bid against a non-existent contract', async () => {
       getContractByIdMock.mockResolvedValue(null);
       const res = await POST(
@@ -820,6 +906,32 @@ describe('contracts route (runRoute)', () => {
       expect(res.status).toBe(400);
       expect(await res.text()).toContain(CONTRACT_AMOUNT_MESSAGE);
       expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses an amount numeric(12,2) cannot hold', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, contractValue: '10000000000' }));
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a title or vendor name made only of spaces, naming the field, and stores names trimmed', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const blankTitle = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, title: '   ' }));
+      expect(blankTitle.status).toBe(400);
+      expect(((await blankTitle.json()) as { error: { message: string } }).error.message).toBe(
+        CONTRACT_TITLE_REQUIRED_MESSAGE,
+      );
+      const blankVendor = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, vendorName: '  ' }));
+      expect(blankVendor.status).toBe(400);
+      expect(((await blankVendor.json()) as { error: { message: string } }).error.message).toBe(
+        CONTRACT_VENDOR_REQUIRED_MESSAGE,
+      );
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+
+      await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, title: '  Roof  ' }));
+      expect(updateContractByIdMock).toHaveBeenCalledWith(SCOPED, 1, { title: 'Roof' });
     });
 
     it('stores the bidding-close time as the instant it was sent, and audits the text', async () => {

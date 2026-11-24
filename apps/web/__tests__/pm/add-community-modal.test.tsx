@@ -7,7 +7,7 @@
  * submit → Stripe EmbeddedCheckout handoff, and the preserved error literal.
  *
  * Mirrors the container/presenter test style of
- * `__tests__/contracts/contract-table.test.tsx`.
+ * `__tests__/contracts/contracts-list-page.test.tsx`.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';

@@ -49,7 +49,11 @@ import {
 } from '../../src/components/contracts/contract-form';
 import {
   CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_AMOUNT_TOO_LARGE_MESSAGE,
+  CONTRACT_CLOSING_TIME_MESSAGE,
   CONTRACT_END_BEFORE_START_MESSAGE,
+  CONTRACT_TITLE_REQUIRED_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
 } from '../../src/lib/contracts/contract-rules';
 
 const TZ = 'America/New_York';
@@ -115,7 +119,7 @@ describe('ContractForm', () => {
       expect(new Date('2026-12-12T22:00:00.000Z').getTimezoneOffset()).toBe(-540);
     });
 
-    it('opening Edit and saving without touching the time sends back exactly the stored time', async () => {
+    it('opening Edit and saving another field does not send the closing time at all, so it cannot move', async () => {
       renderEdit();
       // The community's wall clock (EST), not UTC's digits and not Tokyo's.
       expect(screen.getByLabelText('Bidding closes at')).toHaveValue('2026-12-12T17:00');
@@ -124,18 +128,34 @@ describe('ContractForm', () => {
       await save('Save changes');
 
       expect(h.update).toHaveBeenCalledTimes(1);
-      expect(h.update.mock.calls[0]![0].biddingClosesAt).toBe(STORED_CLOSE);
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, title: 'Roof replacement (phase 1)' });
     });
 
-    it('a second edit-and-save still does not move it', async () => {
-      const first = renderEdit();
+    it('typing the same time back in is not a change either (the field cannot show the stored seconds)', async () => {
+      renderEdit();
+      type('Bidding closes at', '2026-12-13T08:00');
+      type('Bidding closes at', '2026-12-12T17:00');
       await save('Save changes');
-      const saved = h.update.mock.calls[0]![0].biddingClosesAt as string;
-      first.unmount();
+      expect(h.update).not.toHaveBeenCalled();
+    });
 
-      renderEdit({ biddingClosesAt: saved });
+    it('a time the field accepts but that is not a real one (a six-digit year) gets a message, and nothing is sent', async () => {
+      renderEdit();
+      type('Bidding closes at', '202600-01-01T10:00');
+      // jsdom kept the value: the form really was asked to convert it.
+      expect(screen.getByLabelText('Bidding closes at')).toHaveValue('202600-01-01T10:00');
       await save('Save changes');
-      expect(h.update.mock.calls[1]![0].biddingClosesAt).toBe(STORED_CLOSE);
+
+      expect(screen.getByRole('alert')).toHaveTextContent(CONTRACT_CLOSING_TIME_MESSAGE);
+      expect(screen.getByLabelText('Bidding closes at')).toHaveAttribute('aria-invalid', 'true');
+      expect(h.update).not.toHaveBeenCalled();
+      expect(h.router.push).not.toHaveBeenCalled();
+    });
+
+    it('a stored time zone Intl does not know does not crash the form', () => {
+      render(<ContractForm communityId={42} timeZone="Not/A_Zone" contract={STORED} />);
+      // Falls back to Eastern time, as the other zoned helpers do.
+      expect(screen.getByLabelText('Bidding closes at')).toHaveValue('2026-12-12T17:00');
     });
 
     it("a new time is read in the community's time zone", async () => {
@@ -143,7 +163,8 @@ describe('ContractForm', () => {
       type('Bidding closes at', '2026-12-15T09:30');
       await save('Save changes');
       // 9:30 am EST is 14:30 UTC.
-      expect(h.update.mock.calls[0]![0].biddingClosesAt).toBe('2026-12-15T14:30:00.000Z');
+      // And it is the only field sent: in the audit trail the change stands alone.
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, biddingClosesAt: '2026-12-15T14:30:00.000Z' });
     });
 
     it('clearing the field clears the time', async () => {
@@ -184,6 +205,29 @@ describe('ContractForm', () => {
       expect(h.create.mock.calls[0]![0].contractValue).toBe('1200');
     });
 
+    it('an amount the column cannot hold: a message about its size, and nothing is sent', async () => {
+      renderNew();
+      fillRequired();
+      type('Contract value ($)', '10000000000');
+      await save();
+
+      expect(screen.getByRole('alert')).toHaveTextContent(CONTRACT_AMOUNT_TOO_LARGE_MESSAGE);
+      expect(h.create).not.toHaveBeenCalled();
+    });
+
+    it('a title or vendor name made only of spaces: a message naming the field, and nothing is sent', async () => {
+      renderNew();
+      fillRequired();
+      type(/^Title/, '   ');
+      type(/^Vendor name/, '  ');
+      await save();
+
+      const alerts = screen.getAllByRole('alert').map((a) => a.textContent);
+      expect(alerts).toEqual([CONTRACT_TITLE_REQUIRED_MESSAGE, CONTRACT_VENDOR_REQUIRED_MESSAGE]);
+      expect(screen.getByLabelText(/^Title/)).toHaveAttribute('aria-invalid', 'true');
+      expect(h.create).not.toHaveBeenCalled();
+    });
+
     it('an end date before the start date: the stated message, and nothing is sent', async () => {
       renderNew();
       fillRequired();
@@ -222,7 +266,24 @@ describe('ContractForm', () => {
       expect(screen.getByLabelText('Status')).toHaveTextContent('Expired');
       pickStatus('Terminated');
       await save('Save changes');
-      expect(h.update.mock.calls[0]![0].status).toBe('terminated');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, status: 'terminated' });
+    });
+
+    it('a stored status that is not one of the four is shown as it is and never rewritten by a save', async () => {
+      renderEdit({ status: 'archived' });
+      expect(screen.getByLabelText('Status')).toHaveTextContent('archived');
+      expect(screen.getByLabelText('Status')).not.toHaveTextContent('Active');
+
+      type(/^Title/, 'Renamed');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, title: 'Renamed' });
+    });
+
+    it('an unknown stored status is replaced only when the manager chooses another', async () => {
+      renderEdit({ status: 'archived' });
+      pickStatus('Terminated');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, status: 'terminated' });
     });
 
     it('the note field appears only once the conflict box is ticked, and is saved', async () => {
@@ -247,7 +308,8 @@ describe('ContractForm', () => {
       await userEvent.click(screen.getByLabelText('Conflict of interest declared'));
       await save('Save changes');
 
-      expect(h.update.mock.calls[0]![0]).toMatchObject({
+      expect(h.update.mock.calls[0]![0]).toEqual({
+        id: 7,
         conflictOfInterest: false,
         conflictOfInterestNote: null,
       });
@@ -283,11 +345,23 @@ describe('ContractForm', () => {
       expect(h.router.refresh).toHaveBeenCalled();
     });
 
-    it('an edit sends the id and lands on the contract, not the list', async () => {
+    it('an edit that changes nothing sends nothing, and goes back to the contract', async () => {
       renderEdit();
       await save('Save changes');
 
-      expect(h.update.mock.calls[0]![0]).toMatchObject({ id: 7, title: 'Roof replacement', documentId: 100 });
+      expect(h.update).not.toHaveBeenCalled();
+      expect(h.create).not.toHaveBeenCalled();
+      await waitFor(() => expect(h.router.push).toHaveBeenCalledWith('/contracts/7?communityId=42'));
+    });
+
+    it('an edit sends the id and only the fields that changed, then lands on the contract', async () => {
+      renderEdit();
+      type('End date', '2027-12-31');
+      type('Linked Document ID', '');
+      await save('Save changes');
+
+      expect(h.update).toHaveBeenCalledTimes(1);
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, endDate: '2027-12-31', documentId: null });
       await waitFor(() => expect(h.router.push).toHaveBeenCalledWith('/contracts/7?communityId=42'));
       expect(h.create).not.toHaveBeenCalled();
     });

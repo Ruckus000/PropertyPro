@@ -11,18 +11,25 @@
  * "Bidding closes at" is a wall-clock time in the COMMUNITY's time zone, not
  * the browser's: it is converted with the zoned helpers in both directions,
  * and a time the manager did not touch is sent back exactly as it was stored.
+ *
+ * Edit sends only the fields that differ from the loaded contract, and sends
+ * nothing when none do.
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateContract, useUpdateContract, type CreateContractInput } from '@/hooks/use-contracts';
 import {
+  CONTRACT_CLOSING_TIME_MESSAGE,
   CONTRACT_END_BEFORE_START_MESSAGE,
   CONTRACT_STATUS,
+  CONTRACT_TITLE_REQUIRED_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
   CONTRACT_STATUSES,
   contractAmountError,
   isEndBeforeStart,
   type ContractStatus,
 } from '@/lib/contracts/contract-rules';
+import { resolveTimezone } from '@/lib/utils/timezone';
 import { utcDateToWallClockValue, wallClockValueToUtcIso } from '@/lib/utils/zoned-datetime';
 import { timeZoneLabel } from '@/components/emergency/broadcast-status';
 import { Button } from '@/components/ui/button';
@@ -86,29 +93,107 @@ function isStatus(value: string): value is ContractStatus {
   return (CONTRACT_STATUSES as readonly string[]).includes(value);
 }
 
-export function ContractForm({ communityId, timeZone, contract }: ContractFormProps) {
+/** The form's fields as typed. */
+interface FormFields {
+  title: string;
+  vendorName: string;
+  description: string;
+  contractValue: string;
+  startDate: string;
+  endDate: string;
+  /** Null: the stored status is not one of the four, and has not been changed. */
+  status: ContractStatus | null;
+  /** `datetime-local` text in the community's time zone. */
+  biddingClosesAt: string;
+  conflictOfInterest: boolean;
+  conflictNote: string;
+  documentId: string;
+  checklistItemId: string;
+}
+
+function fieldsFromContract(contract: ContractFormValues | undefined, timeZone: string): FormFields {
+  return {
+    title: contract?.title ?? '',
+    vendorName: contract?.vendorName ?? '',
+    description: contract?.description ?? '',
+    contractValue: contract?.contractValue ?? '',
+    startDate: contract?.startDate ?? '',
+    endDate: contract?.endDate ?? '',
+    // A new contract starts Active. A stored status this form does not know is
+    // left alone: never rewritten to Active just because the form was saved.
+    status: contract ? (isStatus(contract.status) ? contract.status : null) : 'active',
+    biddingClosesAt: closingTimeToInput(contract?.biddingClosesAt ?? null, timeZone),
+    conflictOfInterest: contract?.conflictOfInterest ?? false,
+    conflictNote: contract?.conflictOfInterestNote ?? '',
+    documentId: contract?.documentId != null ? String(contract.documentId) : '',
+    checklistItemId:
+      contract?.complianceChecklistItemId != null ? String(contract.complianceChecklistItemId) : '',
+  };
+}
+
+/** The fields as the API takes them. Throws when the closing time cannot be read. */
+function toPayload(fields: FormFields, timeZone: string, storedClosesAt: string | null): CreateContractInput {
+  return {
+    title: fields.title.trim(),
+    vendorName: fields.vendorName.trim(),
+    description: fields.description.trim() || null,
+    contractValue: fields.contractValue.trim() || null,
+    startDate: fields.startDate,
+    endDate: fields.endDate || null,
+    ...(fields.status ? { status: fields.status } : {}),
+    biddingClosesAt: closingTimeFromInput(fields.biddingClosesAt, timeZone, storedClosesAt),
+    conflictOfInterest: fields.conflictOfInterest,
+    // The note belongs to a declared conflict; unticking the box clears it.
+    conflictOfInterestNote: fields.conflictOfInterest ? fields.conflictNote.trim() || null : null,
+    documentId: fields.documentId !== '' ? Number(fields.documentId) : null,
+    complianceChecklistItemId: fields.checklistItemId !== '' ? Number(fields.checklistItemId) : null,
+  };
+}
+
+/**
+ * The fields of `next` that differ from `loaded`. An edit sends only these, so
+ * the audit entry for a save lists what the manager changed and nothing else:
+ * a new bidding-close time stands alone, not among twelve unchanged fields.
+ */
+export function changedFields(
+  next: CreateContractInput,
+  loaded: CreateContractInput,
+): Partial<CreateContractInput> {
+  const changes: Record<string, unknown> = {};
+  for (const key of Object.keys(next) as Array<keyof CreateContractInput>) {
+    if (next[key] !== loaded[key]) changes[key] = next[key];
+  }
+  return changes as Partial<CreateContractInput>;
+}
+
+export function ContractForm({ communityId, timeZone: storedTimeZone, contract }: ContractFormProps) {
   const router = useRouter();
   const isEdit = contract !== undefined;
+  // A stored zone `Intl` does not know must not crash the page.
+  const timeZone = resolveTimezone(storedTimeZone);
   const storedClosesAt = contract?.biddingClosesAt ?? null;
+  // The contract as it was loaded: what an edit is compared against.
+  const [loaded] = useState(() => fieldsFromContract(contract, timeZone));
 
-  const [title, setTitle] = useState(contract?.title ?? '');
-  const [vendorName, setVendorName] = useState(contract?.vendorName ?? '');
-  const [description, setDescription] = useState(contract?.description ?? '');
-  const [contractValue, setContractValue] = useState(contract?.contractValue ?? '');
-  const [startDate, setStartDate] = useState(contract?.startDate ?? '');
-  const [endDate, setEndDate] = useState(contract?.endDate ?? '');
-  const [status, setStatus] = useState<ContractStatus>(
-    contract && isStatus(contract.status) ? contract.status : 'active',
-  );
-  const [biddingClosesAt, setBiddingClosesAt] = useState(closingTimeToInput(storedClosesAt, timeZone));
-  const [conflictOfInterest, setConflictOfInterest] = useState(contract?.conflictOfInterest ?? false);
-  const [conflictNote, setConflictNote] = useState(contract?.conflictOfInterestNote ?? '');
-  const [documentId, setDocumentId] = useState(contract?.documentId != null ? String(contract.documentId) : '');
-  const [checklistItemId, setChecklistItemId] = useState(
-    contract?.complianceChecklistItemId != null ? String(contract.complianceChecklistItemId) : '',
-  );
-  const [valueError, setValueError] = useState<string | null>(null);
-  const [endError, setEndError] = useState<string | null>(null);
+  const [title, setTitle] = useState(loaded.title);
+  const [vendorName, setVendorName] = useState(loaded.vendorName);
+  const [description, setDescription] = useState(loaded.description);
+  const [contractValue, setContractValue] = useState(loaded.contractValue);
+  const [startDate, setStartDate] = useState(loaded.startDate);
+  const [endDate, setEndDate] = useState(loaded.endDate);
+  const [status, setStatus] = useState<ContractStatus | null>(loaded.status);
+  const [biddingClosesAt, setBiddingClosesAt] = useState(loaded.biddingClosesAt);
+  const [conflictOfInterest, setConflictOfInterest] = useState(loaded.conflictOfInterest);
+  const [conflictNote, setConflictNote] = useState(loaded.conflictNote);
+  const [documentId, setDocumentId] = useState(loaded.documentId);
+  const [checklistItemId, setChecklistItemId] = useState(loaded.checklistItemId);
+  const [errors, setErrors] = useState<{
+    title?: string;
+    vendorName?: string;
+    value?: string;
+    end?: string;
+    closes?: string;
+  }>({});
 
   const createMutation = useCreateContract(communityId);
   const updateMutation = useUpdateContract(communityId);
@@ -119,34 +204,50 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const value = contractValue.trim();
-    const valueProblem = contractAmountError(value);
-    const endProblem = isEndBeforeStart(startDate, endDate) ? CONTRACT_END_BEFORE_START_MESSAGE : null;
-    setValueError(valueProblem);
-    setEndError(endProblem);
-    if (valueProblem || endProblem) return;
-
-    const payload: CreateContractInput = {
-      title: title.trim(),
-      vendorName: vendorName.trim(),
-      description: description.trim() || null,
-      contractValue: value || null,
+    const fields: FormFields = {
+      title,
+      vendorName,
+      description,
+      contractValue,
       startDate,
-      endDate: endDate || null,
+      endDate,
       status,
-      biddingClosesAt: closingTimeFromInput(biddingClosesAt, timeZone, storedClosesAt),
+      biddingClosesAt,
       conflictOfInterest,
-      // The note belongs to a declared conflict; unticking the box clears it.
-      conflictOfInterestNote: conflictOfInterest ? conflictNote.trim() || null : null,
-      documentId: documentId !== '' ? Number(documentId) : null,
-      complianceChecklistItemId: checklistItemId !== '' ? Number(checklistItemId) : null,
+      conflictNote,
+      documentId,
+      checklistItemId,
     };
+
+    const problems: typeof errors = {};
+    // `required` lets a name made only of spaces through; the server would refuse it.
+    if (title.trim() === '') problems.title = CONTRACT_TITLE_REQUIRED_MESSAGE;
+    if (vendorName.trim() === '') problems.vendorName = CONTRACT_VENDOR_REQUIRED_MESSAGE;
+    const valueProblem = contractAmountError(contractValue.trim());
+    if (valueProblem) problems.value = valueProblem;
+    if (isEndBeforeStart(startDate, endDate)) problems.end = CONTRACT_END_BEFORE_START_MESSAGE;
+
+    let payload: CreateContractInput | null = null;
+    let changes: Partial<CreateContractInput> = {};
+    try {
+      payload = toPayload(fields, timeZone, storedClosesAt);
+      if (isEdit) changes = changedFields(payload, toPayload(loaded, timeZone, storedClosesAt));
+    } catch {
+      // A date the field accepts but that is not a real wall-clock time (a six-digit year).
+      problems.closes = CONTRACT_CLOSING_TIME_MESSAGE;
+    }
+
+    setErrors(problems);
+    if (payload === null || Object.keys(problems).length > 0) return;
 
     let savedId: number;
     try {
       if (isEdit) {
-        await updateMutation.mutateAsync({ id: contract.id, ...payload });
         savedId = contract.id;
+        // Nothing changed: nothing to save, and nothing to put in the audit trail.
+        if (Object.keys(changes).length > 0) {
+          await updateMutation.mutateAsync({ id: contract.id, ...changes });
+        }
       } else {
         savedId = (await createMutation.mutateAsync(payload)).id;
       }
@@ -170,7 +271,14 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
             maxLength={500}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
+            aria-invalid={errors.title ? true : undefined}
+            aria-describedby={errors.title ? 'contract-title-error' : undefined}
           />
+          {errors.title ? (
+            <p id="contract-title-error" role="alert" className={ERROR}>
+              {errors.title}
+            </p>
+          ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="vendor-name">
@@ -182,7 +290,14 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
             maxLength={500}
             value={vendorName}
             onChange={(event) => setVendorName(event.target.value)}
+            aria-invalid={errors.vendorName ? true : undefined}
+            aria-describedby={errors.vendorName ? 'vendor-name-error' : undefined}
           />
+          {errors.vendorName ? (
+            <p id="vendor-name-error" role="alert" className={ERROR}>
+              {errors.vendorName}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -205,20 +320,21 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
             placeholder="0.00"
             value={contractValue}
             onChange={(event) => setContractValue(event.target.value)}
-            aria-invalid={valueError ? true : undefined}
-            aria-describedby={valueError ? 'contract-value-error' : undefined}
+            aria-invalid={errors.value ? true : undefined}
+            aria-describedby={errors.value ? 'contract-value-error' : undefined}
           />
-          {valueError ? (
+          {errors.value ? (
             <p id="contract-value-error" role="alert" className={ERROR}>
-              {valueError}
+              {errors.value}
             </p>
           ) : null}
         </div>
         <div className="space-y-2">
           <Label htmlFor="contract-status">Status</Label>
-          <Select value={status} onValueChange={(next) => setStatus(next as ContractStatus)}>
-            <SelectTrigger id="contract-status">
-              <SelectValue />
+          <Select value={status ?? ''} onValueChange={(next) => setStatus(next as ContractStatus)}>
+            <SelectTrigger id="contract-status" aria-describedby="contract-status-hint">
+              {/* An unknown stored status is shown as it is written, until another is chosen. */}
+              <SelectValue placeholder={contract?.status} />
             </SelectTrigger>
             <SelectContent>
               {CONTRACT_STATUSES.map((option) => (
@@ -228,7 +344,11 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
               ))}
             </SelectContent>
           </Select>
-          <p className={HINT}>Use Terminated to retire a contract; contracts are not deleted.</p>
+          <p id="contract-status-hint" className={HINT}>
+            {status === null
+              ? 'This status is not one of the four. It is kept as it is unless you choose another.'
+              : 'Use Terminated to retire a contract; contracts are not deleted.'}
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="start-date">
@@ -249,12 +369,12 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
             type="date"
             value={endDate}
             onChange={(event) => setEndDate(event.target.value)}
-            aria-invalid={endError ? true : undefined}
-            aria-describedby={endError ? 'end-date-error' : undefined}
+            aria-invalid={errors.end ? true : undefined}
+            aria-describedby={errors.end ? 'end-date-error' : undefined}
           />
-          {endError ? (
+          {errors.end ? (
             <p id="end-date-error" role="alert" className={ERROR}>
-              {endError}
+              {errors.end}
             </p>
           ) : null}
         </div>
@@ -267,8 +387,14 @@ export function ContractForm({ communityId, timeZone, contract }: ContractFormPr
           type="datetime-local"
           value={biddingClosesAt}
           onChange={(event) => setBiddingClosesAt(event.target.value)}
-          aria-describedby="bidding-closes-hint"
+          aria-invalid={errors.closes ? true : undefined}
+          aria-describedby={errors.closes ? 'bidding-closes-error bidding-closes-hint' : 'bidding-closes-hint'}
         />
+        {errors.closes ? (
+          <p id="bidding-closes-error" role="alert" className={ERROR}>
+            {errors.closes}
+          </p>
+        ) : null}
         <p id="bidding-closes-hint" className={HINT}>
           Bids stay sealed until this time. Time zone: {timeZoneLabel(timeZone)}.
         </p>
