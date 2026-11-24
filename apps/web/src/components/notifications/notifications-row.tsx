@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { cn } from '@/lib/utils';
 import { useMarkRead, type NotificationItem } from '@/hooks/use-notifications';
+import { formatRelative } from './notification-list-item';
 
 const CATEGORY_LABEL: Record<string, string> = {
   announcement: 'Announcement',
@@ -20,25 +21,14 @@ const CATEGORY_LABEL: Record<string, string> = {
   system: 'System',
 };
 
-function formatRelative(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 interface NotificationsRowProps {
   notification: NotificationItem;
   communityId: number;
+  /** Called once the server has accepted the mark-read for this row. */
+  onMarkedRead?: (id: number) => void;
 }
 
-export function NotificationsRow({ notification, communityId }: NotificationsRowProps) {
+export function NotificationsRow({ notification, communityId, onMarkedRead }: NotificationsRowProps) {
   const router = useRouter();
   const markRead = useMarkRead();
   const isUnread = notification.readAt === null;
@@ -46,7 +36,10 @@ export function NotificationsRow({ notification, communityId }: NotificationsRow
 
   function handleClick() {
     if (isUnread) {
-      markRead.mutate({ communityId, ids: [notification.id] });
+      markRead.mutate(
+        { communityId, ids: [notification.id] },
+        { onSuccess: () => onMarkedRead?.(notification.id) },
+      );
     }
     if (notification.actionUrl) {
       router.push(notification.actionUrl);

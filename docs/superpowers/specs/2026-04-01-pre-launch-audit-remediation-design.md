@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX "notifications_dedup_unique"
 
 **Files:**
 - `apps/web/src/components/notifications/notification-dropdown.tsx`
-- `apps/web/src/app/(authenticated)/notifications/notifications-page-client.tsx`
+- `apps/web/src/components/notifications/notifications-page-client.tsx`
 
 Both components silently fail when queries error. Add `AlertBanner` (from `@/components/shared/alert-banner`) when `isError` is true on the notifications query.
 
@@ -63,7 +63,7 @@ Replace inline "You're all caught up" text with `EmptyState` component from `@/c
 
 ### 1e. Accessibility fixes
 
-**File:** `apps/web/src/app/(authenticated)/notifications/notifications-page-client.tsx`
+**File:** `apps/web/src/components/notifications/notifications-page-client.tsx`
 - Add `aria-pressed={isActive}` to category filter buttons
 
 **File:** `apps/web/src/components/notifications/notification-list-item.tsx`

@@ -72,6 +72,17 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
     setAccumulated([]);
   }
 
+  // Rows from earlier pages are a snapshot the refetch never reaches, so a
+  // mark-read on one of them is applied here.
+  function handleMarkedRead(id: number) {
+    const readAt = new Date().toISOString();
+    setAccumulated((rows) =>
+      unreadOnly
+        ? rows.filter((n) => n.id !== id)
+        : rows.map((n) => (n.id === id ? { ...n, readAt } : n)),
+    );
+  }
+
   function handleLoadMore() {
     if (!nextCursor) return;
     setAccumulated(allItems);
@@ -106,7 +117,12 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
     body = (
       <RecordList>
         {allItems.map((n) => (
-          <NotificationsRow key={n.id} notification={n} communityId={communityId} />
+          <NotificationsRow
+            key={n.id}
+            notification={n}
+            communityId={communityId}
+            onMarkedRead={handleMarkedRead}
+          />
         ))}
       </RecordList>
     );
@@ -126,7 +142,7 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
         />
       }
     >
-      <Section aria-busy={isLoading || isFetching}>
+      <Section aria-busy={isLoading || (isFetching && isPlaceholderData)}>
         <SectionToolbar
           filters={
             <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
@@ -152,7 +168,11 @@ export function NotificationsPageClient({ communityId }: NotificationsPageClient
                 </label>
                 <Button
                   variant="outline"
-                  onClick={() => markRead.mutate({ communityId, all: true })}
+                  // Back to the first page on success: earlier pages are a
+                  // snapshot and would keep saying "Unread".
+                  onClick={() =>
+                    markRead.mutate({ communityId, all: true }, { onSuccess: resetPagination })
+                  }
                   disabled={markRead.isPending}
                 >
                   Mark all read

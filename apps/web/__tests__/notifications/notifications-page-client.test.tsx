@@ -122,7 +122,7 @@ describe('NotificationsPageClient', () => {
     render(<NotificationsPageClient communityId={4} />);
     await user.click(screen.getByRole('button', { name: 'Mark all read' }));
     expect(mutate).toHaveBeenCalledTimes(1);
-    expect(mutate).toHaveBeenCalledWith({ communityId: 4, all: true });
+    expect(mutate).toHaveBeenCalledWith({ communityId: 4, all: true }, expect.anything());
   });
 
   it('disables Mark all read while the request is in flight', () => {
@@ -244,7 +244,7 @@ describe('NotificationsPageClient', () => {
     render(<NotificationsPageClient communityId={4} />);
     await user.click(screen.getByRole('button', { name: /Notice 1/ }));
     expect(mutate).toHaveBeenCalledTimes(1);
-    expect(mutate).toHaveBeenCalledWith({ communityId: 4, ids: [1] });
+    expect(mutate).toHaveBeenCalledWith({ communityId: 4, ids: [1] }, expect.anything());
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/announcements/1');
   });
@@ -262,8 +262,106 @@ describe('NotificationsPageClient', () => {
     useNotificationsMock.mockReturnValue(result({ data: page([item(5, { actionUrl: null })]) }));
     render(<NotificationsPageClient communityId={4} />);
     await user.click(screen.getByRole('button', { name: /Notice 5/ }));
-    expect(mutate).toHaveBeenCalledWith({ communityId: 4, ids: [5] });
+    expect(mutate).toHaveBeenCalledWith({ communityId: 4, ids: [5] }, expect.anything());
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('is not busy during a background refetch of the page already shown', () => {
+    useNotificationsMock.mockReturnValue(result({ data: page(two), isFetching: true }));
+    const { container } = render(<NotificationsPageClient communityId={4} />);
+    expect(container.querySelector('section')).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('is busy while a filter change still shows the previous rows', () => {
+    useNotificationsMock.mockReturnValue(
+      result({ data: page(two), isFetching: true, isPlaceholderData: true }),
+    );
+    const { container } = render(<NotificationsPageClient communityId={4} />);
+    expect(container.querySelector('section')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('after Mark all read on a second page, goes back to page one and no row says Unread', async () => {
+    const user = userEvent.setup();
+    let allRead = false;
+    const stamp = (items: NotificationItem[]) =>
+      allRead ? items.map((n) => ({ ...n, readAt: '2026-03-03T10:00:00.000Z' })) : items;
+    // The server refetch reaches only the page the hook is asked for.
+    useNotificationsMock.mockImplementation((_id: number, filters: NotificationFilters) =>
+      result({
+        data:
+          filters.cursor === 'cursor-2'
+            ? page(stamp([item(3), item(4)]))
+            : page(stamp([item(1), item(2)]), 'cursor-2'),
+      }),
+    );
+    mutate.mockImplementation((_payload: unknown, options?: { onSuccess?: () => void }) => {
+      allRead = true;
+      options?.onSuccess?.();
+    });
+    render(<NotificationsPageClient communityId={4} />);
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+
+    await user.click(screen.getByRole('button', { name: 'Mark all read' }));
+
+    expect(lastFilters().cursor).toBeUndefined();
+    const rows = screen.getAllByRole('listitem');
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row).not.toHaveTextContent('Unread');
+      expect(row).toHaveTextContent(/Read · /);
+    }
+  });
+
+  it('marks a link-less row from an earlier page read in place, and a second click sends nothing', async () => {
+    const user = userEvent.setup();
+    useNotificationsMock.mockImplementation((_id: number, filters: NotificationFilters) =>
+      result({
+        data:
+          filters.cursor === 'cursor-2'
+            ? page([item(3), item(4)])
+            : page([item(1, { actionUrl: null }), item(2)], 'cursor-2'),
+      }),
+    );
+    mutate.mockImplementation((_payload: unknown, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    render(<NotificationsPageClient communityId={4} />);
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    const row = () => screen.getAllByRole('listitem')[0]!;
+    expect(row()).toHaveTextContent(/Unread · /);
+
+    await user.click(screen.getByRole('button', { name: /Notice 1/ }));
+
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(row()).toHaveTextContent('Notice 1');
+    expect(row()).not.toHaveTextContent('Unread');
+    expect(screen.getAllByRole('listitem')).toHaveLength(4);
+
+    await user.click(screen.getByRole('button', { name: /Notice 1/ }));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('drops a row marked read from an earlier page when showing unread only', async () => {
+    const user = userEvent.setup();
+    useNotificationsMock.mockImplementation((_id: number, filters: NotificationFilters) =>
+      result({
+        data:
+          filters.cursor === 'cursor-2'
+            ? page([item(3), item(4)])
+            : page([item(1, { actionUrl: null }), item(2)], 'cursor-2'),
+      }),
+    );
+    mutate.mockImplementation((_payload: unknown, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    render(<NotificationsPageClient communityId={4} />);
+    await user.click(screen.getByRole('checkbox', { name: 'Unread only' }));
+    await user.click(screen.getByRole('button', { name: 'Load more' }));
+    await user.click(screen.getByRole('button', { name: /Notice 1/ }));
+    expect(screen.queryByText('Notice 1')).toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('has no axe violations with rows', async () => {
