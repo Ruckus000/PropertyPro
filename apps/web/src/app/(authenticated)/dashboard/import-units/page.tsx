@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/units/import-units-client.tsx
 /**
  * Import Units — bulk CSV import of a community's units.
  *

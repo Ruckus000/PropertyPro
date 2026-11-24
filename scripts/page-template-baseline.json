@@ -23,8 +23,6 @@
   "apps/web/src/app/(authenticated)/contracts/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/apartment/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/claim-root/page.tsx",
-  "apps/web/src/app/(authenticated)/dashboard/import-residents/page.tsx",
-  "apps/web/src/app/(authenticated)/dashboard/import-units/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/leases/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/move-in-out/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/overview/page.tsx",

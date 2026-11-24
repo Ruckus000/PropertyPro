@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/residents/import-residents-client.tsx
 /**
  * Import Residents Page — bulk CSV import wizard for community residents.
  *
