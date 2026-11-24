@@ -27,7 +27,7 @@ const CATEGORY_CONFIG: Record<
   system:       { icon: Bell,      iconClass: 'text-[var(--text-tertiary)]' },
 };
 
-function formatRelative(iso: string): string {
+export function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return 'just now';
