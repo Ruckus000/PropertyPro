@@ -7,7 +7,8 @@
 import type { ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { membershipMock, canWriteMock, getByIdMock } = vi.hoisted(() => ({
+const { membershipMock, canWriteMock, getByIdMock, listMock } = vi.hoisted(() => ({
+  listMock: vi.fn(),
   membershipMock: vi.fn(),
   canWriteMock: vi.fn(),
   getByIdMock: vi.fn(),
@@ -39,7 +40,7 @@ vi.mock('@/lib/db/access-control', () => ({
   requirePermission: () => undefined,
 }));
 vi.mock('@/lib/announcements/read-visibility', () => ({
-  listVisibleAnnouncements: async () => ({ rows: [], totalCount: 0 }),
+  listVisibleAnnouncements: listMock,
   getVisibleAnnouncementById: getByIdMock,
   formatAnnouncementAudienceLabel: (audience: string) => `label:${audience}`,
 }));
@@ -88,6 +89,18 @@ const propsOf = (element: unknown) => (element as ReactElement<Props>).props;
 function list(searchParams: Record<string, string> = {}) {
   return AnnouncementsPage({ searchParams: Promise.resolve(searchParams) }).then(propsOf);
 }
+/**
+ * The records stream inside a Suspense boundary, so the route's own return
+ * never runs them. Run the boundary's child and return what it hands the list.
+ */
+async function records(searchParams: Record<string, string>) {
+  const page = await list(searchParams);
+  const boundary = propsOf(page.children);
+  const child = boundary.children as ReactElement<Props> & {
+    type: (props: Props) => Promise<unknown>;
+  };
+  return propsOf(await child.type(child.props));
+}
 function detail() {
   return AnnouncementDetailRoute({
     params: Promise.resolve({ id: '17' }),
@@ -99,6 +112,7 @@ describe('announcements routes pick the view', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getByIdMock.mockResolvedValue(row);
+    listMock.mockResolvedValue({ rows: [], totalCount: 0 });
   });
 
   it('list: a resident gets the resident view, with no write, toggle or access sentence', async () => {
@@ -133,6 +147,32 @@ describe('announcements routes pick the view', () => {
     membershipMock.mockResolvedValue(manager);
     canWriteMock.mockReturnValue(true);
     expect((await list({ includeDeleted: 'true' })).deletedToggle).toMatchObject({ showing: true });
+  });
+
+  it('list: a non-admin asking for `includeDeleted=true` is not shown deleted rows', async () => {
+    membershipMock.mockResolvedValue(owner);
+    canWriteMock.mockReturnValue(false);
+
+    const props = await records({ includeDeleted: 'true' });
+    expect(props.showDeleted).toBe(false);
+    expect(listMock).toHaveBeenCalledWith(42, owner, { query: undefined, includeDeleted: false });
+  });
+
+  it('list: an admin asking for `includeDeleted=true` is shown them', async () => {
+    membershipMock.mockResolvedValue(manager);
+    canWriteMock.mockReturnValue(true);
+
+    const props = await records({ includeDeleted: 'true' });
+    expect(props.showDeleted).toBe(true);
+    expect(listMock).toHaveBeenCalledWith(42, manager, { query: undefined, includeDeleted: true });
+  });
+
+  it('list: a blank search is no search, so an empty list is not "nothing matches"', async () => {
+    membershipMock.mockResolvedValue(manager);
+    canWriteMock.mockReturnValue(true);
+
+    expect((await records({ q: '  ' })).searchQuery).toBeUndefined();
+    expect((await records({ q: ' pool ' })).searchQuery).toBe('pool');
   });
 
   it('detail: a resident gets the resident view, cannot manage, and is not told the audience', async () => {

@@ -24,7 +24,6 @@ const liveAnnouncement = {
   body: '<p>Inspectors arrive next Tuesday.</p>',
   audience: 'all',
   isPinned: false,
-  publishedBy: 'user-author',
   publishedAt: '2026-04-10T12:00:00.000Z',
   deletedAt: null,
 } as const;
@@ -36,7 +35,6 @@ const deletedAnnouncement = {
   body: '<p>Never mind.</p>',
   audience: 'all',
   isPinned: false,
-  publishedBy: 'user-author',
   publishedAt: '2026-04-08T12:00:00.000Z',
   deletedAt: '2026-04-11T09:00:00.000Z',
 } as const;
@@ -155,6 +153,14 @@ describe('AnnouncementList', () => {
     const pinned = screen.getByRole('heading', { name: 'Pinned' }).closest('section')!;
     expect(within(pinned).getByRole('link', { name: 'Pool rules' })).toBeInTheDocument();
     expect(within(pinned).queryByRole('link', { name: 'Roof inspection scheduled' })).not.toBeInTheDocument();
+  });
+
+  it('with no pinned posts there is one untitled group: the page title already says "Announcements"', () => {
+    renderList({ items: [liveAnnouncement] });
+
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Roof inspection scheduled' })).toBeInTheDocument();
+    expect(screen.getByText('Showing 1')).toBeInTheDocument();
   });
 
   it('marks board-only posts for every reader, so a board seat knows not to share them', () => {

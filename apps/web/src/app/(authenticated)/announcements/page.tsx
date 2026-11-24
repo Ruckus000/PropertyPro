@@ -156,7 +156,6 @@ async function AnnouncementRecords({
     audience: item.audience,
     isPinned: item.isPinned,
     publishedAt: item.publishedAt.toISOString(),
-    publishedBy: item.publishedBy,
     deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
   }));
 

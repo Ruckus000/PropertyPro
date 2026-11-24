@@ -24,7 +24,6 @@ export interface AnnouncementListItem {
   audience: string;
   isPinned: boolean;
   publishedAt: string | Date;
-  publishedBy: string;
   deletedAt: string | Date | null;
 }
 
@@ -115,13 +114,14 @@ function AnnouncementGroup({
   items,
   communityId,
 }: {
-  title: string;
+  /** Omitted when the list is one group: the page title already says what it is. */
+  title?: string;
   items: AnnouncementListItem[];
   communityId: number;
 }) {
   return (
     <Section>
-      <SectionHeader title={title} />
+      {title ? <SectionHeader title={title} /> : null}
       <RecordList>
         {items.map((item) => (
           <AnnouncementRow key={item.id} item={item} communityId={communityId} />
@@ -189,7 +189,7 @@ export function AnnouncementList({
       ) : null}
       {unpinned.length > 0 ? (
         <AnnouncementGroup
-          title={pinned.length > 0 ? 'Recent' : 'Announcements'}
+          title={pinned.length > 0 ? 'Recent' : undefined}
           items={unpinned}
           communityId={communityId}
         />

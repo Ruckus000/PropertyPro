@@ -61,15 +61,6 @@ export function AnnouncementAuthoringForm({
     }
   }
 
-  function handleCancel() {
-    if (announcement) {
-      router.push(`/announcements/${announcement.id}?communityId=${communityId}`);
-      return;
-    }
-
-    router.push(`/announcements?communityId=${communityId}`);
-  }
-
   return (
     <AnnouncementComposer
       communityType={communityType}
@@ -89,7 +80,7 @@ export function AnnouncementAuthoringForm({
       }
       isSubmitting={isSubmitting}
       submitLabel={announcement ? 'Save announcement' : 'Publish announcement'}
-      onCancel={handleCancel}
+      // No onCancel: the page header holds the one Cancel.
       onSubmit={handleSubmit}
     />
   );

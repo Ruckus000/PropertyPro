@@ -59,14 +59,14 @@ function staff(announcement = live, canManage = true, audienceLabel: string | un
   );
 }
 
-function resident(announcement = live, audienceLabel?: string) {
+function resident(announcement = live, audienceLabel?: string, canManage = false) {
   return render(
     <AnnouncementDetailPage
       view="resident"
       communityId={42}
       announcement={announcement}
       audienceLabel={audienceLabel}
-      canManage={false}
+      canManage={canManage}
     />,
   );
 }
@@ -128,6 +128,10 @@ describe('AnnouncementDetailPage', () => {
     expect(within(details).getByText('Owners only')).toBeInTheDocument();
     expect(within(details).getByText('Pinned')).toBeInTheDocument();
     expect(screen.getByText(about)).toBeInTheDocument();
+    // Said once: the line a resident reads above the message is not repeated for staff.
+    expect(screen.getAllByText(/April 10, 2026/)).toHaveLength(1);
+    expect(screen.getAllByText(/Owners only/)).toHaveLength(1);
+    expect(screen.queryByText(/^Pinned · Published/)).not.toBeInTheDocument();
   });
 
   it('tells a board-seat resident that a post is board-only, and says nothing of the audience otherwise', () => {
@@ -172,6 +176,37 @@ describe('AnnouncementDetailPage', () => {
       expect(deleteMutateAsync).toHaveBeenCalledWith({ id: 17 });
     });
     expect(routerMock.refresh).toHaveBeenCalled();
+    // An admin stays: the page now reads Deleted and offers Restore.
+    expect(routerMock.push).not.toHaveBeenCalled();
+  });
+
+  it('an author who is not an admin goes to the list after deleting, not to a page they can no longer open', async () => {
+    const user = userEvent.setup();
+    deleteMutateAsync.mockResolvedValueOnce({ id: 17, deleted: true });
+    resident(live, undefined, true);
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete announcement' }));
+
+    await waitFor(() => {
+      expect(routerMock.push).toHaveBeenCalledWith('/announcements?communityId=42');
+    });
+    expect(deleteMutateAsync).toHaveBeenCalledWith({ id: 17 });
+  });
+
+  it('a failed delete goes nowhere', async () => {
+    const user = userEvent.setup();
+    deleteMutateAsync.mockRejectedValueOnce(new Error('Not allowed.'));
+    resident(live, undefined, true);
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+    const dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete announcement' }));
+
+    await waitFor(() => expect(deleteMutateAsync).toHaveBeenCalled());
+    expect(routerMock.push).not.toHaveBeenCalled();
+    expect(routerMock.refresh).not.toHaveBeenCalled();
   });
 
   it('Restore restores the deleted announcement and refreshes', async () => {

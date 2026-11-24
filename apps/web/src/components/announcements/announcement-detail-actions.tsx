@@ -28,12 +28,18 @@ interface AnnouncementDetailActionsProps {
   communityId: number;
   announcementId: number;
   isDeleted: boolean;
+  /**
+   * The viewer will not be able to open the post once it is deleted (only
+   * admins can), so a successful delete goes to the list, not a 404.
+   */
+  leaveAfterDelete: boolean;
 }
 
 export function AnnouncementDetailActions({
   communityId,
   announcementId,
   isDeleted,
+  leaveAfterDelete,
 }: AnnouncementDetailActionsProps) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -44,6 +50,9 @@ export function AnnouncementDetailActions({
     try {
       await deleteMutation.mutateAsync({ id: announcementId });
       setConfirmOpen(false);
+      if (leaveAfterDelete) {
+        router.push(`/announcements?communityId=${communityId}`);
+      }
       router.refresh();
     } catch {
       // error surfaced in dialog body

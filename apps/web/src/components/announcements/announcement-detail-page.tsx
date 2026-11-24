@@ -4,6 +4,7 @@
  *
  * Edit, Delete and Restore sit in the header for a viewer who can manage the
  * post (`canManage`: its author, or an admin who can write). The staff view
+ * (the route gives it to admins, who can still open a deleted post)
  * adds the Details panel and the generated access sentence; the resident view
  * has no panel and reads the date (and a board-only mark) above the message.
  */
@@ -65,6 +66,7 @@ export function AnnouncementDetailPage(props: Props) {
                 communityId={communityId}
                 announcementId={announcement.id}
                 isDeleted={isDeleted}
+                leaveAfterDelete={props.view !== 'staff'}
               />
             ) : undefined
           }
@@ -100,11 +102,14 @@ export function AnnouncementDetailPage(props: Props) {
       <Section>
         <SectionHeader title="Message" />
         <div className="flex flex-col gap-3 px-4 py-4">
-          <p className="text-xs text-content-secondary">
-            {[announcement.isPinned ? 'Pinned' : null, `Published ${published}`, audienceLabel]
-              .filter(Boolean)
-              .join(' · ')}
-          </p>
+          {/* Staff read these in the Details panel; a resident has no panel. */}
+          {props.view === 'resident' ? (
+            <p className="text-xs text-content-secondary">
+              {[announcement.isPinned ? 'Pinned' : null, `Published ${published}`, audienceLabel]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : null}
           <div
             // A reading measure: the section spans the column, the text does not.
             className="prose prose-neutral max-w-3xl text-content-secondary"
