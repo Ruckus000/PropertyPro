@@ -18,12 +18,13 @@ import { FileText, Plus, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { PanelAttention, PanelGlance } from '@propertypro/ui/components/shared/side-panel';
-import { RecordList, RecordRow } from '@propertypro/ui/components/shared/record-row';
+import { RecordList } from '@propertypro/ui/components/shared/record-row';
 import {
   Section,
   SectionError,
   SectionFirstRun,
   SectionFooter,
+  SectionHeader,
   SectionToolbar,
 } from '@propertypro/ui/components/shared/section';
 import { AlertBanner } from '@/components/shared/alert-banner';
@@ -119,6 +120,10 @@ export function LeaseRosterPage({
     () => (filter === 'past' ? pastLeases(models, { sort, query }, data.directory) : []),
     [models, filter, sort, query, data.directory],
   );
+  const rowsIn = useMemo(() => {
+    const rows = (f: Exclude<RosterFilter, 'past'>) => filterAndGroup(models, { filter: f, sort: 'unit', query: '' }).total;
+    return { all: rows('all'), expiring: rows('expiring'), vacant: rows('vacant'), m2m: rows('m2m') };
+  }, [models]);
   const pastCount = useMemo(() => models.reduce((n, m) => n + m.past.length, 0), [models]);
   const panelModel = models.find((m) => m.unit.id === panelUnitId) ?? null;
 
@@ -192,18 +197,24 @@ export function LeaseRosterPage({
 
   // The four former tiles. Counts wait for the data, so a tab never shows a
   // zero that only means "not loaded yet".
-  const count = (n: number) => (loaded ? n : undefined);
+  // Each count is the number of rows its filter lists (`rowsIn`, the same
+  // function that builds the list), so a chip can never disagree with what it
+  // opens. The vacant filter also lists units moving out and offline units, so
+  // it carries that name; the vacant-only figure is in the panel.
+  const count = (f: Exclude<RosterFilter, 'past'>) => (loaded ? rowsIn[f] : undefined);
   const tabs = [
-    { label: 'All units', value: 'all', count: count(tiles.all.units) },
-    { label: 'Renewals due', value: 'expiring', count: count(tiles.renewalsDue.count) },
-    { label: 'Vacant', value: 'vacant', count: count(tiles.vacant.count) },
-    { label: 'Month-to-month', value: 'm2m', count: count(tiles.monthToMonth.count) },
+    { label: 'All units', value: 'all', count: count('all') },
+    { label: `Renewals due within ${tiles.renewalsDue.window} days`, value: 'expiring', count: count('expiring') },
+    { label: TITLES.vacant, value: 'vacant', count: count('vacant') },
+    { label: 'Month-to-month', value: 'm2m', count: count('m2m') },
   ];
   const rentable = tiles.all.units - tiles.all.offline;
   const holdovers = tiles.renewalsDue.holdovers;
-  const remaining = total - Math.min(limit, total);
-  const canShowMore =
-    loaded && ((filter === 'past' && past.length > limit) || (filter !== 'past' && list!.groups.length === 1 && total > limit));
+  // Past leases and a flat roster page at `limit`; a grouped roster shows every row.
+  const paged = filter === 'past' || list!.groups.length === 1;
+  const shown = paged ? Math.min(limit, total) : total;
+  const remaining = total - shown;
+  const canShowMore = loaded && remaining > 0;
 
   let body: React.ReactNode;
   if (data.isError) {
@@ -247,30 +258,32 @@ export function LeaseRosterPage({
   } else if (filter === 'past') {
     body = (
       <RecordList>
-        {past.slice(0, limit).map(({ model, lease, people, lastDay }) => (
-          <RecordRow
-            key={lease.id}
-            lead={null}
-            title={
+        {past.slice(0, limit).map(({ model, lease, people, lastDay }) => {
+          const names = people.map((p) => p.name).join(', ') || 'Unknown resident';
+          return (
+            <li key={lease.id}>
+              {/* The whole row opens the unit. The ring is inset: the names truncate, so the row clips. */}
               <button
                 type="button"
                 onClick={() => setPanelUnitId(model.unit.id)}
-                className="min-h-11 max-w-full truncate rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus md:min-h-0"
+                className="flex min-h-11 w-full flex-col gap-0.5 px-4 py-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-edge-focus"
               >
-                Unit {model.unit.unitNumber} · {people.map((p) => p.name).join(', ') || 'Unknown resident'}
+                <span className="max-w-full truncate text-sm font-medium text-content" title={names}>
+                  Unit {model.unit.unitNumber} · {names}
+                </span>
+                <span className="text-xs text-content-secondary">
+                  {lease.status === 'cancelled'
+                    ? `Cancelled before move-in · was to start ${fmt(lease.startDate)}`
+                    : lease.endVia === 'transfer'
+                      ? `Transferred · ${fmt(lastDay)}`
+                      : lease.endVia === 'early' || lease.status === 'terminated'
+                        ? `Ended early · ${fmt(lastDay)}`
+                        : `Ended ${fmt(lastDay)}`}
+                </span>
               </button>
-            }
-            statusWord={
-              lease.status === 'cancelled'
-                ? `Cancelled before move-in · was to start ${fmt(lease.startDate)}`
-                : lease.endVia === 'transfer'
-                  ? `Transferred · ${fmt(lastDay)}`
-                  : lease.endVia === 'early' || lease.status === 'terminated'
-                    ? `Ended early · ${fmt(lastDay)}`
-                    : `Ended ${fmt(lastDay)}`
-            }
-          />
-        ))}
+            </li>
+          );
+        })}
       </RecordList>
     );
   } else {
@@ -316,10 +329,15 @@ export function LeaseRosterPage({
                 figure={`${tiles.all.occupancyPct.toFixed(1)}%`}
                 unit="occupied"
                 of={[tiles.all.occupied, rentable]}
+                // Everything the four tiles said beyond their headline count.
                 lines={[
                   ['Occupied', `${tiles.all.occupied} of ${rentable} ${rentable === 1 ? 'unit' : 'units'}`],
-                  ['Renewals with no offer', String(tiles.renewalsDue.withoutOffer)],
+                  ['Vacant', String(tiles.vacant.count)],
+                  ['Average days empty', tiles.vacant.empty ? String(tiles.vacant.avgDaysEmpty) : '—'],
+                  ['Pre-leased', String(tiles.vacant.preLeased)],
                   ['Moving out', String(tiles.vacant.movingOut)],
+                  ['Offline', String(tiles.all.offline)],
+                  ['Renewals with no offer', String(tiles.renewalsDue.withoutOffer)],
                 ]}
                 source="useLeaseRosterData"
               />
@@ -368,78 +386,74 @@ export function LeaseRosterPage({
           )}
 
           <Section aria-label={TITLES[filter]} aria-busy={data.isLoading}>
-            {data.isError || (loaded && !hasUnits) ? null : (
-              <SectionToolbar
-                filters={
-                  <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
-                    <QuickFilterTabs
-                      tabs={tabs}
-                      active={filter}
-                      // Pressing the selected filter again returns to all units, as the tiles did.
-                      onChange={(v) => pickFilter(v === filter ? 'all' : (v as RosterFilter))}
-                      tone="ink"
-                    />
-                    <div className="flex flex-col gap-3 md:ml-auto md:flex-row md:flex-wrap md:items-center">
-                      <div className="relative">
-                        <Search
-                          aria-hidden="true"
-                          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-content-tertiary"
-                        />
-                        <Input
-                          type="search"
-                          aria-label="Search units, residents or emails"
-                          placeholder="Search unit, resident or email"
-                          value={query}
-                          onChange={(e) => {
-                            setQuery(e.target.value);
-                            setLimit(PAGE_SIZE);
-                          }}
-                          className="w-full pl-8 md:w-64"
-                        />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div role="group" aria-label="Sort" className="flex items-center gap-1">
-                          {(['unit', 'end'] as const).map((k) => (
-                            <Button
-                              key={k}
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              aria-pressed={sort === k}
-                              onClick={() => setSort(k)}
-                              className={cn(sort === k ? 'bg-surface-muted font-semibold text-content' : 'text-content-tertiary')}
-                            >
-                              {k === 'unit' ? 'Unit' : filter === 'past' ? 'Most recent' : 'Lease end'}
-                            </Button>
-                          ))}
-                        </div>
-                        {filter === 'past' ? (
-                          <Button variant="outline" size="sm" onClick={() => pickFilter('all')}>
-                            Back to all units
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => pickFilter('past')}
-                            disabled={!loaded || pastCount === 0}
-                          >
-                            Past leases ({pastCount})
-                          </Button>
-                        )}
-                        <AlertWindowsMenu
-                          windows={data.settings.alertWindows}
-                          allowResidentsWithoutEmail={data.settings.allowResidentsWithoutEmail}
-                          canEdit={isRootManager}
-                          actions={actions}
-                          onHelp={onHelp}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                }
-              />
-            )}
+            {filter === 'past' ? <SectionHeader title={TITLES.past} /> : null}
+            <SectionToolbar
+              filters={
+                <div role="group" aria-label="Filter units">
+                  <QuickFilterTabs
+                    tabs={tabs}
+                    active={filter}
+                    // Pressing the selected filter again returns to all units, as the tiles did.
+                    onChange={(v) => pickFilter(v === filter ? 'all' : (v as RosterFilter))}
+                    tone="ink"
+                  />
+                </div>
+              }
+            />
+            {/* Its own row, not the toolbar's filters slot: that slot scrolls
+                sideways and clips focus rings; this one wraps. */}
+            <div className="flex flex-col gap-2 border-b border-edge px-4 py-2 md:flex-row md:flex-wrap md:items-center">
+              <div className="relative md:mr-auto">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-content-tertiary"
+                />
+                <Input
+                  type="search"
+                  aria-label="Search units, residents or emails"
+                  placeholder="Search unit, resident or email"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setLimit(PAGE_SIZE);
+                  }}
+                  className="w-full pl-8 md:w-64"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div role="group" aria-label="Sort" className="flex items-center gap-1">
+                  {(['unit', 'end'] as const).map((k) => (
+                    <Button
+                      key={k}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-pressed={sort === k}
+                      onClick={() => setSort(k)}
+                      className={cn(sort === k ? 'bg-surface-muted font-semibold text-content' : 'text-content-tertiary')}
+                    >
+                      {k === 'unit' ? 'Unit' : filter === 'past' ? 'Most recent' : 'Lease end'}
+                    </Button>
+                  ))}
+                </div>
+                {filter === 'past' ? (
+                  <Button variant="outline" size="sm" onClick={() => pickFilter('all')}>
+                    Back to all units
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => pickFilter('past')} disabled={pastCount === 0}>
+                    Past leases ({pastCount})
+                  </Button>
+                )}
+                <AlertWindowsMenu
+                  windows={data.settings.alertWindows}
+                  allowResidentsWithoutEmail={data.settings.allowResidentsWithoutEmail}
+                  canEdit={isRootManager}
+                  actions={actions}
+                  onHelp={onHelp}
+                />
+              </div>
+            </div>
 
             {body}
 
@@ -447,7 +461,7 @@ export function LeaseRosterPage({
               <SectionFooter
                 note={
                   <span aria-live="polite">
-                    {filter === 'past' && total > limit ? `Showing ${limit} of ` : ''}
+                    {remaining > 0 ? `Showing ${shown} of ` : ''}
                     {`${total} ${total === 1 ? noun[0] : noun[1]}${query ? (total === 1 ? ' matches' : ' match') : ''}`}
                   </span>
                 }

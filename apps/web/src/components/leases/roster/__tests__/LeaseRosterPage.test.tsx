@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { axe } from 'vitest-axe';
-import type { RosterLease, RosterUnit } from '@/lib/leases/roster-model';
+import { buildRoster, buildTiles, type RosterLease, type RosterUnit } from '@/lib/leases/roster-model';
 
 const { rosterMock, refetch } = vi.hoisted(() => ({ rosterMock: vi.fn(), refetch: vi.fn() }));
 
@@ -57,6 +57,27 @@ const directory = {
   ]),
 };
 
+// One of each state the vacant filter gathers: 102 moving out, 201 vacant,
+// 202 offline, 301 vacant but pre-leased. Plus 101 leased, 302 month-to-month
+// and 303 inside the renewal window.
+const mixedUnits: RosterUnit[] = [
+  { id: 1, unitNumber: '101', building: null, floor: 1, rentAmount: '1500.00' },
+  { id: 2, unitNumber: '102', building: null, floor: 1, rentAmount: '1500.00' },
+  { id: 3, unitNumber: '201', building: null, floor: 2, rentAmount: '1700.00' },
+  { id: 4, unitNumber: '202', building: null, floor: 2, rentAmount: '1700.00', offlineReason: 'renovation', offlineSince: '2026-09-01', offlineUntil: '2026-12-01' },
+  { id: 5, unitNumber: '301', building: null, floor: 3, rentAmount: '1900.00' },
+  { id: 6, unitNumber: '302', building: null, floor: 3, rentAmount: '1900.00' },
+  { id: 7, unitNumber: '303', building: null, floor: 3, rentAmount: '1900.00' },
+];
+const mixedLeases: RosterLease[] = [
+  lease(1, 1),
+  lease(2, 2, { moveOutOn: '2026-10-31', endVia: 'notice' }),
+  lease(3, 3, { startDate: '2025-09-01', endDate: '2026-09-01', moveOutOn: '2026-09-01', endVia: 'notice' }),
+  lease(5, 5, { startDate: '2026-11-01', endDate: '2027-10-31' }),
+  lease(6, 6, { endDate: null }),
+  lease(7, 7, { endDate: '2026-11-15' }),
+];
+
 function data(over: Record<string, unknown> = {}) {
   return {
     leases,
@@ -103,9 +124,67 @@ describe('LeaseRosterPage', () => {
   it('each former tile is a toolbar filter that keeps its count', () => {
     mount();
     expect(filter(/^All units\s*4$/).getAttribute('aria-pressed')).toBe('true');
-    expect(filter(/^Renewals due\s*1$/).getAttribute('aria-pressed')).toBe('false');
-    expect(filter(/^Vacant\s*1$/)).toBeDefined();
+    expect(filter(/^Renewals due within 90 days\s*1$/).getAttribute('aria-pressed')).toBe('false');
+    expect(filter(/^Vacant and moving out\s*1$/)).toBeDefined();
     expect(filter(/^Month-to-month\s*1$/)).toBeDefined();
+    expect(within(screen.getByRole('group', { name: 'Filter units' })).getAllByRole('button')).toHaveLength(4);
+  });
+
+  it('every filter count equals the rows it lists, with moving-out and offline units present', () => {
+    rosterMock.mockReturnValue(data({ units: mixedUnits, leases: mixedLeases }));
+    mount();
+    const seen: Record<string, number> = {};
+    for (const name of [/^All units/, /^Renewals due/, /^Vacant and moving out/, /^Month-to-month/]) {
+      const chip = filter(name);
+      const n = Number(/(\d+)$/.exec(chip.textContent ?? '')?.[1]);
+      fireEvent.click(chip);
+      expect(chip.getAttribute('aria-pressed')).toBe('true');
+      expect(openButtons()).toHaveLength(n);
+      seen[String(name)] = n;
+    }
+    // Vacant lists 201 (vacant), 301 (pre-leased), 102 (moving out) and 202 (offline).
+    expect(Object.values(seen)).toEqual([7, 1, 4, 1]);
+  });
+
+  it('keeps everything the tiles said: vacancy, pre-leased, offline, days empty and the renewal window', () => {
+    rosterMock.mockReturnValue(data({ units: mixedUnits, leases: mixedLeases }));
+    const { container } = mount();
+    const t = buildTiles(
+      buildRoster({ units: mixedUnits, leases: mixedLeases, offers: [], directory, today: TODAY, alertWindows: [30, 60, 90] }),
+      TODAY,
+      [30, 60, 90],
+    );
+    // The fixture must exercise every figure, or equal zeros prove nothing.
+    expect([t.vacant.count, t.vacant.avgDaysEmpty, t.vacant.preLeased, t.vacant.movingOut, t.all.offline]).toEqual([2, 26, 1, 1, 1]);
+    const glance = container.querySelector<HTMLElement>('[data-source="useLeaseRosterData"]')!;
+    const value = (label: string) => within(glance).getByText(label).nextElementSibling?.textContent;
+    expect(value('Vacant')).toBe(String(t.vacant.count));
+    expect(value('Average days empty')).toBe(String(t.vacant.avgDaysEmpty));
+    expect(value('Pre-leased')).toBe(String(t.vacant.preLeased));
+    expect(value('Moving out')).toBe(String(t.vacant.movingOut));
+    expect(value('Offline')).toBe(String(t.all.offline));
+    expect(value('Renewals with no offer')).toBe(String(t.renewalsDue.withoutOffer));
+    expect(filter(new RegExp(`^Renewals due within ${t.renewalsDue.window} days`))).toBeDefined();
+  });
+
+  it('the renewal window on the filter follows the alert setting', () => {
+    rosterMock.mockReturnValue(data({ settings: { alertWindows: [30, 60], allowResidentsWithoutEmail: false } }));
+    mount();
+    expect(filter(/^Renewals due within 60 days/)).toBeDefined();
+  });
+
+  it('a flat list over fifty rows says how many are showing', () => {
+    const many: RosterUnit[] = Array.from({ length: 60 }, (_, i) => ({
+      id: i + 1, unitNumber: String(100 + i), building: null, floor: 1, rentAmount: null,
+    }));
+    rosterMock.mockReturnValue(data({ units: many, leases: [lease(1, 1)] }));
+    mount();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Sort' })).getByRole('button', { name: 'Lease end' }));
+    expect(screen.getByText('Showing 50 of 60 units')).toBeVisible();
+    expect(openButtons()).toHaveLength(50);
+    fireEvent.click(screen.getByRole('button', { name: 'Show 10 more of 10' }));
+    expect(screen.getByText('60 units')).toBeVisible();
+    expect(openButtons()).toHaveLength(60);
   });
 
   it('each filter shows the rows its tile did, and All units resets', () => {
@@ -158,7 +237,9 @@ describe('LeaseRosterPage', () => {
     mount();
     fireEvent.click(screen.getByRole('button', { name: 'Past leases (1)' }));
     expect(openButtons()).toEqual([]);
-    const row = screen.getByRole('button', { name: /Unit 202.*Dee Eng/ });
+    expect(screen.getByRole('heading', { level: 2, name: 'Past leases' })).toBeVisible();
+    // The whole row is the button: its name carries the outcome line too.
+    const row = screen.getByRole('button', { name: /Unit 202.*Dee Eng.*Ended Jun 30, 2026/ });
     expect(screen.getByText(/Ended.*Jun 30, 2026/)).toBeVisible();
     fireEvent.click(row);
     expect(screen.getByTestId('unit-panel').textContent).toBe('202');
@@ -168,6 +249,7 @@ describe('LeaseRosterPage', () => {
 
   it('opening a row shows the unit panel', () => {
     mount();
+    expect(screen.getByText('Ana Beltrán').getAttribute('title')).toBe('Ana Beltrán');
     fireEvent.click(screen.getByRole('button', { name: 'Open Unit 101' }));
     expect(screen.getByTestId('unit-panel').textContent).toBe('101');
   });
@@ -197,6 +279,8 @@ describe('LeaseRosterPage', () => {
     expect(screen.getByRole('alert').textContent).toContain("We couldn't load leases.");
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.queryByText('No leases yet')).toBeNull();
+    // The expiry-alerts control stays reachable, as it always was.
+    expect(screen.getByTestId('alert-windows')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
@@ -227,6 +311,7 @@ describe('LeaseRosterPage', () => {
       '/dashboard/directory?communityId=3',
     );
     expect(screen.queryByText('No leases yet')).toBeNull();
+    expect(screen.getByTestId('alert-windows')).toBeVisible();
   });
 
   it('only the root manager can edit the expiry alert windows', () => {
@@ -237,6 +322,10 @@ describe('LeaseRosterPage', () => {
     expect(screen.getByTestId('alert-windows').getAttribute('data-can-edit')).toBe('true');
   });
 
+  // Covers this page's own markup and the real RosterTable. UnitPanel, the
+  // dialogs and AlertWindowsMenu are mocked above, so this says nothing about them.
+  // Probe (2026-11-24): the footer's aria-live="polite" changed to "loud" turns
+  // this case red (aria-valid-attr-value) and no other.
   it('has no axe violations', async () => {
     const { container } = mount();
     expect(await axe(container)).toHaveNoViolations();

@@ -135,7 +135,7 @@ function ResidentCell({ m, today }: { m: UnitModel; today: string }) {
         {initials(first.name)}
       </span>
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-content">{first.name}</div>
+        <div className="truncate text-sm font-medium text-content" title={first.name}>{first.name}</div>
         {subLine && <div className="truncate text-xs text-content-secondary">{subLine}</div>}
       </div>
     </div>
