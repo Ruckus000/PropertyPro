@@ -78,3 +78,28 @@ describe("tokenDefinitions", () => {
     }
   });
 });
+
+describe("control border contrast (WCAG 1.4.11)", () => {
+  const luminance = (hex: string): number => {
+    const [r, g, b] = [1, 3, 5]
+      .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const contrast = (a: string, b: string): number => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+  const { border, surface } = tokenDefinitions;
+
+  it.each(["card", "page", "subtle", "muted"] as const)(
+    "border.control is at least 3:1 on surface.%s",
+    (name) => {
+      expect(contrast(toHex(border.control), toHex(surface[name]))).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it("border.strong is not a control edge: it stays under 3:1", () => {
+    expect(contrast(toHex(border.strong), toHex(surface.card))).toBeLessThan(3);
+  });
+});
