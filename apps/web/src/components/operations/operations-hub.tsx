@@ -122,7 +122,8 @@ function joinWords(words: string[]): string {
 /**
  * The sentence under the page title. It names only the sections this viewer
  * has, and says whose records they are: a resident sees their own requests and
- * reservations, but the community's work orders.
+ * reservations, and work orders for their own unit (the work-orders route
+ * limits a resident to their units).
  */
 function describeHub({
   resident,
@@ -143,9 +144,9 @@ function describeHub({
     return all ? `${all.charAt(0).toUpperCase()}${all.slice(1)} for this community.` : undefined;
   }
   const own = joinWords([...requests, ...reservations]);
-  if (own && workOrdersEnabled) return `Your ${own}, and the community's work orders.`;
+  if (own && workOrdersEnabled) return `Your ${own}, and work orders for your unit.`;
   if (own) return `Your ${own}.`;
-  return workOrdersEnabled ? "The community's work orders." : undefined;
+  return workOrdersEnabled ? 'Work orders for your unit.' : undefined;
 }
 
 /** The foot of a list's box: "Load more", and a note when there is one. */
@@ -563,9 +564,9 @@ export function OperationsHub({
           }
           // No side panel and no generated "About". describeAccess words one
           // resource with one resident scope, and this page holds three with
-          // different scopes: a resident sees only their own requests and
-          // reservations, but every work order and every bookable amenity. No
-          // single sentence from it is true here.
+          // different scopes: a resident sees their own requests and
+          // reservations and their unit's work orders, but every bookable
+          // amenity. No single sentence from it is true here.
           tabs={
             <TabsList aria-label="Operations tabs" className={TAB_LIST_CLASS}>
               {availableTabs.map((candidate) => (
@@ -737,13 +738,20 @@ export function OperationsHub({
                     {workOrdersQuery.data.data.map((workOrder) => {
                       const status = operationsStatus(workOrder.status);
                       return (
-                        <RecordRow
+                        // Not RecordRow: it cuts the description to one line, and
+                        // with no record view there would be nowhere to read the rest.
+                        <OperationsRow
                           key={workOrder.id}
                           lead={<StatusLead status={status} />}
-                          title={workOrder.title}
-                          preview={workOrder.description ?? undefined}
+                          title={<p className="truncate text-sm font-medium text-content">{workOrder.title}</p>}
                           statusWord={status.word}
-                        />
+                        >
+                          {workOrder.description ? (
+                            <p className="mt-1 max-w-prose whitespace-pre-line text-sm text-content-secondary">
+                              {workOrder.description}
+                            </p>
+                          ) : null}
+                        </OperationsRow>
                       );
                     })}
                   </RecordList>

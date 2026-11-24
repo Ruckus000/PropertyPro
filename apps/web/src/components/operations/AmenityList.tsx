@@ -50,9 +50,11 @@ export function AmenityList({ amenities, isAdmin, onEdit, onReserve }: AmenityLi
                   <button
                     type="button"
                     onClick={() => onEdit(amenity.id)}
-                    className="inline-block min-h-6 max-w-full truncate rounded-xs text-left align-top underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                    // The only edit control, so 44px on a phone. The ring is inset
+                    // because the truncating <h3> would clip an outer one.
+                    className="inline-flex min-h-11 max-w-full items-center rounded-xs text-left align-top underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus md:min-h-6"
                   >
-                    {amenity.name}
+                    <span className="truncate">{amenity.name}</span>
                   </button>
                 ) : (
                   amenity.name

@@ -1125,8 +1125,10 @@ describe('OperationsHub — page kit', () => {
 
     const resident = render(hub(false));
     expect(
-      screen.getByText("Your maintenance requests and amenity reservations, and the community's work orders."),
+      // The work-orders route limits a resident to their own units.
+      screen.getByText('Your maintenance requests and amenity reservations, and work orders for your unit.'),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/community's work orders/)).toBeNull();
     resident.unmount();
 
     render(hub(false, { workOrdersEnabled: false, reservationsEnabled: false }));
@@ -1208,6 +1210,23 @@ describe('OperationsHub — page kit', () => {
     // Reserve stays a row button, only on what can be booked.
     expect(screen.getByRole('button', { name: 'Reserve Pool' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reserve Sauna' })).toBeNull();
+  });
+
+  it('shows a work order description in full: the row opens nothing, so there is nowhere else to read it', () => {
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    render(hub(true));
+    const description = screen.getByText('Two coats');
+    expect(description.className).not.toContain('truncate');
+    expect(description.className).not.toMatch(/line-clamp/);
+  });
+
+  it("makes a manager's amenity name a 44px target on a phone, with a ring its heading cannot clip", async () => {
+    searchParamsMock.mockReturnValue('tab=amenities');
+    render(hub(true));
+    const name = await screen.findByRole('button', { name: 'Pool' });
+    for (const cls of ['inline-flex', 'items-center', 'min-h-11', 'md:min-h-6', 'focus-visible:ring-inset']) {
+      expect(name.className.split(' ')).toContain(cls);
+    }
   });
 
   it('keeps Cancel on a reservation row', async () => {
