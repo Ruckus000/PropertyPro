@@ -103,7 +103,7 @@
     "next": "^15.5.29",
     "tsup": "^8.3.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.7"
   },
   "dependencies": {
     "@propertypro/shared": "workspace:*",
