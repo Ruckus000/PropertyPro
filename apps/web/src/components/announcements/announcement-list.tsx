@@ -1,25 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+/**
+ * The records of the announcements list, on the page kit: "Pinned" and
+ * "Recent" sections of rows. A row's title opens the announcement; Edit,
+ * Delete and Restore live on that page, not here. A client component so the
+ * preview text is built with the browser's inert DOMParser (see `stripHtml`).
+ */
 import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { Loader2, Pin, RotateCcw, SearchX, Trash2 } from 'lucide-react';
-import { AlertBanner } from '@/components/shared/alert-banner';
+import { SearchX } from 'lucide-react';
+import { RecordList, RecordRow } from '@propertypro/ui/components/shared/record-row';
+import { Section, SectionFooter, SectionHeader } from '@propertypro/ui/components/shared/section';
+import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { EmptyState } from '@/components/shared/empty-state';
-import { AnnouncementsFirstPost, AnnouncementsWaiting } from './announcements-empty';
-import { StatusBadge } from '@/components/shared/status-badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { formatShortDate } from '@/lib/utils/format-date';
+import { AnnouncementsFirstPost, AnnouncementsWaiting } from './announcements-empty';
 
 export interface AnnouncementListItem {
   id: number;
@@ -33,18 +28,11 @@ export interface AnnouncementListItem {
   deletedAt: string | Date | null;
 }
 
-/**
- * Pure presentational announcement list. No data hooks, no permission props,
- * no mutations — receives display data and behavioral callbacks from a
- * container (see `announcement-list-container.tsx`). UI state internal to
- * presentation (e.g. the delete-confirm dialog open state) lives here.
- */
 export interface AnnouncementListProps {
   items: AnnouncementListItem[];
   communityId: number;
+  /** Deleted rows are listed (admins, `?includeDeleted=true`). */
   showDeleted: boolean;
-  /** "Show deleted" toggle, only rendered when the container provides it. */
-  headerAction?: ReactNode;
   /** The viewer can post: an empty list shows the first-post guide, not the waiting state. */
   canWrite?: boolean;
   /**
@@ -53,21 +41,8 @@ export interface AnnouncementListProps {
    * message naming the search.
    */
   searchQuery?: string;
-  /** Clears the search; shown in the no-results state. */
-  clearSearchAction?: ReactNode;
-  /** Per-item authorization decision; container computes from server state. */
-  canManageItem: (item: AnnouncementListItem) => boolean;
-  /** Container-supplied mutation handlers. The presenter only knows when they're in flight. */
-  onDelete: (id: number) => Promise<void>;
-  onRestore: (id: number) => Promise<void>;
-  isDeleteBusy: boolean;
-  isRestoreBusy: boolean;
-  /** id whose restore mutation is currently flight, if any (for per-card spinner). */
-  pendingRestoreId: number | null;
-  deleteError: string | null;
-  restoreError: string | null;
-  /** Called when the dialog closes successfully or via cancel; container resets mutation state. */
-  onDialogClose?: () => void;
+  /** Where "Clear search" goes; shown in the no-results state. */
+  clearSearchHref?: string;
 }
 
 export function stripHtml(html: string): string {
@@ -113,98 +88,47 @@ export function stripHtml(html: string): string {
     .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)));
 }
 
-function AnnouncementCard({
-  item,
-  communityId,
-  canManage,
-  onRequestDelete,
-  onRequestRestore,
-  isBusy,
-}: {
-  item: AnnouncementListItem;
-  communityId: number;
-  canManage: boolean;
-  onRequestDelete: (id: number) => void;
-  onRequestRestore: (id: number) => void;
-  isBusy: boolean;
-}) {
-  const detailHref = `/announcements/${item.id}?communityId=${communityId}`;
-  const editHref = `/announcements/${item.id}/edit?communityId=${communityId}`;
-  const isDeleted = item.deletedAt != null;
-
+function AnnouncementRow({ item, communityId }: { item: AnnouncementListItem; communityId: number }) {
+  const deleted = item.deletedAt != null;
+  const word = deleted ? 'Deleted' : 'Published';
   return (
-    <article
-      className={`rounded-md border border-edge bg-surface-card p-5 ${
-        isDeleted ? 'opacity-60' : ''
-      }`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-content">
-              <Link href={detailHref} className="hover:text-interactive">
-                {item.title}
-              </Link>
-            </h3>
-            {item.isPinned && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-interactive-subtle px-2 py-0.5 text-xs font-semibold text-interactive">
-                <Pin size={12} aria-hidden="true" />
-                Pinned
-              </span>
-            )}
-            {item.audience === 'board_only' && (
-              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs font-medium text-content-secondary">
-                Board only
-              </span>
-            )}
-            {isDeleted && <StatusBadge status="closed" label="Deleted" subtle />}
-          </div>
-          <p className="mt-1 text-xs text-content-tertiary">{formatShortDate(item.publishedAt)}</p>
-        </div>
-      </div>
-      {item.body && (
-        <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-content-secondary">
-          {stripHtml(item.body)}
-        </p>
-      )}
+    <RecordRow
+      lead={<StatusGlyph kind={deleted ? 'not-started' : 'done'} label={word} hideLabel />}
+      title={
+        <Link
+          href={`/announcements/${item.id}?communityId=${communityId}`}
+          className="inline-flex min-h-11 max-w-full items-center text-content-link hover:underline md:min-h-0"
+        >
+          <span className="truncate">{item.title}</span>
+        </Link>
+      }
+      statusWord={word}
+      // Every reader sees the board-only mark, so a board seat knows not to share the post.
+      meta={[item.audience === 'board_only' ? 'Board only' : '', formatShortDate(item.publishedAt)]}
+      preview={item.body ? stripHtml(item.body) : undefined}
+    />
+  );
+}
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" size="sm">
-          <Link href={detailHref}>View details</Link>
-        </Button>
-        {canManage && !isDeleted ? (
-          <Button asChild size="sm">
-            <Link href={editHref}>Edit</Link>
-          </Button>
-        ) : null}
-        {canManage && !isDeleted ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-content-secondary hover:bg-status-danger-bg hover:text-status-danger"
-            disabled={isBusy}
-            title="Delete announcement"
-            onClick={() => onRequestDelete(item.id)}
-          >
-            <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
-            Delete
-          </Button>
-        ) : null}
-        {canManage && isDeleted ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={isBusy}
-            onClick={() => onRequestRestore(item.id)}
-          >
-            <RotateCcw className="mr-1 h-4 w-4" aria-hidden="true" />
-            Restore
-          </Button>
-        ) : null}
-      </div>
-    </article>
+function AnnouncementGroup({
+  title,
+  items,
+  communityId,
+}: {
+  title: string;
+  items: AnnouncementListItem[];
+  communityId: number;
+}) {
+  return (
+    <Section>
+      <SectionHeader title={title} />
+      <RecordList>
+        {items.map((item) => (
+          <AnnouncementRow key={item.id} item={item} communityId={communityId} />
+        ))}
+      </RecordList>
+      <SectionFooter note={`Showing ${items.length}`} />
+    </Section>
   );
 }
 
@@ -212,183 +136,64 @@ export function AnnouncementList({
   items,
   communityId,
   showDeleted,
-  headerAction,
   canWrite = false,
   searchQuery,
-  clearSearchAction,
-  canManageItem,
-  onDelete,
-  onRestore,
-  isDeleteBusy,
-  isRestoreBusy,
-  pendingRestoreId,
-  deleteError,
-  restoreError,
-  onDialogClose,
+  clearSearchHref,
 }: AnnouncementListProps) {
-  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
-
   const visibleItems = showDeleted ? items : items.filter((item) => item.deletedAt == null);
-  const { pinned, unpinned } = visibleItems.reduce<{
-    pinned: AnnouncementListItem[];
-    unpinned: AnnouncementListItem[];
-  }>(
-    (acc, item) => {
-      (item.isPinned ? acc.pinned : acc.unpinned).push(item);
-      return acc;
-    },
-    { pinned: [], unpinned: [] },
-  );
 
-  async function handleConfirmDelete() {
-    if (pendingDeleteId === null) return;
-    try {
-      await onDelete(pendingDeleteId);
-      setPendingDeleteId(null);
-    } catch {
-      // error rendered in dialog body via deleteError prop
-    }
-  }
-
-  async function handleRestore(id: number) {
-    try {
-      await onRestore(id);
-    } catch {
-      // surfaced via restoreError banner
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      {headerAction ? (
-        <div className="flex items-center justify-end">{headerAction}</div>
-      ) : null}
-
-      {restoreError ? (
-        <AlertBanner
-          status="danger"
-          variant="subtle"
-          title="We couldn't restore this announcement."
-          description={restoreError}
-        />
-      ) : null}
-
-      {visibleItems.length === 0 && searchQuery ? (
+  if (visibleItems.length === 0 && searchQuery) {
+    return (
+      <Section>
         <EmptyState
           icon={SearchX}
           title={`No announcements match “${searchQuery}”`}
           description="Try a different word, or clear the search to see every announcement."
-          action={clearSearchAction}
+          action={
+            clearSearchHref ? (
+              <Button asChild variant="outline">
+                <Link href={clearSearchHref}>Clear search</Link>
+              </Button>
+            ) : undefined
+          }
         />
-      ) : visibleItems.length === 0 && showDeleted ? (
+      </Section>
+    );
+  }
+  if (visibleItems.length === 0 && showDeleted) {
+    return (
+      <Section>
         <EmptyState
           icon="bell"
           title="No deleted announcements"
           description="Deleted announcements show up here. Admins can restore them."
         />
-      ) : visibleItems.length === 0 ? (
-        canWrite ? (
-          <AnnouncementsFirstPost communityId={communityId} />
-        ) : (
-          <AnnouncementsWaiting communityId={communityId} />
-        )
-      ) : (
-        <div className="space-y-6">
-          {pinned.length > 0 && (
-            <section>
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">
-                Pinned
-              </h2>
-              <div className="space-y-3">
-                {pinned.map((item) => (
-                  <AnnouncementCard
-                    key={item.id}
-                    item={item}
-                    communityId={communityId}
-                    canManage={canManageItem(item)}
-                    onRequestDelete={setPendingDeleteId}
-                    onRequestRestore={handleRestore}
-                    isBusy={
-                      (isDeleteBusy && pendingDeleteId === item.id) ||
-                      (isRestoreBusy && pendingRestoreId === item.id)
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+      </Section>
+    );
+  }
+  if (visibleItems.length === 0) {
+    return canWrite ? (
+      <AnnouncementsFirstPost communityId={communityId} />
+    ) : (
+      <AnnouncementsWaiting communityId={communityId} />
+    );
+  }
 
-          {unpinned.length > 0 && (
-            <section>
-              {pinned.length > 0 && (
-                <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-content-tertiary">
-                  Recent
-                </h2>
-              )}
-              <div className="space-y-3">
-                {unpinned.map((item) => (
-                  <AnnouncementCard
-                    key={item.id}
-                    item={item}
-                    communityId={communityId}
-                    canManage={canManageItem(item)}
-                    onRequestDelete={setPendingDeleteId}
-                    onRequestRestore={handleRestore}
-                    isBusy={
-                      (isDeleteBusy && pendingDeleteId === item.id) ||
-                      (isRestoreBusy && pendingRestoreId === item.id)
-                    }
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
+  const pinned = visibleItems.filter((item) => item.isPinned);
+  const unpinned = visibleItems.filter((item) => !item.isPinned);
 
-      <AlertDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => {
-          if (!open && !isDeleteBusy) {
-            setPendingDeleteId(null);
-            onDialogClose?.();
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete announcement?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This hides the announcement from residents. Admins can restore it from the Show
-              deleted view.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {deleteError && pendingDeleteId !== null ? (
-            <AlertBanner
-              status="danger"
-              variant="subtle"
-              title="We couldn't delete this announcement."
-              description={deleteError}
-            />
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleteBusy}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-status-danger text-content-inverse hover:bg-[var(--red-900)]"
-              disabled={isDeleteBusy || pendingDeleteId === null}
-              onClick={(event) => {
-                event.preventDefault();
-                void handleConfirmDelete();
-              }}
-            >
-              {isDeleteBusy ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" aria-hidden="true" />
-              ) : null}
-              Delete announcement
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+  return (
+    <div className="flex flex-col gap-5">
+      {pinned.length > 0 ? (
+        <AnnouncementGroup title="Pinned" items={pinned} communityId={communityId} />
+      ) : null}
+      {unpinned.length > 0 ? (
+        <AnnouncementGroup
+          title={pinned.length > 0 ? 'Recent' : 'Announcements'}
+          items={unpinned}
+          communityId={communityId}
+        />
+      ) : null}
     </div>
   );
 }

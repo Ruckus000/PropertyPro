@@ -1,3 +1,5 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/announcements/announcement-form-page.tsx
+// page-template: delegated to apps/web/src/components/announcements/announcement-form-page.tsx
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
@@ -5,8 +7,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
-import { AnnouncementAuthoringForm } from '@/components/announcements/announcement-authoring-form';
-import { PageHeader } from '@/components/shared/page-header';
+import { AnnouncementFormPage } from '@/components/announcements/announcement-form-page';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -32,16 +33,9 @@ export default async function NewAnnouncementPage({ searchParams }: PageProps) {
   requirePermission(membership, 'announcements', 'write');
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader
-        title="New Announcement"
-        description="Share a community update with the right audience."
-      />
-
-      <AnnouncementAuthoringForm
-        communityId={context.communityId}
-        communityType={membership.communityType}
-      />
-    </div>
+    <AnnouncementFormPage
+      communityId={context.communityId}
+      communityType={membership.communityType}
+    />
   );
 }

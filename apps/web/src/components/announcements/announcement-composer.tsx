@@ -191,7 +191,9 @@ export function AnnouncementComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-6 rounded-md border border-edge bg-surface-card p-4 sm:p-6"
+      // No box of its own: the page's Section draws the border. The `p-4` below
+      // `sm` is part of what fits the date fields on a 375px phone (see below).
+      className="space-y-6 p-4 sm:p-6"
     >
       {error ? (
         <AlertBanner

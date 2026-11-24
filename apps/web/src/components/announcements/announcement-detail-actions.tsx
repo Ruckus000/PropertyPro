@@ -1,9 +1,15 @@
 'use client';
 
+/**
+ * Header actions on an announcement's page, for a viewer who can manage it:
+ * Edit and Delete on a live post, Restore on a deleted one. Delete asks first.
+ */
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, RotateCcw, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,14 +28,12 @@ interface AnnouncementDetailActionsProps {
   communityId: number;
   announcementId: number;
   isDeleted: boolean;
-  canEdit: boolean;
 }
 
 export function AnnouncementDetailActions({
   communityId,
   announcementId,
   isDeleted,
-  canEdit,
 }: AnnouncementDetailActionsProps) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -50,38 +54,39 @@ export function AnnouncementDetailActions({
     try {
       await restoreMutation.mutateAsync({ id: announcementId });
       router.refresh();
-    } catch {
-      // handled via UI state
+    } catch (error) {
+      // Restore is offered only here, so a failure must not pass silently.
+      toast.error(
+        error instanceof Error && error.message
+          ? `We couldn't restore this announcement. ${error.message}`
+          : "We couldn't restore this announcement. Please try again.",
+      );
     }
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {canEdit ? (
-        <Button asChild size="sm">
-          <Link href={`/announcements/${announcementId}/edit?communityId=${communityId}`}>
-            Edit
-          </Link>
-        </Button>
-      ) : null}
-
+    <>
       {!isDeleted ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-content-secondary hover:bg-status-danger-bg hover:text-status-danger"
-          disabled={deleteMutation.isPending}
-          onClick={() => setConfirmOpen(true)}
-        >
-          <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
-          Delete
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={deleteMutation.isPending}
+            onClick={() => setConfirmOpen(true)}
+          >
+            <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
+            Delete
+          </Button>
+          <Button asChild>
+            <Link href={`/announcements/${announcementId}/edit?communityId=${communityId}`}>
+              Edit
+            </Link>
+          </Button>
+        </>
       ) : (
         <Button
           type="button"
           variant="outline"
-          size="sm"
           loading={restoreMutation.isPending}
           onClick={handleRestore}
         >
@@ -137,6 +142,6 @@ export function AnnouncementDetailActions({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 }
