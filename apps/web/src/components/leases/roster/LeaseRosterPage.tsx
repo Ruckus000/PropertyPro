@@ -210,6 +210,14 @@ export function LeaseRosterPage({
   ];
   const rentable = tiles.all.units - tiles.all.offline;
   const holdovers = tiles.renewalsDue.holdovers;
+  const figures: [string, string][] = [
+    ['Vacant', String(tiles.vacant.count)],
+    ['Average days empty', tiles.vacant.empty ? String(tiles.vacant.avgDaysEmpty) : '—'],
+    ['Pre-leased', String(tiles.vacant.preLeased)],
+    ['Moving out', String(tiles.vacant.movingOut)],
+    ['Offline', String(tiles.all.offline)],
+    ['Renewals with no offer', String(tiles.renewalsDue.withoutOffer)],
+  ];
   // Past leases and a flat roster page at `limit`; a grouped roster shows every row.
   const paged = filter === 'past' || list!.groups.length === 1;
   const shown = paged ? Math.min(limit, total) : total;
@@ -329,22 +337,16 @@ export function LeaseRosterPage({
                 figure={`${tiles.all.occupancyPct.toFixed(1)}%`}
                 unit="occupied"
                 of={[tiles.all.occupied, rentable]}
-                // Everything the four tiles said beyond their headline count.
-                lines={[
-                  ['Occupied', `${tiles.all.occupied} of ${rentable} ${rentable === 1 ? 'unit' : 'units'}`],
-                  ['Vacant', String(tiles.vacant.count)],
-                  ['Average days empty', tiles.vacant.empty ? String(tiles.vacant.avgDaysEmpty) : '—'],
-                  ['Pre-leased', String(tiles.vacant.preLeased)],
-                  ['Moving out', String(tiles.vacant.movingOut)],
-                  ['Offline', String(tiles.all.offline)],
-                  ['Renewals with no offer', String(tiles.renewalsDue.withoutOffer)],
-                ]}
+                // One line only: on a table page the panel is a strip above the
+                // table until the box is very wide, and every line here pushes
+                // the table down. The other figures are the row in the section.
+                lines={[['Occupied', `${tiles.all.occupied} of ${rentable} ${rentable === 1 ? 'unit' : 'units'}`]]}
                 source="useLeaseRosterData"
               />
             ) : undefined,
+          // Only when there is something: an empty placeholder would cost the strip a column.
           attention:
-            loaded && hasUnits ? (
-              holdovers > 0 ? (
+            loaded && hasUnits && holdovers > 0 ? (
                 <PanelAttention
                   lead="Past end date"
                   title={`${holdovers} ${holdovers === 1 ? 'lease has' : 'leases have'} run past the end date with no renewal or move-out.`}
@@ -354,9 +356,6 @@ export function LeaseRosterPage({
                     </Button>
                   }
                 />
-              ) : (
-                <PanelAttention none="Leases that run past their end date will show here." />
-              )
             ) : undefined,
         }}
       >
@@ -387,6 +386,17 @@ export function LeaseRosterPage({
 
           <Section aria-label={TITLES[filter]} aria-busy={data.isLoading}>
             {filter === 'past' ? <SectionHeader title={TITLES.past} /> : null}
+            {loaded && hasUnits ? (
+              // What the four tiles said beyond their counts, on one wrapping line.
+              <dl aria-label="Unit figures" className="flex flex-wrap gap-x-8 gap-y-1 border-b border-edge px-4 py-2 text-sm">
+                {figures.map(([label, value]) => (
+                  <div key={label} className="flex items-baseline gap-2 whitespace-nowrap">
+                    <dt className="text-content-secondary">{label}</dt>
+                    <dd className="font-medium tabular-nums text-content">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
             <SectionToolbar
               filters={
                 <div role="group" aria-label="Filter units">
@@ -417,7 +427,8 @@ export function LeaseRosterPage({
                     setQuery(e.target.value);
                     setLimit(PAGE_SIZE);
                   }}
-                  className="w-full pl-8 md:w-64"
+                  // Wide enough for the whole placeholder.
+                  className="w-full pl-8 md:w-80"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">

@@ -156,8 +156,12 @@ describe('LeaseRosterPage', () => {
     );
     // The fixture must exercise every figure, or equal zeros prove nothing.
     expect([t.vacant.count, t.vacant.avgDaysEmpty, t.vacant.preLeased, t.vacant.movingOut, t.all.offline]).toEqual([2, 26, 1, 1, 1]);
-    const glance = container.querySelector<HTMLElement>('[data-source="useLeaseRosterData"]')!;
-    const value = (label: string) => within(glance).getByText(label).nextElementSibling?.textContent;
+    // One wrapping row in the section, not stacked panel lines: stacked, they
+    // pushed the table below the fold.
+    const row = container.querySelector<HTMLElement>('dl[aria-label="Unit figures"]')!;
+    expect(row.className).toContain('flex-wrap');
+    expect(row.children).toHaveLength(6);
+    const value = (label: string) => within(row).getByText(label).nextElementSibling?.textContent;
     expect(value('Vacant')).toBe(String(t.vacant.count));
     expect(value('Average days empty')).toBe(String(t.vacant.avgDaysEmpty));
     expect(value('Pre-leased')).toBe(String(t.vacant.preLeased));
@@ -259,6 +263,25 @@ describe('LeaseRosterPage', () => {
     const glance = container.querySelector<HTMLElement>('[data-source="useLeaseRosterData"]')!;
     expect(within(glance).getByText('75.0%')).toBeVisible();
     expect(within(glance).getByText('3 of 4 units')).toBeVisible();
+    // The strip above the table stays short: a headline and one line.
+    expect(glance.querySelectorAll('dt')).toHaveLength(1);
+  });
+
+  it('needs attention appears only when a lease is past its end date', () => {
+    const first = mount();
+    expect(screen.queryByRole('heading', { name: 'Needs attention' })).toBeNull();
+    first.unmount();
+    rosterMock.mockReturnValue(data({ leases: [lease(1, 1), lease(2, 2, { endDate: '2026-09-15' })] }));
+    mount();
+    expect(screen.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
+    expect(screen.getByText(/1 lease has run past the end date/)).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Show renewals due' }));
+    expect(openButtons()).toEqual(['Open Unit 102']);
+  });
+
+  it('the search field is wide enough for its placeholder', () => {
+    mount();
+    expect(screen.getByRole('searchbox').className).toContain('md:w-80');
   });
 
   it('loading: the header and filters stay, counts and rows wait', () => {

@@ -170,9 +170,9 @@ export function RosterTable({
           <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Unit</th>
           <th scope="col" className="w-full px-4 py-2.5 font-medium">Resident</th>
           <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Status</th>
-          <th scope="col" className="hidden px-4 py-2.5 font-medium md:table-cell">Lease end</th>
-          <th scope="col" className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">Rent</th>
-          <th scope="col" className="px-4 py-2.5 font-medium">Renewal</th>
+          <th scope="col" className="hidden whitespace-nowrap px-4 py-2.5 font-medium md:table-cell">Lease end</th>
+          <th scope="col" className="hidden whitespace-nowrap px-4 py-2.5 text-right font-medium lg:table-cell">Rent</th>
+          <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Renewal</th>
         </tr>
       </thead>
       {groups.map((g) => {

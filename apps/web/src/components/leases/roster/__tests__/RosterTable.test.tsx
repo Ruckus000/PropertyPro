@@ -65,6 +65,15 @@ describe('RosterTable', () => {
     expect(screen.getByRole('button', { name: 'Open Unit 201' })).toBeDefined();
   });
 
+  it('no column header wraps, and Resident takes the spare width', () => {
+    setup();
+    const headers = [...document.querySelectorAll<HTMLElement>('thead th')];
+    expect(headers.map((h) => h.textContent)).toEqual(['Unit', 'Resident', 'Status', 'Lease end', 'Rent', 'Renewal']);
+    for (const h of headers) {
+      expect(h.className).toContain(h.textContent === 'Resident' ? 'w-full' : 'whitespace-nowrap');
+    }
+  });
+
   it('only attention states get a badge; Leased reads as plain text', () => {
     setup();
     expect(screen.getByText('Leased')).toBeDefined();
