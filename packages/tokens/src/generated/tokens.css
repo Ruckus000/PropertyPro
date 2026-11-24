@@ -42,6 +42,7 @@
   --sand-100: #F6EFE6;
   --sand-200: #EFE7DC;
   --sand-300: #E3D8C9;
+  --sand-500: #938979;
 
   --coral-50: #FCF1ED;
   --coral-100: #F7DCD2;
@@ -242,6 +243,7 @@
   --border-default: var(--sand-200);
   --border-subtle: var(--sand-100);
   --border-strong: var(--sand-300);
+  --border-control: var(--sand-500);
   --border-muted: var(--sand-50);
   --border-focus: var(--coral-500);
   --border-error: var(--red-500);
