@@ -8,7 +8,6 @@
   "apps/web/src/app/(authenticated)/arc-requests/new/page.tsx",
   "apps/web/src/app/(authenticated)/arc-requests/page.tsx",
   "apps/web/src/app/(authenticated)/assessments/page.tsx",
-  "apps/web/src/app/(authenticated)/audit-trail/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/board/elections/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/board/forum/[threadId]/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/board/forum/page.tsx",
