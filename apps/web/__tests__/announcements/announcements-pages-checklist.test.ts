@@ -49,8 +49,12 @@ vi.mock('@/lib/services/onboarding-checklist-service', () => ({
   tryAutoComplete: tryAutoCompleteMock,
 }));
 vi.mock('@/lib/utils/timezone', () => ({ resolveTimezone: () => 'America/New_York' }));
-vi.mock('@/components/announcements/announcement-list-container', () => ({
-  AnnouncementListContainer: () => null,
+vi.mock('@/components/announcements/announcement-list', () => ({
+  AnnouncementList: () => null,
+}));
+vi.mock('@/components/announcements/announcements-list-page', () => ({
+  AnnouncementsListPage: () => null,
+  announcementsListHref: () => '/announcements',
 }));
 vi.mock('@/components/mobile/MobileAnnouncementsContent', () => ({
   MobileAnnouncementsContent: () => null,

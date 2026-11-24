@@ -1,22 +1,26 @@
+// page-template: delegated to apps/web/src/components/announcements/announcements-list-page.tsx
 /**
  * Announcements Page — full community announcements list.
  *
- * Route: /announcements?communityId=X
- * Auth: any community member.
+ * Route: /announcements?communityId=X[&q=<search>][&includeDeleted=true]
+ * Auth: any community member. `includeDeleted` is honoured for admins only.
  */
 import { Suspense } from 'react';
 import { headers } from 'next/headers';
-import Link from 'next/link';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { checkPermissionV2, requirePermission } from '@/lib/db/access-control';
+import { describeAccess } from '@/lib/access/describe-access';
 import { listVisibleAnnouncements } from '@/lib/announcements/read-visibility';
 import { tryAutoComplete } from '@/lib/services/onboarding-checklist-service';
-import { AnnouncementListContainer } from '@/components/announcements/announcement-list-container';
+import { AnnouncementList } from '@/components/announcements/announcement-list';
+import {
+  AnnouncementsListPage,
+  announcementsListHref,
+} from '@/components/announcements/announcements-list-page';
 import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CommunityMembership } from '@/lib/api/community-membership';
 
@@ -67,35 +71,50 @@ export default async function AnnouncementsPage({ searchParams }: PageProps) {
   const showDeleted =
     membership.isAdmin && resolvedSearchParams['includeDeleted'] === 'true';
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Announcements"
-        description="Community updates, notices, and reminders."
-        actions={
-          canWriteAnnouncements ? (
-            <Button asChild>
-              <Link href={`/announcements/new?communityId=${context.communityId}`}>
-                New announcement
-              </Link>
-            </Button>
-          ) : undefined
-        }
+  /* The list query resolves inside the boundary so the header flushes
+     immediately and the rows stream in. */
+  const records = (
+    <Suspense fallback={<AnnouncementListSkeleton />}>
+      <AnnouncementRecords
+        communityId={context.communityId}
+        membership={membership}
+        query={query}
+        showDeleted={showDeleted}
+        canWriteAnnouncements={canWriteAnnouncements}
       />
+    </Suspense>
+  );
 
-      {/* The list query resolves inside the boundary so the header flushes
-          immediately and the rows stream in. */}
-      <Suspense fallback={<AnnouncementListSkeleton />}>
-        <AnnouncementList
-          communityId={context.communityId}
-          membership={membership}
-          userId={userId}
-          query={query}
-          showDeleted={showDeleted}
-          canWriteAnnouncements={canWriteAnnouncements}
-        />
-      </Suspense>
-    </div>
+  // Anyone who can post or manage gets the staff page; everyone else the
+  // resident one, which has no actions and no panel.
+  if (!membership.isAdmin && !canWriteAnnouncements) {
+    return (
+      <AnnouncementsListPage view="resident" communityId={context.communityId}>
+        {records}
+      </AnnouncementsListPage>
+    );
+  }
+
+  return (
+    <AnnouncementsListPage
+      view="staff"
+      communityId={context.communityId}
+      canWrite={canWriteAnnouncements}
+      deletedToggle={
+        membership.isAdmin
+          ? {
+              showing: showDeleted,
+              href: announcementsListHref(context.communityId, {
+                query,
+                includeDeleted: !showDeleted,
+              }),
+            }
+          : undefined
+      }
+      about={describeAccess(membership.communityType, 'announcements', 'sent-to-them')}
+    >
+      {records}
+    </AnnouncementsListPage>
   );
 }
 
@@ -109,23 +128,21 @@ function AnnouncementListSkeleton() {
   );
 }
 
-interface AnnouncementListProps {
+interface AnnouncementRecordsProps {
   communityId: number;
   membership: CommunityMembership;
-  userId: string;
   query: string | undefined;
   showDeleted: boolean;
   canWriteAnnouncements: boolean;
 }
 
-async function AnnouncementList({
+async function AnnouncementRecords({
   communityId,
   membership,
-  userId,
   query,
   showDeleted,
   canWriteAnnouncements,
-}: AnnouncementListProps) {
+}: AnnouncementRecordsProps) {
   const { rows: items } = await listVisibleAnnouncements(communityId, membership, {
     query,
     includeDeleted: showDeleted,
@@ -139,18 +156,18 @@ async function AnnouncementList({
     audience: item.audience,
     isPinned: item.isPinned,
     publishedAt: item.publishedAt.toISOString(),
-    publishedBy: item.publishedBy,
     deletedAt: item.deletedAt ? item.deletedAt.toISOString() : null,
   }));
 
   return (
-    <AnnouncementListContainer
+    <AnnouncementList
       items={serializedItems}
       communityId={communityId}
-      currentUserId={userId}
-      isAdmin={membership.isAdmin}
-      canWriteAnnouncements={canWriteAnnouncements}
       showDeleted={showDeleted}
+      canWrite={canWriteAnnouncements}
+      // A blank search is no search.
+      searchQuery={query?.trim() || undefined}
+      clearSearchHref={announcementsListHref(communityId, { includeDeleted: showDeleted })}
     />
   );
 }

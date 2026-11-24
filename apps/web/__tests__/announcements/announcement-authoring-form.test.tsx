@@ -5,7 +5,7 @@
  * mock that hook + `next/navigation` and mock `AnnouncementComposer` down to a
  * pair of buttons that invoke the real `onSubmit` / `onCancel` handlers, so we
  * assert exactly the component's create-vs-update branching, the success
- * id-missing literal, error propagation, the cancel/back path, and the
+ * id-missing literal, error propagation, the absence of a cancel handler, and the
  * submitting/disabled state.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -58,7 +58,12 @@ vi.mock('@/components/announcements/announcement-composer', () => ({
       >
         {props.submitLabel}
       </button>
-      <button type="button" data-testid="composer-cancel" onClick={props.onCancel}>
+      <button
+        type="button"
+        data-testid="composer-cancel"
+        data-has-handler={String(props.onCancel !== undefined)}
+        onClick={props.onCancel}
+      >
         Cancel
       </button>
     </div>
@@ -143,28 +148,11 @@ describe('AnnouncementAuthoringForm', () => {
     expect(refreshMock).not.toHaveBeenCalled();
   });
 
-  it('cancel (create): pushes back to the announcements list', () => {
+  it('passes the composer no cancel handler: the page header holds the one Cancel', () => {
     render(<AnnouncementAuthoringForm communityId={7} communityType="condo_718" />);
     screen.getByTestId('composer-cancel').click();
-    expect(pushMock).toHaveBeenCalledWith('/announcements?communityId=7');
-  });
-
-  it('cancel (edit): pushes back to the existing announcement', () => {
-    render(
-      <AnnouncementAuthoringForm
-        communityType="condo_718"
-        communityId={7}
-        announcement={{
-          id: 9,
-          title: 'T',
-          body: 'B',
-          audience: 'all',
-          isPinned: false,
-        }}
-      />,
-    );
-    screen.getByTestId('composer-cancel').click();
-    expect(pushMock).toHaveBeenCalledWith('/announcements/9?communityId=7');
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('composer-cancel')).toHaveAttribute('data-has-handler', 'false');
   });
 
   it('disables the submit button while submitting', async () => {

@@ -1,10 +1,6 @@
 [
   "apps/web/src/app/(auth)/signup/page.tsx",
   "apps/web/src/app/(authenticated)/account/join-community/page.tsx",
-  "apps/web/src/app/(authenticated)/announcements/[id]/edit/page.tsx",
-  "apps/web/src/app/(authenticated)/announcements/[id]/page.tsx",
-  "apps/web/src/app/(authenticated)/announcements/new/page.tsx",
-  "apps/web/src/app/(authenticated)/announcements/page.tsx",
   "apps/web/src/app/(authenticated)/arc-requests/new/page.tsx",
   "apps/web/src/app/(authenticated)/arc-requests/page.tsx",
   "apps/web/src/app/(authenticated)/assessments/page.tsx",

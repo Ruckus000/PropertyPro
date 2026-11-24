@@ -1,5 +1,6 @@
+// breadcrumbs:exempt — delegated to apps/web/src/components/announcements/announcement-form-page.tsx
+// page-template: delegated to apps/web/src/components/announcements/announcement-form-page.tsx
 import { headers } from 'next/headers';
-import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { resolvePageCommunityContext } from '@/lib/tenant/resolve-community-context';
 import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
@@ -7,10 +8,7 @@ import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { requirePermission } from '@/lib/db/access-control';
 import { getVisibleAnnouncementById } from '@/lib/announcements/read-visibility';
-import { AnnouncementAuthoringForm } from '@/components/announcements/announcement-authoring-form';
-import { AnnouncementDetailActions } from '@/components/announcements/announcement-detail-actions';
-import { PageHeader } from '@/components/shared/page-header';
-import { Button } from '@/components/ui/button';
+import { AnnouncementFormPage } from '@/components/announcements/announcement-form-page';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,39 +58,17 @@ export default async function EditAnnouncementPage({ params, searchParams }: Pag
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <PageHeader
-        title="Edit Announcement"
-        description="Update the announcement residents see in the community feed."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline">
-              <Link href={`/announcements/${announcementId}?communityId=${context.communityId}`}>
-                Cancel
-              </Link>
-            </Button>
-            <AnnouncementDetailActions
-              communityId={context.communityId}
-              announcementId={announcementId}
-              isDeleted={announcement.deletedAt != null}
-              canEdit={false}
-            />
-          </div>
-        }
-      />
-
-      <AnnouncementAuthoringForm
-        communityId={context.communityId}
-        communityType={membership.communityType}
-        announcement={{
-          id: announcement.id,
-          title: announcement.title,
-          body: announcement.body,
-          audience: announcement.audience as 'all' | 'owners_only' | 'board_only' | 'tenants_only',
-          isPinned: announcement.isPinned,
-          expiresAt: announcement.expiresAt ? new Date(announcement.expiresAt).toISOString() : null,
-        }}
-      />
-    </div>
+    <AnnouncementFormPage
+      communityId={context.communityId}
+      communityType={membership.communityType}
+      announcement={{
+        id: announcement.id,
+        title: announcement.title,
+        body: announcement.body,
+        audience: announcement.audience as 'all' | 'owners_only' | 'board_only' | 'tenants_only',
+        isPinned: announcement.isPinned,
+        expiresAt: announcement.expiresAt ? new Date(announcement.expiresAt).toISOString() : null,
+      }}
+    />
   );
 }
