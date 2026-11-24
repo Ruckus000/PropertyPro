@@ -1,6 +1,8 @@
 /**
  * D30: the Directory split view is the one pane sized from the viewport, so with
- * the top-nav flag on the tab row's height comes off it (19rem, not 16rem).
+ * the top-nav flag on the tab row's height comes off it (25.5rem, not 22.5rem).
+ * Both figures are 6.5rem more than before the page moved onto PageLayout
+ * (19 / 16): the header now paints a title and description above the tabs.
  * Mocks mirror directory-page-client.test.tsx.
  */
 import type { ReactNode } from 'react';
@@ -215,13 +217,13 @@ describe('DirectoryPageClient — split view offset (D30)', () => {
     flag.on = false;
     const off = await openSplit();
     // A phone has the tab row in every build; the desktop has the rail (no row).
-    expect(off.className).toContain('h-[calc(100dvh-19rem)]');
-    expect(off.className).toContain('lg:h-[calc(100dvh-16rem)]');
+    expect(off.className).toContain('h-[calc(100dvh-25.5rem)]');
+    expect(off.className).toContain('lg:h-[calc(100dvh-22.5rem)]');
     cleanup();
 
     flag.on = true;
     const on = await openSplit();
-    expect(on.className).toContain('h-[calc(100dvh-19rem)]');
-    expect(on.className).not.toContain('h-[calc(100dvh-16rem)]');
+    expect(on.className).toContain('h-[calc(100dvh-25.5rem)]');
+    expect(on.className).not.toContain('h-[calc(100dvh-22.5rem)]');
   });
 });

@@ -842,3 +842,116 @@ describe('DirectoryPageClient — setup', () => {
     expect(screen.queryByRole('region', { name: 'Continue setup' })).toBeNull();
   });
 });
+
+describe('DirectoryPageClient — page kit', () => {
+  const header = () => document.querySelector('[data-page-header]') as HTMLElement;
+
+  it('is a list page with a painted title and a one-sentence description', () => {
+    renderClient();
+    expect(document.querySelector('[data-page-template="list"]')).not.toBeNull();
+    expect(within(header()).getByRole('heading', { level: 1, name: 'Directory' })).not.toHaveClass('sr-only');
+    expect(within(header()).getByText('The units in this community and the people who live in them.')).toBeInTheDocument();
+  });
+
+  it('a non-admin reads a description that promises units only', () => {
+    renderClient({ isAdmin: false, canSeeBalances: false });
+    expect(within(header()).getByText('The units in this community.')).toBeInTheDocument();
+    expect(screen.queryByText(/the people who live in them/)).not.toBeInTheDocument();
+  });
+
+  it('a writer gets Add unit and More actions in the header', () => {
+    renderClient();
+    expect(within(header()).getByRole('button', { name: 'Add unit' })).toBeInTheDocument();
+    expect(within(header()).getByRole('button', { name: 'More actions' })).toBeInTheDocument();
+  });
+
+  it('without units.write the header offers no Add and the menu no unit import, but export stays', async () => {
+    const user = userEvent.setup();
+    renderClient({ canWrite: false });
+    expect(within(header()).queryByRole('button', { name: /^Add/ })).not.toBeInTheDocument();
+    await user.click(within(header()).getByRole('button', { name: 'More actions' }));
+    expect(await screen.findByRole('menuitem', { name: /Export units/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /Import from CSV/ })).not.toBeInTheDocument();
+  });
+
+  it('a writer finds the unit import in the menu', async () => {
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(within(header()).getByRole('button', { name: 'More actions' }));
+    expect(await screen.findByRole('menuitem', { name: /Import from CSV/ })).toHaveAttribute(
+      'href',
+      '/dashboard/import-units?communityId=42',
+    );
+  });
+
+  it('on the residents tab the header primary is Add resident', () => {
+    searchState.value = 'tab=residents';
+    renderClient();
+    expect(within(header()).getByRole('button', { name: 'Add resident' })).toBeInTheDocument();
+    expect(within(header()).queryByRole('button', { name: 'Add unit' })).not.toBeInTheDocument();
+  });
+
+  it('a non-admin gets no tabs row at all, even with ?tab=residents', () => {
+    searchState.value = 'tab=residents';
+    renderClient({ isAdmin: false, canSeeBalances: false });
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Residents' })).not.toBeInTheDocument();
+    // Units are still there.
+    expect(screen.getByRole('button', { name: /^101/ })).toBeInTheDocument();
+  });
+
+  it('an admin gets the three tabs under the header', () => {
+    renderClient();
+    const tabs = within(screen.getByRole('tablist', { name: 'Directory sections' })).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Units3', 'Residents2', 'Join requests']);
+  });
+
+  it('the residents table has five columns: no Board or Phone column, the board seat under the name', () => {
+    useResidentsListMock.mockReturnValue(
+      ok([
+        resident('Olive Owner', { unitId: 1, designation: 'board_president', phone: '305-555-0101' }),
+        resident('Ivy Invited', { unitId: 3, portalStatus: 'invited' }),
+      ]),
+    );
+    searchState.value = 'tab=residents';
+    renderClient();
+    const table = screen.getByRole('table', { name: 'Residents' });
+    const headers = within(table).getAllByRole('columnheader');
+    expect(headers).toHaveLength(5);
+    expect(headers.slice(1).map((h) => h.textContent)).toEqual(['Name', 'Unit', 'Type', 'Portal']);
+    expect(within(headers[0]!).getByRole('checkbox', { name: 'Select all shown residents' })).toBeInTheDocument();
+    // No column waits for a wider screen than 768px.
+    for (const h of headers) expect(h.className).not.toMatch(/\b(lg|xl):table-cell\b/);
+
+    // The seat sits in the Name cell, with the email.
+    const olive = within(table).getByRole('button', { name: /olive owner/i });
+    expect(within(olive).getByText('olive.owner@x.test')).toBeInTheDocument();
+    expect(within(olive).getByText('Board president')).toBeInTheDocument();
+    expect(
+      within(within(table).getByRole('button', { name: /ivy invited/i })).queryByText(/board/i),
+    ).not.toBeInTheDocument();
+
+    // Phone is in the resident sheet only.
+    expect(within(table).queryByText('305-555-0101')).not.toBeInTheDocument();
+  });
+
+  it('the phone number is still in the resident sheet', async () => {
+    useResidentsListMock.mockReturnValue(ok([resident('Olive Owner', { unitId: 1, phone: '305-555-0101' })]));
+    searchState.value = 'tab=residents';
+    const user = userEvent.setup();
+    renderClient();
+    await user.click(within(screen.getByRole('table', { name: 'Residents' })).getByRole('button', { name: /olive owner/i }));
+    const drawer = await screen.findByRole('dialog', { name: 'Olive Owner' });
+    expect(within(drawer).getByText('305-555-0101')).toBeInTheDocument();
+  });
+
+  it('?tab= picks the tab and ?q= seeds the units search', () => {
+    searchState.value = 'tab=units&q=103';
+    renderClient();
+    expect(screen.getByRole('tab', { name: /units/i })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('searchbox', { name: /search unit or owner/i })).toHaveValue('103');
+    expect(screen.getByRole('button', { name: /^103/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^101/ })).not.toBeInTheDocument();
+  });
+});

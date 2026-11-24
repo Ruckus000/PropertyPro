@@ -2,6 +2,7 @@
 
 import { useId, useState, type ReactNode } from 'react';
 import { Building2, Columns2, LayoutGrid, Search, SlidersHorizontal, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { BuildingOption } from './directory-model';
@@ -71,7 +72,7 @@ export function DirectoryToolbar<T extends string>({
     <div className="flex items-center gap-2">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor asChild>
-          <div className="flex min-h-12 min-w-0 flex-1 flex-wrap md:min-w-72 items-center gap-1.5 rounded-sm border border-edge bg-surface-card py-1 pl-3 pr-1 text-content-tertiary focus-within:border-edge-focus md:min-h-10">
+          <div className="flex min-h-12 min-w-0 flex-1 flex-wrap md:min-w-72 items-center gap-1.5 rounded-sm border border-edge-control bg-surface-card py-1 pl-3 pr-1 text-content-tertiary focus-within:border-edge-focus md:min-h-10">
             <Search size={16} className="shrink-0" aria-hidden="true" />
             {tokens.map((t) => (
               <span
@@ -101,23 +102,21 @@ export function DirectoryToolbar<T extends string>({
               className="h-9 min-w-32 flex-1 border-0 bg-transparent text-base text-content outline-none placeholder:text-content-placeholder"
             />
             <PopoverTrigger asChild>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 aria-label={tokens.length ? `Filters, ${tokens.length} active` : 'Filters'}
-                className={cn(
-                  'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-2.5 text-xs font-medium text-content hover:bg-surface-hover',
-                  open && 'bg-surface-hover',
-                  FOCUS,
-                )}
+                className={cn('shrink-0 text-content', open && 'bg-surface-hover')}
               >
-                <SlidersHorizontal size={15} aria-hidden="true" />
+                <SlidersHorizontal aria-hidden="true" />
                 <span className="hidden sm:inline">Filters</span>
                 {tokens.length ? (
                   <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-interactive px-1.5 text-xs font-semibold text-content-inverse">
                     {tokens.length}
                   </span>
                 ) : null}
-              </button>
+              </Button>
             </PopoverTrigger>
           </div>
         </PopoverAnchor>
@@ -180,20 +179,12 @@ export function DirectoryToolbar<T extends string>({
           </fieldset>
 
           <div className="flex justify-between gap-2 border-t border-edge-subtle pt-3">
-            <button
-              type="button"
-              onClick={onClearAll}
-              className={cn('h-9 rounded-md px-2.5 text-xs font-medium text-content-secondary hover:bg-surface-hover', FOCUS)}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={onClearAll} className="text-content-secondary">
               Clear all
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className={cn('h-9 rounded-md bg-interactive px-3.5 text-xs font-medium text-content-inverse hover:bg-interactive-hover', FOCUS)}
-            >
+            </Button>
+            <Button type="button" size="sm" onClick={() => setOpen(false)}>
               {resultsLabel}
-            </button>
+            </Button>
           </div>
         </PopoverContent>
       </Popover>
