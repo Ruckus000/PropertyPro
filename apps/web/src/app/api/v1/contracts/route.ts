@@ -8,7 +8,9 @@
  * - createScopedClient for tenant isolation (AGENTS #13)
  * - logAuditEvent on every mutation
  * - Compliance-community-only feature gate via hasCompliance (AGENTS #34)
- * - Bid embargo enforced server-side: bid details hidden until biddingClosesAt
+ * - Bid embargo enforced server-side: bid details hidden until biddingClosesAt.
+ *   The rule itself is `applyBidEmbargo` in contract-service, the one copy the
+ *   contract's own page uses too.
  *
  * Wire-shape notes:
  * - GET: pre-migration returned a bespoke flat `{ data, alerts }` envelope.
@@ -33,6 +35,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
+  applyBidEmbargo,
   createContractBidForCommunity,
   createContractForCommunity,
   getContractById,
@@ -43,6 +46,13 @@ import {
   updateContractById,
 } from '@/lib/services/contract-service';
 import {
+  CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_AMOUNT_PATTERN,
+  CONTRACT_END_BEFORE_START_MESSAGE,
+  CONTRACT_STATUSES,
+  isEndBeforeStart,
+} from '@/lib/contracts/contract-rules';
+import {
   contractsCreateContract,
   contractsListContract,
   contractsUpdateContract,
@@ -52,8 +62,6 @@ import {
 // Validation schemas (POST body branches; PATCH body lives in ./contract.ts)
 // ---------------------------------------------------------------------------
 
-const contractStatusValues = ['draft', 'active', 'expired', 'terminated'] as const;
-
 const createContractSchema = z.object({
   communityId: z.number().int().positive(),
   title: z.string().min(1, 'Title is required').max(500),
@@ -61,7 +69,7 @@ const createContractSchema = z.object({
   description: z.string().nullable().optional(),
   contractValue: z
     .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 decimal places')
+    .regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE)
     .nullable()
     .optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format'),
@@ -75,22 +83,29 @@ const createContractSchema = z.object({
   biddingClosesAt: z.string().datetime().nullable().optional(),
   conflictOfInterest: z.boolean().optional(),
   conflictOfInterestNote: z.string().nullable().optional(),
-  status: z.enum(contractStatusValues).optional(),
+  status: z.enum(CONTRACT_STATUSES).optional(),
 });
 
 const createBidSchema = z.object({
   communityId: z.number().int().positive(),
   contractId: z.number().int().positive(),
   vendorName: z.string().min(1, 'Vendor name is required').max(500),
-  bidAmount: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 decimal places'),
+  bidAmount: z.string().regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE),
   notes: z.string().nullable().optional(),
 });
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** A contract cannot end before it starts. Both are 'YYYY-MM-DD'. */
+function requireEndNotBeforeStart(startDate: string, endDate: string | null | undefined): void {
+  if (isEndBeforeStart(startDate, endDate)) {
+    throw new ValidationError(CONTRACT_END_BEFORE_START_MESSAGE, {
+      fields: [{ field: 'endDate', message: CONTRACT_END_BEFORE_START_MESSAGE }],
+    });
+  }
+}
 
 function requireComplianceCommunity(communityType: CommunityType): void {
   const features = getFeaturesForCommunity(communityType);
@@ -141,34 +156,6 @@ function coerceContractRow(row: Record<string, unknown>): ContractRow {
   };
 }
 
-/**
- * Apply bid embargo: if biddingClosesAt is in the future, redact bid details
- * and only return a sealed summary (count + close date).
- */
-function applyBidEmbargo(
-  contract: ContractRow,
-  bids: Record<string, unknown>[],
-): { bids: Record<string, unknown>[]; embargoed: boolean; bidCount: number; biddingClosesAt: Date | null } {
-  const now = new Date();
-  const isEmbargoed = contract.biddingClosesAt !== null && contract.biddingClosesAt > now;
-
-  if (isEmbargoed) {
-    return {
-      bids: [],
-      embargoed: true,
-      bidCount: bids.length,
-      biddingClosesAt: contract.biddingClosesAt,
-    };
-  }
-
-  return {
-    bids,
-    embargoed: false,
-    bidCount: bids.length,
-    biddingClosesAt: contract.biddingClosesAt,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // GET — List contracts with expiration alerts and bid info
 // ---------------------------------------------------------------------------
@@ -184,6 +171,9 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
+    // ponytail: every contract and every bid in the community is loaded, only to
+    // count bids per contract; fine at tens of contracts. Trigger: a community
+    // passes 200 contracts, or this request takes over one second.
     const contractRows = await listContractsForCommunity(scoped);
     const bidRows = await listContractBidsForCommunity(scoped);
     const contractRecords = contractRows.map(coerceContractRow);
@@ -259,6 +249,16 @@ export const PATCH = withErrorHandler(
       throw new NotFoundError('Contract not found');
     }
 
+    // Checked when either date is sent, against the dates as they will be after
+    // this update: the one that is not sent keeps its stored value. An update
+    // that touches neither date is not refused for dates it did not set.
+    if (fields.startDate !== undefined || fields.endDate !== undefined) {
+      requireEndNotBeforeStart(
+        fields.startDate ?? (existing['startDate'] as string),
+        fields.endDate !== undefined ? fields.endDate : (existing['endDate'] as string | null),
+      );
+    }
+
     // Validate documentId belongs to this community if provided
     if (fields.documentId) {
       const document = await getContractDocumentById(scoped, fields.documentId);
@@ -284,7 +284,9 @@ export const PATCH = withErrorHandler(
 
     for (const [key, value] of Object.entries(fields)) {
       if (value !== undefined) {
-        updateData[key] = value;
+        // The column takes a Date; the body carries ISO text (as create converts it).
+        updateData[key] =
+          key === 'biddingClosesAt' && typeof value === 'string' ? new Date(value) : value;
         oldValues[key] = existing[key];
         newValues[key] = value;
       }
@@ -327,6 +329,7 @@ async function handleCreateContract(
   }
 
   const payload = parseResult.data;
+  requireEndNotBeforeStart(payload.startDate, payload.endDate);
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);

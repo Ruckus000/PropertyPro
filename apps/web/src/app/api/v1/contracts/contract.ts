@@ -79,8 +79,12 @@
  * (`packages/shared/src/rbac-matrix.ts`).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import {
+  CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_AMOUNT_PATTERN,
+  CONTRACT_STATUSES,
+} from '@/lib/contracts/contract-rules';
 
-const contractStatusValues = ['draft', 'active', 'expired', 'terminated'] as const;
 
 /**
  * PATCH body — preserved field-for-field from the pre-migration
@@ -95,7 +99,7 @@ export const updateContractBodySchema = z.object({
   description: z.string().nullable().optional(),
   contractValue: z
     .string()
-    .regex(/^\d+(\.\d{1,2})?$/)
+    .regex(CONTRACT_AMOUNT_PATTERN, CONTRACT_AMOUNT_MESSAGE)
     .nullable()
     .optional(),
   startDate: z
@@ -112,7 +116,7 @@ export const updateContractBodySchema = z.object({
   biddingClosesAt: z.string().datetime().nullable().optional(),
   conflictOfInterest: z.boolean().optional(),
   conflictOfInterestNote: z.string().nullable().optional(),
-  status: z.enum(contractStatusValues).optional(),
+  status: z.enum(CONTRACT_STATUSES).optional(),
 });
 
 export const contractsListContract = defineRoute({

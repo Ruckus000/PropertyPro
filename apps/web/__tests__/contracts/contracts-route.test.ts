@@ -40,6 +40,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import {
+  CONTRACT_AMOUNT_MESSAGE,
+  CONTRACT_END_BEFORE_START_MESSAGE,
+} from '../../src/lib/contracts/contract-rules';
 
 const {
   requireAuthenticatedUserIdMock,
@@ -106,7 +110,12 @@ vi.mock('@/lib/services/contract-renewal-alerts', () => ({
   getContractExpirationAlerts: getContractExpirationAlertsMock,
 }));
 
-vi.mock('@/lib/services/contract-service', () => ({
+// The reads and writes are stand-ins; the sealing rule is NOT. `applyBidEmbargo`
+// lives in this module and the route must run the real one, or the embargo
+// tests below would only prove that a mock returns what it was told to.
+vi.mock('@/lib/services/contract-service', async (importOriginal) => ({
+  applyBidEmbargo: (await importOriginal<typeof import('../../src/lib/services/contract-service')>())
+    .applyBidEmbargo,
   listContractsForCommunity: listContractsForCommunityMock,
   listContractBidsForCommunity: listContractBidsForCommunityMock,
   getContractById: getContractByIdMock,
@@ -260,6 +269,60 @@ describe('contracts route (runRoute)', () => {
       expect(json.data.contracts[0]!.bidSummary.embargoed).toBe(true);
       expect(json.data.contracts[0]!.bidSummary.bidCount).toBe(2);
       expect(json.data.contracts[0]!.bidSummary.bids).toHaveLength(0);
+    });
+
+    it('a sealed contract: no bid vendor, amount or note is anywhere in the response', async () => {
+      listContractsForCommunityMock.mockResolvedValue([
+        {
+          id: 1,
+          communityId: 42,
+          title: 'A',
+          vendorName: 'V',
+          startDate: '2026-01-01',
+          endDate: '2027-01-01',
+          biddingClosesAt: new Date(Date.now() + 86_400_000),
+          conflictOfInterest: false,
+          status: 'active',
+          createdBy: 'u',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+      listContractBidsForCommunityMock.mockResolvedValue([
+        { id: 1, contractId: 1, vendorName: 'Zephyr Roofing', bidAmount: '48250.00', notes: 'Includes tear-off' },
+      ]);
+
+      const body = await (await GET(getReq('42'))).text();
+      expect(body).toContain('"bidCount":1');
+      for (const secret of ['Zephyr Roofing', '48250', 'Includes tear-off']) {
+        expect(body).not.toContain(secret);
+      }
+    });
+
+    it('reveals bid details once biddingClosesAt has passed', async () => {
+      listContractsForCommunityMock.mockResolvedValue([
+        {
+          id: 1,
+          communityId: 42,
+          title: 'A',
+          vendorName: 'V',
+          startDate: '2026-01-01',
+          endDate: null,
+          biddingClosesAt: new Date(Date.now() - 86_400_000),
+          conflictOfInterest: false,
+          status: 'active',
+          createdBy: 'u',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+      listContractBidsForCommunityMock.mockResolvedValue([
+        { id: 1, contractId: 1, vendorName: 'Zephyr Roofing', bidAmount: '48250.00' },
+      ]);
+
+      const body = await (await GET(getReq('42'))).text();
+      expect(body).toContain('Zephyr Roofing');
+      expect(body).toContain('"embargoed":false');
     });
 
     it('reveals bid details when biddingClosesAt is null', async () => {
@@ -440,6 +503,72 @@ describe('contracts route (runRoute)', () => {
       expect(res.status).toBe(400);
     });
 
+    it('refuses 1,200 as a value and says how to write an amount', async () => {
+      const res = await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-01-01',
+          contractValue: '1,200',
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(CONTRACT_AMOUNT_MESSAGE);
+      expect(createContractForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses an end date before the start date, with the stated message', async () => {
+      const res = await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-03-01',
+          endDate: '2026-02-28',
+        }),
+      );
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toBe(CONTRACT_END_BEFORE_START_MESSAGE);
+      expect(createContractForCommunityMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts a contract that starts and ends on the same day', async () => {
+      const res = await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-03-01',
+          endDate: '2026-03-01',
+        }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('saves the status and the conflict-of-interest note it is given', async () => {
+      await POST(
+        jsonReq('POST', {
+          communityId: 42,
+          title: 'T',
+          vendorName: 'A',
+          startDate: '2026-01-01',
+          status: 'draft',
+          conflictOfInterest: true,
+          conflictOfInterestNote: 'Treasurer owns the vendor',
+        }),
+      );
+      expect(createContractForCommunityMock).toHaveBeenCalledWith(
+        SCOPED,
+        expect.objectContaining({
+          status: 'draft',
+          conflictOfInterest: true,
+          conflictOfInterestNote: 'Treasurer owns the vendor',
+        }),
+      );
+    });
+
     it('returns 403 when demo-grace blocks (before membership)', async () => {
       assertNotDemoGraceMock.mockRejectedValueOnce(new ForbiddenError('Demo expired'));
       const res = await POST(
@@ -578,6 +707,22 @@ describe('contracts route (runRoute)', () => {
       expect(json.error.message).toContain('Invalid bid payload');
     });
 
+    it('refuses 1,200 as a bid amount and says how to write an amount', async () => {
+      getContractByIdMock.mockResolvedValue({ id: 10, communityId: 42 });
+      const res = await POST(
+        jsonReq('POST', {
+          action: 'add_bid',
+          communityId: 42,
+          contractId: 10,
+          vendorName: 'BidCo',
+          bidAmount: '1,200',
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(CONTRACT_AMOUNT_MESSAGE);
+      expect(createContractBidForCommunityMock).not.toHaveBeenCalled();
+    });
+
     it('returns 404 for a bid against a non-existent contract', async () => {
       getContractByIdMock.mockResolvedValue(null);
       const res = await POST(
@@ -622,6 +767,102 @@ describe('contracts route (runRoute)', () => {
           newValues: expect.objectContaining({ title: 'New Title' }),
         }),
       );
+    });
+
+    const STORED = {
+      id: 1,
+      communityId: 42,
+      title: 'Old Title',
+      status: 'active',
+      startDate: '2026-03-01',
+      endDate: '2026-12-31',
+    };
+
+    it('refuses an end date before the STORED start date when only the end date is sent', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, endDate: '2026-02-28' }));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toBe(CONTRACT_END_BEFORE_START_MESSAGE);
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('refuses a start date after the STORED end date when only the start date is sent', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, startDate: '2027-01-01' }));
+      expect(res.status).toBe(400);
+      const json = (await res.json()) as { error: { message: string } };
+      expect(json.error.message).toBe(CONTRACT_END_BEFORE_START_MESSAGE);
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts both dates moved together, and an end date cleared to open-ended', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const moved = await PATCH(
+        jsonReq('PATCH', { id: 1, communityId: 42, startDate: '2027-01-01', endDate: '2027-12-31' }),
+      );
+      expect(moved.status).toBe(200);
+      const cleared = await PATCH(
+        jsonReq('PATCH', { id: 1, communityId: 42, startDate: '2027-01-01', endDate: null }),
+      );
+      expect(cleared.status).toBe(200);
+    });
+
+    it('an update that sends neither date is not refused for dates already stored out of order', async () => {
+      getContractByIdMock.mockResolvedValue({ ...STORED, startDate: '2026-03-01', endDate: '2026-01-01' });
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, title: 'Renamed' }));
+      expect(res.status).toBe(200);
+    });
+
+    it('refuses 1,200 as a value and says how to write an amount', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, contractValue: '1,200' }));
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain(CONTRACT_AMOUNT_MESSAGE);
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('stores the bidding-close time as the instant it was sent, and audits the text', async () => {
+      getContractByIdMock.mockResolvedValue({ ...STORED, biddingClosesAt: null });
+      const res = await PATCH(
+        jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt: '2026-12-12T22:00:00.000Z' }),
+      );
+      expect(res.status).toBe(200);
+      // The column takes a Date: ISO text handed to the driver throws.
+      const values = updateContractByIdMock.mock.calls[0]![2] as { biddingClosesAt: unknown };
+      expect(values.biddingClosesAt).toBeInstanceOf(Date);
+      expect((values.biddingClosesAt as Date).toISOString()).toBe('2026-12-12T22:00:00.000Z');
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oldValues: { biddingClosesAt: null },
+          newValues: { biddingClosesAt: '2026-12-12T22:00:00.000Z' },
+        }),
+      );
+    });
+
+    it('clears the bidding-close time with null', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt: null }));
+      expect(updateContractByIdMock).toHaveBeenCalledWith(SCOPED, 1, { biddingClosesAt: null });
+    });
+
+    it('saves a new status and conflict-of-interest note', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      const res = await PATCH(
+        jsonReq('PATCH', {
+          id: 1,
+          communityId: 42,
+          status: 'terminated',
+          conflictOfInterest: true,
+          conflictOfInterestNote: 'Treasurer owns the vendor',
+        }),
+      );
+      expect(res.status).toBe(200);
+      expect(updateContractByIdMock).toHaveBeenCalledWith(SCOPED, 1, {
+        status: 'terminated',
+        conflictOfInterest: true,
+        conflictOfInterestNote: 'Treasurer owns the vendor',
+      });
     });
 
     it('returns 401 when unauthenticated', async () => {
