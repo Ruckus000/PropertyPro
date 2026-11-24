@@ -4,7 +4,7 @@
  * One move-in or move-out checklist on the page kit (`template="detail"`).
  * Shown by `ChecklistListPage` when the address carries `?checklist=<id>`.
  */
-import type { ReactNode } from 'react';
+import { useEffect, useId, type ReactNode } from 'react';
 import { ClipboardCheck } from 'lucide-react';
 import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { Section, SectionError, SectionHeader } from '@propertypro/ui/components/shared/section';
@@ -25,12 +25,30 @@ interface Props {
   communityId: number;
   checklistId: number;
   onBack: () => void;
+  /** True when a card on this page opened the checklist: focus goes to the title. */
+  focusTitle?: boolean;
 }
 
-export function ChecklistDetailView({ communityId, checklistId, onBack }: Props) {
+/** Puts keyboard focus on the `<h1>` of the PageHeader carrying this id. */
+export function focusPageTitle(headerId: string): void {
+  const title = document.getElementById(headerId)?.querySelector('h1');
+  if (!title) return;
+  title.tabIndex = -1;
+  title.focus();
+}
+
+export function ChecklistDetailView({ communityId, checklistId, onBack, focusTitle }: Props) {
   const { data: checklist, isLoading, isError, refetch } = useMoveChecklist(communityId, checklistId);
   const updateStep = useUpdateChecklistStep(communityId, checklistId);
   const triggerAction = useTriggerStepAction(communityId, checklistId);
+
+  const headerId = useId();
+
+  // The card that had focus is gone; without this focus falls to <body>.
+  // The same <h1> element stays mounted from loading to loaded.
+  useEffect(() => {
+    if (focusTitle) focusPageTitle(headerId);
+  }, [focusTitle, headerId]);
 
   const backButton = (
     <Button variant="outline" onClick={onBack}>
@@ -42,7 +60,9 @@ export function ChecklistDetailView({ communityId, checklistId, onBack }: Props)
     return (
       <PageLayout
         template="detail"
-        header={<PageHeader title={title} icon={<ClipboardCheck />} actions={backButton} />}
+        header={
+          <PageHeader id={headerId} title={title} icon={<ClipboardCheck />} actions={backButton} />
+        }
       >
         {body}
       </PageLayout>
@@ -106,6 +126,7 @@ export function ChecklistDetailView({ communityId, checklistId, onBack }: Props)
       template="detail"
       header={
         <PageHeader
+          id={headerId}
           title={isMoveIn ? 'Move-in checklist' : 'Move-out checklist'}
           icon={<ClipboardCheck />}
           status={<StatusGlyph kind={kind} label={word} />}

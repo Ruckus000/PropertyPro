@@ -7,7 +7,7 @@
  * The list is read once, unfiltered, and narrowed here, so every filter's
  * count is of the whole set whichever filter is on.
  */
-import { useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ClipboardCheck } from 'lucide-react';
@@ -16,12 +16,13 @@ import { PanelGlance } from '@propertypro/ui/components/shared/side-panel';
 import { Section, SectionError, SectionFirstRun } from '@propertypro/ui/components/shared/section';
 import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import { useMoveChecklists, type MoveChecklistRow } from '@/hooks/use-move-checklists';
+import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
 import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChecklistDetailView } from './ChecklistDetailView';
+import { ChecklistDetailView, focusPageTitle } from './ChecklistDetailView';
 import { checklistProgress, ProgressBar, progressText } from './checklist-progress';
 
 interface Props {
@@ -31,6 +32,8 @@ interface Props {
 type Filter = 'all' | 'move_in' | 'move_out';
 
 const CHECKLIST_PARAM = 'checklist';
+/** Set in `history.state` on the entry this page pushes; it survives a refresh. */
+const OPENED_HERE = 'checklistOpenedHere';
 
 function parseChecklistId(raw: string | null): number | null {
   if (raw === null || !/^\d+$/.test(raw)) return null;
@@ -59,6 +62,7 @@ function ChecklistCard({
       <a
         href={href}
         onClick={onOpen}
+        data-checklist-link={checklist.id}
         className="truncate rounded-xs text-base font-medium text-content after:absolute after:inset-0 after:rounded-md focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-focus"
       >
         {checklist.unitLabel ?? `Unit #${checklist.unitId}`} — Lease #{checklist.leaseId}
@@ -80,8 +84,11 @@ export function ChecklistListPage({ communityId }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [filter, setFilter] = useState<Filter>('all');
-  // True only while a checklist this page opened (pushState) is showing.
-  const openedHereRef = useRef(false);
+  const headerId = useId();
+  // True from a card click until that checklist closes: its title takes focus.
+  const openedByClickRef = useRef(false);
+  // The checklist on screen, so closing it can return focus to its card.
+  const shownIdRef = useRef<number | null>(null);
 
   const { data: checklists, isLoading, isError, refetch } = useMoveChecklists(communityId);
 
@@ -93,6 +100,22 @@ export function ChecklistListPage({ communityId }: Props) {
   const showDetail =
     requestedId !== null && (!loaded || checklists.some((c) => c.id === requestedId));
   const notFound = rawRequested !== null && !showDetail;
+
+  // On close, focus returns to the card that was opened (or the list title when
+  // that card is not on screen); otherwise it would fall to <body>.
+  useEffect(() => {
+    if (showDetail) {
+      shownIdRef.current = requestedId;
+      return;
+    }
+    const closedId = shownIdRef.current;
+    if (closedId === null) return;
+    shownIdRef.current = null;
+    openedByClickRef.current = false;
+    const card = document.querySelector<HTMLElement>(`[data-checklist-link="${closedId}"]`);
+    if (card) card.focus();
+    else focusPageTitle(headerId);
+  }, [showDetail, requestedId, headerId]);
 
   function hrefFor(checklistId: number | null): string {
     const params = new URLSearchParams(searchParams.toString());
@@ -113,18 +136,22 @@ export function ChecklistListPage({ communityId }: Props) {
       return;
     }
     event.preventDefault();
-    openedHereRef.current = true;
-    window.history.pushState(null, '', hrefFor(checklistId));
+    // A double click: the first click already pushed this checklist.
+    const current = new URLSearchParams(window.location.search).get(CHECKLIST_PARAM);
+    if (current === String(checklistId)) return;
+    openedByClickRef.current = true;
+    window.history.pushState({ [OPENED_HERE]: true }, '', hrefFor(checklistId));
   }
 
   /*
-   * Pop the entry this page pushed. A visitor who ARRIVED on `?checklist=`
-   * (a refresh, a shared link) has no such entry; Back would leave the page,
-   * so the id is stripped in place instead.
+   * Pop the entry this page pushed. The mark is read from history.state, not
+   * kept in memory, so it is still there after a refresh. A visitor who
+   * ARRIVED on `?checklist=` (a shared link) has no marked entry; Back would
+   * leave the page, so the id is stripped in place instead.
    */
   function closeChecklist() {
-    if (openedHereRef.current) {
-      openedHereRef.current = false;
+    const state: unknown = window.history.state;
+    if (typeof state === 'object' && state !== null && OPENED_HERE in state) {
       window.history.back();
       return;
     }
@@ -137,6 +164,7 @@ export function ChecklistListPage({ communityId }: Props) {
         communityId={communityId}
         checklistId={requestedId}
         onBack={closeChecklist}
+        focusTitle={openedByClickRef.current}
       />
     );
   }
@@ -217,16 +245,16 @@ export function ChecklistListPage({ communityId }: Props) {
       records="cards"
       banner={
         notFound ? (
-          <p
-            role="status"
-            className="rounded-md border border-edge bg-surface-hover p-3 text-sm text-content"
-          >
-            We couldn&apos;t find that checklist. It may have been removed.
-          </p>
+          <AlertBanner
+            status="info"
+            variant="subtle"
+            title="We couldn't find that checklist. It may have been removed."
+          />
         ) : undefined
       }
       header={
         <PageHeader
+          id={headerId}
           title="Move In/Out"
           icon={<ClipboardCheck />}
           description="Follow each move-in and move-out step by step, one checklist per lease."
