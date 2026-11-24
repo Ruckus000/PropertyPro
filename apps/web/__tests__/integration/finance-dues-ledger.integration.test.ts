@@ -28,6 +28,7 @@ const describeDb = getDescribeDb();
 
 type AssessmentsRouteModule = typeof import('../../src/app/api/v1/assessments/route');
 type AssessmentGenerateRouteModule = typeof import('../../src/app/api/v1/assessments/[id]/generate/route');
+type AssessmentIdRouteModule = typeof import('../../src/app/api/v1/assessments/[id]/route');
 type AssessmentLineItemsRouteModule = typeof import('../../src/app/api/v1/assessments/[id]/line-items/route');
 type DelinquencyRouteModule = typeof import('../../src/app/api/v1/delinquency/route');
 type DelinquencyWaiveRouteModule = typeof import('../../src/app/api/v1/delinquency/[unitId]/waive/route');
@@ -43,6 +44,7 @@ type StripeConnectStatusRouteModule = typeof import('../../src/app/api/v1/stripe
 interface RouteModules {
   assessments: AssessmentsRouteModule;
   assessmentGenerate: AssessmentGenerateRouteModule;
+  assessmentId: AssessmentIdRouteModule;
   assessmentLineItems: AssessmentLineItemsRouteModule;
   delinquency: DelinquencyRouteModule;
   delinquencyWaive: DelinquencyWaiveRouteModule;
@@ -174,6 +176,7 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     routes = {
       assessments: await import('../../src/app/api/v1/assessments/route'),
       assessmentGenerate: await import('../../src/app/api/v1/assessments/[id]/generate/route'),
+      assessmentId: await import('../../src/app/api/v1/assessments/[id]/route'),
       assessmentLineItems: await import('../../src/app/api/v1/assessments/[id]/line-items/route'),
       delinquency: await import('../../src/app/api/v1/delinquency/route'),
       delinquencyWaive: await import('../../src/app/api/v1/delinquency/[unitId]/waive/route'),
@@ -348,6 +351,105 @@ describeDb('WS66 finance/dues/ledger (db-backed integration)', () => {
     const csvBody = await csvResponse.text();
     expect(csvBody).toContain('Entry ID');
     expect(csvBody).toContain('assessment');
+  });
+
+  it('deleting an assessment cancels its unpaid charges and leaves a paid one alone', async () => {
+    const kit = requireState();
+    const routeModules = requireRoutes();
+    const communityA = requireCommunity(kit, 'communityA');
+    const scopedA = kit.dbModule.createScopedClient(communityA.id);
+    const { processOverdueTransitions, processLateFees } = await import(
+      '../../src/lib/services/assessment-automation-service'
+    );
+    const cronScope = { onlyCommunityIds: [communityA.id] };
+    const cronNow = new Date('2026-03-01T12:00:00.000Z');
+    // Settle whatever the crons would do to this community's earlier charges
+    // first (they re-charge a late fee waived in the test above), so the
+    // baseline moves only with this test's own charge.
+    await processOverdueTransitions(cronNow, cronScope);
+    await processLateFees(cronNow, cronScope);
+    const baseline = await moneyFor(communityA.id, unitAId);
+
+    const createResponse = await routeModules.assessments.POST(
+      jsonRequest(apiUrl('/api/v1/assessments'), 'POST', {
+        communityId: communityA.id,
+        title: `Delete Me ${kit.runSuffix}`,
+        amountCents: 4200,
+        frequency: 'monthly',
+        dueDay: 15,
+        lateFeeAmountCents: 700,
+        lateFeeDaysGrace: 0,
+        startDate: '2026-01-01',
+        isActive: true,
+      }),
+    );
+    expect(createResponse.status).toBe(200);
+    const assessmentId = readNumberField(
+      (await parseJson<{ data: Record<string, unknown> }>(createResponse)).data,
+      'id',
+    );
+    const generateResponse = await routeModules.assessmentGenerate.POST(
+      jsonRequest(apiUrl(`/api/v1/assessments/${assessmentId}/generate`), 'POST', {
+        communityId: communityA.id,
+        dueDate: '2026-02-15',
+      }),
+      { params: Promise.resolve({ id: String(assessmentId) }) },
+    );
+    expect(generateResponse.status).toBe(200);
+    await processOverdueTransitions(cronNow, cronScope);
+    await processLateFees(cronNow, cronScope);
+
+    const readItems = () =>
+      scopedA.selectFrom<{ id: number; unitId: number; status: string; lateFeeCents: number }>(
+        kit.dbModule.assessmentLineItems,
+        {},
+        eq(kit.dbModule.assessmentLineItems.assessmentId, assessmentId),
+      );
+    const generated = await readItems();
+    const unpaid = generated.find((row) => row.unitId === unitAId)!;
+    const paid = generated.find((row) => row.unitId === unitASecondaryId)!;
+    expect(unpaid).toMatchObject({ status: 'overdue', lateFeeCents: 700 });
+    expect((await moneyFor(communityA.id, unitAId)).balanceCents).toBe(baseline.balanceCents + 4900);
+
+    // The second unit paid before the delete.
+    await scopedA.update(
+      kit.dbModule.assessmentLineItems,
+      { status: 'paid', paidAt: new Date() },
+      eq(kit.dbModule.assessmentLineItems.id, paid.id),
+    );
+    await kit.dbModule.postLedgerEntry(scopedA, {
+      entryType: 'payment',
+      amountCents: -4200,
+      description: 'Integration test payment',
+      sourceType: 'payment',
+      sourceId: `pi_test_${kit.runSuffix}`,
+      unitId: unitASecondaryId,
+    });
+
+    const deleteResponse = await routeModules.assessmentId.DELETE(
+      new NextRequest(apiUrl(`/api/v1/assessments/${assessmentId}?communityId=${communityA.id}`), {
+        method: 'DELETE',
+      }),
+      { params: Promise.resolve({ id: String(assessmentId) }) },
+    );
+    expect(deleteResponse.status).toBe(200);
+
+    // The crons must not act on a cancelled charge.
+    await processOverdueTransitions(cronNow, cronScope);
+    await processLateFees(cronNow, cronScope);
+
+    const afterDelete = await readItems();
+    // Waived with its fee on record; the reversal covered charge + fee.
+    expect(afterDelete.find((row) => row.id === unpaid.id)).toMatchObject({
+      status: 'waived',
+      lateFeeCents: 700,
+    });
+    expect(afterDelete.find((row) => row.id === paid.id)!.status).toBe('paid');
+
+    const money = await moneyFor(communityA.id, unitAId);
+    expect(money.balanceCents).toBe(baseline.balanceCents);
+    expect(money.totalDueCents).toBe(baseline.totalDueCents);
+    expect(money.balanceCents).toBe(money.totalDueCents);
   });
 
   it('enforces owner-only unit scoping across owner-facing WS66 routes', async () => {

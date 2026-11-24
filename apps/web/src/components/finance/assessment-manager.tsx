@@ -687,10 +687,16 @@ function EditAssessmentDialog({
 
           {error && <p className="text-sm text-status-danger">{error}</p>}
 
+          {confirmDelete && (
+            <p role="alert" className="text-sm text-status-danger">
+              Delete this assessment? Its unpaid charges will be cancelled and taken off each
+              unit&apos;s balance. Charges already paid stay paid and are not refunded.
+            </p>
+          )}
+
           <div className="flex items-center gap-3 pt-2">
             {confirmDelete ? (
               <>
-                <span className="text-xs text-status-danger">Delete this assessment?</span>
                 <button
                   type="button"
                   onClick={() => {

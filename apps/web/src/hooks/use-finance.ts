@@ -191,6 +191,10 @@ export function useDeleteAssessment(communityId: number, assessmentId: number) {
       queryClient.invalidateQueries({
         queryKey: FINANCE_KEYS.assessmentLineItems(communityId, assessmentId),
       });
+      // Deleting cancels the assessment's unpaid charges, so balances move.
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.delinquency(communityId) });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.ledger(communityId) });
+      queryClient.invalidateQueries({ queryKey: FINANCE_KEYS.payments(communityId) });
     },
   });
 }
