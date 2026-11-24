@@ -651,12 +651,32 @@ export async function updateAssessmentForCommunity(
   return row;
 }
 
+/**
+ * Delete an assessment and cancel the charges it left unpaid.
+ *
+ * Unpaid charges (`pending`/`overdue`) become `waived`, and each gets a
+ * reversing `adjustment` for what it carried (amount + late fee, the same sum a
+ * payment would have settled), so the unit stops owing it and the overdue and
+ * late-fee crons, which only act on `pending`/`overdue`, leave it alone. Paid
+ * charges are untouched: deleting an assessment is not a refund.
+ *
+ * The line items are waived rather than soft-deleted so a payment already in
+ * flight (ACH settles days later) still finds its payable: the webhook marks it
+ * paid and posts the payment, and the unit shows a credit for money the
+ * association really received, instead of the payment being skipped as
+ * "payable not found".
+ *
+ * One transaction: the status flip, the reversals, the soft-delete and the
+ * audit row commit together, so a failure cannot leave a deleted assessment
+ * whose units still owe it. The UPDATE returns only the rows it flipped, so a
+ * charge paid a moment earlier is not reversed.
+ */
 export async function deleteAssessmentForCommunity(
   communityId: number,
   assessmentId: number,
   actorUserId: string,
   requestId?: string | null,
-): Promise<void> {
+): Promise<{ cancelledCount: number; cancelledAmountCents: number }> {
   const scoped = createScopedClient(communityId);
   const existingRows = await scoped.selectFrom<AssessmentRecord>(
     assessments,
@@ -668,16 +688,52 @@ export async function deleteAssessmentForCommunity(
     throw new NotFoundError('Assessment not found');
   }
 
-  await scoped.softDelete(assessments, eq(assessments.id, assessmentId));
+  return scoped.transaction(async (tx) => {
+    const cancelled = (await tx.update(
+      assessmentLineItems,
+      { status: 'waived' },
+      and(
+        eq(assessmentLineItems.assessmentId, assessmentId),
+        inArray(assessmentLineItems.status, ['pending', 'overdue']),
+      ),
+    )) as unknown as AssessmentLineItemRecord[];
 
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'delete',
-    resourceType: 'assessment',
-    resourceId: String(assessmentId),
-    communityId,
-    oldValues: existing,
-    metadata: { requestId: requestId ?? null },
+    let cancelledAmountCents = 0;
+    for (const lineItem of cancelled) {
+      const owedCents = lineItem.amountCents + lineItem.lateFeeCents;
+      if (owedCents === 0) continue;
+      cancelledAmountCents += owedCents;
+      await postLedgerEntry(tx, {
+        entryType: 'adjustment',
+        amountCents: -owedCents,
+        description: `Charge cancelled: assessment "${existing.title}" was deleted (line item #${lineItem.id})`,
+        sourceType: 'assessment',
+        sourceId: String(lineItem.id),
+        unitId: lineItem.unitId,
+        metadata: {
+          assessmentId,
+          lineItemId: lineItem.id,
+          notes: 'Assessment deleted',
+        },
+        createdByUserId: actorUserId,
+        requestId: requestId ?? undefined,
+      });
+    }
+
+    await tx.softDelete(assessments, eq(assessments.id, assessmentId));
+
+    const summary = { cancelledCount: cancelled.length, cancelledAmountCents };
+    await tx.logAudit({
+      userId: actorUserId,
+      action: 'delete',
+      resourceType: 'assessment',
+      resourceId: String(assessmentId),
+      oldValues: existing,
+      newValues: summary,
+      metadata: { requestId: requestId ?? null },
+    });
+
+    return summary;
   });
 }
 
