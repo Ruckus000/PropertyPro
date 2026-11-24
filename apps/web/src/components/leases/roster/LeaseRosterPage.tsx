@@ -5,17 +5,30 @@
  *
  * One row per unit, not per lease: the page answers "what is happening in
  * each unit" — occupied, ending, vacant, offline — and puts the one next step
- * on the row. The tiles double as filters; past leases live behind their own
- * view instead of mixing into the list.
+ * on the row. The toolbar filters carry the counts; past leases live behind
+ * their own view instead of mixing into the list. Opening a row shows the
+ * unit's record in `UnitPanel`.
  *
  * All status logic is in `@/lib/leases/roster-model` (pure, tested); this file
  * is state and layout.
  */
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { FileText, Plus, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
+import { PanelAttention, PanelGlance } from '@propertypro/ui/components/shared/side-panel';
+import { RecordList, RecordRow } from '@propertypro/ui/components/shared/record-row';
+import {
+  Section,
+  SectionError,
+  SectionFirstRun,
+  SectionFooter,
+  SectionToolbar,
+} from '@propertypro/ui/components/shared/section';
 import { AlertBanner } from '@/components/shared/alert-banner';
+import { PageHeader } from '@/components/shared/page-header';
+import { QuickFilterTabs } from '@/components/shared/quick-filter-tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,7 +47,6 @@ import {
   type RowAction,
   type UnitModel,
 } from '@/lib/leases/roster-model';
-import { RosterTiles } from './RosterTiles';
 import { PAGE_SIZE, RosterTable } from './RosterTable';
 import { UnitPanel } from './UnitPanel';
 import { AlertWindowsMenu } from './AlertWindowsMenu';
@@ -173,179 +185,283 @@ export function LeaseRosterPage({
 
   const total = filter === 'past' ? past.length : (list?.total ?? 0);
   const noun = filter === 'past' ? ['lease', 'leases'] : ['unit', 'units'];
-  const shown = filter === 'past' ? Math.min(limit, past.length) : total;
-  const isFirstRun = !data.isLoading && data.leases.length === 0;
+  const loaded = !data.isLoading && !data.isError;
+  const hasUnits = data.units.length > 0;
+  const isFirstRun = loaded && data.leases.length === 0 && hasUnits;
+  const newLease = () => setDialog({ kind: 'lease', mode: 'new', unitId: null });
+
+  // The four former tiles. Counts wait for the data, so a tab never shows a
+  // zero that only means "not loaded yet".
+  const count = (n: number) => (loaded ? n : undefined);
+  const tabs = [
+    { label: 'All units', value: 'all', count: count(tiles.all.units) },
+    { label: 'Renewals due', value: 'expiring', count: count(tiles.renewalsDue.count) },
+    { label: 'Vacant', value: 'vacant', count: count(tiles.vacant.count) },
+    { label: 'Month-to-month', value: 'm2m', count: count(tiles.monthToMonth.count) },
+  ];
+  const rentable = tiles.all.units - tiles.all.offline;
+  const holdovers = tiles.renewalsDue.holdovers;
+  const remaining = total - Math.min(limit, total);
+  const canShowMore =
+    loaded && ((filter === 'past' && past.length > limit) || (filter !== 'past' && list!.groups.length === 1 && total > limit));
+
+  let body: React.ReactNode;
+  if (data.isError) {
+    body = <SectionError message="We couldn't load leases. Please try again." onRetry={data.refetch} />;
+  } else if (data.isLoading) {
+    body = (
+      <div className="space-y-2 p-4">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-12" />
+        ))}
+      </div>
+    );
+  } else if (total === 0) {
+    body = (
+      <div className="flex flex-col items-start gap-3 px-4 py-6">
+        <p className="text-sm text-content">
+          {query
+            ? `No ${noun[1]} in ${TITLES[filter]} match “${query}”.`
+            : {
+                all: hasUnits ? 'No units on record.' : 'Leases hang off units, and there are none yet.',
+                expiring: `No renewals due in the next ${Math.max(...data.settings.alertWindows)} days.`,
+                vacant: 'Every unit is occupied and no move-outs are recorded.',
+                m2m: 'No month-to-month leases.',
+                past: 'No past leases on record yet.',
+              }[filter]}
+        </p>
+        {!query && filter === 'all' && !hasUnits && (
+          // No units means no leases can exist yet: point at where units are added.
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/dashboard/directory?communityId=${communityId}`}>Add units in the Directory</Link>
+          </Button>
+        )}
+        {query && (
+          <Button variant="outline" size="sm" onClick={() => setQuery('')}>
+            <X aria-hidden="true" className="size-4" />
+            Clear search
+          </Button>
+        )}
+      </div>
+    );
+  } else if (filter === 'past') {
+    body = (
+      <RecordList>
+        {past.slice(0, limit).map(({ model, lease, people, lastDay }) => (
+          <RecordRow
+            key={lease.id}
+            lead={null}
+            title={
+              <button
+                type="button"
+                onClick={() => setPanelUnitId(model.unit.id)}
+                className="min-h-11 max-w-full truncate rounded-sm text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-focus md:min-h-0"
+              >
+                Unit {model.unit.unitNumber} · {people.map((p) => p.name).join(', ') || 'Unknown resident'}
+              </button>
+            }
+            statusWord={
+              lease.status === 'cancelled'
+                ? `Cancelled before move-in · was to start ${fmt(lease.startDate)}`
+                : lease.endVia === 'transfer'
+                  ? `Transferred · ${fmt(lastDay)}`
+                  : lease.endVia === 'early' || lease.status === 'terminated'
+                    ? `Ended early · ${fmt(lastDay)}`
+                    : `Ended ${fmt(lastDay)}`
+            }
+          />
+        ))}
+      </RecordList>
+    );
+  } else {
+    body = (
+      <RosterTable
+        groups={list!.groups}
+        today={today}
+        selectedUnitId={panelUnitId}
+        limit={limit}
+        onOpen={setPanelUnitId}
+        onAction={onRowAction}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      {data.isError && (
-        <AlertBanner status="danger" title="We couldn't load leases." description="Refresh the page or try again." />
-      )}
-      {data.hasPartialError && !data.isError && (
-        <AlertBanner
-          status="warning"
-          title="Some lease details are unavailable."
-          description="Resident names or renewal offers may be missing. Lease dates and statuses are complete."
-        />
-      )}
-
-      {isFirstRun && data.units.length > 0 && (
-        <div className="rounded-lg border border-edge bg-surface-card p-6">
-          <h2 className="text-base font-semibold text-content">No leases yet</h2>
-          <p className="mt-1 max-w-prose text-sm text-content-secondary">
-            Add the lease for each occupied unit to start tracking renewals, move-outs and deposits. Units without a lease show as
-            vacant.
-          </p>
-          <Button className="mt-4" onClick={() => setDialog({ kind: 'lease', mode: 'new', unitId: null })}>
-            <Plus aria-hidden="true" className="mr-2 size-4" />
-            Add the first lease
-          </Button>
-        </div>
-      )}
-
-      {data.isLoading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-28 rounded-lg" />
-          ))}
-        </div>
-      ) : (
-        <RosterTiles tiles={tiles} active={filter} onSelect={pickFilter} />
-      )}
-
-      <section aria-labelledby="roster-title" className="overflow-hidden rounded-lg border border-edge bg-surface-card">
-        <div className="flex flex-wrap items-center gap-3 border-b border-edge px-4 py-3">
-          <div className="mr-auto min-w-0">
-            <h2 id="roster-title" className="text-base font-semibold text-content">
-              {TITLES[filter]}
-            </h2>
-            <p className="text-xs text-content-secondary" aria-live="polite">
-              {query ? `${total} ${total === 1 ? noun[0] : noun[1]} match` : `${total} ${total === 1 ? noun[0] : noun[1]}`}
-            </p>
-          </div>
-          <div className="relative">
-            <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-content-tertiary" />
-            <Input
-              type="search"
-              aria-label="Search units, residents or emails"
-              placeholder="Search unit, resident or email"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setLimit(PAGE_SIZE);
-              }}
-              className="h-11 md:h-9 w-64 pl-8"
-            />
-          </div>
-          <div role="group" aria-label="Sort" className="inline-flex overflow-hidden rounded-md border border-edge">
-            {(['unit', 'end'] as const).map((k) => (
-              <button
-                key={k}
-                type="button"
-                aria-pressed={sort === k}
-                onClick={() => setSort(k)}
-                className={cn(
-                  'h-9 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-edge-focus',
-                  k === 'end' && 'border-l border-edge',
-                  sort === k ? 'bg-surface-muted font-semibold text-content' : 'bg-surface-card text-content-secondary',
-                )}
-              >
-                {k === 'unit' ? 'Unit' : filter === 'past' ? 'Most recent' : 'Lease end'}
-              </button>
-            ))}
-          </div>
-          {filter === 'past' ? (
-            <Button variant="ghost" size="sm" onClick={() => pickFilter('all')}>
-              Back to all units
-            </Button>
-          ) : (
-            <Button variant="ghost" size="sm" onClick={() => pickFilter('past')} disabled={pastCount === 0}>
-              Past leases ({pastCount})
-            </Button>
-          )}
-          <AlertWindowsMenu windows={data.settings.alertWindows} allowResidentsWithoutEmail={data.settings.allowResidentsWithoutEmail} canEdit={isRootManager} actions={actions} onHelp={onHelp} />
-          <Button onClick={() => setDialog({ kind: 'lease', mode: 'new', unitId: null })}>
-            <Plus aria-hidden="true" className="mr-2 size-4" />
-            New lease
-          </Button>
-        </div>
-
-        {data.isLoading ? (
-          <div className="space-y-2 p-4">
-            {[0, 1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-12" />
-            ))}
-          </div>
-        ) : total === 0 ? (
-          <div className="px-4 py-10 text-center">
-            <p className="text-sm text-content-secondary">
-              {query
-                ? `No ${noun[1]} in ${TITLES[filter]} match “${query}”.`
-                : {
-                    all: data.units.length === 0 && !data.isError ? 'Leases hang off units, and there are none yet.' : 'No units on record.',
-                    expiring: `No renewals due in the next ${Math.max(...data.settings.alertWindows)} days.`,
-                    vacant: 'Every unit is occupied and no move-outs are recorded.',
-                    m2m: 'No month-to-month leases.',
-                    past: 'No past leases on record yet.',
-                  }[filter]}
-            </p>
-            {!query && filter === 'all' && data.units.length === 0 && !data.isError && (
-              // No units means no leases can exist yet: point at where units are added.
-              <Button asChild variant="outline" size="sm" className="mt-3">
-                <Link href={`/dashboard/directory?communityId=${communityId}`}>Add units in the Directory</Link>
-              </Button>
-            )}
-            {query && (
-              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setQuery('')}>
-                <X aria-hidden="true" className="mr-1 size-4" />
-                Clear search
-              </Button>
-            )}
-          </div>
-        ) : filter === 'past' ? (
-          <ul className="divide-y divide-edge-subtle">
-            {past.slice(0, limit).map(({ model, lease, people, lastDay }) => (
-              <li key={lease.id}>
-                <button
-                  type="button"
-                  onClick={() => setPanelUnitId(model.unit.id)}
-                  className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-edge-focus"
-                >
-                  <span className="w-16 text-sm font-semibold tabular-nums text-content">{model.unit.unitNumber}</span>
-                  <span className="min-w-0 flex-1 truncate text-sm text-content">{people.map((p) => p.name).join(', ') || 'Unknown resident'}</span>
-                  <span className="text-xs text-content-secondary">
-                    {lease.status === 'cancelled'
-                      ? `Cancelled before move-in · was to start ${fmt(lease.startDate)}`
-                      : lease.endVia === 'transfer'
-                        ? `Transferred · ${fmt(lastDay)}`
-                        : lease.endVia === 'early' || lease.status === 'terminated'
-                          ? `Ended early · ${fmt(lastDay)}`
-                          : `Ended ${fmt(lastDay)}`}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <RosterTable
-            groups={list!.groups}
-            today={today}
-            selectedUnitId={panelUnitId}
-            limit={limit}
-            onOpen={setPanelUnitId}
-            onAction={onRowAction}
+    <>
+      <PageLayout
+        template="list"
+        records="table"
+        header={
+          <PageHeader
+            title="Leases"
+            icon={<FileText />}
+            description="Every unit and its lease: who lives there, when the lease ends, and the next step on each renewal."
+            // On first run the section offers "Add the first lease" instead.
+            actions={
+              isFirstRun ? undefined : (
+                <Button onClick={newLease}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  New lease
+                </Button>
+              )
+            }
           />
-        )}
+        }
+        panel={{
+          template: 'list',
+          // Same `tiles` the filter counts read, so the figures cannot disagree.
+          glance:
+            loaded && hasUnits ? (
+              <PanelGlance
+                figure={`${tiles.all.occupancyPct.toFixed(1)}%`}
+                unit="occupied"
+                of={[tiles.all.occupied, rentable]}
+                lines={[
+                  ['Occupied', `${tiles.all.occupied} of ${rentable} ${rentable === 1 ? 'unit' : 'units'}`],
+                  ['Renewals with no offer', String(tiles.renewalsDue.withoutOffer)],
+                  ['Moving out', String(tiles.vacant.movingOut)],
+                ]}
+                source="useLeaseRosterData"
+              />
+            ) : undefined,
+          attention:
+            loaded && hasUnits ? (
+              holdovers > 0 ? (
+                <PanelAttention
+                  lead="Past end date"
+                  title={`${holdovers} ${holdovers === 1 ? 'lease has' : 'leases have'} run past the end date with no renewal or move-out.`}
+                  action={
+                    <Button variant="link" size="sm" className="h-auto p-0 md:h-auto" onClick={() => pickFilter('expiring')}>
+                      Show renewals due
+                    </Button>
+                  }
+                />
+              ) : (
+                <PanelAttention none="Leases that run past their end date will show here." />
+              )
+            ) : undefined,
+        }}
+      >
+        <div className="flex flex-col gap-4">
+          {data.hasPartialError && !data.isError && (
+            <AlertBanner
+              status="warning"
+              title="Some lease details are unavailable."
+              description="Resident names or renewal offers may be missing. Lease dates and statuses are complete."
+            />
+          )}
 
-        {((filter === 'past' && past.length > limit) || (filter !== 'past' && list!.groups.length === 1 && total > limit)) && (
-          <div className="border-t border-edge px-4 py-3 text-center">
-            <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE_SIZE)}>
-              Show {Math.min(PAGE_SIZE, total - Math.min(limit, total))} more of {total - Math.min(limit, total)}
-            </Button>
-          </div>
-        )}
-        {filter === 'past' && shown < total && <span className="sr-only">{`${shown} of ${total} shown`}</span>}
-      </section>
+          {isFirstRun && (
+            <Section>
+              <SectionFirstRun
+                title="No leases yet"
+                headingLevel={2}
+                description="Add the lease for each occupied unit to start tracking renewals, move-outs and deposits. Units without a lease show as vacant."
+                action={
+                  <Button onClick={newLease}>
+                    <Plus aria-hidden="true" className="size-4" />
+                    Add the first lease
+                  </Button>
+                }
+              />
+            </Section>
+          )}
+
+          <Section aria-label={TITLES[filter]} aria-busy={data.isLoading}>
+            {data.isError || (loaded && !hasUnits) ? null : (
+              <SectionToolbar
+                filters={
+                  <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+                    <QuickFilterTabs
+                      tabs={tabs}
+                      active={filter}
+                      // Pressing the selected filter again returns to all units, as the tiles did.
+                      onChange={(v) => pickFilter(v === filter ? 'all' : (v as RosterFilter))}
+                      tone="ink"
+                    />
+                    <div className="flex flex-col gap-3 md:ml-auto md:flex-row md:flex-wrap md:items-center">
+                      <div className="relative">
+                        <Search
+                          aria-hidden="true"
+                          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-content-tertiary"
+                        />
+                        <Input
+                          type="search"
+                          aria-label="Search units, residents or emails"
+                          placeholder="Search unit, resident or email"
+                          value={query}
+                          onChange={(e) => {
+                            setQuery(e.target.value);
+                            setLimit(PAGE_SIZE);
+                          }}
+                          className="w-full pl-8 md:w-64"
+                        />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div role="group" aria-label="Sort" className="flex items-center gap-1">
+                          {(['unit', 'end'] as const).map((k) => (
+                            <Button
+                              key={k}
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-pressed={sort === k}
+                              onClick={() => setSort(k)}
+                              className={cn(sort === k ? 'bg-surface-muted font-semibold text-content' : 'text-content-tertiary')}
+                            >
+                              {k === 'unit' ? 'Unit' : filter === 'past' ? 'Most recent' : 'Lease end'}
+                            </Button>
+                          ))}
+                        </div>
+                        {filter === 'past' ? (
+                          <Button variant="outline" size="sm" onClick={() => pickFilter('all')}>
+                            Back to all units
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => pickFilter('past')}
+                            disabled={!loaded || pastCount === 0}
+                          >
+                            Past leases ({pastCount})
+                          </Button>
+                        )}
+                        <AlertWindowsMenu
+                          windows={data.settings.alertWindows}
+                          allowResidentsWithoutEmail={data.settings.allowResidentsWithoutEmail}
+                          canEdit={isRootManager}
+                          actions={actions}
+                          onHelp={onHelp}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                }
+              />
+            )}
+
+            {body}
+
+            {loaded && hasUnits ? (
+              <SectionFooter
+                note={
+                  <span aria-live="polite">
+                    {filter === 'past' && total > limit ? `Showing ${limit} of ` : ''}
+                    {`${total} ${total === 1 ? noun[0] : noun[1]}${query ? (total === 1 ? ' matches' : ' match') : ''}`}
+                  </span>
+                }
+              >
+                {canShowMore ? (
+                  <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE_SIZE)}>
+                    Show {Math.min(PAGE_SIZE, remaining)} more of {remaining}
+                  </Button>
+                ) : null}
+              </SectionFooter>
+            ) : null}
+          </Section>
+        </div>
+      </PageLayout>
 
       <UnitPanel
         model={panelModel}
@@ -372,6 +488,6 @@ export function LeaseRosterPage({
         onClose={() => setDialog(null)}
         onHelp={onHelp}
       />
-    </div>
+    </>
   );
 }
