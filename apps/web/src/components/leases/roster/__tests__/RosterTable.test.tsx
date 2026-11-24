@@ -74,6 +74,20 @@ describe('RosterTable', () => {
     }
   });
 
+  it('only the Resident cell may shrink; no other cell wraps its lines', () => {
+    setup();
+    const cells = [...screen.getByRole('button', { name: 'Open Unit 102' }).closest('tr')!.children] as HTMLElement[];
+    expect(cells).toHaveLength(6);
+    cells.forEach((cell, i) => {
+      if (i === 1) {
+        expect(cell.className).toContain('max-w-0');
+        expect(cell.className).not.toContain('whitespace-nowrap');
+      } else {
+        expect(cell.className).toContain('whitespace-nowrap');
+      }
+    });
+  });
+
   it('only attention states get a badge; Leased reads as plain text', () => {
     setup();
     expect(screen.getByText('Leased')).toBeDefined();

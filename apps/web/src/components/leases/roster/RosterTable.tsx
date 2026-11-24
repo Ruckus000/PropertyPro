@@ -12,8 +12,10 @@
  *
  * Width: the Resident column takes the spare room (`w-full` header) and is the
  * one that gives (`max-w-0` cell, so a long name truncates instead of widening
- * the table), down to a floor (`min-w-32`, `md:min-w-40`). Unit, Status and Rent stay on one
- * line; Lease end and Renewal may wrap when the box is tight.
+ * the table), down to a `min-w-32` floor. Every other cell is
+ * `whitespace-nowrap`: because Resident claims all the spare width, a cell
+ * that may wrap is squeezed to its narrowest and every row doubles in height.
+ * A two-line cell (date over "In 15 days") keeps its two lines.
  */
 import { ChevronDown, ChevronRight, Clock, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
@@ -223,13 +225,13 @@ export function RosterTable({
                     {m.unit.unitNumber}
                   </button>
                 </td>
-                <td className="min-w-32 max-w-0 px-4 py-3 md:min-w-40">
+                <td className="min-w-32 max-w-0 px-4 py-3">
                   <ResidentCell m={m} today={today} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   <LeaseStatus status={m.status} />
                 </td>
-                <td className="hidden px-4 py-3 md:table-cell">
+                <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">
                   <EndCell m={m} today={today} />
                 </td>
                 <td className="hidden whitespace-nowrap px-4 py-3 text-right lg:table-cell">
@@ -246,7 +248,7 @@ export function RosterTable({
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex flex-col items-start gap-0.5">
                     <StageText m={m} today={today} />
                     {m.action && (
