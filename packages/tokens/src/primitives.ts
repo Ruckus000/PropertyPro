@@ -14,9 +14,12 @@ export const primitiveColors = {
   // palette (marketing-theme.css) brought into the app so surfaces read warm
   // instead of clinical-cool. Only the light steps used by surface/border
   // tokens are defined; text/interactive stay on the cool `gray` ramp.
+  // 500 is the one dark step: the edge of an input, textarea or select, which
+  // WCAG 1.4.11 wants at 3:1 against its surface (3.42 on sand-0, 3.23 on
+  // sand-50, 3.02 on sand-100; pinned in __tests__/semantic.test.ts).
   sand: {
     0: '#FFFEFC', 25: '#FDFAF6', 50: '#FBF7F1', 100: '#F6EFE6',
-    200: '#EFE7DC', 300: '#E3D8C9',
+    200: '#EFE7DC', 300: '#E3D8C9', 500: '#938979',
   },
   // "Florida Modern" brand ramps — the app's primary/accent palette, anchored
   // on the marketing landing page (marketing-theme.css) so the product reads
