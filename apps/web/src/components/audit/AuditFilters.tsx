@@ -193,15 +193,37 @@ export function itemTypeLabel(entityType: string): string {
 interface AuditViewPickerProps {
   view: AuditView;
   onView: (view: AuditView) => void;
+  /**
+   * 'pill' (default) is the bordered pill the embedded viewer uses. 'ink' is
+   * the page kit's filter look (as `QuickFilterTabs tone="ink"`) for a
+   * `SectionToolbar`, which scrolls its filters sideways instead of wrapping.
+   */
+  tone?: 'pill' | 'ink';
 }
 
-export function AuditViewPicker({ view, onView }: AuditViewPickerProps) {
+// Complete literals so Tailwind's scanner sees them.
+const GROUP_PILL = '-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0';
+const GROUP_INK = 'flex items-center gap-1';
+const CHOICE_PILL =
+  'inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm transition-colors duration-quick focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus';
+// ring-inset: the toolbar's sideways scroller would clip an outer ring.
+const CHOICE_INK =
+  'inline-flex h-11 shrink-0 items-center rounded-md px-3 text-sm font-medium transition-colors duration-quick focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus md:h-8';
+
+function choiceState(tone: 'pill' | 'ink', selected: boolean): string {
+  if (tone === 'ink') {
+    return selected
+      ? 'bg-surface-muted font-semibold text-content'
+      : 'text-content-tertiary hover:bg-surface-hover hover:text-content';
+  }
+  return selected
+    ? 'border-interactive bg-interactive-subtle font-medium text-content-brand'
+    : 'border-edge-strong bg-surface-card text-content hover:bg-surface-hover';
+}
+
+export function AuditViewPicker({ view, onView, tone = 'pill' }: AuditViewPickerProps) {
   return (
-    <div
-      role="radiogroup"
-      aria-label="Show"
-      className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0"
-    >
+    <div role="radiogroup" aria-label="Show" className={tone === 'ink' ? GROUP_INK : GROUP_PILL}>
       {AUDIT_VIEWS.map((v) => {
         const selected = v === view;
         return (
@@ -211,13 +233,7 @@ export function AuditViewPicker({ view, onView }: AuditViewPickerProps) {
             role="radio"
             aria-checked={selected}
             onClick={() => onView(v)}
-            className={cn(
-              'inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm transition-colors duration-quick',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus',
-              selected
-                ? 'border-interactive bg-interactive-subtle font-medium text-content-brand'
-                : 'border-edge-strong bg-surface-card text-content hover:bg-surface-hover',
-            )}
+            className={cn(tone === 'ink' ? CHOICE_INK : CHOICE_PILL, choiceState(tone, selected))}
           >
             {AUDIT_VIEW_LABELS[v]}
           </button>
