@@ -1,4 +1,5 @@
 // breadcrumbs:exempt — delegated to apps/web/src/components/violations/ViolationDetailView.tsx
+// page-template: delegated to apps/web/src/components/violations/ViolationDetailView.tsx
 /**
  * Violation Detail Page — Phase 1C
  *
@@ -22,6 +23,7 @@ import {
 } from '@/lib/violations/common';
 import { canActAsBoard } from '@/lib/db/access-control';
 import { getViolationForCommunity } from '@/lib/services/violations-service';
+import { hydrateReportedByRole } from '@/lib/violations/hydrate-reporter-role';
 import { ViolationDetailView } from '@/components/violations/ViolationDetailView';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { withUnitLabel } from '@/lib/units/unit-labels';
@@ -84,18 +86,27 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
     notFound();
   }
 
+  // The Details panel names the reporter's standing ("A resident" / "Staff"),
+  // the same words the list uses. Only viewers who get the panel (managers and
+  // board seats) pay for the lookup; the helper applies the reporter redaction
+  // again before it reads anything.
+  const canManage = canActAsBoard(membership);
+  const reportedByRole = canManage
+    ? ((await hydrateReportedByRole(scoped, [violation], { membership, userId }))[0]
+        ?.reportedByRole ?? null)
+    : null;
+
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>
-    <div className="mx-auto max-w-3xl">
       <ViolationDetailView
         violation={violation}
         communityId={communityId}
         communityTimezone={membership.timezone}
         userId={userId}
-        canManage={canActAsBoard(membership)}
+        canManage={canManage}
         finesEnabled={membership.violationFinesEnabled}
+        reportedByRole={reportedByRole}
       />
-    </div>
     </FeatureGate>
   );
 }

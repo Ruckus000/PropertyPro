@@ -8,7 +8,10 @@ import { useCallback, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
+import { Section, SectionFooter, SectionHeader } from '@propertypro/ui/components/shared/section';
 import type { ViolationItem } from '@/lib/api/violations';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 // Editor lazy-loaded so TipTap only ships when this transition form is in
 // view. mode='narrow' produces output inside the existing sanitizeHtml
@@ -262,184 +265,176 @@ export function ViolationStatusTransition({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 space-y-4 rounded-md border border-edge bg-surface-hover p-4">
-      <h4 className="text-sm font-semibold text-content">{config.title}</h4>
+    <Section>
+      <SectionHeader title={config.title} />
+      <form onSubmit={handleSubmit}>
+        <div className="space-y-4 px-4 py-4">
+          {error && (
+            <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{error}</div>
+          )}
 
-      {error && (
-        <div role="alert" className="rounded-md bg-status-danger-bg px-3 py-2 text-sm text-status-danger">{error}</div>
-      )}
-
-      {/* Hearing-specific fields */}
-      {action === 'hearing' && (
-        <>
-          <div>
-            <label htmlFor="hearing-date" className="mb-1 block text-sm font-medium text-content-secondary">
-              Hearing date and time ({communityTimezone})
-            </label>
-            <input
-              id="hearing-date"
-              type="datetime-local"
-              value={hearingDate}
-              onChange={(e) => setHearingDate(e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
-            />
-            {hearingNoticeWarning ? (
-              <p
-                role="status"
-                data-testid="hearing-notice-window-warning"
-                className="mt-1 rounded-md bg-status-warning-bg px-3 py-2 text-xs text-status-warning"
-              >
-                {hearingNoticeWarning.message}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-content-disabled">
-                Most Florida condo bylaws require at least {HEARING_NOTICE_DAYS} days&apos;
-                notice. Check your governing documents.
-              </p>
-            )}
-          </div>
-          <div>
-            <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-content-secondary">
-              Hearing Location (optional)
-            </label>
-            <input
-              id="hearing-location"
-              type="text"
-              value={hearingLocation}
-              onChange={(e) => setHearingLocation(e.target.value)}
-              placeholder="e.g., Community clubhouse, Room 101"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
-            />
-          </div>
-        </>
-      )}
-
-      {/* Fine-specific fields */}
-      {action === 'fine' && (
-        <>
-          <div>
-            <label htmlFor="fine-amount" className="mb-1 block text-sm font-medium text-content-secondary">
-              Fine Amount ($)
-            </label>
-            <input
-              id="fine-amount"
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={fineAmountDollars}
-              onChange={(e) => setFineAmountDollars(e.target.value)}
-              placeholder="0.00"
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
-            />
-          </div>
-          <div>
-            <label htmlFor="fine-due-date" className="mb-1 block text-sm font-medium text-content-secondary">
-              Due Date
-            </label>
-            <input
-              id="fine-due-date"
-              type="date"
-              value={fineDueDate}
-              min={format(new Date(), 'yyyy-MM-dd')}
-              onChange={(e) => setFineDueDate(e.target.value)}
-              className="w-full rounded-md border border-edge-strong px-3 py-2 text-sm focus:border-edge-focus focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-focus"
-            />
-          </div>
-          <fieldset>
-            <legend className="mb-1 block text-sm font-medium text-content-secondary">Fining committee</legend>
-            <p className="mb-2 text-xs text-content-tertiary">
-              The owners who approved this fine. Board members and the person imposing the fine cannot serve
-              (Fla. Stat. §718.303(3) / §720.305(2)).
-            </p>
-            {committee.isLoading ? (
-              <p className="text-sm text-content-tertiary">Loading owners…</p>
-            ) : (committee.data ?? []).length === 0 ? (
-              <p className="text-sm text-content-tertiary">No eligible owners found.</p>
-            ) : (
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-edge-strong bg-surface-card p-2">
-                {(committee.data ?? []).map((member) => (
-                  <label key={member.userId} className="flex items-center gap-2 text-sm text-content-secondary">
-                    <input
-                      type="checkbox"
-                      checked={committeeIds.includes(member.userId)}
-                      onChange={(e) =>
-                        setCommitteeIds((ids) =>
-                          e.target.checked ? [...ids, member.userId] : ids.filter((id) => id !== member.userId),
-                        )
-                      }
-                    />
-                    {member.name}
-                  </label>
-                ))}
+          {/* Hearing-specific fields */}
+          {action === 'hearing' && (
+            <>
+              <div>
+                <label htmlFor="hearing-date" className="mb-1 block text-sm font-medium text-content-secondary">
+                  Hearing date and time ({communityTimezone})
+                </label>
+                <Input
+                  id="hearing-date"
+                  type="datetime-local"
+                  value={hearingDate}
+                  onChange={(e) => setHearingDate(e.target.value)}
+                />
+                {hearingNoticeWarning ? (
+                  <p
+                    role="status"
+                    data-testid="hearing-notice-window-warning"
+                    className="mt-1 rounded-md bg-status-warning-bg px-3 py-2 text-xs text-status-warning"
+                  >
+                    {hearingNoticeWarning.message}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-content-disabled">
+                    Most Florida condo bylaws require at least {HEARING_NOTICE_DAYS} days&apos;
+                    notice. Check your governing documents.
+                  </p>
+                )}
               </div>
-            )}
-            <label className="mt-2 flex items-center gap-2 text-sm text-content-secondary">
-              <input
-                type="checkbox"
-                checked={committeeApproved}
-                onChange={(e) => setCommitteeApproved(e.target.checked)}
-              />
-              The fining committee approved this fine
-            </label>
-            {committeeIds.length > 0 && committeeRule === 'pick_more' && (
-              <p className="mt-2 text-sm text-status-danger">
-                Florida law requires at least {FINING_COMMITTEE_MIN_MEMBERS} committee members. Select{' '}
-                {FINING_COMMITTEE_MIN_MEMBERS - committeeIds.length} more.
-              </p>
-            )}
-            {committeeIds.length > 0 && committeeRule === 'needs_disclaimer' && (
-              <div role="alert" className="mt-2 rounded-md border border-status-warning-border bg-status-warning-bg p-3">
-                <p className="text-sm font-medium text-status-warning">
-                  Fewer than {FINING_COMMITTEE_MIN_MEMBERS} committee members
+              <div>
+                <label htmlFor="hearing-location" className="mb-1 block text-sm font-medium text-content-secondary">
+                  Hearing Location (optional)
+                </label>
+                <Input
+                  id="hearing-location"
+                  type="text"
+                  value={hearingLocation}
+                  onChange={(e) => setHearingLocation(e.target.value)}
+                  placeholder="e.g., Community clubhouse, Room 101"
+                />
+              </div>
+            </>
+          )}
+
+          {/* Fine-specific fields */}
+          {action === 'fine' && (
+            <>
+              <div>
+                <label htmlFor="fine-amount" className="mb-1 block text-sm font-medium text-content-secondary">
+                  Fine Amount ($)
+                </label>
+                <Input
+                  id="fine-amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={fineAmountDollars}
+                  onChange={(e) => setFineAmountDollars(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+              <div>
+                <label htmlFor="fine-due-date" className="mb-1 block text-sm font-medium text-content-secondary">
+                  Due Date
+                </label>
+                <Input
+                  id="fine-due-date"
+                  type="date"
+                  value={fineDueDate}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  onChange={(e) => setFineDueDate(e.target.value)}
+                />
+              </div>
+              <fieldset>
+                <legend className="mb-1 block text-sm font-medium text-content-secondary">Fining committee</legend>
+                <p className="mb-2 text-xs text-content-tertiary">
+                  The owners who approved this fine. Board members and the person imposing the fine cannot serve
+                  (Fla. Stat. §718.303(3) / §720.305(2)).
                 </p>
-                <p className="mt-1 text-sm text-content-secondary">{SMALL_COMMITTEE_DISCLAIMER}</p>
+                {committee.isLoading ? (
+                  <p className="text-sm text-content-tertiary">Loading owners…</p>
+                ) : (committee.data ?? []).length === 0 ? (
+                  <p className="text-sm text-content-tertiary">No eligible owners found.</p>
+                ) : (
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-sm border border-edge-control bg-surface-card p-2">
+                    {(committee.data ?? []).map((member) => (
+                      <label key={member.userId} className="flex items-center gap-2 text-sm text-content-secondary">
+                        <input
+                          type="checkbox"
+                          checked={committeeIds.includes(member.userId)}
+                          onChange={(e) =>
+                            setCommitteeIds((ids) =>
+                              e.target.checked ? [...ids, member.userId] : ids.filter((id) => id !== member.userId),
+                            )
+                          }
+                        />
+                        {member.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <label className="mt-2 flex items-center gap-2 text-sm text-content-secondary">
                   <input
                     type="checkbox"
-                    checked={smallCommitteeAccepted}
-                    onChange={(e) => setSmallCommitteeAccepted(e.target.checked)}
+                    checked={committeeApproved}
+                    onChange={(e) => setCommitteeApproved(e.target.checked)}
                   />
-                  I accept this disclaimer
+                  The fining committee approved this fine
                 </label>
-                <p className="mt-1 text-xs text-content-tertiary">
-                  Your name and the time you accept are recorded in the audit log.
-                </p>
-              </div>
-            )}
-          </fieldset>
-        </>
-      )}
+                {committeeIds.length > 0 && committeeRule === 'pick_more' && (
+                  <p className="mt-2 text-sm text-status-danger">
+                    Florida law requires at least {FINING_COMMITTEE_MIN_MEMBERS} committee members. Select{' '}
+                    {FINING_COMMITTEE_MIN_MEMBERS - committeeIds.length} more.
+                  </p>
+                )}
+                {committeeIds.length > 0 && committeeRule === 'needs_disclaimer' && (
+                  <div role="alert" className="mt-2 rounded-md border border-status-warning-border bg-status-warning-bg p-3">
+                    <p className="text-sm font-medium text-status-warning">
+                      Fewer than {FINING_COMMITTEE_MIN_MEMBERS} committee members
+                    </p>
+                    <p className="mt-1 text-sm text-content-secondary">{SMALL_COMMITTEE_DISCLAIMER}</p>
+                    <label className="mt-2 flex items-center gap-2 text-sm text-content-secondary">
+                      <input
+                        type="checkbox"
+                        checked={smallCommitteeAccepted}
+                        onChange={(e) => setSmallCommitteeAccepted(e.target.checked)}
+                      />
+                      I accept this disclaimer
+                    </label>
+                    <p className="mt-1 text-xs text-content-tertiary">
+                      Your name and the time you accept are recorded in the audit log.
+                    </p>
+                  </div>
+                )}
+              </fieldset>
+            </>
+          )}
 
-      {/* Notes (always shown) */}
-      <div>
-        <label htmlFor="transition-notes" className="mb-1 block text-sm font-medium text-content-secondary">
-          {config.notesLabel}
-        </label>
-        <NotesEditor
-          value={notes}
-          onChange={setNotes}
-          placeholder={config.notesRequired ? 'Required — provide a reason for this action.' : 'Optional notes for the audit trail.'}
-        />
-      </div>
+          {/* Notes (always shown) */}
+          <div>
+            <label htmlFor="transition-notes" className="mb-1 block text-sm font-medium text-content-secondary">
+              {config.notesLabel}
+            </label>
+            <NotesEditor
+              value={notes}
+              onChange={setNotes}
+              placeholder={config.notesRequired ? 'Required — provide a reason for this action.' : 'Optional notes for the audit trail.'}
+            />
+          </div>
+        </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={submitting || (action === 'fine' && !committeeReady)}
-          className="rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse transition-colors duration-quick hover:bg-interactive-hover disabled:opacity-50"
-        >
-          {submitting ? 'Processing...' : config.title}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={submitting}
-          className="rounded-md border border-edge-strong bg-surface-card px-4 py-2 text-sm font-medium text-content-secondary transition-colors duration-quick hover:bg-surface-hover"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
+        {/* Action buttons */}
+        <SectionFooter>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting || (action === 'fine' && !committeeReady)}>
+              {submitting ? 'Processing...' : config.title}
+            </Button>
+          </div>
+        </SectionFooter>
+      </form>
+    </Section>
   );
 }
