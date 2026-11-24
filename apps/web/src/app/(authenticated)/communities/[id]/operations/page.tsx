@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/operations/operations-hub.tsx
 import { createScopedClient } from '@propertypro/db';
 import { getEffectiveFeatures, resolvePlanId } from '@propertypro/shared';
 import { OperationsHub } from '@/components/operations/operations-hub';

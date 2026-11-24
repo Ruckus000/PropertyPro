@@ -42,7 +42,8 @@ describe('amenities — axe', () => {
       <AmenityList amenities={[POOL, SAUNA]} isAdmin onEdit={() => {}} onReserve={() => {}} />,
     );
     expect(screen.getByRole('heading', { level: 3, name: 'Pool' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Edit Sauna' })).toBeTruthy();
+    // The name is the edit control (owner decision 2026-11-24).
+    expect(screen.getByRole('button', { name: 'Sauna' })).toBeTruthy();
     expect(await axe(container)).toHaveNoViolations();
   });
 
