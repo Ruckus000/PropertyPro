@@ -6,7 +6,7 @@
  * in audit-trail-viewer.test.tsx; this file pins what the frame decides.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -138,9 +138,13 @@ describe('AuditTrailPage (the route, on the page kit)', () => {
     await screen.findByText('2025 Reserve Study.pdf');
     const section = screen.getByTestId('audit-trail-section');
     const note = within(section).getByText(PERMANENT);
-    // The footer is the section's last child, under the list.
-    expect(section.lastElementChild).toContainElement(note);
-    expect(section.lastElementChild?.className).toContain('border-t');
+    // The footer is the last thing in the section's live region, under the list.
+    const live = section.querySelector<HTMLElement>('[aria-live="polite"]')!;
+    expect(section.lastElementChild).toBe(live);
+    expect(live.lastElementChild).toContainElement(note);
+    expect(live.lastElementChild?.className).toContain('border-t');
+    // Interface text size, not the footer's caption size.
+    expect(note.parentElement?.className).toContain('text-sm');
   });
 
   it('says how many routine events are hidden in the footer instead, when some are', async () => {
@@ -150,6 +154,96 @@ describe('AuditTrailPage (the route, on the page kit)', () => {
     expect(await within(section).findByText(/178 routine events, like document views/)).toBeInTheDocument();
     expect(within(section).getByRole('button', { name: 'Show everything' })).toBeInTheDocument();
     expect(screen.queryByText(PERMANENT)).toBeNull();
+  });
+
+  it('shows skeleton rows under the real header while loading, with one busy region', () => {
+    fetchMock.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    expect(screen.getByRole('heading', { level: 1, name: 'Audit Trail' })).toBeInTheDocument();
+    const section = screen.getByTestId('audit-trail-section');
+    expect(within(section).getByLabelText('Loading activity')).toBeInTheDocument();
+    expect(section).not.toHaveAttribute('aria-busy');
+    const busy = section.querySelectorAll('[aria-busy]');
+    expect(busy).toHaveLength(1);
+    expect(busy[0]).toHaveAttribute('aria-busy', 'true');
+    expect(busy[0]).toHaveAttribute('aria-live', 'polite');
+    expect(screen.queryByText(PERMANENT)).toBeNull();
+  });
+
+  it('shows the error banner in the section, and Try again loads the list', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ error: { message: 'boom' } }), { status: 500 })),
+    );
+    renderPage();
+    const section = await screen.findByTestId('audit-trail-section');
+    expect(await within(section).findByText('We couldn’t load the audit trail')).toBeInTheDocument();
+    expect(screen.queryByText(PERMANENT)).toBeNull();
+    const before = fetchMock.mock.calls.length;
+    fetchMock.mockImplementation(() => Promise.resolve(payload()));
+    fireEvent.click(within(section).getByRole('button', { name: 'Try again' }));
+    expect(await within(section).findByText('2025 Reserve Study.pdf')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('explains an empty result in the section and offers a way out, with no footer', async () => {
+    extra = { data: [] };
+    renderPage();
+    const section = await screen.findByTestId('audit-trail-section');
+    expect(await within(section).findByText('Nothing in the last 30 days')).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Look further back' })).toBeInTheDocument();
+    expect(within(section).getByRole('button', { name: 'Show everything' })).toBeInTheDocument();
+    expect(screen.queryByText(PERMANENT)).toBeNull();
+    // The filters stay.
+    expect(within(section).getByRole('radiogroup', { name: 'Show' })).toBeInTheDocument();
+  });
+
+  it('offers "Show older activity" under the list, and it loads the next page', async () => {
+    fetchMock.mockImplementation((input: RequestInfo) => {
+      if (new URL(String(input), 'http://x').searchParams.get('cursor') === 'c1') {
+        extra = { data: [{ ...ENTRY, id: 4001, oldValues: { title: 'Older Minutes.pdf' } }] };
+      } else {
+        extra = { pagination: { nextCursor: 'c1', hasMore: true, pageSize: 50 } };
+      }
+      return Promise.resolve(payload());
+    });
+    renderPage();
+    const section = await screen.findByTestId('audit-trail-section');
+    await within(section).findByText('2025 Reserve Study.pdf');
+    const older = within(section).getByRole('button', { name: 'Show older activity' });
+    // In the list's own block, not squeezed into the footer row beside the note.
+    expect(within(section).getByText(PERMANENT).closest('div')).not.toContainElement(older);
+    fireEvent.click(older);
+    expect(await within(section).findByText('Older Minutes.pdf')).toBeInTheDocument();
+    expect(within(section).getByText('2025 Reserve Study.pdf')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Show older activity' })).toBeNull());
+  });
+
+  it('opens the details sheet for the entry in the link, and puts a clicked row in the address bar', async () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    navState.search = 'communityId=42&entry=4790';
+    renderPage();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('What changed')).toBeInTheDocument();
+    expect(within(dialog).getByText('Record #4790')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Details: Maria Lopez deleted the document/, hidden: true }));
+    expect(replaceState).toHaveBeenCalledWith(null, '', '/audit-trail?communityId=42&entry=4790');
+    replaceState.mockRestore();
+  });
+
+  it('draws the search box with the control border', async () => {
+    renderPage();
+    await screen.findByText('2025 Reserve Study.pdf');
+    const box = screen.getByRole('combobox', { name: 'Search for a person, document, or unit' });
+    expect(box.parentElement?.className).toContain('border-edge-control');
+  });
+
+  it('lets the Show choices wrap on a phone instead of scrolling out of sight', async () => {
+    renderPage();
+    await screen.findByText('2025 Reserve Study.pdf');
+    const group = screen.getByRole('radiogroup', { name: 'Show' });
+    expect(group.className).toContain('flex-wrap');
+    expect(within(group).getByRole('radio', { name: 'Notices' }).className).toContain('h-11');
   });
 
   it('keeps the chosen view in the address bar', async () => {

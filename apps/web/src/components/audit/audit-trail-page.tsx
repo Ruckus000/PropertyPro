@@ -47,7 +47,7 @@ export function AuditTrailPage({ communityId, timeZone, about }: AuditTrailPageP
         panel={{ template: 'list', about }}
       >
         {/* overflow-visible: the search suggestions open over the list and must not be cut at the section's edge. */}
-        <Section className="overflow-visible" aria-busy={parts.isPending} data-testid="audit-trail-section">
+        <Section className="overflow-visible" data-testid="audit-trail-section">
           {parts.subject !== null && <SectionHeader title={parts.subject} description={parts.intro} />}
           {/* Not a SectionToolbar: its filter slot scrolls sideways, which would clip the suggestions list. */}
           <div className="flex flex-col gap-3 border-b border-edge px-4 py-2 sm:flex-row sm:items-start">
@@ -55,16 +55,19 @@ export function AuditTrailPage({ communityId, timeZone, about }: AuditTrailPageP
             {parts.period}
           </div>
           <SectionToolbar filters={<AuditViewPicker view={parts.view} onView={parts.onView} tone="ink" />} />
-          <div className="px-4 pb-4" aria-live="polite" aria-busy={parts.isPending}>
-            {parts.body}
+          {/* One live region for the list and the note under it, as in the unframed viewer. */}
+          <div aria-live="polite" aria-busy={parts.isPending}>
+            <div className="px-4 pb-4">
+              {parts.body}
+              {parts.loadMore && <div className="pt-4">{parts.loadMore}</div>}
+            </div>
+            {parts.footerNote !== null && (
+              <SectionFooter
+                // text-sm: the footer's own size is caption, too small for the record's standing note.
+                note={<span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">{parts.footerNote}</span>}
+              />
+            )}
           </div>
-          {parts.footerNote !== null && (
-            <SectionFooter
-              note={<span className="flex flex-wrap items-center gap-x-2 gap-y-1">{parts.footerNote}</span>}
-            >
-              {parts.loadMore}
-            </SectionFooter>
-          )}
         </Section>
       </PageLayout>
       {parts.sheet}

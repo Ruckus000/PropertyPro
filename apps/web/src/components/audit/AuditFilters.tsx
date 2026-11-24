@@ -82,7 +82,7 @@ export function AuditSearch({ communityId, scope, scopeLabel, onScope }: AuditSe
     <div className="relative">
       <div
         className={cn(
-          'flex min-h-11 items-center gap-2 rounded-md border border-edge-strong bg-surface-card px-3',
+          'flex min-h-11 items-center gap-2 rounded-md border border-edge-control bg-surface-card px-3',
           'focus-within:border-edge-focus focus-within:ring-2 focus-within:ring-focus',
         )}
       >
@@ -196,14 +196,15 @@ interface AuditViewPickerProps {
   /**
    * 'pill' (default) is the bordered pill the embedded viewer uses. 'ink' is
    * the page kit's filter look (as `QuickFilterTabs tone="ink"`) for a
-   * `SectionToolbar`, which scrolls its filters sideways instead of wrapping.
+   * `SectionToolbar`.
    */
   tone?: 'pill' | 'ink';
 }
 
 // Complete literals so Tailwind's scanner sees them.
 const GROUP_PILL = '-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:overflow-visible sm:pb-0';
-const GROUP_INK = 'flex items-center gap-1';
+// Wraps below md, where six choices do not fit one row; from md the toolbar holds them on one line.
+const GROUP_INK = 'flex flex-wrap items-center gap-1 md:flex-nowrap';
 const CHOICE_PILL =
   'inline-flex h-9 shrink-0 items-center rounded-full border px-4 text-sm transition-colors duration-quick focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus';
 // ring-inset: the toolbar's sideways scroller would clip an outer ring.
