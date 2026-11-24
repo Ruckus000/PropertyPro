@@ -50,7 +50,6 @@
   "apps/web/src/app/(authenticated)/help/statutes/page.tsx",
   "apps/web/src/app/(authenticated)/meetings/[id]/page.tsx",
   "apps/web/src/app/(authenticated)/meetings/page.tsx",
-  "apps/web/src/app/(authenticated)/notifications/page.tsx",
   "apps/web/src/app/(authenticated)/payments/page.tsx",
   "apps/web/src/app/(authenticated)/payments/success/page.tsx",
   "apps/web/src/app/(authenticated)/pm/dashboard/communities/page.tsx",
