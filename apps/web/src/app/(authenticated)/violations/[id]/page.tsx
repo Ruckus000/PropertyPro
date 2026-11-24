@@ -91,10 +91,16 @@ export default async function ViolationDetailPage({ params, searchParams }: Page
   // board seats) pay for the lookup; the helper applies the reporter redaction
   // again before it reads anything.
   const canManage = canActAsBoard(membership);
-  const reportedByRole = canManage
-    ? ((await hydrateReportedByRole(scoped, [violation], { membership, userId }))[0]
-        ?.reportedByRole ?? null)
-    : null;
+  let reportedByRole: 'resident' | 'staff' | null = null;
+  if (canManage) {
+    try {
+      reportedByRole =
+        (await hydrateReportedByRole(scoped, [violation], { membership, userId }))[0]
+          ?.reportedByRole ?? null;
+    } catch {
+      // A label, not the case: if the lookup fails the panel names no reporter.
+    }
+  }
 
   return (
     <FeatureGate feature="hasViolations" communityId={communityId}>

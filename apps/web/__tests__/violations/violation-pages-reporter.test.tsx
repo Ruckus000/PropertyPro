@@ -19,6 +19,7 @@ const {
   detailViewMock,
   violationsPageMock,
   roleRows,
+  roleLookup,
 } = vi.hoisted(() => ({
   requireAuthMock: vi.fn(),
   requireMembershipMock: vi.fn(),
@@ -28,13 +29,19 @@ const {
   detailViewMock: vi.fn(),
   violationsPageMock: vi.fn(),
   roleRows: [] as Array<{ userId: string; role: string }>,
+  roleLookup: { fails: false },
 }));
 
 // Real table objects (the predicate is built from them) plus a fake client
 // whose only read is hydrateReportedByRole's user_roles lookup.
 vi.mock('@propertypro/db', async () => ({
   ...(await import('../../../../packages/db/src/schema')),
-  createScopedClient: () => ({ selectFrom: async () => roleRows }),
+  createScopedClient: () => ({
+    selectFrom: async () => {
+      if (roleLookup.fails) throw new Error('user_roles lookup failed');
+      return roleRows;
+    },
+  }),
 }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {
@@ -116,6 +123,7 @@ function row(overrides: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks();
   roleRows.length = 0;
+  roleLookup.fails = false;
   roleRows.push({ userId: 'neighbour-1', role: 'resident' });
   requireAuthMock.mockResolvedValue('household-1');
   requireMembershipMock.mockResolvedValue(RESIDENT);
@@ -175,6 +183,28 @@ describe('violation detail page', () => {
     expect(canManage).toBe(true);
     // For the staff Details panel: the reporter's standing in this community.
     expect(reportedByRole).toBe('resident');
+  });
+});
+
+describe('violation detail page, reporter lookup failure', () => {
+  it("still shows a manager the case when the reporter's standing cannot be looked up", async () => {
+    requireMembershipMock.mockResolvedValue(BOARD_SEAT);
+    getViolationForCommunityMock.mockResolvedValue(row({}));
+    roleLookup.fails = true;
+
+    render(
+      await ViolationDetailPage({
+        params: Promise.resolve({ id: '1' }),
+        searchParams: Promise.resolve({ communityId: '42' }),
+      }),
+    );
+
+    const props = detailViewMock.mock.calls[0]![0] as {
+      violation: Record<string, unknown>;
+      reportedByRole: string | null;
+    };
+    expect(props.violation.id).toBe(1);
+    expect(props.reportedByRole).toBeNull();
   });
 });
 

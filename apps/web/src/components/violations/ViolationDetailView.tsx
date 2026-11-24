@@ -13,7 +13,7 @@
  * asks the router to re-render that component (`router.refresh()`): the new
  * status arrives as props and a short-notice hearing toast stays on screen.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import DOMPurify from 'isomorphic-dompurify';
 import { TriangleAlert } from 'lucide-react';
@@ -125,6 +125,9 @@ export function ViolationDetailView({
   const actionsRef = useRef<HTMLDivElement>(null);
   /** The action whose form was just cancelled: its button gets focus back. */
   const [returnFocusTo, setReturnFocusTo] = useState<ActionType | null>(null);
+  // Pending until the refreshed case arrives. Until then the header would
+  // still offer the OLD status's actions, so they are disabled.
+  const [refreshing, startRefresh] = useTransition();
 
   // The header buttons are put away while a form is open, and the form is gone
   // once it closes. Either way focus would fall to <body>; send it on instead.
@@ -208,6 +211,7 @@ export function ViolationDetailView({
                     type="button"
                     data-action={action}
                     variant={primary ? 'default' : 'outline'}
+                    disabled={refreshing}
                     onClick={() => setActiveAction(action)}
                   >
                     {label}
@@ -256,7 +260,14 @@ export function ViolationDetailView({
               action={activeAction}
               onComplete={() => {
                 setActiveAction(null);
-                router.refresh();
+                startRefresh(() => router.refresh());
+                // The focused form is gone; the title is the one thing sure to
+                // be there whatever the new status offers.
+                const title = document.querySelector<HTMLElement>('[data-page-header] h1');
+                if (title) {
+                  title.tabIndex = -1;
+                  title.focus();
+                }
               }}
               onCancel={() => {
                 setReturnFocusTo(activeAction);
@@ -271,7 +282,7 @@ export function ViolationDetailView({
           <div className="flex flex-col gap-3 px-4 py-4">
             {/* Staff read these in the Details panel; a resident has no panel. */}
             {!canManage ? (
-              <p className="text-xs text-content-secondary">{`${category} · ${unit}`}</p>
+              <p className="text-sm text-content-secondary">{`${category} · ${unit}`}</p>
             ) : null}
             <p className="max-w-3xl whitespace-pre-wrap text-sm text-content">
               {violation.description}

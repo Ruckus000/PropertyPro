@@ -10,6 +10,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const routerMock = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => routerMock }));
 
+// The mocked router finishes its refresh at once, so "still refreshing" is
+// set by hand: `transition.pending` is what useTransition reports.
+const transition = vi.hoisted(() => ({ pending: false }));
+vi.mock('react', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react')>();
+  const useTransition = () => [transition.pending, (fn: () => void) => fn()] as const;
+  return { ...actual, default: { ...actual, useTransition }, useTransition };
+});
+
 // The transition form has its own test file; here it is two buttons.
 vi.mock('@/components/violations/ViolationStatusTransition', () => ({
   ViolationStatusTransition: (props: { action: string; onComplete: () => void; onCancel: () => void }) => (
@@ -74,6 +83,7 @@ function header() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  transition.pending = false;
 });
 
 describe('ViolationDetailView', () => {
@@ -189,6 +199,28 @@ describe('ViolationDetailView', () => {
 
     expect(routerMock.refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('transition-form')).toBeNull();
+  });
+
+  it('moves focus to the page title after a completed action', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule Hearing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'stub complete' }));
+
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus();
+  });
+
+  it("disables the old status's actions until the refreshed case arrives", () => {
+    transition.pending = true;
+    renderView();
+
+    const buttons = within(header()).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Impose Fine', 'Schedule Hearing']);
+    for (const button of buttons) expect(button).toBeDisabled();
+  });
+
+  it('enables the actions when no refresh is under way', () => {
+    renderView();
+    for (const button of within(header()).getAllByRole('button')) expect(button).toBeEnabled();
   });
 
   it('returns focus to the button that opened the form on cancel, without a refresh', () => {
