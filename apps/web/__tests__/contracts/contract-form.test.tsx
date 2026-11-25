@@ -43,6 +43,7 @@ vi.mock('@/hooks/use-contracts', () => ({
 
 import {
   ContractForm,
+  changedFields,
   closingTimeFromInput,
   closingTimeToInput,
   type ContractFormValues,
@@ -403,6 +404,45 @@ describe('ContractForm', () => {
       expect(h.update).not.toHaveBeenCalled();
       expect(h.create).not.toHaveBeenCalled();
       await waitFor(() => expect(h.router.push).toHaveBeenCalledWith('/contracts/7?communityId=42'));
+    });
+
+    it('retyping the stored amount without its cents is not a change', async () => {
+      renderEdit({ contractValue: '1200.00' });
+      type(/^Contract value/, '1200');
+      await save('Save changes');
+      expect(h.update).not.toHaveBeenCalled();
+    });
+
+    it('a different amount is still sent', async () => {
+      renderEdit({ contractValue: '1200.00' });
+      type(/^Contract value/, '1200.50');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, contractValue: '1200.50' });
+    });
+
+    it('a stored note beside an unticked box is sent as cleared when the contract is saved', async () => {
+      renderEdit({ conflictOfInterest: false, conflictOfInterestNote: 'Left over' });
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, conflictOfInterestNote: null });
+    });
+
+    it('no stored note and an unticked box: nothing is sent for the conflict fields', async () => {
+      renderEdit({ conflictOfInterest: false, conflictOfInterestNote: null });
+      await save('Save changes');
+      expect(h.update).not.toHaveBeenCalled();
+    });
+
+    it('changedFields: empty text and null are the same, and money compares as a number', () => {
+      const base = { title: 'T', vendorName: 'V', startDate: '2027-01-01' } as const;
+      expect(
+        changedFields(
+          { ...base, description: '', endDate: null, contractValue: '1200' },
+          { ...base, description: null, endDate: '', contractValue: '1200.00' },
+        ),
+      ).toEqual({});
+      expect(
+        changedFields({ ...base, description: 'x', contractValue: '1200.5' }, { ...base, description: null, contractValue: '1200.00' }),
+      ).toEqual({ description: 'x', contractValue: '1200.5' });
     });
 
     it('an edit sends the id and only the fields that changed, then lands on the contract', async () => {

@@ -89,6 +89,14 @@ describe('ContractsListPage', () => {
     expect(within(table).queryByRole('button')).not.toBeInTheDocument();
   });
 
+  it("a row's title reads as a link: link colour, underlined on hover", () => {
+    loaded([contract({ id: 17 })]);
+    renderPage();
+    const link = screen.getByRole('link', { name: 'Roof Maintenance' });
+    expect(link).toHaveClass('text-content-link', 'hover:underline');
+    expect(link).not.toHaveClass('text-content');
+  });
+
   it('shows the value as money, the vendor under the title, and the status as a word', () => {
     loaded([contract()]);
     renderPage();

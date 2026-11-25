@@ -35,6 +35,7 @@ import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
+  type ContractAuditBuilder,
   applyBidEmbargo,
   createContractBidForCommunity,
   createContractForCommunity,
@@ -249,13 +250,15 @@ export const PATCH = withErrorHandler(
   runRoute(contractsUpdateContract, async ({ body, req }) => {
     const actorUserId = await requireAuthenticatedUserId();
     const { id, communityId: rawCommunityId, ...fields } = body;
-    if (fields.title !== undefined) fields.title = requireName(fields.title, 'title');
-    if (fields.vendorName !== undefined) fields.vendorName = requireName(fields.vendorName, 'vendorName');
     const communityId = resolveEffectiveCommunityId(req, rawCommunityId);
     await assertNotDemoGrace(communityId);
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireComplianceCommunity(membership.communityType);
     requirePermission(membership, 'contracts', 'write');
+    // After the gates: a caller who may not write is refused as such, not told
+    // what is wrong with a field they were never allowed to send.
+    if (fields.title !== undefined) fields.title = requireName(fields.title, 'title');
+    if (fields.vendorName !== undefined) fields.vendorName = requireName(fields.vendorName, 'vendorName');
 
     const scoped = createScopedClient(communityId);
 
@@ -294,7 +297,6 @@ export const PATCH = withErrorHandler(
     }
 
     const updateData: Record<string, unknown> = {};
-    const oldValues: Record<string, unknown> = {};
     const newValues: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(fields)) {
@@ -302,7 +304,6 @@ export const PATCH = withErrorHandler(
         // The column takes a Date; the body carries ISO text (as create converts it).
         updateData[key] =
           key === 'biddingClosesAt' && typeof value === 'string' ? new Date(value) : value;
-        oldValues[key] = existing[key];
         newValues[key] = value;
       }
     }
@@ -311,6 +312,22 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('No fields to update');
     }
 
+    // The audit entry is written inside the update's own transaction, with the
+    // old values taken from the row as it stood under the row lock, not from the
+    // unlocked read above (which another update may have outdated).
+    const audit: ContractAuditBuilder = (before) => {
+      const oldValues: Record<string, unknown> = {};
+      for (const key of Object.keys(newValues)) oldValues[key] = before[key];
+      return {
+        userId: actorUserId,
+        action: 'update',
+        resourceType: 'contract',
+        resourceId: String(id),
+        oldValues,
+        newValues,
+      };
+    };
+
     let updated: Record<string, unknown> | undefined;
     if ('biddingClosesAt' in updateData) {
       // A change to the closing time goes through the guarded update: while the
@@ -318,7 +335,7 @@ export const PATCH = withErrorHandler(
       // cleared or brought forward (owner decision, 2026-11-24). The check and
       // the write share one transaction and the contract's row lock, which
       // adding a bid also takes, so they cannot race.
-      const result = await updateContractGuardingSealedBids(scoped, id, updateData);
+      const result = await updateContractGuardingSealedBids(scoped, id, updateData, new Date(), audit);
       if (result.status === 'not_found') {
         throw new NotFoundError('Contract not found');
       }
@@ -329,18 +346,9 @@ export const PATCH = withErrorHandler(
       }
       updated = result.row;
     } else {
-      updated = await updateContractById(scoped, id, updateData);
+      updated = await updateContractById(scoped, id, updateData, audit);
+      if (!updated) throw new NotFoundError('Contract not found');
     }
-
-    await logAuditEvent({
-      userId: actorUserId,
-      action: 'update',
-      resourceType: 'contract',
-      resourceId: String(id),
-      communityId,
-      oldValues,
-      newValues,
-    });
 
     return updated;
   }),
@@ -457,30 +465,32 @@ async function handleCreateBid(
     throw new NotFoundError('Contract not found in this community');
   }
 
-  const created = await createContractBidForCommunity(scoped, {
-    contractId: payload.contractId,
-    vendorName: payload.vendorName,
-    bidAmount: payload.bidAmount,
-    notes: payload.notes ?? null,
-    createdBy: actorUserId,
-  });
+  // The audit entry commits with the bid, in the same transaction.
+  const created = await createContractBidForCommunity(
+    scoped,
+    {
+      contractId: payload.contractId,
+      vendorName: payload.vendorName,
+      bidAmount: payload.bidAmount,
+      notes: payload.notes ?? null,
+      createdBy: actorUserId,
+    },
+    (bid) => ({
+      userId: actorUserId,
+      action: 'create',
+      resourceType: 'contract_bid',
+      resourceId: String(bid['id']),
+      newValues: {
+        contractId: payload.contractId,
+        vendorName: payload.vendorName,
+        bidAmount: payload.bidAmount,
+      },
+    }),
+  );
 
   if (!created) {
     throw new ValidationError('Failed to create bid');
   }
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'create',
-    resourceType: 'contract_bid',
-    resourceId: String(created['id']),
-    communityId,
-    newValues: {
-      contractId: payload.contractId,
-      vendorName: payload.vendorName,
-      bidAmount: payload.bidAmount,
-    },
-  });
 
   return created;
 }

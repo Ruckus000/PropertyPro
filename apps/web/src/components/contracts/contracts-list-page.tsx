@@ -198,7 +198,7 @@ function ContractsTable({
                 <TableCell className="max-w-0">
                   <Link
                     href={contractHref(communityId, contract.id)}
-                    className={`${TOUCH} max-w-full font-medium text-content hover:underline ${FOCUS}`}
+                    className={`${TOUCH} max-w-full font-medium text-content-link hover:underline ${FOCUS}`}
                   >
                     <span className="truncate">{contract.title}</span>
                   </Link>

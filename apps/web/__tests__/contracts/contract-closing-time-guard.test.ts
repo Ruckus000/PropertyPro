@@ -21,7 +21,9 @@ vi.mock('@propertypro/db/filters', () => ({
 }));
 
 import {
+  type ContractAuditBuilder,
   createContractBidForCommunity,
+  updateContractById,
   updateContractGuardingSealedBids,
 } from '../../src/lib/services/contract-service';
 import {
@@ -39,16 +41,32 @@ const EARLIER_STILL_AHEAD = new Date('2026-12-05T22:00:00.000Z');
 const PAST = new Date('2026-11-30T22:00:00.000Z');
 
 /** A scoped client over one contract and its bids, logging every call in order. */
-function fake(contract: Record<string, unknown> | null, bidCount: number) {
+function fake(contract: Record<string, unknown> | null, bidCount: number, failAudit = false) {
   const log: string[] = [];
   const updates: Record<string, unknown>[] = [];
   const inserts: Record<string, unknown>[] = [];
+  const audits: Record<string, unknown>[] = [];
   const client = {
+    // A throw inside rolls back everything the transaction wrote.
     transaction: async <T,>(fn: (tx: unknown) => Promise<T>) => {
       log.push('begin');
-      const result = await fn(client);
-      log.push('commit');
-      return result;
+      const kept = { u: updates.length, i: inserts.length, a: audits.length };
+      try {
+        const result = await fn(client);
+        log.push('commit');
+        return result;
+      } catch (error) {
+        updates.length = kept.u;
+        inserts.length = kept.i;
+        audits.length = kept.a;
+        log.push('rollback');
+        throw error;
+      }
+    },
+    logAudit: async (params: Record<string, unknown>) => {
+      log.push('audit');
+      if (failAudit) throw new Error('audit write failed');
+      audits.push(params);
     },
     selectFrom: (table: { __table: string }) => {
       const rows =
@@ -80,7 +98,7 @@ function fake(contract: Record<string, unknown> | null, bidCount: number) {
       return [{ id: 99, ...values }];
     },
   };
-  return { scoped: client as unknown as Scoped, log, updates, inserts };
+  return { scoped: client as unknown as Scoped, log, updates, inserts, audits };
 }
 
 const sealed = { id: 7, communityId: 42, biddingClosesAt: CLOSES };
@@ -204,5 +222,89 @@ describe('createContractBidForCommunity', () => {
     const f = fake(null, 0);
     expect(await createContractBidForCommunity(f.scoped, { contractId: 7, vendorName: 'BidCo' })).toBeUndefined();
     expect(f.inserts).toEqual([]);
+  });
+});
+
+describe('the audit entry is written inside the same transaction as the write', () => {
+  const bid = { contractId: 7, vendorName: 'BidCo', bidAmount: '100.00' };
+  const bidAudit: ContractAuditBuilder = (row) => ({
+    userId: 'u1',
+    action: 'create',
+    resourceType: 'contract_bid',
+    resourceId: String(row['id']),
+    newValues: { contractId: 7, vendorName: 'BidCo', bidAmount: '100.00' },
+  });
+
+  it('a bid and its audit entry commit together, with the payload the route built', async () => {
+    const f = fake(sealed, 0);
+    await createContractBidForCommunity(f.scoped, bid, bidAudit);
+    expect(f.log).toEqual(['begin', 'lock contracts for update', 'insert contract_bids', 'audit', 'commit']);
+    expect(f.audits).toEqual([
+      {
+        userId: 'u1',
+        action: 'create',
+        resourceType: 'contract_bid',
+        resourceId: '99',
+        newValues: { contractId: 7, vendorName: 'BidCo', bidAmount: '100.00' },
+      },
+    ]);
+  });
+
+  it('when the audit write fails the bid is rolled back and the error reaches the caller', async () => {
+    const f = fake(sealed, 0, true);
+    await expect(createContractBidForCommunity(f.scoped, bid, bidAudit)).rejects.toThrow('audit write failed');
+    expect(f.inserts).toEqual([]);
+    expect(f.log.at(-1)).toBe('rollback');
+  });
+
+  it('an update and its audit entry commit together; the audit builder is given the row as locked', async () => {
+    const f = fake({ ...sealed, title: 'Under the lock' }, 0);
+    const seen: unknown[] = [];
+    const result = await updateContractGuardingSealedBids(f.scoped, 7, { biddingClosesAt: LATER }, NOW, (before) => {
+      seen.push(before['title']);
+      return { userId: 'u1', action: 'update', resourceType: 'contract', resourceId: '7', oldValues: { title: before['title'] } };
+    });
+    expect(seen).toEqual(['Under the lock']);
+    expect(result).toMatchObject({ status: 'updated', before: { title: 'Under the lock' } });
+    expect(f.log).toEqual(['begin', 'lock contracts for update', 'update contracts', 'audit', 'commit']);
+    expect(f.audits[0]).toMatchObject({ resourceId: '7', oldValues: { title: 'Under the lock' } });
+  });
+
+  it('when the audit write fails the update is rolled back', async () => {
+    const f = fake(sealed, 0, true);
+    await expect(
+      updateContractGuardingSealedBids(f.scoped, 7, { biddingClosesAt: LATER }, NOW, (): ReturnType<ContractAuditBuilder> => ({
+        userId: 'u1',
+        action: 'update',
+        resourceType: 'contract',
+        resourceId: '7',
+      })),
+    ).rejects.toThrow('audit write failed');
+    expect(f.updates).toEqual([]);
+    expect(f.log.at(-1)).toBe('rollback');
+  });
+
+  it('a refused closing-time change writes no audit entry', async () => {
+    const f = fake(sealed, 2);
+    await updateContractGuardingSealedBids(f.scoped, 7, { biddingClosesAt: null }, NOW, (): ReturnType<ContractAuditBuilder> => ({
+      userId: 'u1',
+      action: 'update',
+      resourceType: 'contract',
+      resourceId: '7',
+    }));
+    expect(f.audits).toEqual([]);
+  });
+
+  it('the plain update locks the row, writes and audits in one transaction, and says nothing when the contract is gone', async () => {
+    const audit: ContractAuditBuilder = () => ({ userId: 'u1', action: 'update', resourceType: 'contract', resourceId: '7' });
+    const f = fake(sealed, 0);
+    await updateContractById(f.scoped, 7, { title: 'X' }, audit);
+    expect(f.log).toEqual(['begin', 'lock contracts for update', 'update contracts', 'audit', 'commit']);
+    const gone = fake(null, 0);
+    expect(await updateContractById(gone.scoped, 7, { title: 'X' }, audit)).toBeUndefined();
+    expect(gone.audits).toEqual([]);
+    const failing = fake(sealed, 0, true);
+    await expect(updateContractById(failing.scoped, 7, { title: 'X' }, audit)).rejects.toThrow();
+    expect(failing.updates).toEqual([]);
   });
 });

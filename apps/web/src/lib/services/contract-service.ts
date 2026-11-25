@@ -8,6 +8,16 @@ type ScopedClient = ReturnType<typeof createScopedClient>;
 export type ContractRouteRow = Record<string, unknown>;
 
 /**
+ * The audit entry for a write, built from the row the write produced (or, for
+ * an update, the row as it stood under the lock) and written in the SAME
+ * transaction: an audit failure rolls the write back, and a write never commits
+ * unaudited.
+ */
+export type ContractAuditBuilder = (
+  row: ContractRouteRow,
+) => Parameters<ScopedClient['logAudit']>[0];
+
+/**
  * List contracts in the caller's scoped community. Caller MUST verify
  * contracts:read authorization before exposing rows.
  */
@@ -84,9 +94,19 @@ export async function updateContractById(
   scoped: ScopedClient,
   id: number,
   values: Record<string, unknown>,
+  audit?: ContractAuditBuilder,
 ): Promise<ContractRouteRow | undefined> {
-  const rows = await scoped.update(contracts, values, eq(contracts.id, id));
-  return (rows as unknown as ContractRouteRow[])[0];
+  if (!audit) {
+    const rows = await scoped.update(contracts, values, eq(contracts.id, id));
+    return (rows as unknown as ContractRouteRow[])[0];
+  }
+  return scoped.transaction(async (tx) => {
+    const before = await lockContractById(tx, id);
+    if (!before) return undefined;
+    const rows = await tx.update(contracts, values, eq(contracts.id, id));
+    await tx.logAudit(audit(before));
+    return (rows as unknown as ContractRouteRow[])[0];
+  });
 }
 
 /** The contract's row, locked until the transaction ends. Null when it is not in this community. */
@@ -108,17 +128,20 @@ async function lockContractById(tx: ScopedClient, id: number): Promise<ContractR
 export async function createContractBidForCommunity(
   scoped: ScopedClient,
   values: Record<string, unknown>,
+  audit?: ContractAuditBuilder,
 ): Promise<ContractRouteRow | undefined> {
   return scoped.transaction(async (tx) => {
     const contract = await lockContractById(tx, values['contractId'] as number);
     if (!contract) return undefined;
     const rows = await tx.insert(contractBids, values);
-    return (rows as unknown as ContractRouteRow[])[0];
+    const created = (rows as unknown as ContractRouteRow[])[0];
+    if (created && audit) await tx.logAudit(audit(created));
+    return created;
   });
 }
 
 export type GuardedContractUpdate =
-  | { status: 'updated'; row: ContractRouteRow | undefined }
+  | { status: 'updated'; row: ContractRouteRow | undefined; before: ContractRouteRow }
   | { status: 'not_found' }
   /** Sealed, with bids, and the new closing time would open them early. Nothing was written. */
   | { status: 'closing_time_locked' };
@@ -141,6 +164,7 @@ export async function updateContractGuardingSealedBids(
   id: number,
   values: Record<string, unknown>,
   now: Date = new Date(),
+  audit?: ContractAuditBuilder,
 ): Promise<GuardedContractUpdate> {
   return scoped.transaction(async (tx) => {
     const current = await lockContractById(tx, id);
@@ -154,7 +178,13 @@ export async function updateContractGuardingSealedBids(
     }
 
     const rows = await tx.update(contracts, values, eq(contracts.id, id));
-    return { status: 'updated' as const, row: (rows as unknown as ContractRouteRow[])[0] };
+    if (audit) await tx.logAudit(audit(current));
+    return {
+      status: 'updated' as const,
+      row: (rows as unknown as ContractRouteRow[])[0],
+      /** The row as it stood under the lock, before this update. */
+      before: current,
+    };
   });
 }
 

@@ -156,6 +156,26 @@ function toPayload(fields: FormFields, timeZone: string, storedClosesAt: string 
   };
 }
 
+/** Empty text and null are the same "nothing". */
+function isBlank(value: unknown): boolean {
+  return value === null || value === undefined || value === '';
+}
+
+/**
+ * Whether a field is unchanged. Money compares as a number (the stored
+ * `1200.00` and a retyped `1200` are the same amount); everything else
+ * compares as it is, with '' and null equal.
+ */
+function sameValue(key: string, a: unknown, b: unknown): boolean {
+  if (isBlank(a) || isBlank(b)) return isBlank(a) && isBlank(b);
+  if (key === 'contractValue') {
+    const x = Number(a);
+    const y = Number(b);
+    if (Number.isFinite(x) && Number.isFinite(y)) return x === y;
+  }
+  return a === b;
+}
+
 /**
  * The fields of `next` that differ from `loaded`. An edit sends only these, so
  * the audit entry for a save lists what the manager changed and nothing else:
@@ -167,7 +187,7 @@ export function changedFields(
 ): Partial<CreateContractInput> {
   const changes: Record<string, unknown> = {};
   for (const key of Object.keys(next) as Array<keyof CreateContractInput>) {
-    if (next[key] !== loaded[key]) changes[key] = next[key];
+    if (!sameValue(key, next[key], loaded[key])) changes[key] = next[key];
   }
   return changes as Partial<CreateContractInput>;
 }
@@ -242,7 +262,15 @@ export function ContractForm({
     let changes: Partial<CreateContractInput> = {};
     try {
       payload = toPayload(fields, timeZone, storedClosesAt);
-      if (isEdit) changes = changedFields(payload, toPayload(loaded, timeZone, storedClosesAt));
+      if (isEdit) {
+        // The baseline carries the stored note as it is: a note stored beside an
+        // unticked box is still stored, so saving the box unticked clears it.
+        const baseline: CreateContractInput = {
+          ...toPayload(loaded, timeZone, storedClosesAt),
+          conflictOfInterestNote: loaded.conflictNote.trim() || null,
+        };
+        changes = changedFields(payload, baseline);
+      }
     } catch {
       // A date the field accepts but that is not a real wall-clock time (a six-digit year).
       problems.closes = CONTRACT_CLOSING_TIME_MESSAGE;
