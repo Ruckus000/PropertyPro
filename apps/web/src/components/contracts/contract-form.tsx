@@ -29,6 +29,7 @@ import {
   isEndBeforeStart,
   type ContractStatus,
 } from '@/lib/contracts/contract-rules';
+import { CLOSING_TIME_LOCKED_MESSAGE, isClosingTimeChangeAllowed } from '@/lib/contracts/bid-sealing';
 import { resolveTimezone } from '@/lib/utils/timezone';
 import { utcDateToWallClockValue, wallClockValueToUtcIso } from '@/lib/utils/zoned-datetime';
 import { timeZoneLabel } from '@/components/emergency/broadcast-status';
@@ -69,6 +70,11 @@ interface ContractFormProps {
   timeZone: string;
   /** Absent on the New page. */
   contract?: ContractFormValues;
+  /**
+   * The contract is sealed and has bids: the closing time can be moved later,
+   * not cleared or brought forward. The server enforces it; this says so first.
+   */
+  closingTimeLocked?: boolean;
 }
 
 /** A stored ISO time as the `datetime-local` value it is in `timeZone`. */
@@ -166,7 +172,12 @@ export function changedFields(
   return changes as Partial<CreateContractInput>;
 }
 
-export function ContractForm({ communityId, timeZone: storedTimeZone, contract }: ContractFormProps) {
+export function ContractForm({
+  communityId,
+  timeZone: storedTimeZone,
+  contract,
+  closingTimeLocked = false,
+}: ContractFormProps) {
   const router = useRouter();
   const isEdit = contract !== undefined;
   // A stored zone `Intl` does not know must not crash the page.
@@ -235,6 +246,11 @@ export function ContractForm({ communityId, timeZone: storedTimeZone, contract }
     } catch {
       // A date the field accepts but that is not a real wall-clock time (a six-digit year).
       problems.closes = CONTRACT_CLOSING_TIME_MESSAGE;
+    }
+    if (closingTimeLocked && payload && 'biddingClosesAt' in changes) {
+      const next = payload.biddingClosesAt ? new Date(payload.biddingClosesAt) : null;
+      const stored = storedClosesAt ? new Date(storedClosesAt) : undefined;
+      if (!isClosingTimeChangeAllowed(stored, next, new Date())) problems.closes = CLOSING_TIME_LOCKED_MESSAGE;
     }
 
     setErrors(problems);
@@ -396,7 +412,8 @@ export function ContractForm({ communityId, timeZone: storedTimeZone, contract }
           </p>
         ) : null}
         <p id="bidding-closes-hint" className={HINT}>
-          Bids stay sealed until this time. Time zone: {timeZoneLabel(timeZone)}.
+          {closingTimeLocked ? `${CLOSING_TIME_LOCKED_MESSAGE} ` : 'Bids stay sealed until this time. '}
+          Time zone: {timeZoneLabel(timeZone)}.
         </p>
       </div>
 

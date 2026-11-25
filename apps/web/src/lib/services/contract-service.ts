@@ -1,6 +1,7 @@
 import type { createScopedClient } from '@propertypro/db';
 import { complianceChecklistItems, contractBids, contracts, documents } from '@propertypro/db';
 import { eq } from '@propertypro/db/filters';
+import { isBiddingSealed, isClosingTimeChangeAllowed } from '@/lib/contracts/bid-sealing';
 
 type ScopedClient = ReturnType<typeof createScopedClient>;
 
@@ -88,16 +89,73 @@ export async function updateContractById(
   return (rows as unknown as ContractRouteRow[])[0];
 }
 
+/** The contract's row, locked until the transaction ends. Null when it is not in this community. */
+async function lockContractById(tx: ScopedClient, id: number): Promise<ContractRouteRow | null> {
+  const rows = await tx.selectFrom(contracts, {}, eq(contracts.id, id)).for('update');
+  return ((rows as unknown as ContractRouteRow[])[0]) ?? null;
+}
+
 /**
  * Insert a contract bid in the caller's scoped community. Caller MUST verify
  * contracts:write authorization and contract ownership first.
+ *
+ * The contract's row is locked first, in the same transaction. That is what
+ * keeps a new bid and a change to the closing time from passing each other:
+ * `updateContractGuardingSealedBids` takes the same lock before it counts
+ * bids, so each sees the other's finished work. Undefined when the contract is
+ * no longer there.
  */
 export async function createContractBidForCommunity(
   scoped: ScopedClient,
   values: Record<string, unknown>,
 ): Promise<ContractRouteRow | undefined> {
-  const rows = await scoped.insert(contractBids, values);
-  return (rows as unknown as ContractRouteRow[])[0];
+  return scoped.transaction(async (tx) => {
+    const contract = await lockContractById(tx, values['contractId'] as number);
+    if (!contract) return undefined;
+    const rows = await tx.insert(contractBids, values);
+    return (rows as unknown as ContractRouteRow[])[0];
+  });
+}
+
+export type GuardedContractUpdate =
+  | { status: 'updated'; row: ContractRouteRow | undefined }
+  | { status: 'not_found' }
+  /** Sealed, with bids, and the new closing time would open them early. Nothing was written. */
+  | { status: 'closing_time_locked' };
+
+/**
+ * Update a contract when the update touches `biddingClosesAt`. Caller MUST
+ * verify contracts:write authorization and pass a Date or null for the time.
+ *
+ * While the contract is sealed and has at least one bid, the closing time may
+ * only stay or move later (`isClosingTimeChangeAllowed`); clearing it or
+ * bringing it forward is refused and nothing is written. With no bids, or once
+ * bidding has closed, any change goes through.
+ *
+ * One transaction: lock the contract's row, read its closing time, look for a
+ * bid, then update. Adding a bid takes the same lock, so a bid cannot arrive
+ * between the check and the write.
+ */
+export async function updateContractGuardingSealedBids(
+  scoped: ScopedClient,
+  id: number,
+  values: Record<string, unknown>,
+  now: Date = new Date(),
+): Promise<GuardedContractUpdate> {
+  return scoped.transaction(async (tx) => {
+    const current = await lockContractById(tx, id);
+    if (!current) return { status: 'not_found' as const };
+
+    const next = (values['biddingClosesAt'] as Date | null | undefined) ?? null;
+    const stored = current['biddingClosesAt'];
+    if (isBiddingSealed(stored, now) && !isClosingTimeChangeAllowed(stored, next, now)) {
+      const bids = await tx.selectFrom(contractBids, { id: contractBids.id }, eq(contractBids.contractId, id)).limit(1);
+      if ((bids as unknown as unknown[]).length > 0) return { status: 'closing_time_locked' as const };
+    }
+
+    const rows = await tx.update(contracts, values, eq(contracts.id, id));
+    return { status: 'updated' as const, row: (rows as unknown as ContractRouteRow[])[0] };
+  });
 }
 
 /**
@@ -137,14 +195,9 @@ export function applyBidEmbargo<Bid>(
   bids: Bid[],
   now: Date = new Date(),
 ): SealedBids<Bid> {
-  // Fails CLOSED. Bids are open only when no closing time was set, or it is a
-  // real time at or before now. Anything else the column could hand back (an
-  // Invalid Date, text, undefined) is not proof that bidding has closed, so the
-  // bids stay sealed.
-  const closesAt: unknown = contract.biddingClosesAt;
-  const open =
-    closesAt === null || (closesAt instanceof Date && closesAt.getTime() <= now.getTime());
-  const embargoed = !open;
+  // The predicate itself (it fails closed) is `isBiddingSealed`, shared with
+  // the audit trail's redaction of bid entries.
+  const embargoed = isBiddingSealed(contract.biddingClosesAt, now);
   return {
     bids: embargoed ? [] : bids,
     embargoed,

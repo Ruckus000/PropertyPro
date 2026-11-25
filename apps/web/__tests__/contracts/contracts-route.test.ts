@@ -40,6 +40,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { ForbiddenError } from '../../src/lib/api/errors/ForbiddenError';
 import { UnauthorizedError } from '../../src/lib/api/errors/UnauthorizedError';
+import { CLOSING_TIME_LOCKED_MESSAGE } from '../../src/lib/contracts/bid-sealing';
 import {
   CONTRACT_AMOUNT_MESSAGE,
   CONTRACT_AMOUNT_TOO_LARGE_MESSAGE,
@@ -65,6 +66,7 @@ const {
   createContractForCommunityMock,
   createContractBidForCommunityMock,
   updateContractByIdMock,
+  updateContractGuardingSealedBidsMock,
 } = vi.hoisted(() => ({
   requireAuthenticatedUserIdMock: vi.fn(),
   requireCommunityMembershipMock: vi.fn(),
@@ -82,6 +84,7 @@ const {
   createContractForCommunityMock: vi.fn(),
   createContractBidForCommunityMock: vi.fn(),
   updateContractByIdMock: vi.fn(),
+  updateContractGuardingSealedBidsMock: vi.fn(),
 }));
 
 vi.mock('@propertypro/db', () => ({
@@ -127,6 +130,7 @@ vi.mock('@/lib/services/contract-service', async (importOriginal) => ({
   createContractForCommunity: createContractForCommunityMock,
   createContractBidForCommunity: createContractBidForCommunityMock,
   updateContractById: updateContractByIdMock,
+  updateContractGuardingSealedBids: updateContractGuardingSealedBidsMock,
 }));
 
 import { GET, POST, PATCH } from '../../src/app/api/v1/contracts/route';
@@ -193,6 +197,7 @@ describe('contracts route (runRoute)', () => {
       bidAmount: '25000.00',
     });
     updateContractByIdMock.mockResolvedValue({ id: 1, title: 'New Title' });
+    updateContractGuardingSealedBidsMock.mockResolvedValue({ status: 'updated', row: { id: 1 } });
   });
 
   // -------------------------------------------------------------------------
@@ -941,7 +946,9 @@ describe('contracts route (runRoute)', () => {
       );
       expect(res.status).toBe(200);
       // The column takes a Date: ISO text handed to the driver throws.
-      const values = updateContractByIdMock.mock.calls[0]![2] as { biddingClosesAt: unknown };
+      // And a change to the closing time goes through the guarded update, not the plain one.
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+      const values = updateContractGuardingSealedBidsMock.mock.calls[0]![2] as { biddingClosesAt: unknown };
       expect(values.biddingClosesAt).toBeInstanceOf(Date);
       expect((values.biddingClosesAt as Date).toISOString()).toBe('2026-12-12T22:00:00.000Z');
       expect(logAuditEventMock).toHaveBeenCalledWith(
@@ -955,7 +962,55 @@ describe('contracts route (runRoute)', () => {
     it('clears the bidding-close time with null', async () => {
       getContractByIdMock.mockResolvedValue(STORED);
       await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt: null }));
-      expect(updateContractByIdMock).toHaveBeenCalledWith(SCOPED, 1, { biddingClosesAt: null });
+      expect(updateContractGuardingSealedBidsMock).toHaveBeenCalledWith(SCOPED, 1, { biddingClosesAt: null });
+      expect(updateContractByIdMock).not.toHaveBeenCalled();
+    });
+
+    it('sealed with bids: a closing time that would open them early is refused, and nothing is audited', async () => {
+      getContractByIdMock.mockResolvedValue({ ...STORED, biddingClosesAt: new Date('2099-01-01T00:00:00Z') });
+      updateContractGuardingSealedBidsMock.mockResolvedValue({ status: 'closing_time_locked' });
+
+      for (const biddingClosesAt of [null, '2020-01-01T00:00:00.000Z']) {
+        const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt }));
+        expect(res.status).toBe(400);
+        const json = (await res.json()) as { error: { message: string } };
+        expect(json.error.message).toBe(CLOSING_TIME_LOCKED_MESSAGE);
+      }
+      expect(logAuditEventMock).not.toHaveBeenCalled();
+    });
+
+    it('an accepted change to the closing time is still audited with its old and new values', async () => {
+      const stored = new Date('2026-12-12T22:00:00.000Z');
+      getContractByIdMock.mockResolvedValue({ ...STORED, biddingClosesAt: stored });
+      updateContractGuardingSealedBidsMock.mockResolvedValue({ status: 'updated', row: { id: 1 } });
+
+      const res = await PATCH(
+        jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt: '2026-12-20T22:00:00.000Z' }),
+      );
+      expect(res.status).toBe(200);
+      expect(logAuditEventMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'update',
+          resourceType: 'contract',
+          resourceId: '1',
+          oldValues: { biddingClosesAt: stored },
+          newValues: { biddingClosesAt: '2026-12-20T22:00:00.000Z' },
+        }),
+      );
+    });
+
+    it('404 when the contract disappears between the first read and the guarded update', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      updateContractGuardingSealedBidsMock.mockResolvedValue({ status: 'not_found' });
+      const res = await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, biddingClosesAt: null }));
+      expect(res.status).toBe(404);
+    });
+
+    it('an update that does not touch the closing time does not go through the guard', async () => {
+      getContractByIdMock.mockResolvedValue(STORED);
+      await PATCH(jsonReq('PATCH', { id: 1, communityId: 42, title: 'Renamed' }));
+      expect(updateContractByIdMock).toHaveBeenCalledWith(SCOPED, 1, { title: 'Renamed' });
+      expect(updateContractGuardingSealedBidsMock).not.toHaveBeenCalled();
     });
 
     it('saves a new status and conflict-of-interest note', async () => {

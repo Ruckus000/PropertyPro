@@ -326,8 +326,10 @@ describe('Contracts pages', () => {
       expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/contracts?communityId=42');
     });
 
-    it('opens the Edit page with the stored contract, and loads no bid to do it', async () => {
-      const element = (await edit('7')) as ReactElement;
+    it('opens the Edit page with the stored contract; it learns that sealed bids exist and nothing they say', async () => {
+      const element = (await edit('7')) as ReactElement<{ closingTimeLocked: boolean }>;
+      // Sealed, two bids: the form is told the closing time is locked.
+      expect(element.props.closingTimeLocked).toBe(true);
       const props = JSON.stringify(element.props);
       for (const secret of SECRETS) {
         expect(props).not.toContain(secret);
@@ -351,6 +353,15 @@ describe('Contracts pages', () => {
 
       render((await edit('7')) as ReactElement);
       expect(screen.getByLabelText('Bidding closes at')).toHaveValue('2026-12-12T17:00');
+    });
+
+    it('the closing time is not locked on Edit once bidding has closed, or while there are no bids', async () => {
+      h.rows.contracts = [contractRow({ biddingClosesAt: CLOSED_EARLIER })];
+      expect(((await edit('7')) as ReactElement<{ closingTimeLocked: boolean }>).props.closingTimeLocked).toBe(false);
+
+      h.rows.contracts = [contractRow()];
+      h.rows.contract_bids = [];
+      expect(((await edit('7')) as ReactElement<{ closingTimeLocked: boolean }>).props.closingTimeLocked).toBe(false);
     });
 
     it("opens a contract with its title, status, Edit, and the linked document's title", async () => {

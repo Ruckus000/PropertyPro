@@ -44,7 +44,9 @@ import {
   listContractBidsForCommunity,
   listContractsForCommunity,
   updateContractById,
+  updateContractGuardingSealedBids,
 } from '@/lib/services/contract-service';
+import { CLOSING_TIME_LOCKED_MESSAGE } from '@/lib/contracts/bid-sealing';
 import {
   CONTRACT_END_BEFORE_START_MESSAGE,
   CONTRACT_STATUSES,
@@ -309,7 +311,26 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('No fields to update');
     }
 
-    const updated = await updateContractById(scoped, id, updateData);
+    let updated: Record<string, unknown> | undefined;
+    if ('biddingClosesAt' in updateData) {
+      // A change to the closing time goes through the guarded update: while the
+      // contract is sealed and has bids, the time can move later but not be
+      // cleared or brought forward (owner decision, 2026-11-24). The check and
+      // the write share one transaction and the contract's row lock, which
+      // adding a bid also takes, so they cannot race.
+      const result = await updateContractGuardingSealedBids(scoped, id, updateData);
+      if (result.status === 'not_found') {
+        throw new NotFoundError('Contract not found');
+      }
+      if (result.status === 'closing_time_locked') {
+        throw new ValidationError(CLOSING_TIME_LOCKED_MESSAGE, {
+          fields: [{ field: 'biddingClosesAt', message: CLOSING_TIME_LOCKED_MESSAGE }],
+        });
+      }
+      updated = result.row;
+    } else {
+      updated = await updateContractById(scoped, id, updateData);
+    }
 
     await logAuditEvent({
       userId: actorUserId,

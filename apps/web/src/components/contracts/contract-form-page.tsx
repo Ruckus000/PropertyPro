@@ -14,7 +14,7 @@ import { ContractForm } from './contract-form';
 
 type Props = ComponentProps<typeof ContractForm>;
 
-export function ContractFormPage({ communityId, timeZone, contract }: Props) {
+export function ContractFormPage({ communityId, timeZone, contract, closingTimeLocked }: Props) {
   const cancelHref = contract
     ? `/contracts/${contract.id}?communityId=${communityId}`
     : `/contracts?communityId=${communityId}`;
@@ -40,7 +40,12 @@ export function ContractFormPage({ communityId, timeZone, contract }: Props) {
       }
     >
       <Section className="w-full max-w-4xl">
-        <ContractForm communityId={communityId} timeZone={timeZone} contract={contract} />
+        <ContractForm
+          communityId={communityId}
+          timeZone={timeZone}
+          contract={contract}
+          closingTimeLocked={closingTimeLocked}
+        />
       </Section>
     </PageLayout>
   );

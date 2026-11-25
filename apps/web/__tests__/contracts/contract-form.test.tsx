@@ -47,6 +47,7 @@ import {
   closingTimeToInput,
   type ContractFormValues,
 } from '../../src/components/contracts/contract-form';
+import { CLOSING_TIME_LOCKED_MESSAGE } from '../../src/lib/contracts/bid-sealing';
 import {
   CONTRACT_AMOUNT_MESSAGE,
   CONTRACT_AMOUNT_TOO_LARGE_MESSAGE,
@@ -184,6 +185,56 @@ describe('ContractForm', () => {
       expect(closingTimeFromInput('2026-12-12T17:00', TZ, STORED_CLOSE)).toBe(STORED_CLOSE);
       expect(closingTimeToInput(null, TZ)).toBe('');
       expect(closingTimeFromInput('', TZ, STORED_CLOSE)).toBeNull();
+    });
+  });
+
+  describe('a sealed contract that already has bids', () => {
+    function renderLocked() {
+      return render(<ContractForm communityId={42} timeZone={TZ} contract={STORED} closingTimeLocked />);
+    }
+
+    it('says up front that the closing time can only move later', () => {
+      renderLocked();
+      expect(screen.getByText(new RegExp(CLOSING_TIME_LOCKED_MESSAGE.replace(/\./g, '\\.')))).toBeInTheDocument();
+    });
+
+    it('refuses clearing the closing time, and sends nothing', async () => {
+      renderLocked();
+      type('Bidding closes at', '');
+      await save('Save changes');
+
+      expect(screen.getByRole('alert')).toHaveTextContent(CLOSING_TIME_LOCKED_MESSAGE);
+      expect(h.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses an earlier closing time, and sends nothing', async () => {
+      renderLocked();
+      type('Bidding closes at', '2026-12-01T09:00');
+      await save('Save changes');
+
+      expect(screen.getByRole('alert')).toHaveTextContent(CLOSING_TIME_LOCKED_MESSAGE);
+      expect(h.update).not.toHaveBeenCalled();
+    });
+
+    it('sends a later closing time', async () => {
+      renderLocked();
+      type('Bidding closes at', '2026-12-20T17:00');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, biddingClosesAt: '2026-12-20T22:00:00.000Z' });
+    });
+
+    it('other fields save as usual', async () => {
+      renderLocked();
+      type(/^Title/, 'Renamed');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, title: 'Renamed' });
+    });
+
+    it('control: without bids the same contract can have its closing time cleared', async () => {
+      renderEdit();
+      type('Bidding closes at', '');
+      await save('Save changes');
+      expect(h.update.mock.calls[0]![0]).toEqual({ id: 7, biddingClosesAt: null });
     });
   });
 

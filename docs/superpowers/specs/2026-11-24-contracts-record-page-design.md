@@ -42,6 +42,8 @@ Only managers of condo and HOA communities see any of this, as today.
 | The form can set Status and a conflict-of-interest note | The database and API already accept both; the form never offered them, so a contract could not be marked terminated |
 | End date must not be before start date; value must be a plain amount, with a message saying so | No check today; the server rejects `1,200` with a generic error |
 | After saving an edit you land on the contract | Today the bid list pops open instead |
+| A bid's entry in the Audit Trail hides what the bid said until bidding closes | Owner decision, 2026-11-24: "Hide them until closing". Adding a bid writes its vendor and amount into the audit entry, and managers could read them there before the closing time. The entry is still written unchanged (the log is append-only); it is redacted when read, in the list, the entry sheet, the CSV download and the printed record, by the same rule that seals the bids. After the closing time the same entry shows everything. If the contract cannot be found or its closing time cannot be read, the entry stays redacted |
+| The closing time of a sealed contract with bids can move later, not earlier | Owner decision, 2026-11-24: "Block it once bids exist". While at least one bid has been received and bidding is still sealed, an edit may keep the closing time or move it later, and may not clear it or bring it forward. With no bids, or once bidding has closed, it can be changed freely. Refused on the server with "Bids have been received, so the closing time can be moved later but not opened early."; the form says the same first. The check and the write share one transaction and a lock on the contract's row, which adding a bid also takes |
 
 ## What does not change
 
@@ -113,18 +115,21 @@ Only managers of condo and HOA communities see any of this, as today.
   picker in the app to reuse. The record page shows the linked document's title
   and a link, which removes most of the pain. Trigger to build a picker: a
   manager asks how to find a document's number.
-- **Bids can still be added after bidding closes** and the closing time can
-  still be edited (the edit is audited with old and new values). These are
-  record-keeping choices for the association, not ours to block without asking.
+- **Bids can still be added after bidding closes.** A record-keeping choice for
+  the association, not ours to block (owner, 2026-11-24: left allowed). Editing
+  the closing time is no longer in this list: see "What changes in behaviour".
 - **No bid edit, delete or award.** None exists today; not asked for.
 - No emails about expiring contracts (none today).
 
-## Questions for the owner
+## Questions for the owner (all answered, 2026-11-24)
 
-1. Status and the conflict-of-interest note in the form: included above. Say
-   if you would rather leave the form's fields exactly as they are.
-2. Adding a bid after bidding has closed: left allowed. Say if it should be
-   refused instead.
+1. Status and the conflict-of-interest note in the form: included, as written.
+2. Adding a bid after bidding has closed: left allowed, as written.
+3. Raised by the security review: sealed bid details readable in the Audit
+   Trail before closing. Answer: "Hide them until closing". Now in "What
+   changes in behaviour".
+4. Raised by the security review: unsealing bids by editing the closing time.
+   Answer: "Block it once bids exist". Now in "What changes in behaviour".
 
 ## Solution Verification Checklist
 
