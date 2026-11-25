@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/leases/roster/LeaseRosterPage.tsx
 /**
  * Leases page — unit roster (Leases v3; plan docs/superpowers/plans/2026-09-29-leases-v3.md)
  *
@@ -12,7 +13,6 @@ import { requirePageCommunityMembership as requireCommunityMembership } from '@/
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { LeaseRosterPage } from '@/components/leases/roster/LeaseRosterPage';
-import { PageHeader } from '@/components/shared/page-header';
 import { utcDateToWallClockValue } from '@/lib/utils/zoned-datetime';
 
 interface PageProps {
@@ -53,8 +53,6 @@ export default async function LeasesPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasLeaseTracking" communityId={communityId}>
-      <PageHeader title="Leases" />
-
       <LeaseRosterPage
         communityId={communityId}
         today={today}

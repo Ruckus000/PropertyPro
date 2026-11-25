@@ -3,13 +3,17 @@
 import { useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { BriefcaseBusiness } from 'lucide-react';
+import { PropScene } from '@propertypro/ui';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
+import { RecordList, RecordRow } from '@propertypro/ui/components/shared/record-row';
+import { Section, SectionError, SectionFooter } from '@propertypro/ui/components/shared/section';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { EmptyState } from '@/components/shared/empty-state';
-import { PropScene } from '@propertypro/ui';
 import { PageHeader } from '@/components/shared/page-header';
-import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   parseWorkOrderStatus,
   useAmenities,
@@ -19,8 +23,8 @@ import {
   useWorkOrders,
   type MaintenanceRequestScope,
 } from '@/hooks/use-operations';
-import { cn } from '@/lib/utils';
 import { formatInCommunityTimezone } from '@/lib/utils/format-date';
+import { OperationsRow, operationsStatus, ROW_OPEN_BUTTON_CLASS, StatusLead } from './operations-row';
 
 // Create-sheets are loaded on demand (when the user opens one) so the
 // initial Operations Hub bundle does not pay for them up front.
@@ -76,14 +80,6 @@ function parseRequestId(raw: string | null): number | undefined {
   return Number.isSafeInteger(id) && id > 0 ? id : undefined;
 }
 
-/**
- * Makes a whole list card open its detail: the title's button stretches an
- * invisible layer over the card (the card must be `relative`), and that layer
- * carries the focus ring.
- */
-const CARD_OPEN_BUTTON_CLASS =
-  'text-left after:absolute after:inset-0 after:rounded-xl focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-focus';
-
 type OperationsTab = 'all' | 'requests' | 'work-orders' | 'reservations' | 'amenities';
 
 const TABS: ReadonlyArray<{ id: OperationsTab; label: string }> = [
@@ -94,22 +90,87 @@ const TABS: ReadonlyArray<{ id: OperationsTab; label: string }> = [
   { id: 'amenities', label: 'Amenities' },
 ];
 
-function LoadMoreButton({
-  onClick,
-  isLoading,
-  visible,
+/** What a tab's error message says failed to load. */
+const TAB_NOUN: Record<OperationsTab, string> = {
+  all: 'operations',
+  requests: 'requests',
+  'work-orders': 'work orders',
+  reservations: 'reservations',
+  amenities: 'amenities',
+};
+
+/** The kind of record a row of the mixed "All" list is. */
+const ITEM_TYPE_LABEL: Record<string, string> = {
+  maintenance_request: 'Maintenance request',
+  work_order: 'Work order',
+  reservation: 'Reservation',
+};
+
+// Ink, not coral: the selected tab is marked by an underline (design §11.3).
+// The same overrides as the Directory and Visitors pages: every one has the
+// primitive's variant (none, or data-[state=active]) so tailwind-merge replaces
+// rather than stacks.
+const TAB_LIST_CLASS =
+  'flex w-full justify-start gap-1 rounded-none border-b border-edge-strong bg-transparent p-0';
+const TAB_TRIGGER_CLASS =
+  'gap-2 rounded-none border-b-2 border-transparent py-2 data-[state=active]:border-content data-[state=active]:bg-transparent data-[state=active]:shadow-none';
+
+function joinWords(words: string[]): string {
+  if (words.length <= 1) return words.join('');
+  return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
+}
+
+/**
+ * The sentence under the page title. It names only the sections this viewer
+ * has, and says whose records they are: a resident sees their own requests and
+ * reservations, and work orders for their own unit (the work-orders route
+ * limits a resident to their units).
+ */
+function describeHub({
+  resident,
+  requestsEnabled,
+  workOrdersEnabled,
+  reservationsEnabled,
 }: {
-  onClick: () => void;
+  resident: boolean;
+  requestsEnabled: boolean;
+  workOrdersEnabled: boolean;
+  reservationsEnabled: boolean;
+}): string | undefined {
+  const requests = requestsEnabled ? ['maintenance requests'] : [];
+  const workOrders = workOrdersEnabled ? ['work orders'] : [];
+  const reservations = reservationsEnabled ? ['amenity reservations'] : [];
+  if (!resident) {
+    const all = joinWords([...requests, ...workOrders, ...reservations]);
+    return all ? `${all.charAt(0).toUpperCase()}${all.slice(1)} for this community.` : undefined;
+  }
+  const own = joinWords([...requests, ...reservations]);
+  if (own && workOrdersEnabled) return `Your ${own}, and work orders for your unit.`;
+  if (own) return `Your ${own}.`;
+  return workOrdersEnabled ? 'Work orders for your unit.' : undefined;
+}
+
+/** The foot of a list's box: "Load more", and a note when there is one. */
+function ListFooter({
+  more,
+  isLoading,
+  onMore,
+  note,
+}: {
+  more: boolean;
   isLoading: boolean;
-  visible: boolean;
+  onMore: () => void;
+  note?: string;
 }) {
-  if (!visible) return null;
+  if (!more && !note) return null;
   return (
-    <div className="flex justify-center pt-2">
-      <Button variant="outline" size="sm" onClick={onClick} disabled={isLoading}>
-        {isLoading ? 'Loading…' : 'Load more'}
-      </Button>
-    </div>
+    <SectionFooter note={note}>
+      {more ? (
+        <Button variant="outline" size="sm" onClick={onMore} disabled={isLoading}>
+          {isLoading ? 'Loading…' : 'Load more'}
+        </Button>
+      ) : null}
+    </SectionFooter>
   );
 }
 
@@ -417,10 +478,6 @@ export function OperationsHub({
     opener.focus();
   }
 
-  const requestsDescription = requestScope === 'community'
-    ? 'Review community requests, work orders, and reservations from one hub.'
-    : 'Track your requests, work orders, and reservations from one hub.';
-
   const requestsEmptyState = selectedTab === 'requests'
     ? (
       <EmptyState
@@ -445,253 +502,296 @@ export function OperationsHub({
     )
     : <EmptyState preset="no_operations_items" size="section" illustration={<PropScene size="section" prop="wrench" />} />;
 
+  const loadMoreRows = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('page', String(filters.page + 1));
+    window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
+  };
+
+  function retryActiveTab() {
+    switch (selectedTab) {
+      case 'all':
+        void operationsQuery.refetch();
+        return;
+      case 'requests':
+        void requestsQuery.refetch();
+        return;
+      case 'work-orders':
+        void workOrdersQuery.refetch();
+        return;
+      case 'reservations':
+        void reservationsQuery.refetch();
+        void amenitiesQuery.refetch();
+        return;
+      case 'amenities':
+        void amenitiesQuery.refetch();
+    }
+  }
+
+  const reservationsMeta = reservationsQuery.data?.meta;
+  const reservationsPastShown = reservationsMeta
+    ? reservationsMeta.page * reservationsMeta.limit < reservationsMeta.total
+    : false;
+  const reservationsAtCap = reservationsMeta ? reservationsMeta.limit >= RESERVATIONS_MAX_LIMIT : false;
+
   return (
-    <div className="space-y-6">
-      {legacyNotice ? (
-        <AlertBanner
-          status="info"
-          title="Operations is the new home for maintenance."
-          description={legacyNotice}
-        />
-      ) : null}
-
-      <PageHeader
-        title="Operations"
-        description={requestsDescription}
-        actions={
-          cta
-            ? (
-              <Button size="sm" onClick={() => openCreate(cta.createValue)}>
-                {cta.label}
-              </Button>
-            )
-            : undefined
-        }
-      />
-
-      <nav
-        className="flex flex-wrap gap-2 border-b border-edge pb-3"
-        aria-label="Operations tabs"
-        role="tablist"
-      >
-        {availableTabs.map((candidate) => (
-          <button
-            key={candidate.id}
-            type="button"
-            role="tab"
-            id={`operations-tab-${candidate.id}`}
-            aria-selected={candidate.id === selectedTab}
-            aria-controls={`operations-panel-${candidate.id}`}
-            tabIndex={candidate.id === selectedTab ? 0 : -1}
-            onClick={() => setTab(candidate.id)}
-            className={cn(
-              'min-h-11 md:min-h-0 rounded-full px-4 py-2 text-sm font-medium transition-colors',
-              candidate.id === selectedTab
-                ? 'bg-interactive text-content-inverse shadow-sm'
-                : 'bg-surface-muted text-content-secondary hover:bg-surface-hover hover:text-content',
-            )}
+    <>
+      <Tabs value={selectedTab} onValueChange={(next) => setTab(next as OperationsTab)}>
+        <PageLayout
+          template="list"
+          banner={
+            legacyNotice ? (
+              <AlertBanner
+                status="info"
+                title="Operations is the new home for maintenance."
+                description={legacyNotice}
+              />
+            ) : undefined
+          }
+          header={
+            <PageHeader
+              title="Operations"
+              icon={<BriefcaseBusiness />}
+              description={describeHub({
+                resident: requestScope !== 'community',
+                requestsEnabled,
+                workOrdersEnabled,
+                reservationsEnabled,
+              })}
+              actions={
+                cta ? <Button onClick={() => openCreate(cta.createValue)}>{cta.label}</Button> : undefined
+              }
+            />
+          }
+          // No side panel and no generated "About". describeAccess words one
+          // resource with one resident scope, and this page holds three with
+          // different scopes: a resident sees their own requests and
+          // reservations and their unit's work orders, but every bookable
+          // amenity. No single sentence from it is true here.
+          tabs={
+            <TabsList aria-label="Operations tabs" className={TAB_LIST_CLASS}>
+              {availableTabs.map((candidate) => (
+                <TabsTrigger
+                  key={candidate.id}
+                  value={candidate.id}
+                  // Stable ids (not Radix's generated ones): one panel serves every tab.
+                  id={`operations-tab-${candidate.id}`}
+                  aria-controls={`operations-panel-${candidate.id}`}
+                  className={TAB_TRIGGER_CLASS}
+                >
+                  {candidate.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          }
+        >
+          <TabsContent
+            value={selectedTab}
+            id={activePanelId}
+            aria-labelledby={activeTabId}
+            className="mt-0 flex flex-col gap-4"
+            // A <section>: the help-capture manifests select `section[role="tabpanel"]`.
+            asChild
           >
-            {candidate.label}
-          </button>
-        ))}
-      </nav>
+            <section>
+              {activeState.isLoading ? (
+                <Section aria-busy="true" aria-label="Loading">
+                  <div className="space-y-3 px-4 py-3">
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                  </div>
+                </Section>
+              ) : null}
 
-      <section
-        id={activePanelId}
-        role="tabpanel"
-        aria-labelledby={activeTabId}
-        tabIndex={0}
-        className="space-y-4"
-      >
-        {activeState.isLoading ? (
-          <div className="space-y-3">
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-            <Skeleton className="h-24 w-full" />
-          </div>
-        ) : null}
+              {!activeState.isLoading && activeState.error ? (
+                <Section>
+                  <SectionError
+                    message={`We couldn't load ${TAB_NOUN[selectedTab]}. ${
+                      activeState.error instanceof Error && activeState.error.message
+                        ? activeState.error.message
+                        : 'Please try again.'
+                    }`}
+                    onRetry={retryActiveTab}
+                  />
+                </Section>
+              ) : null}
 
-        {!activeState.isLoading && activeState.error ? (
-          <AlertBanner
-            status="danger"
-            title="We couldn't load operations."
-            description={activeState.error instanceof Error ? activeState.error.message : 'Please try again.'}
-          />
-        ) : null}
+              {operationsPartialFailure ? (
+                <AlertBanner
+                  status="warning"
+                  title="Some operations sources are temporarily unavailable."
+                  description={`Unavailable: ${operationsQuery.data?.meta.unavailableSources.join(', ')}`}
+                  variant="subtle"
+                />
+              ) : null}
 
-        {operationsPartialFailure ? (
-          <AlertBanner
-            status="warning"
-            title="Some operations sources are temporarily unavailable."
-            description={`Unavailable: ${operationsQuery.data?.meta.unavailableSources.join(', ')}`}
-            variant="subtle"
-          />
-        ) : null}
+              {!activeState.isLoading && !activeState.error && !activeState.hasData && !operationsPartialFailure ? (
+                selectedTab === 'reservations' ? (
+                  <ReservationsEmpty
+                    isAdmin={isAdmin}
+                    amenityCount={allAmenities.length}
+                    bookableNames={bookableAmenities.map((amenity) => amenity.name)}
+                    onReserve={() => openCreate('reservation')}
+                    onAdd={() => openCreate('amenity', { tab: 'amenities' })}
+                    onShowAmenities={() => setTab('amenities')}
+                  />
+                ) : selectedTab === 'amenities' ? (
+                  <AmenitiesEmpty isAdmin={isAdmin} onAdd={() => openCreate('amenity')} />
+                ) : (
+                  requestsEmptyState
+                )
+              ) : null}
 
-        {!activeState.isLoading && !activeState.error && !activeState.hasData && !operationsPartialFailure ? (
-          selectedTab === 'reservations' ? (
-            <ReservationsEmpty
-              isAdmin={isAdmin}
-              amenityCount={allAmenities.length}
-              bookableNames={bookableAmenities.map((amenity) => amenity.name)}
-              onReserve={() => openCreate('reservation')}
-              onAdd={() => openCreate('amenity', { tab: 'amenities' })}
-              onShowAmenities={() => setTab('amenities')}
-            />
-          ) : selectedTab === 'amenities' ? (
-            <AmenitiesEmpty isAdmin={isAdmin} onAdd={() => openCreate('amenity')} />
-          ) : (
-            requestsEmptyState
-          )
-        ) : null}
+              {!activeState.isLoading && !activeState.error && selectedTab === 'amenities' && activeState.hasData ? (
+                <Section>
+                  <AmenityList
+                    amenities={visibleAmenities}
+                    isAdmin={isAdmin}
+                    onEdit={(amenityId) => openCreate('amenity', { amenityId })}
+                    onReserve={(amenityId) => openCreate('reservation', { amenityId })}
+                  />
+                </Section>
+              ) : null}
 
-        {!activeState.isLoading && !activeState.error && selectedTab === 'amenities' && activeState.hasData ? (
-          <AmenityList
-            amenities={visibleAmenities}
-            isAdmin={isAdmin}
-            onEdit={(amenityId) => openCreate('amenity', { amenityId })}
-            onReserve={(amenityId) => openCreate('reservation', { amenityId })}
-          />
-        ) : null}
-
-        {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data ? (
-          <div className="space-y-4">
-            {operationsQuery.data.data.map((item) => (
-              <article key={`${item.type}-${item.id}`} className="relative rounded-xl border border-edge bg-surface-card p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-content-tertiary">
-                      {item.type.replace('_', ' ')}
-                    </p>
-                    <h2 className="text-lg font-semibold text-content">
-                      {item.type === 'maintenance_request' && requestsEnabled ? (
-                        <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(item.id, e.currentTarget)}>
-                          {item.title}
-                        </button>
+              {!activeState.isLoading && !activeState.error && selectedTab === 'all' && operationsQuery.data && activeState.hasData ? (
+                <Section>
+                  <RecordList>
+                    {operationsQuery.data.data.map((item) => {
+                      const status = operationsStatus(item.status);
+                      const meta = [
+                        ITEM_TYPE_LABEL[item.type] ?? item.type.replace(/_/g, ' '),
+                        `Created ${formatInCommunityTimezone(item.createdAt, communityTimezone)}`,
+                      ];
+                      return item.type === 'maintenance_request' && requestsEnabled ? (
+                        <OperationsRow
+                          key={`${item.type}-${item.id}`}
+                          openable
+                          lead={<StatusLead status={status} />}
+                          title={
+                            <p className="text-sm font-medium text-content">
+                              <button type="button" className={ROW_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(item.id, e.currentTarget)}>
+                                {item.title}
+                              </button>
+                            </p>
+                          }
+                          statusWord={status.word}
+                          meta={meta}
+                        />
                       ) : (
-                        item.title
-                      )}
-                    </h2>
-                    <p className="text-xs text-content-tertiary">
-                      Created {formatInCommunityTimezone(item.createdAt, communityTimezone)}
-                    </p>
-                  </div>
-                  <StatusBadge status={item.status} />
-                </div>
-              </article>
-            ))}
-            <LoadMoreButton
-              visible={Boolean(operationsQuery.data?.meta.cursor)}
-              isLoading={operationsQuery.isFetching}
-              onClick={() => {
-                const params = new URLSearchParams(searchParams.toString());
-                if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
-                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
-              }}
-            />
-          </div>
-        ) : null}
+                        <RecordRow
+                          key={`${item.type}-${item.id}`}
+                          lead={<StatusLead status={status} />}
+                          title={item.title}
+                          statusWord={status.word}
+                          meta={meta}
+                        />
+                      );
+                    })}
+                  </RecordList>
+                  <ListFooter
+                    more={Boolean(operationsQuery.data.meta.cursor)}
+                    isLoading={operationsQuery.isFetching}
+                    onMore={() => {
+                      const params = new URLSearchParams(searchParams.toString());
+                      if (operationsQuery.data?.meta.cursor) params.set('cursor', operationsQuery.data.meta.cursor);
+                      window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
+                    }}
+                  />
+                </Section>
+              ) : null}
 
-        {!activeState.isLoading && !activeState.error && selectedTab === 'requests' && requestsQuery.data ? (
-          <div className="space-y-4">
-            {requestsQuery.data.data.map((request) => (
-              <article key={request.id} className="relative rounded-xl border border-edge bg-surface-card p-5 transition-colors hover:border-edge-strong">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-content">
-                      <button type="button" className={CARD_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(request.id, e.currentTarget)}>
-                        {request.title}
-                      </button>
-                    </h2>
-                    <p className="text-sm text-content-secondary">{request.description}</p>
-                  </div>
-                  <StatusBadge status={request.status} />
-                </div>
-              </article>
-            ))}
-            <LoadMoreButton
-              visible={
-                requestsQuery.data
-                  ? requestsQuery.data.meta.page * requestsQuery.data.meta.limit < requestsQuery.data.meta.total
-                  : false
-              }
-              isLoading={requestsQuery.isFetching}
-              onClick={() => {
-                const nextPage = filters.page + 1;
-                const params = new URLSearchParams(searchParams.toString());
-                params.set('page', String(nextPage));
-                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
-              }}
-            />
-          </div>
-        ) : null}
+              {!activeState.isLoading && !activeState.error && selectedTab === 'requests' && requestsQuery.data && activeState.hasData ? (
+                <Section>
+                  <RecordList>
+                    {requestsQuery.data.data.map((request) => {
+                      const status = operationsStatus(request.status);
+                      return (
+                        <OperationsRow
+                          key={request.id}
+                          openable
+                          lead={<StatusLead status={status} />}
+                          title={
+                            <p className="text-sm font-medium text-content">
+                              <button type="button" className={ROW_OPEN_BUTTON_CLASS} onClick={(e) => openRequest(request.id, e.currentTarget)}>
+                                {request.title}
+                              </button>
+                            </p>
+                          }
+                          preview={request.description}
+                          statusWord={status.word}
+                        />
+                      );
+                    })}
+                  </RecordList>
+                  <ListFooter
+                    more={requestsQuery.data.meta.page * requestsQuery.data.meta.limit < requestsQuery.data.meta.total}
+                    isLoading={requestsQuery.isFetching}
+                    onMore={loadMoreRows}
+                  />
+                </Section>
+              ) : null}
 
-        {!activeState.isLoading && !activeState.error && selectedTab === 'work-orders' && workOrdersQuery.data ? (
-          <div className="space-y-4">
-            {workOrdersQuery.data.data.map((workOrder) => (
-              <article key={workOrder.id} className="rounded-xl border border-edge bg-surface-card p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold text-content">{workOrder.title}</h2>
-                    {workOrder.description ? (
-                      <p className="text-sm text-content-secondary">{workOrder.description}</p>
-                    ) : null}
-                  </div>
-                  <StatusBadge status={workOrder.status} />
-                </div>
-              </article>
-            ))}
-            <LoadMoreButton
-              visible={
-                workOrdersQuery.data
-                  ? workOrdersQuery.data.meta.page * workOrdersQuery.data.meta.limit < workOrdersQuery.data.meta.total
-                  : false
-              }
-              isLoading={workOrdersQuery.isFetching}
-              onClick={() => {
-                const nextPage = filters.page + 1;
-                const params = new URLSearchParams(searchParams.toString());
-                params.set('page', String(nextPage));
-                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
-              }}
-            />
-          </div>
-        ) : null}
+              {!activeState.isLoading && !activeState.error && selectedTab === 'work-orders' && workOrdersQuery.data && activeState.hasData ? (
+                <Section>
+                  {/* A work order has no record view yet, so its row opens nothing. */}
+                  <RecordList>
+                    {workOrdersQuery.data.data.map((workOrder) => {
+                      const status = operationsStatus(workOrder.status);
+                      return (
+                        // Not RecordRow: it cuts the description to one line, and
+                        // with no record view there would be nowhere to read the rest.
+                        <OperationsRow
+                          key={workOrder.id}
+                          lead={<StatusLead status={status} />}
+                          title={<p className="truncate text-sm font-medium text-content">{workOrder.title}</p>}
+                          statusWord={status.word}
+                        >
+                          {workOrder.description ? (
+                            <p className="mt-1 max-w-prose whitespace-pre-line text-sm text-content-secondary">
+                              {workOrder.description}
+                            </p>
+                          ) : null}
+                        </OperationsRow>
+                      );
+                    })}
+                  </RecordList>
+                  <ListFooter
+                    more={workOrdersQuery.data.meta.page * workOrdersQuery.data.meta.limit < workOrdersQuery.data.meta.total}
+                    isLoading={workOrdersQuery.isFetching}
+                    onMore={loadMoreRows}
+                  />
+                </Section>
+              ) : null}
 
-        {!activeState.isLoading && !activeState.error && selectedTab === 'reservations' && reservationsQuery.data && activeState.hasData ? (
-          <div className="space-y-4">
-            <ReservationList
-              communityId={communityId}
-              communityTimezone={communityTimezone}
-              reservations={reservationsQuery.data.data}
-              amenityNames={amenityNames}
-            />
-            {/* Keyed on the limit the rows on screen were fetched with, not the one requested: while
-                the last step (80 -> 100) loads, the earlier rows stay as placeholder and the button
-                stays in its Loading state instead of vanishing before the rows arrive. */}
-            <LoadMoreButton
-              visible={
-                reservationsQuery.data.meta.limit < RESERVATIONS_MAX_LIMIT
-                && reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total
-              }
-              isLoading={reservationsQuery.isFetching}
-              onClick={() => {
-                const nextPage = filters.page + 1;
-                const params = new URLSearchParams(searchParams.toString());
-                params.set('page', String(nextPage));
-                window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
-              }}
-            />
-            {reservationsQuery.data.meta.limit >= RESERVATIONS_MAX_LIMIT
-            && reservationsQuery.data.meta.page * reservationsQuery.data.meta.limit < reservationsQuery.data.meta.total ? (
-              // The route sorts by start time, newest first, so the rows past the cap are the earliest.
-              <p className="text-center text-sm text-content-secondary">
-                {`Showing ${reservationsQuery.data.meta.limit} of ${reservationsQuery.data.meta.total} reservations, latest dates first.`}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
+              {!activeState.isLoading && !activeState.error && selectedTab === 'reservations' && reservationsQuery.data && activeState.hasData ? (
+                <Section>
+                  <ReservationList
+                    communityId={communityId}
+                    communityTimezone={communityTimezone}
+                    reservations={reservationsQuery.data.data}
+                    amenityNames={amenityNames}
+                  />
+                  {/* Keyed on the limit the rows on screen were fetched with, not the one requested: while
+                      the last step (80 -> 100) loads, the earlier rows stay as placeholder and the button
+                      stays in its Loading state instead of vanishing before the rows arrive. */}
+                  <ListFooter
+                    more={!reservationsAtCap && reservationsPastShown}
+                    isLoading={reservationsQuery.isFetching}
+                    onMore={loadMoreRows}
+                    // The route sorts by start time, newest first, so the rows past the cap are the earliest.
+                    note={
+                      reservationsAtCap && reservationsPastShown
+                        ? `Showing ${reservationsQuery.data.meta.limit} of ${reservationsQuery.data.meta.total} reservations, latest dates first.`
+                        : undefined
+                    }
+                  />
+                </Section>
+              ) : null}
+            </section>
+          </TabsContent>
+        </PageLayout>
+      </Tabs>
 
       {openRequestId !== undefined && requestsEnabled ? (
         <RequestDetailSheet
@@ -744,6 +844,6 @@ export function OperationsHub({
           amenity={editingAmenity}
         />
       ) : null}
-    </div>
+    </>
   );
 }

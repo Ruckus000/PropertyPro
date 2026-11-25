@@ -125,6 +125,10 @@ export function useTriggerStepAction(communityId: number, checklistId: number) {
       queryClient.invalidateQueries({
         queryKey: ['move-checklist', communityId, checklistId],
       });
+      // The list cards print "N of M steps done", and an action completes a step.
+      queryClient.invalidateQueries({
+        queryKey: ['move-checklists', communityId],
+      });
     },
   });
 }

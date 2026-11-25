@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { OperationsHub } from '../../../src/components/operations/operations-hub';
 
 const {
@@ -847,14 +848,17 @@ describe('OperationsHub — amenities', () => {
     expect(screen.queryByText(/Reservation #17/)).toBeNull();
   });
 
-  it('shows a manager every amenity with Edit, and a resident only the bookable ones', async () => {
+  it('shows a manager every amenity with its name as the edit control, and a resident only the bookable ones', async () => {
     amenities([POOL, SAUNA_CLOSED]);
     searchParamsMock.mockReturnValue('tab=amenities');
     const { unmount } = render(hub(true));
 
     expect(await screen.findByRole('heading', { level: 3, name: 'Sauna' })).toBeInTheDocument();
     expect(screen.getByText('Not open for booking')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Edit Pool' })).toBeInTheDocument();
+    // Owner decision 2026-11-24: the name opens the edit sheet; no separate Edit button.
+    const editPool = screen.getByRole('button', { name: 'Edit Pool' });
+    expect(editPool).toHaveTextContent(/^Pool$/);
+    expect(screen.getAllByRole('button', { name: 'Edit Pool' })).toHaveLength(1);
     expect(screen.getByText('Up to 2 hours per booking')).toBeInTheDocument();
     // The header holds the one filled Add amenity once the list has something in it.
     expect(screen.getByRole('button', { name: 'Add amenity' })).toBeInTheDocument();
@@ -864,6 +868,8 @@ describe('OperationsHub — amenities', () => {
     expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { level: 3, name: 'Sauna' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
+    // A resident's amenity name is plain text.
+    expect(screen.getByRole('heading', { level: 3, name: 'Pool' }).querySelector('button')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
   });
 
@@ -1050,5 +1056,302 @@ describe('OperationsHub — request panel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kitchen leak' }));
     expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=all&request=7');
     expect(screen.queryByRole('button', { name: 'Repaint lobby' })).not.toBeInTheDocument();
+  });
+});
+
+describe('OperationsHub — page kit', () => {
+  const hub = (isAdmin: boolean, overrides: Partial<Parameters<typeof OperationsHub>[0]> = {}) => (
+    <OperationsHub
+      communityId={42}
+      requestsEnabled={true}
+      workOrdersEnabled={true}
+      reservationsEnabled={true}
+      requestScope={isAdmin ? 'community' : 'mine'}
+      isAdmin={isAdmin}
+      userId="u-1"
+      communityTimezone="America/New_York"
+      {...overrides}
+    />
+  );
+  const request = {
+    id: 7, communityId: 42, unitId: null, submittedById: 'u-1', title: 'Kitchen leak',
+    description: 'Water under the sink', status: 'submitted', priority: 'high', category: 'plumbing',
+    comments: [], createdAt: '2026-03-27T14:00:00.000Z', updatedAt: '2026-03-27T14:00:00.000Z',
+  };
+  const workOrder = {
+    id: 8, title: 'Repaint lobby', description: 'Two coats', unitId: null, vendorId: null, priority: 'low',
+    status: 'in_progress', createdAt: '2026-03-27T14:00:00.000Z', updatedAt: '2026-03-27T14:00:00.000Z',
+  };
+  const booking = {
+    id: 17, amenityId: 9, unitId: 12, status: 'confirmed',
+    startTime: '2099-03-28T14:00:00.000Z', endTime: '2099-03-28T15:00:00.000Z',
+    notes: null, createdAt: '2026-03-27T14:00:00.000Z', updatedAt: '2026-03-27T14:00:00.000Z',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useMaintenanceRequestsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [request], meta: { total: 1, page: 1, limit: 20 } } });
+    useOperationsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [], meta: { cursor: null, limit: 50, partialFailure: false, unavailableSources: [] } } });
+    useWorkOrdersMock.mockReturnValue({ isLoading: false, error: null, data: { data: [workOrder], meta: { page: 1, limit: 20, total: 1 } } });
+    useReservationsMock.mockReturnValue({ isLoading: false, error: null, data: { data: [booking], meta: { page: 1, limit: 20, total: 1 } } });
+    amenities([POOL, SAUNA_CLOSED]);
+  });
+
+  it('is a list page whose tabs are an underline strip, not pills', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { container } = render(hub(true));
+
+    expect(container.querySelector('[data-page-template="list"]')).not.toBeNull();
+    const tablist = screen.getByRole('tablist', { name: 'Operations tabs' });
+    expect(tablist.className).toContain('border-b');
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'All', 'Requests', 'Work Orders', 'Reservations', 'Amenities',
+    ]);
+    const selected = screen.getByRole('tab', { selected: true });
+    expect(selected).toHaveAccessibleName('Requests');
+    expect(selected.className).toContain('border-b-2');
+    expect(selected.className).not.toContain('rounded-full');
+    // Help-capture manifests select the panel as `section[role="tabpanel"]`.
+    expect(screen.getByRole('tabpanel').tagName).toBe('SECTION');
+  });
+
+  it('paints the title with a description that fits the viewer', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { unmount } = render(hub(true));
+    expect(screen.getByRole('heading', { level: 1, name: 'Operations' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Maintenance requests, work orders and amenity reservations for this community.'),
+    ).toBeInTheDocument();
+    unmount();
+
+    const resident = render(hub(false));
+    expect(
+      // The work-orders route limits a resident to their own units.
+      screen.getByText('Your maintenance requests and amenity reservations, and work orders for your unit.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/community's work orders/)).toBeNull();
+    resident.unmount();
+
+    render(hub(false, { workOrdersEnabled: false, reservationsEnabled: false }));
+    expect(screen.getByText('Your maintenance requests.')).toBeInTheDocument();
+  });
+
+  it('opens on Requests when the URL names no tab, or one the viewer does not have', () => {
+    searchParamsMock.mockReturnValue('');
+    const { unmount } = render(hub(true));
+    expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('Requests');
+    unmount();
+
+    searchParamsMock.mockReturnValue('tab=nonsense');
+    render(hub(false));
+    expect(screen.getByRole('tab', { selected: true })).toHaveAccessibleName('Requests');
+  });
+
+  it('switching tabs replaces the URL in place and keeps every other key', () => {
+    const historyReplace = vi.spyOn(window.history, 'replaceState').mockImplementation(() => {});
+    searchParamsMock.mockReturnValue('tab=requests&status=open&priority=high&unitId=5&q=leak&from=maintenance');
+    render(hub(true));
+
+    // Radix tabs select on mouse down.
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Work Orders' }), { button: 0 });
+    expect(historyReplace).toHaveBeenCalledTimes(1);
+    expect(historyReplace).toHaveBeenCalledWith(
+      null,
+      '',
+      '/communities/42/operations?tab=work-orders&status=open&priority=high&unitId=5&q=leak&from=maintenance',
+    );
+    expect(historyPush).not.toHaveBeenCalled();
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+    historyReplace.mockRestore();
+  });
+
+  it('feeds status, priority, unitId and cursor from the URL to the lists', () => {
+    searchParamsMock.mockReturnValue('tab=all&status=in_progress&priority=high&unitId=5&cursor=abc');
+    render(hub(true));
+
+    expect(useOperationsMock).toHaveBeenLastCalledWith(
+      42,
+      { limit: 50, cursor: 'abc', status: 'in_progress', priority: 'high', unitId: 5 },
+      { enabled: true },
+    );
+    expect(useWorkOrdersMock).toHaveBeenLastCalledWith(
+      42,
+      expect.objectContaining({ status: 'in_progress', unitId: 5 }),
+      expect.anything(),
+    );
+  });
+
+  it('gives a resident no All tab, no manager action and no side panel', async () => {
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    const { container, rerender } = render(hub(false));
+
+    expect(screen.queryByRole('tab', { name: 'All' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Dispatch Work Order' })).toBeNull();
+    expect(container.querySelector('aside')).toBeNull();
+    expect(screen.queryByRole('complementary')).toBeNull();
+
+    searchParamsMock.mockReturnValue('tab=amenities');
+    rerender(hub(false));
+    expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
+    const residentName = screen.getByRole('heading', { level: 3, name: 'Pool' });
+    expect(residentName.querySelector('button')).toBeNull();
+    expect(residentName.innerHTML).not.toContain('text-content-link');
+    expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
+    expect(screen.queryByText('Open for booking')).toBeNull();
+    // A resident still books from the row.
+    expect(screen.getByRole('button', { name: 'Reserve Pool' })).toBeInTheDocument();
+  });
+
+  it("opens the edit sheet from an amenity's name for a manager, with a history entry", async () => {
+    searchParamsMock.mockReturnValue('tab=amenities');
+    render(hub(true));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Sauna' }));
+    expect(historyPush).toHaveBeenCalledTimes(1);
+    expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=amenities&create=amenity&amenityId=10');
+    // Reserve stays a row button, only on what can be booked.
+    expect(screen.getByRole('button', { name: 'Reserve Pool' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reserve Sauna' })).toBeNull();
+  });
+
+  it('shows a work order description in full: the row opens nothing, so there is nowhere else to read it', () => {
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    render(hub(true));
+    const description = screen.getByText('Two coats');
+    expect(description.className).not.toContain('truncate');
+    expect(description.className).not.toMatch(/line-clamp/);
+  });
+
+  it("makes a manager's amenity name a 44px target on a phone, with a ring its heading cannot clip", async () => {
+    searchParamsMock.mockReturnValue('tab=amenities');
+    render(hub(true));
+    const name = await screen.findByRole('button', { name: 'Edit Pool' });
+    expect(name).toHaveTextContent(/^Pool$/);
+    // Coloured as a link, so a manager can tell it from a resident's plain name.
+    expect(name.className.split(' ')).toContain('text-content-link');
+    expect(name.className.split(' ')).toContain('hover:underline');
+    for (const cls of ['inline-flex', 'items-center', 'min-h-11', 'md:min-h-6', 'focus-visible:ring-inset']) {
+      expect(name.className.split(' ')).toContain(cls);
+    }
+  });
+
+  it('keeps Cancel on a reservation row', async () => {
+    searchParamsMock.mockReturnValue('tab=reservations');
+    render(hub(false));
+    expect(await screen.findByRole('button', { name: 'Cancel Pool reservation' })).toBeInTheDocument();
+  });
+
+  it('says each status in words', async () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { rerender } = render(hub(true));
+    const row = (name: string) => screen.getByText(name).closest('li')!;
+    expect(row('Kitchen leak').textContent).toContain('Submitted');
+
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    rerender(hub(true));
+    expect(row('Repaint lobby').textContent).toContain('In Progress');
+    expect(row('Repaint lobby').textContent).toContain('Two coats');
+    // A work order has no record view: its row holds nothing to press.
+    expect(row('Repaint lobby').querySelector('button, a')).toBeNull();
+
+    searchParamsMock.mockReturnValue('tab=reservations');
+    rerender(hub(true));
+    const booked = (await screen.findByRole('heading', { level: 3, name: 'Pool' })).closest('li')!;
+    expect(booked.textContent).toContain('Confirmed');
+
+    searchParamsMock.mockReturnValue('tab=amenities');
+    rerender(hub(true));
+    const pool = (await screen.findByRole('heading', { level: 3, name: 'Pool' })).closest('li')!;
+    expect(pool.textContent).toContain('Open for booking');
+  });
+
+  it('labels each row of the mixed list with its kind and status', () => {
+    searchParamsMock.mockReturnValue('tab=all');
+    useOperationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [
+          { id: 7, type: 'maintenance_request', title: 'Kitchen leak', status: 'submitted', priority: 'high', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+          { id: 8, type: 'work_order', title: 'Repaint lobby', status: 'created', priority: 'low', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+        ],
+        meta: { cursor: null, limit: 50, partialFailure: false, unavailableSources: [] },
+      },
+    });
+    render(hub(true));
+    const leak = screen.getByText('Kitchen leak').closest('li')!;
+    expect(leak.textContent).toContain('Submitted');
+    expect(leak.textContent).toContain('Maintenance request');
+    const paint = screen.getByText('Repaint lobby').closest('li')!;
+    expect(paint.textContent).toContain('Created');
+    expect(paint.textContent).toContain('Work order');
+  });
+
+  it('names a reservation in the mixed list with a capital, like the other kinds', () => {
+    searchParamsMock.mockReturnValue('tab=all');
+    useOperationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [
+          { id: 17, type: 'reservation', title: 'Pool booking', status: 'confirmed', priority: 'low', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+        ],
+        meta: { cursor: null, limit: 50, partialFailure: false, unavailableSources: [] },
+      },
+    });
+    render(hub(true));
+    const row = screen.getByText('Pool booking').closest('li')!;
+    expect(row.textContent).toContain('Confirmed · Reservation · Created');
+  });
+
+  it('puts Load more in the footer of the list it grows', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    useMaintenanceRequestsMock.mockReturnValue({
+      isLoading: false,
+      isFetching: false,
+      error: null,
+      data: { data: [request], meta: { total: 40, page: 1, limit: 20 } },
+    });
+    render(hub(true));
+    const more = screen.getByRole('button', { name: 'Load more' });
+    const list = screen.getByText('Kitchen leak').closest('ul')!;
+    const box = list.parentElement!;
+    expect(box.tagName).toBe('SECTION');
+    expect(box.getAttribute('role')).toBeNull();
+    expect(box.contains(more)).toBe(true);
+    expect(list.contains(more)).toBe(false);
+  });
+
+  it('offers a retry when a list fails to load', () => {
+    const refetch = vi.fn();
+    searchParamsMock.mockReturnValue('tab=work-orders');
+    useWorkOrdersMock.mockReturnValue({ isLoading: false, error: new Error('boom'), data: undefined, refetch });
+    render(hub(true));
+
+    expect(screen.getByRole('alert')).toHaveTextContent("We couldn't load work orders.");
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no axe violations on a manager list, and axe would catch an unnamed row button', async () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    const { container } = render(hub(true));
+    expect(screen.getByRole('button', { name: 'Kitchen leak' })).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+
+    // Probe: the audit sees inside the rows.
+    screen.getByText('Kitchen leak').closest('li')!.appendChild(document.createElement('button'));
+    expect((await axe(container)).violations.map((v) => v.id)).toContain('button-name');
+  });
+
+  it('shows a skeleton, not a list, while a tab loads', () => {
+    searchParamsMock.mockReturnValue('tab=requests');
+    useMaintenanceRequestsMock.mockReturnValue({ isLoading: true, error: null, data: undefined });
+    render(hub(true));
+    const panel = screen.getByRole('tabpanel');
+    expect(panel.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(panel.querySelector('ul')).toBeNull();
   });
 });

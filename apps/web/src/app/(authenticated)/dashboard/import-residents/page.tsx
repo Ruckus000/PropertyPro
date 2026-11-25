@@ -1,3 +1,4 @@
+// page-template: delegated to apps/web/src/components/residents/import-residents-client.tsx
 /**
  * Import Residents Page — bulk CSV import wizard for community residents.
  *
@@ -11,6 +12,7 @@ import { toUrlSearchParams } from '@/lib/tenant/community-resolution';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { ImportResidentsClient } from '@/components/residents/import-residents-client';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
 import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
@@ -30,12 +32,11 @@ export default async function ImportResidentsPage({ searchParams }: PageProps) {
 
   if (!context.communityId) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Import Residents" />
-        <p className="mt-2 text-sm text-content-secondary">
+      <PageLayout template="focus" header={<PageHeader title="Import Residents" />}>
+        <p className="text-sm text-content-secondary">
           Add a valid <code className="rounded bg-surface-muted px-1">communityId</code> query parameter to import residents.
         </p>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -44,12 +45,11 @@ export default async function ImportResidentsPage({ searchParams }: PageProps) {
 
   if (!membership.isAdmin) {
     return (
-      <div className="mx-auto max-w-2xl">
-        <PageHeader title="Import Residents" />
-        <p className="mt-2 text-sm text-content-secondary">
+      <PageLayout template="focus" header={<PageHeader title="Import Residents" />}>
+        <p className="text-sm text-content-secondary">
           You do not have permission to import residents.
         </p>
-      </div>
+      </PageLayout>
     );
   }
 

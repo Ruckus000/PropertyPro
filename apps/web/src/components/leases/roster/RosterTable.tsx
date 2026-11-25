@@ -9,6 +9,13 @@
  * the prototype. The row's unit cell holds the real button; the whole row is
  * also clickable for the mouse. The next-step link is its own button and does
  * not also open the row.
+ *
+ * Width: the Resident column takes the spare room (`w-full` header) and is the
+ * one that gives (`max-w-0` cell, so a long name truncates instead of widening
+ * the table), down to a `min-w-32` floor. Every other cell is
+ * `whitespace-nowrap`: because Resident claims all the spare width, a cell
+ * that may wrap is squeezed to its narrowest and every row doubles in height.
+ * A two-line cell (date over "In 15 days") keeps its two lines.
  */
 import { ChevronDown, ChevronRight, Clock, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
@@ -116,7 +123,7 @@ function ResidentCell({ m, today }: { m: UnitModel; today: string }) {
     return (
       <div className="flex items-center gap-2.5">
         <span aria-hidden="true" className="size-8 shrink-0 rounded-full border border-dashed border-edge-strong" />
-        <span className="text-sm text-content-secondary">{note}</span>
+        <span className="min-w-0 truncate text-sm text-content-secondary">{note}</span>
       </div>
     );
   }
@@ -130,7 +137,7 @@ function ResidentCell({ m, today }: { m: UnitModel; today: string }) {
         {initials(first.name)}
       </span>
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-content">{first.name}</div>
+        <div className="truncate text-sm font-medium text-content" title={first.name}>{first.name}</div>
         {subLine && <div className="truncate text-xs text-content-secondary">{subLine}</div>}
       </div>
     </div>
@@ -162,12 +169,12 @@ export function RosterTable({
       <caption className="sr-only">Units and their leases</caption>
       <thead>
         <tr className="border-b border-edge text-xs font-medium text-content-secondary">
-          <th scope="col" className="px-4 py-2.5 font-medium">Unit</th>
-          <th scope="col" className="px-4 py-2.5 font-medium">Resident</th>
-          <th scope="col" className="px-4 py-2.5 font-medium">Status</th>
-          <th scope="col" className="hidden px-4 py-2.5 font-medium md:table-cell">Lease end</th>
-          <th scope="col" className="hidden px-4 py-2.5 text-right font-medium lg:table-cell">Rent</th>
-          <th scope="col" className="px-4 py-2.5 font-medium">Renewal</th>
+          <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Unit</th>
+          <th scope="col" className="w-full px-4 py-2.5 font-medium">Resident</th>
+          <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Status</th>
+          <th scope="col" className="hidden whitespace-nowrap px-4 py-2.5 font-medium md:table-cell">Lease end</th>
+          <th scope="col" className="hidden whitespace-nowrap px-4 py-2.5 text-right font-medium lg:table-cell">Rent</th>
+          <th scope="col" className="whitespace-nowrap px-4 py-2.5 font-medium">Renewal</th>
         </tr>
       </thead>
       {groups.map((g) => {
@@ -205,7 +212,7 @@ export function RosterTable({
                   selectedUnitId === m.unit.id ? 'bg-surface-hover' : 'bg-surface-card',
                 )}
               >
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   <button
                     type="button"
                     aria-label={`Open Unit ${m.unit.unitNumber}`}
@@ -218,16 +225,16 @@ export function RosterTable({
                     {m.unit.unitNumber}
                   </button>
                 </td>
-                <td className="px-4 py-3">
+                <td className="min-w-32 max-w-0 px-4 py-3">
                   <ResidentCell m={m} today={today} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   <LeaseStatus status={m.status} />
                 </td>
-                <td className="hidden px-4 py-3 md:table-cell">
+                <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">
                   <EndCell m={m} today={today} />
                 </td>
-                <td className="hidden px-4 py-3 text-right lg:table-cell">
+                <td className="hidden whitespace-nowrap px-4 py-3 text-right lg:table-cell">
                   {m.current || m.next ? (
                     <span className="text-sm tabular-nums text-content">
                       {m.current?.rentAmount == null && m.next?.rentAmount == null
@@ -241,7 +248,7 @@ export function RosterTable({
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="whitespace-nowrap px-4 py-3">
                   <div className="flex flex-col items-start gap-0.5">
                     <StageText m={m} today={today} />
                     {m.action && (

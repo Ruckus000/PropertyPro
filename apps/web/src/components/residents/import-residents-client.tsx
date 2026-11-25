@@ -1,20 +1,23 @@
 'use client';
 
+/**
+ * Import residents from a CSV, on the page kit: upload, review (a dry run,
+ * nothing saved), import, done. The step strip under the header says where
+ * the import stands; each step is one Section with its actions in the footer.
+ * The header has Cancel only, back to the Directory.
+ */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import {
-  Upload,
-  Download,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  FileSpreadsheet,
-  Loader2,
-  UserCheck,
-} from 'lucide-react';
+import { Upload, Download, FileSpreadsheet, Loader2, Users } from 'lucide-react';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
+import { Section, SectionFooter, SectionHeader } from '@propertypro/ui/components/shared/section';
+import { StatusGlyph, type StatusGlyphKind } from '@propertypro/ui/components/shared/status-glyph';
+import { StepStrip } from '@propertypro/ui/components/shared/step-strip';
 import { cn } from '@/lib/utils';
 import { AlertBanner } from '@/components/shared/alert-banner';
 import { PageHeader } from '@/components/shared/page-header';
+import { Button, buttonVariants } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   useDryRunImport,
   useImportResidents,
@@ -32,6 +35,7 @@ import {
   countRowsWithErrors,
   fileLevelErrors,
   rowsToFixFileName,
+  type ImportDisplayRow,
 } from '@/lib/utils/resident-import-rows';
 import { saveCsvFile } from '@/lib/utils/save-csv-file';
 
@@ -45,6 +49,16 @@ interface ImportResidentsClientProps {
 }
 
 type WizardStep = 'upload' | 'preview' | 'importing' | 'results';
+
+/** The step strip, in the order of `WizardStep`. */
+const STEP_NAMES = ['Upload', 'Review', 'Import', 'Done'];
+const STEP_INDEX: Record<WizardStep, number> = { upload: 0, preview: 1, importing: 2, results: 3 };
+
+/** Padding for content that sits in a Section outside its header, table and footer. */
+const BODY = 'space-y-4 px-4 py-4';
+
+/** Form width (the cap the announcement form uses). The review step, with its table, takes the full width. */
+const FORM_WIDTH = 'w-full max-w-4xl';
 
 /* ─────── CSV Template ─────── */
 
@@ -202,13 +216,25 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
 
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Import Residents"
-      />
+    <PageLayout
+      template="form"
+      header={
+        <PageHeader
+          title="Import Residents"
+          icon={<Users />}
+          description="Add many residents at once from a spreadsheet saved as a CSV file."
+          actions={
+            <Button asChild variant="outline">
+              <Link href={directoryHref('residents', { communityId })}>Cancel</Link>
+            </Button>
+          }
+        />
+      }
+      tabs={<StepStrip steps={STEP_NAMES} current={STEP_INDEX[step]} label="Import steps" />}
+    >
       <p role="status" className="sr-only">{announcement}</p>
 
-      <div ref={stepRef} tabIndex={-1} role="group" aria-label="Import step" className="space-y-6">
+      <div ref={stepRef} tabIndex={-1} role="group" aria-label="Import step" className="space-y-5">
 
       {/* Step 1: Upload */}
       {step === 'upload' && (
@@ -225,7 +251,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
         />
       )}
 
-      {/* Step 2: Preview */}
+      {/* Step 2: Review */}
       {step === 'preview' && dryRunData && (
         <PreviewStep
           csvText={csvText}
@@ -233,78 +259,71 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
           preview={dryRunData.preview}
           errors={dryRunData.errors}
           onImport={handleImport}
-          onCancel={resetWizard}
+          onBack={resetWizard}
         />
       )}
 
-      {/* Step 3: Importing */}
+      {/* Step 3: Import */}
       {step === 'importing' && !importError && (
-        <div className="flex flex-col items-center gap-4 py-16">
-          <Loader2 size={40} className="animate-spin text-interactive" aria-hidden="true" />
-          <p className="text-sm text-content-secondary">Importing residents...</p>
-        </div>
+        <Section className={FORM_WIDTH}>
+          <div className="flex flex-col items-center gap-4 px-4 py-16">
+            <Loader2 className="size-10 animate-spin text-interactive" aria-hidden="true" />
+            <p className="text-sm text-content-secondary">Importing residents...</p>
+          </div>
+        </Section>
       )}
       {step === 'importing' && importError && !mayHavePartlyImported && (
-        <div className="space-y-4">
-          <AlertBanner
-            status="danger"
-            title="The import didn't start"
-            description={`${importError.message.replace(/\.$/, '')}. Nothing was imported.`}
-          />
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleBackToPreview}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
-            >
-              Back to preview
-            </button>
-            <button
-              type="button"
-              onClick={resetWizard}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-            >
-              Start over
-            </button>
+        <Section className={FORM_WIDTH}>
+          <div className={BODY}>
+            <AlertBanner
+              status="danger"
+              title="The import didn't start"
+              description={`${importError.message.replace(/\.$/, '')}. Nothing was imported.`}
+            />
           </div>
-        </div>
+          <SectionFooter>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={resetWizard}>
+                Start over
+              </Button>
+              <Button type="button" onClick={handleBackToPreview}>
+                Back to preview
+              </Button>
+            </div>
+          </SectionFooter>
+        </Section>
       )}
       {step === 'importing' && importError && mayHavePartlyImported && (
-        <div className="space-y-4">
-          <AlertBanner
-            status="danger"
-            title="The import stopped before finishing"
-            description={`${importError.message.replace(/\.$/, '')}. Every row that was saved is complete, and nothing is half-saved. Check the file again to see which rows are left.`}
-          />
-          {dryRunMutation.error instanceof Error && (
+        <Section className={FORM_WIDTH}>
+          <div className={BODY}>
             <AlertBanner
-              status="warning"
-              title="We couldn't check the file again"
-              description={dryRunMutation.error.message}
+              status="danger"
+              title="The import stopped before finishing"
+              description={`${importError.message.replace(/\.$/, '')}. Every row that was saved is complete, and nothing is half-saved. Check the file again to see which rows are left.`}
             />
-          )}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={handleCheckWhatsLeft}
-              disabled={dryRunMutation.isPending}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[36px]"
-            >
-              {dryRunMutation.isPending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-              {dryRunMutation.isPending ? 'Checking...' : "Check what's left"}
-            </button>
-            <button
-              type="button"
-              onClick={resetWizard}
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-            >
-              Start over
-            </button>
+            {dryRunMutation.error instanceof Error && (
+              <AlertBanner
+                status="warning"
+                title="We couldn't check the file again"
+                description={dryRunMutation.error.message}
+              />
+            )}
           </div>
-        </div>
+          <SectionFooter>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" onClick={resetWizard}>
+                Start over
+              </Button>
+              <Button type="button" onClick={handleCheckWhatsLeft} disabled={dryRunMutation.isPending}>
+                {dryRunMutation.isPending && <Loader2 className="animate-spin" aria-hidden="true" />}
+                {dryRunMutation.isPending ? 'Checking...' : "Check what's left"}
+              </Button>
+            </div>
+          </SectionFooter>
+        </Section>
       )}
 
-      {/* Step 4: Results */}
+      {/* Step 4: Done */}
       {step === 'results' && importResult && (
         <ResultsStep
           csvText={csvText}
@@ -315,7 +334,7 @@ export function ImportResidentsClient({ communityId }: ImportResidentsClientProp
         />
       )}
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -345,12 +364,13 @@ function UploadStep({
   onDragLeave,
 }: UploadStepProps) {
   return (
-    <div className="space-y-6">
-      {/* Instructions */}
-      <div className="rounded-md border border-edge bg-surface-card p-5">
+    <Section className={FORM_WIDTH}>
+      <SectionHeader title="Choose a CSV file" />
+      <div className={BODY}>
+        {/* Instructions */}
         <div className="flex items-start gap-3">
-          <FileSpreadsheet size={20} className="mt-0.5 shrink-0 text-content-secondary" aria-hidden="true" />
-          <div className="space-y-2">
+          <FileSpreadsheet className="mt-0.5 size-5 shrink-0 text-content-secondary" aria-hidden="true" />
+          <div className="space-y-1">
             <p className="text-sm font-medium text-content">
               Upload a CSV with columns: name, email, role, unit_number
             </p>
@@ -358,72 +378,66 @@ function UploadStep({
               Valid roles: owner, tenant. Every row needs a unit_number.
               Board and manager access is assigned from Roles &amp; Access after import.
             </p>
-            <button
-              type="button"
-              onClick={downloadCsvTemplate}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-interactive hover:text-interactive-hover"
-            >
-              <Download size={14} aria-hidden="true" />
+            <Button type="button" variant="link" onClick={downloadCsvTemplate} className="px-0">
+              <Download aria-hidden="true" />
               Download CSV template
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
 
-      {/* Drop zone */}
-      <div
-        onDrop={onDrop}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        className={cn(
-          'flex flex-col items-center justify-center gap-4 rounded-md border-2 border-dashed p-12 transition-colors',
-          dragOver
-            ? 'border-interactive bg-interactive-subtle'
-            : 'border-edge bg-surface-card',
-          isLoading && 'pointer-events-none opacity-60',
-        )}
-      >
-        {isLoading ? (
-          <>
-            <Loader2 size={32} className="animate-spin text-interactive" aria-hidden="true" />
-            <p className="text-sm text-content-secondary">
-              Validating {fileName}...
-            </p>
-          </>
-        ) : (
-          <>
-            <Upload size={32} className="text-content-secondary" aria-hidden="true" />
-            <div className="text-center">
-              <p className="text-sm font-medium text-content">
-                Drag and drop your CSV file here
+        {/* Drop zone */}
+        <div
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          className={cn(
+            'flex flex-col items-center justify-center gap-4 rounded-md border-2 border-dashed p-12 transition-colors',
+            dragOver
+              ? 'border-interactive bg-interactive-subtle'
+              : 'border-edge-control bg-surface-card',
+            isLoading && 'pointer-events-none opacity-60',
+          )}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="size-8 animate-spin text-interactive" aria-hidden="true" />
+              <p className="text-sm text-content-secondary">
+                Validating {fileName}...
               </p>
-              <p className="mt-1 text-sm text-content-secondary">or</p>
-            </div>
-            {/* The file input is visually hidden; show its keyboard focus on the button it sits in. */}
-            <label className="cursor-pointer rounded-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:focus-visible]:ring-offset-2">
-              <span className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]">
-                Browse Files
-              </span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={onFileChange}
-                className="sr-only"
-              />
-            </label>
-          </>
+            </>
+          ) : (
+            <>
+              <Upload className="size-8 text-content-secondary" aria-hidden="true" />
+              <div className="text-center">
+                <p className="text-sm font-medium text-content">
+                  Drag and drop your CSV file here
+                </p>
+                <p className="mt-1 text-sm text-content-secondary">or</p>
+              </div>
+              {/* The file input is visually hidden; show its keyboard focus on the button it sits in. */}
+              <label className="cursor-pointer rounded-md has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-focus has-[:focus-visible]:ring-offset-2">
+                <span className={buttonVariants()}>Browse Files</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={onFileChange}
+                  className="sr-only"
+                />
+              </label>
+            </>
+          )}
+        </div>
+
+        {error && (
+          <AlertBanner
+            status="danger"
+            title="Validation failed"
+            description={error}
+          />
         )}
       </div>
-
-      {error && (
-        <AlertBanner
-          status="danger"
-          title="Validation failed"
-          description={error}
-        />
-      )}
-    </div>
+    </Section>
   );
 }
 
@@ -439,18 +453,40 @@ function DownloadRowsToFix({
   errors: CsvError[];
 }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="outline"
       onClick={() => saveCsvFile(buildRowsToFixCsv(csvText, errors), rowsToFixFileName(fileName))}
-      className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
     >
-      <Download size={14} aria-hidden="true" />
+      <Download aria-hidden="true" />
       Download rows to fix
-    </button>
+    </Button>
   );
 }
 
 /* ─────── Preview Step ─────── */
+
+const ROW_STATUS: Record<ImportDisplayRow['status'], { kind: StatusGlyphKind; word: string }> = {
+  ready: { kind: 'done', word: 'Ready' },
+  member: { kind: 'not-started', word: 'Member' },
+  error: { kind: 'overdue', word: 'Fix' },
+};
+
+function rowDetails(row: ImportDisplayRow): string {
+  if (row.status === 'error') return row.problems.join('; ') || 'Not imported';
+  if (row.status === 'member') return 'Already in this community — nothing to import';
+  return row.existingAccount ? 'Existing account — will be added to this community' : 'New account';
+}
+
+// Five columns (owner decision, 2026-11-24): the line number sits under the
+// status and the email under the name. This step exists so people can check
+// what is in their file, so no value is ever cut: every cell wraps. The table
+// is `table-fixed`, so it can never be wider than its Section: Status, Role
+// and Unit have set widths, Details takes a quarter, and Resident takes the
+// rest, which is the largest share (about 250px in a 720px box). In a box
+// under 720px (`cq-md`) only Status and Resident are columns, and the
+// Resident cell carries role, unit and details beneath.
+const WIDE = 'hidden cq-md:table-cell';
 
 interface PreviewStepProps {
   csvText: string;
@@ -458,10 +494,10 @@ interface PreviewStepProps {
   preview: DryRunRow[];
   errors: CsvError[];
   onImport: () => void;
-  onCancel: () => void;
+  onBack: () => void;
 }
 
-function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }: PreviewStepProps) {
+function PreviewStep({ csvText, fileName, preview, errors, onImport, onBack }: PreviewStepProps) {
   // Every line of the uploaded file, on its own line number, with the values
   // as typed — ready and rejected alike.
   const rows = buildImportDisplayRows(csvText, preview, errors);
@@ -474,144 +510,121 @@ function PreviewStep({ csvText, fileName, preview, errors, onImport, onCancel }:
   const showRows = fileErrors.length === 0;
 
   return (
-    <div className="space-y-6">
+    <Section className="cq">
+      <SectionHeader title="Review the file" description={fileName || undefined} />
+
       {fileErrors.length > 0 && (
-        <AlertBanner
-          status="danger"
-          title="This file can't be imported as it is"
-          description={fileErrors.map((e) => e.message).join('. ')}
-        />
+        <div className={BODY}>
+          <AlertBanner
+            status="danger"
+            title="This file can't be imported as it is"
+            description={fileErrors.map((e) => e.message).join('. ')}
+          />
+        </div>
       )}
 
       {showRows && (
         <>
           {/* Summary — counts are rows, not messages */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
-              <span className="text-sm font-medium text-content">
-                {readyCount} ready to import
-              </span>
-            </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-edge px-4 py-3">
+            <StatusGlyph kind="done" label={`${readyCount} ready to import`} />
             {memberCount > 0 && (
-              <div className="flex items-center gap-2">
-                <UserCheck size={16} className="text-content-secondary" aria-hidden="true" />
-                <span className="text-sm font-medium text-content">
-                  {memberCount} already {memberCount === 1 ? 'a member' : 'members'}
-                </span>
-              </div>
+              <StatusGlyph
+                kind="not-started"
+                label={`${memberCount} already ${memberCount === 1 ? 'a member' : 'members'}`}
+              />
             )}
             {fixCount > 0 && (
-              <div className="flex items-center gap-2">
-                <XCircle size={16} className="text-status-danger" aria-hidden="true" />
-                <span className="text-sm font-medium text-content">
-                  {fixCount} {fixCount === 1 ? 'row needs' : 'rows need'} fixing
-                </span>
-              </div>
+              <StatusGlyph
+                kind="overdue"
+                label={`${fixCount} ${fixCount === 1 ? 'row needs' : 'rows need'} fixing`}
+              />
             )}
           </div>
 
           {fixCount > 0 && (
-            <p className="text-sm text-content-secondary">
-              Rows that need fixing are left out of the import. Download them, correct them, and upload
-              that file afterwards. Each row keeps its line number from your file.
-            </p>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-edge px-4 py-3">
+              <p className="min-w-0 flex-1 basis-64 text-sm text-content-secondary">
+                Rows that need fixing are left out of the import. Download them, correct them, and upload
+                that file afterwards. Each row keeps its line number from your file.
+              </p>
+              <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={errors} />
+            </div>
           )}
 
-          {/* Preview table */}
-          <div className="overflow-x-auto rounded-md border border-edge">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-edge bg-surface-muted">
-                  {['Line', 'Status', 'Name', 'Email', 'Role', 'Unit', 'Details'].map((label) => (
-                    <th
-                      key={label}
-                      scope="col"
-                      className="h-10 px-3 text-left text-xs font-medium uppercase tracking-wider text-content-secondary"
-                    >
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
+          <Table aria-label="Rows in the file" className="table-fixed">
+            <TableHeader className="bg-surface-subtle">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-28">Status</TableHead>
+                <TableHead>Resident</TableHead>
+                <TableHead className={cn(WIDE, 'w-20')}>Role</TableHead>
+                <TableHead className={cn(WIDE, 'w-24')}>Unit</TableHead>
+                <TableHead className={cn(WIDE, 'w-1/4')}>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => {
+                const status = ROW_STATUS[row.status];
+                const details = rowDetails(row);
+                const roleAndUnit = [row.role, row.unitNumber ? `Unit ${row.unitNumber}` : '']
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <TableRow
                     key={row.rowNumber}
-                    className={cn(
-                      'h-[52px] border-b border-edge last:border-b-0',
-                      row.status === 'error' && 'bg-status-danger-bg',
-                    )}
+                    data-row-status={row.status}
+                    className={cn(row.status === 'error' && 'bg-status-danger-bg hover:bg-status-danger-bg')}
                   >
-                    <td className="px-3 text-sm text-content-secondary">{row.rowNumber}</td>
-                    <td className="px-3">
-                      {row.status === 'ready' ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
-                          <CheckCircle2 size={16} className="text-status-success" aria-hidden="true" />
-                          Ready
-                        </span>
-                      ) : row.status === 'member' ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
-                          <UserCheck size={16} className="text-content-secondary" aria-hidden="true" />
-                          Member
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-content">
-                          <XCircle size={16} className="text-status-danger" aria-hidden="true" />
-                          Fix
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 text-sm text-content">{row.name || '-'}</td>
-                    <td className="px-3 text-sm text-content">{row.email || '-'}</td>
-                    <td className="px-3 text-sm text-content">{row.role || '-'}</td>
-                    <td className="px-3 text-sm text-content">{row.unitNumber || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-content-secondary">
-                      {row.status === 'error'
-                        ? row.problems.join('; ') || 'Not imported'
-                        : row.status === 'member'
-                          ? 'Already in this community — nothing to import'
-                          : row.existingAccount
-                            ? 'Existing account — will be added to this community'
-                            : 'New account'}
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-sm text-content-secondary">
-                      No rows found in the CSV file.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                    <TableCell className="align-top">
+                      <StatusGlyph kind={status.kind} label={status.word} />
+                      <span data-line className="block text-sm text-content-secondary">
+                        Line {row.rowNumber}
+                      </span>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <span data-name className="block break-words font-medium text-content">
+                        {row.name || '-'}
+                      </span>
+                      <span data-email className="block break-all text-sm text-content-secondary">
+                        {row.email || '-'}
+                      </span>
+                      {/* Narrow boxes only: what the three hidden columns say. */}
+                      <span data-narrow className="block text-sm text-content-secondary cq-md:hidden">
+                        {roleAndUnit ? <span className="block break-words">{roleAndUnit}</span> : null}
+                        <span className="block break-words">{details}</span>
+                      </span>
+                    </TableCell>
+                    <TableCell className={cn(WIDE, 'break-words align-top')}>{row.role || '-'}</TableCell>
+                    <TableCell data-unit className={cn(WIDE, 'break-words align-top')}>{row.unitNumber || '-'}</TableCell>
+                    <TableCell className={cn(WIDE, 'break-words align-top text-sm text-content-secondary')}>
+                      {details}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {rows.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={5} className="py-8 text-center text-sm text-content-secondary">
+                    No rows found in the CSV file.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onImport}
-          disabled={readyCount === 0}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover disabled:cursor-not-allowed disabled:opacity-50 md:min-h-[36px]"
-        >
-          Import {readyCount} {readyCount === 1 ? 'Resident' : 'Residents'}
-        </button>
-        {showRows && fixCount > 0 && (
-          <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={errors} />
-        )}
-        <button
-          type="button"
-          onClick={onCancel}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
+      <SectionFooter>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={onBack}>
+            Back
+          </Button>
+          <Button type="button" onClick={onImport} disabled={readyCount === 0}>
+            Import {readyCount} {readyCount === 1 ? 'Resident' : 'Residents'}
+          </Button>
+        </div>
+      </SectionFooter>
+    </Section>
   );
 }
 
@@ -627,68 +640,64 @@ interface ResultsStepProps {
 
 function ResultsStep({ csvText, fileName, result, communityId, onImportMore }: ResultsStepProps) {
   return (
-    <div className="space-y-6">
-      {/* Success summary */}
-      {result.importedCount > 0 && (
-        <AlertBanner
-          status="success"
-          title={`${result.importedCount} ${result.importedCount === 1 ? 'resident' : 'residents'} imported successfully`}
-        />
-      )}
-
-      {/* Errors */}
-      {result.errors.length > 0 && (
-        <AlertBanner
-          status="warning"
-          title={`${result.skippedCount} ${result.skippedCount === 1 ? 'row' : 'rows'} skipped`}
-          description="Some rows could not be imported. See details below."
-        />
-      )}
-
-      {result.errors.length > 0 && (
-        <div className="rounded-md border border-edge bg-surface-card p-4">
-          <div className="flex items-center gap-2 pb-3">
-            <AlertTriangle size={16} className="text-status-warning" aria-hidden="true" />
-            <span className="text-sm font-medium text-content">Skipped rows</span>
-          </div>
-          <ul className="space-y-1">
-            {result.errors.map((err, i) => (
-              <li key={i} className="text-sm text-content-secondary">
-                Line {err.rowNumber}{err.column ? ` (${err.column})` : ''}: {err.message}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* No results at all */}
-      {result.importedCount === 0 && result.errors.length === 0 && (
-        <AlertBanner
-          status="info"
-          title="No residents were imported"
-          description="The CSV file did not contain any valid rows to import."
-        />
-      )}
-
-      {/* Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href={directoryHref('residents', { communityId })}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md bg-interactive px-4 py-2 text-sm font-medium text-content-inverse hover:bg-interactive-hover md:min-h-[36px]"
-        >
-          View Residents
-        </Link>
-        {countRowsWithErrors(result.errors) > 0 && (
-          <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={result.errors} />
+    <Section className={FORM_WIDTH}>
+      <SectionHeader title="Import finished" />
+      <div className={BODY}>
+        {/* Success summary */}
+        {result.importedCount > 0 && (
+          <AlertBanner
+            status="success"
+            title={`${result.importedCount} ${result.importedCount === 1 ? 'resident' : 'residents'} imported successfully`}
+          />
         )}
-        <button
-          type="button"
-          onClick={onImportMore}
-          className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-edge bg-surface-card px-4 py-2 text-sm font-medium text-content hover:bg-surface-muted md:min-h-[36px]"
-        >
-          Import More
-        </button>
+
+        {/* Errors */}
+        {result.errors.length > 0 && (
+          <AlertBanner
+            status="warning"
+            title={`${result.skippedCount} ${result.skippedCount === 1 ? 'row' : 'rows'} skipped`}
+            description="Some rows could not be imported. See details below."
+          />
+        )}
+
+        {result.errors.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-content">Skipped rows</h3>
+              {countRowsWithErrors(result.errors) > 0 && (
+                <DownloadRowsToFix csvText={csvText} fileName={fileName} errors={result.errors} />
+              )}
+            </div>
+            <ul className="space-y-1">
+              {result.errors.map((err, i) => (
+                <li key={i} className="text-sm text-content-secondary">
+                  Line {err.rowNumber}{err.column ? ` (${err.column})` : ''}: {err.message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* No results at all */}
+        {result.importedCount === 0 && result.errors.length === 0 && (
+          <AlertBanner
+            status="info"
+            title="No residents were imported"
+            description="The CSV file did not contain any valid rows to import."
+          />
+        )}
       </div>
-    </div>
+
+      <SectionFooter>
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={onImportMore}>
+            Import More
+          </Button>
+          <Button asChild>
+            <Link href={directoryHref('residents', { communityId })}>View Residents</Link>
+          </Button>
+        </div>
+      </SectionFooter>
+    </Section>
   );
 }
