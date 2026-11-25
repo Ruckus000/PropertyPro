@@ -856,8 +856,9 @@ describe('OperationsHub — amenities', () => {
     expect(await screen.findByRole('heading', { level: 3, name: 'Sauna' })).toBeInTheDocument();
     expect(screen.getByText('Not open for booking')).toBeInTheDocument();
     // Owner decision 2026-11-24: the name opens the edit sheet; no separate Edit button.
-    expect(screen.getByRole('button', { name: 'Pool' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
+    const editPool = screen.getByRole('button', { name: 'Edit Pool' });
+    expect(editPool).toHaveTextContent(/^Pool$/);
+    expect(screen.getAllByRole('button', { name: 'Edit Pool' })).toHaveLength(1);
     expect(screen.getByText('Up to 2 hours per booking')).toBeInTheDocument();
     // The header holds the one filled Add amenity once the list has something in it.
     expect(screen.getByRole('button', { name: 'Add amenity' })).toBeInTheDocument();
@@ -868,7 +869,7 @@ describe('OperationsHub — amenities', () => {
     expect(screen.queryByRole('heading', { level: 3, name: 'Sauna' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
     // A resident's amenity name is plain text.
-    expect(screen.queryByRole('button', { name: 'Pool' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 3, name: 'Pool' }).querySelector('button')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
   });
 
@@ -1193,7 +1194,10 @@ describe('OperationsHub — page kit', () => {
     searchParamsMock.mockReturnValue('tab=amenities');
     rerender(hub(false));
     expect(await screen.findByRole('heading', { level: 3, name: 'Pool' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Pool' })).toBeNull();
+    const residentName = screen.getByRole('heading', { level: 3, name: 'Pool' });
+    expect(residentName.querySelector('button')).toBeNull();
+    expect(residentName.innerHTML).not.toContain('text-content-link');
+    expect(screen.queryByRole('button', { name: 'Edit Pool' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add amenity' })).toBeNull();
     expect(screen.queryByText('Open for booking')).toBeNull();
     // A resident still books from the row.
@@ -1204,7 +1208,7 @@ describe('OperationsHub — page kit', () => {
     searchParamsMock.mockReturnValue('tab=amenities');
     render(hub(true));
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Sauna' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit Sauna' }));
     expect(historyPush).toHaveBeenCalledTimes(1);
     expect(historyPush).toHaveBeenCalledWith(null, '', '/communities/42/operations?tab=amenities&create=amenity&amenityId=10');
     // Reserve stays a row button, only on what can be booked.
@@ -1223,7 +1227,11 @@ describe('OperationsHub — page kit', () => {
   it("makes a manager's amenity name a 44px target on a phone, with a ring its heading cannot clip", async () => {
     searchParamsMock.mockReturnValue('tab=amenities');
     render(hub(true));
-    const name = await screen.findByRole('button', { name: 'Pool' });
+    const name = await screen.findByRole('button', { name: 'Edit Pool' });
+    expect(name).toHaveTextContent(/^Pool$/);
+    // Coloured as a link, so a manager can tell it from a resident's plain name.
+    expect(name.className.split(' ')).toContain('text-content-link');
+    expect(name.className.split(' ')).toContain('hover:underline');
     for (const cls of ['inline-flex', 'items-center', 'min-h-11', 'md:min-h-6', 'focus-visible:ring-inset']) {
       expect(name.className.split(' ')).toContain(cls);
     }
@@ -1279,6 +1287,23 @@ describe('OperationsHub — page kit', () => {
     const paint = screen.getByText('Repaint lobby').closest('li')!;
     expect(paint.textContent).toContain('Created');
     expect(paint.textContent).toContain('Work order');
+  });
+
+  it('names a reservation in the mixed list with a capital, like the other kinds', () => {
+    searchParamsMock.mockReturnValue('tab=all');
+    useOperationsMock.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        data: [
+          { id: 17, type: 'reservation', title: 'Pool booking', status: 'confirmed', priority: 'low', unitId: null, createdAt: '2026-03-27T14:00:00.000Z' },
+        ],
+        meta: { cursor: null, limit: 50, partialFailure: false, unavailableSources: [] },
+      },
+    });
+    render(hub(true));
+    const row = screen.getByText('Pool booking').closest('li')!;
+    expect(row.textContent).toContain('Confirmed · Reservation · Created');
   });
 
   it('puts Load more in the footer of the list it grows', () => {

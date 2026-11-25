@@ -43,7 +43,7 @@ describe('amenities — axe', () => {
     );
     expect(screen.getByRole('heading', { level: 3, name: 'Pool' })).toBeTruthy();
     // The name is the edit control (owner decision 2026-11-24).
-    expect(screen.getByRole('button', { name: 'Sauna' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit Sauna' })).toBeTruthy();
     expect(await axe(container)).toHaveNoViolations();
   });
 

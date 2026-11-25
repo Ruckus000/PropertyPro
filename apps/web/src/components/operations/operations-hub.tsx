@@ -103,6 +103,7 @@ const TAB_NOUN: Record<OperationsTab, string> = {
 const ITEM_TYPE_LABEL: Record<string, string> = {
   maintenance_request: 'Maintenance request',
   work_order: 'Work order',
+  reservation: 'Reservation',
 };
 
 // Ink, not coral: the selected tab is marked by an underline (design §11.3).
