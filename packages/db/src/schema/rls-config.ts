@@ -610,6 +610,9 @@ export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number
  * role; supabase-js tenant reads use the service-role client), so revoking the
  * grant costs nothing and removes the whole class.
  *
+ * `compliance_audit_log` joined in 0105 (0077 missed it; managers could read raw
+ * old_values/new_values/metadata through PostgREST).
+ *
  * `user_roles` is deliberately absent: storage.objects policies subquery it as
  * `authenticated`, so 0077 narrows its SELECT policy instead of revoking it.
  *
@@ -620,7 +623,8 @@ export type RlsGlobalExclusionName = (typeof RLS_GLOBAL_TABLE_EXCLUSIONS)[number
 export const DATA_API_REVOKED_TENANT_TABLES = [
   'amenities', 'amenity_reservations', 'announcements', 'arc_submissions',
   'assessment_line_items', 'assessments',
-  'community_join_requests', 'compliance_checklist_items', 'contract_bids',
+  'community_join_requests', 'compliance_audit_log', 'compliance_checklist_items',
+  'contract_bids',
   'contracts', 'document_categories', 'document_drafts', 'documents',
   'election_ballot_submissions', 'election_ballots', 'election_candidates',
   'election_eligibility_snapshots', 'election_proxies', 'elections',

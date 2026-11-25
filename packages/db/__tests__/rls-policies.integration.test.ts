@@ -559,35 +559,31 @@ describeDb('P4-55 RLS policies (integration)', () => {
     expect(phantom, `Config lists tables that do not exist: ${phantom.join(', ')}`).toEqual([]);
   });
 
-  it('restricts compliance_audit_log reads to admin roles for the actor community', async () => {
-    await setAuthenticatedContext(authSql, seed.tenantAUserId, seed.communityAId);
-    const tenantRows = await authSql<{ id: number; community_id: number }[]>`
-      select id, community_id
-      from public.compliance_audit_log
-      where resource_id like ${`${seed.auditResourcePrefix}%`}
-      order by id
-    `;
-    expect(tenantRows).toEqual([]);
+  it('refuses compliance_audit_log to authenticated at the ACL, admins included (0105)', async () => {
+    // Before 0105 a community's managers could read raw old_values/new_values/
+    // metadata through PostgREST on their own JWT (the admin-tier SELECT policy
+    // admitted them). The grant is now gone, so the policy is unreachable on
+    // that path; the application reads the table on a privileged role, and
+    // service_role keeps its grant. Asserted by message so the grant, not an
+    // empty policy result, is what refused the read.
+    for (const [userId, communityId] of [
+      [seed.tenantAUserId, seed.communityAId],
+      [seed.adminAUserId, seed.communityAId],
+      [seed.adminBUserId, seed.communityBId],
+    ] as const) {
+      await setAuthenticatedContext(authSql, userId, communityId);
+      await expect(
+        authSql`select id from public.compliance_audit_log limit 1`,
+      ).rejects.toThrow('permission denied for table compliance_audit_log');
+    }
 
-    await setAuthenticatedContext(authSql, seed.adminAUserId, seed.communityAId);
-    const adminARows = await authSql<{ id: number; community_id: number }[]>`
-      select id, community_id
-      from public.compliance_audit_log
+    await setServiceRoleContext(serviceSql);
+    const rows = await serviceSql<{ id: number }[]>`
+      select id from public.compliance_audit_log
       where resource_id like ${`${seed.auditResourcePrefix}%`}
-      order by id
+      limit 1
     `;
-    expect(adminARows.length).toBeGreaterThan(0);
-    expect(adminARows.every((row) => Number(row.community_id) === seed.communityAId)).toBe(true);
-
-    await setAuthenticatedContext(authSql, seed.adminBUserId, seed.communityBId);
-    const adminBRows = await authSql<{ id: number; community_id: number }[]>`
-      select id, community_id
-      from public.compliance_audit_log
-      where resource_id like ${`${seed.auditResourcePrefix}%`}
-      order by id
-    `;
-    expect(adminBRows.length).toBeGreaterThan(0);
-    expect(adminBRows.every((row) => Number(row.community_id) === seed.communityBId)).toBe(true);
+    expect(rows.length).toBe(1);
   });
 
   it('preserves service_role bypass across tenant data', async () => {

@@ -715,6 +715,13 @@
       "when": 1795473306912,
       "tag": "0104_assessment_line_items_unique_period",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1795567027895,
+      "tag": "0105_revoke_data_api_audit_log",
+      "breakpoints": true
     }
   ]
 }

@@ -57,7 +57,14 @@ const DROPPED_AFTER_0077 = [
   'onboarding_wizard_state', // 0091
   'access_requests', 'accounting_connections', 'calendar_sync_tokens', // 0094
 ];
-const EXPECTED_IN_0077 = [...DATA_API_REVOKED_TENANT_TABLES, ...DROPPED_AFTER_0077].sort();
+/** Tables a later migration added to the revoked set; 0077's frozen array never named them. */
+const ADDED_AFTER_0077 = [
+  'compliance_audit_log', // 0105
+];
+const EXPECTED_IN_0077 = [
+  ...DATA_API_REVOKED_TENANT_TABLES.filter((t) => !(ADDED_AFTER_0077 as string[]).includes(t)),
+  ...DROPPED_AFTER_0077,
+].sort();
 
 describe('migration 0077 — tenant tables shut to the Data API', () => {
   it('strips comments without emptying the migration', () => {
@@ -171,6 +178,33 @@ describe('migration 0077 — tenant tables shut to the Data API', () => {
 
     it('does not re-grant service_role (unlike the platform-table loop above it)', () => {
       expect(BLOCK_BODY).not.toMatch(/\bGRANT\b/i);
+    });
+  });
+
+  describe('migration 0105 — compliance_audit_log shut to the Data API', () => {
+    const SQL = stripComments(
+      readFileSync(
+        path.resolve(__dirname, '../migrations/0105_revoke_data_api_audit_log.sql'),
+        'utf8',
+      ),
+    );
+
+    it('revokes every privilege on the table and its sequences from anon and authenticated', () => {
+      expect(SQL).toContain("t text := 'compliance_audit_log'");
+      expect(SQL).toContain(
+        "format('REVOKE ALL ON TABLE public.%I FROM anon, authenticated', t)",
+      );
+      expect(SQL).toContain(
+        "format('REVOKE ALL ON SEQUENCE public.%I FROM anon, authenticated', s)",
+      );
+    });
+
+    it('touches nothing else: no GRANT, no policy, no trigger, no service_role', () => {
+      expect(SQL).not.toMatch(/\b(GRANT|POLICY|TRIGGER|service_role|postgres)\b/i);
+    });
+
+    it('is in DATA_API_REVOKED_TENANT_TABLES', () => {
+      expect(DATA_API_REVOKED_TENANT_TABLES).toContain('compliance_audit_log');
     });
   });
 });
