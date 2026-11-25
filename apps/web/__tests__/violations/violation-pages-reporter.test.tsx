@@ -19,6 +19,7 @@ const {
   detailViewMock,
   violationsPageMock,
   roleRows,
+  roleLookup,
 } = vi.hoisted(() => ({
   requireAuthMock: vi.fn(),
   requireMembershipMock: vi.fn(),
@@ -28,13 +29,19 @@ const {
   detailViewMock: vi.fn(),
   violationsPageMock: vi.fn(),
   roleRows: [] as Array<{ userId: string; role: string }>,
+  roleLookup: { fails: false },
 }));
 
 // Real table objects (the predicate is built from them) plus a fake client
 // whose only read is hydrateReportedByRole's user_roles lookup.
 vi.mock('@propertypro/db', async () => ({
   ...(await import('../../../../packages/db/src/schema')),
-  createScopedClient: () => ({ selectFrom: async () => roleRows }),
+  createScopedClient: () => ({
+    selectFrom: async () => {
+      if (roleLookup.fails) throw new Error('user_roles lookup failed');
+      return roleRows;
+    },
+  }),
 }));
 vi.mock('next/navigation', () => ({
   redirect: (url: string) => {
@@ -116,6 +123,7 @@ function row(overrides: Record<string, unknown>) {
 beforeEach(() => {
   vi.clearAllMocks();
   roleRows.length = 0;
+  roleLookup.fails = false;
   roleRows.push({ userId: 'neighbour-1', role: 'resident' });
   requireAuthMock.mockResolvedValue('household-1');
   requireMembershipMock.mockResolvedValue(RESIDENT);
@@ -130,30 +138,73 @@ describe('violation detail page', () => {
         searchParams: Promise.resolve({ communityId: '42' }),
       }),
     );
-    return detailViewMock.mock.calls[0]![0] as { violation: Record<string, unknown> };
+    return detailViewMock.mock.calls[0]![0] as {
+      violation: Record<string, unknown>;
+      canManage: boolean;
+      reportedByRole: string | null;
+    };
   }
 
   it('reads a resident through the D1a predicate and strips the reporter (D1b)', async () => {
     getViolationForCommunityMock.mockResolvedValue(row({}));
 
-    const { violation } = await renderDetail();
+    const { violation, canManage, reportedByRole } = await renderDetail();
 
     const [, , unitIds, visibleWhere] = getViolationForCommunityMock.mock.calls[0]!;
     expect(unitIds).toEqual([101]);
     expect(visibleWhere).toBeDefined();
     expect(violation.reportedByUserId).toBeNull();
+    // No panel for a resident, so the reporter's standing is not sent either.
+    expect(canManage).toBe(false);
+    expect(reportedByRole).toBeNull();
+  });
+
+  it("does not send the reporter's standing to a resident who filed the report themselves", async () => {
+    // The filer keeps their own id (D1b), but the standing is for the staff panel only.
+    requireAuthMock.mockResolvedValue('neighbour-1');
+    getViolationForCommunityMock.mockResolvedValue(row({}));
+
+    const { violation, reportedByRole } = await renderDetail();
+
+    expect(violation.reportedByUserId).toBe('neighbour-1');
+    expect(reportedByRole).toBeNull();
   });
 
   it('shows a board seat every case, with the reporter', async () => {
     requireMembershipMock.mockResolvedValue(BOARD_SEAT);
     getViolationForCommunityMock.mockResolvedValue(row({}));
 
-    const { violation } = await renderDetail();
+    const { violation, canManage, reportedByRole } = await renderDetail();
 
     const [, , unitIds, visibleWhere] = getViolationForCommunityMock.mock.calls[0]!;
     expect(unitIds).toBeUndefined();
     expect(visibleWhere).toBeUndefined();
     expect(violation.reportedByUserId).toBe('neighbour-1');
+    expect(canManage).toBe(true);
+    // For the staff Details panel: the reporter's standing in this community.
+    expect(reportedByRole).toBe('resident');
+  });
+});
+
+describe('violation detail page, reporter lookup failure', () => {
+  it("still shows a manager the case when the reporter's standing cannot be looked up", async () => {
+    requireMembershipMock.mockResolvedValue(BOARD_SEAT);
+    getViolationForCommunityMock.mockResolvedValue(row({}));
+    roleLookup.fails = true;
+
+    render(
+      await ViolationDetailPage({
+        params: Promise.resolve({ id: '1' }),
+        searchParams: Promise.resolve({ communityId: '42' }),
+      }),
+    );
+
+    const props = detailViewMock.mock.calls[0]![0] as {
+      violation: Record<string, unknown>;
+      reportedByRole: string | null;
+    };
+    expect(props.violation.id).toBe(1);
+    expect(props.reportedByRole).toBeNull();
   });
 });
 
