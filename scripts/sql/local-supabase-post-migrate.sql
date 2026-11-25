@@ -223,7 +223,9 @@ END $$;
 -- invite tokens, ballot submissions, leases) comes back member-readable locally
 -- and in CI while production has it shut.
 --
--- Keep in sync with 0077 and DATA_API_REVOKED_TENANT_TABLES (rls-config.ts);
+-- compliance_audit_log joined in migration 0105.
+--
+-- Keep in sync with 0077 (+ 0105) and DATA_API_REVOKED_TENANT_TABLES (rls-config.ts);
 -- packages/db/__tests__/data-api-revoke-migration.test.ts enforces it.
 -- ---------------------------------------------------------------------------
 DO $$
@@ -234,7 +236,8 @@ BEGIN
   FOREACH t IN ARRAY ARRAY[
     'amenities', 'amenity_reservations', 'announcements', 'arc_submissions',
     'assessment_line_items', 'assessments',
-    'community_join_requests', 'compliance_checklist_items', 'contract_bids',
+    'community_join_requests', 'compliance_audit_log', 'compliance_checklist_items',
+    'contract_bids',
     'contracts', 'document_categories', 'document_drafts', 'documents',
     'election_ballot_submissions', 'election_ballots', 'election_candidates',
     'election_eligibility_snapshots', 'election_proxies', 'elections',
