@@ -3,14 +3,17 @@
 /**
  * The Amenities tab of the Operations hub (plan B1): what can be booked, with
  * the limits the server enforces (lib/amenities/booking-rules.ts). Managers see
- * every amenity and can edit it; residents see only those open for booking.
- * The hub filters the list and owns the sheets; this only renders.
+ * every amenity, and its name opens the edit form; residents see only those
+ * open for booking, with the name as plain text. Reserve stays a row button.
+ * The hub filters the list, draws the box around it and owns the sheets; this
+ * only renders the rows.
  */
 
-import { CalendarCheck, CalendarX } from 'lucide-react';
+import { RecordList } from '@propertypro/ui/components/shared/record-row';
 import { Button } from '@/components/ui/button';
 import type { AmenityListItem } from '@/hooks/use-operations';
 import { describeBookingRules } from '@/lib/amenities/booking-rules';
+import { OperationsRow, StatusLead } from './operations-row';
 
 interface AmenityListProps {
   amenities: AmenityListItem[];
@@ -28,50 +31,58 @@ function facts(amenity: AmenityListItem): string[] {
 
 export function AmenityList({ amenities, isAdmin, onEdit, onReserve }: AmenityListProps) {
   return (
-    <ul className="space-y-3" aria-label="Amenities">
+    <RecordList aria-label="Amenities">
       {amenities.map((amenity) => {
         const rules = describeBookingRules(amenity.bookingRules ?? {});
-        const meta = facts(amenity);
+        // Only managers see amenities that are closed for booking, so only they need the word.
+        const status = isAdmin
+          ? amenity.isBookable
+            ? ({ kind: 'done', word: 'Open for booking' } as const)
+            : ({ kind: 'not-started', word: 'Not open for booking' } as const)
+          : null;
         return (
-          <li key={amenity.id} className="rounded-md border border-edge bg-surface-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1">
-                <h3 className="text-base font-semibold text-content">{amenity.name}</h3>
-                {meta.length > 0 && <p className="text-sm text-content-secondary">{meta.join(' · ')}</p>}
-                {isAdmin && (
-                  <p className="inline-flex items-center gap-1 text-xs text-content-secondary">
-                    {amenity.isBookable ? (
-                      <CalendarCheck aria-hidden="true" className="size-4" />
-                    ) : (
-                      <CalendarX aria-hidden="true" className="size-4" />
-                    )}
-                    {amenity.isBookable ? 'Open for booking' : 'Not open for booking'}
-                  </p>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {isAdmin && (
-                  <Button variant="ghost" size="sm" onClick={() => onEdit(amenity.id)} aria-label={`Edit ${amenity.name}`}>
-                    Edit
-                  </Button>
-                )}
-                {amenity.isBookable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onReserve(amenity.id)}
-                    aria-label={`Reserve ${amenity.name}`}
+          <OperationsRow
+            key={amenity.id}
+            lead={status ? <StatusLead status={status} /> : null}
+            title={
+              <h3 className="truncate text-sm font-medium text-content">
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => onEdit(amenity.id)}
+                    aria-label={`Edit ${amenity.name}`}
+                    // The only edit control, so 44px on a phone, and coloured as a
+                    // link so it reads as one. The ring is inset because the
+                    // truncating <h3> would clip an outer one.
+                    className="inline-flex min-h-11 max-w-full items-center rounded-xs text-left align-top text-content-link underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus md:min-h-6"
                   >
-                    Reserve
-                  </Button>
+                    <span className="truncate">{amenity.name}</span>
+                  </button>
+                ) : (
+                  amenity.name
                 )}
-              </div>
-            </div>
-            {amenity.description && (
-              <p className="mt-2 max-w-[75ch] text-sm text-content-secondary">{amenity.description}</p>
-            )}
-            {rules.length > 0 && (
-              <ul className="mt-3 flex flex-wrap gap-2" aria-label={`Booking limits for ${amenity.name}`}>
+              </h3>
+            }
+            statusWord={status?.word}
+            meta={facts(amenity)}
+            actions={
+              amenity.isBookable ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onReserve(amenity.id)}
+                  aria-label={`Reserve ${amenity.name}`}
+                >
+                  Reserve
+                </Button>
+              ) : undefined
+            }
+          >
+            {amenity.description ? (
+              <p className="mt-1 max-w-prose text-sm text-content-secondary">{amenity.description}</p>
+            ) : null}
+            {rules.length > 0 ? (
+              <ul className="mt-2 flex flex-wrap gap-2" aria-label={`Booking limits for ${amenity.name}`}>
                 {rules.map((rule) => (
                   <li
                     key={rule}
@@ -81,10 +92,10 @@ export function AmenityList({ amenities, isAdmin, onEdit, onReserve }: AmenityLi
                   </li>
                 ))}
               </ul>
-            )}
-          </li>
+            ) : null}
+          </OperationsRow>
         );
       })}
-    </ul>
+    </RecordList>
   );
 }

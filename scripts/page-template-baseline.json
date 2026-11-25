@@ -15,7 +15,6 @@
   "apps/web/src/app/(authenticated)/communities/[id]/insurance/wind-mitigation/[reportId]/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/meetings/[meetingId]/minutes/author/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/meetings/page.tsx",
-  "apps/web/src/app/(authenticated)/communities/[id]/operations/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/payments/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/reserves/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/storm-damage/page.tsx",

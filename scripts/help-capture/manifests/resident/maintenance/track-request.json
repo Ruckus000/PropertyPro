@@ -20,7 +20,7 @@
         }
       ],
       "clipTo": [
-        "nav[aria-label=\"Operations tabs\"]",
+        "role=tablist[name=\"Operations tabs\"]",
         "section[role=\"tabpanel\"]"
       ]
     }
