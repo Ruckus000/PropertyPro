@@ -18,8 +18,8 @@
     "  Lowest priority.",
     "",
     "  UNDEFENDED, inside the shell. payment-portal (2), assessment-manager,",
-    "  transparency/meeting-notice-table, residents/import-residents-client,",
-    "  esign/templates-view, site-editor-v3/DomainPanel. Each has a scroller but",
+    "  transparency/meeting-notice-table, esign/templates-view,",
+    "  site-editor-v3/DomainPanel. Each has a scroller but",
     "  no tab stop, so an overflowing column is unreachable by keyboard",
     "  (WCAG 2.1.1). payment-portal is the one to drain first: 11",
     "  whitespace-nowrap cells on an owner-facing money screen."
@@ -32,6 +32,5 @@
   "apps/web/src/components/marketing/pricing-section.tsx": 1,
   "apps/web/src/components/marketing/resource-mdx-components.tsx": 1,
   "apps/web/src/components/pm/site-editor-v3/panels/DomainPanel.tsx": 1,
-  "apps/web/src/components/residents/import-residents-client.tsx": 1,
   "apps/web/src/components/transparency/meeting-notice-table.tsx": 1
 }

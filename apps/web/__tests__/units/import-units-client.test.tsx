@@ -1,5 +1,5 @@
 /** Import units screen: choose a file → preview (nothing saved) → import → results. */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,5 +33,98 @@ describe('ImportUnitsClient', () => {
     expect(mutateAsyncMock).toHaveBeenNthCalledWith(2, { csv: 'unit_number\n101\n4b\n', dryRun: false });
     expect(await screen.findByText('1 unit imported')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'View units' })).toHaveAttribute('href', '/dashboard/directory?communityId=42&tab=units');
+  });
+
+  async function toReview(user: ReturnType<typeof userEvent.setup>) {
+    mutateAsyncMock.mockResolvedValueOnce({ units: [unit, { ...unit, rowNumber: 3, unitNumber: '102', building: null, floor: null }], errors: [], importedCount: 0, skippedCount: 0, dryRun: true });
+    render(<ImportUnitsClient communityId={42} />);
+    await user.upload(screen.getByLabelText(/choose csv file/i), new File(['unit_number\n101\n102\n'], 'units.csv', { type: 'text/csv' }));
+    await screen.findByText(/ready to import/);
+  }
+
+  function currentStep() {
+    const items = within(screen.getByRole('list', { name: 'Import steps' })).getAllByRole('listitem');
+    expect(items.map((li) => li.querySelector('[data-step-name]')!.textContent)).toEqual(['Choose file', 'Review', 'Done']);
+    const current = items.filter((li) => li.getAttribute('aria-current') === 'step');
+    expect(current).toHaveLength(1);
+    return current[0]!.querySelector('[data-step-name]')!.textContent;
+  }
+
+  it('the step strip follows the import: Choose file, Review, Done', async () => {
+    const user = userEvent.setup();
+    render(<ImportUnitsClient communityId={42} />);
+    expect(currentStep()).toBe('Choose file');
+
+    mutateAsyncMock
+      .mockResolvedValueOnce({ units: [unit], errors: [], importedCount: 0, skippedCount: 0, dryRun: true })
+      .mockResolvedValueOnce({ units: [unit], errors: [], importedCount: 1, skippedCount: 0, dryRun: false });
+    await user.upload(screen.getByLabelText(/choose csv file/i), new File(['unit_number\n101\n'], 'units.csv', { type: 'text/csv' }));
+    await waitFor(() => expect(currentStep()).toBe('Review'));
+
+    await user.click(screen.getByRole('button', { name: 'Import 1 unit' }));
+    await waitFor(() => expect(currentStep()).toBe('Done'));
+  });
+
+  it('moves focus to the new step, and not on first render', async () => {
+    const user = userEvent.setup();
+    render(<ImportUnitsClient communityId={42} />);
+    expect(document.activeElement).toBe(document.body);
+
+    mutateAsyncMock.mockResolvedValueOnce({ units: [unit], errors: [], importedCount: 0, skippedCount: 0, dryRun: true });
+    await user.upload(screen.getByLabelText(/choose csv file/i), new File(['unit_number\n101\n'], 'units.csv', { type: 'text/csv' }));
+    await waitFor(() => expect(document.activeElement).toHaveAttribute('aria-label', 'Import step'));
+  });
+
+  it('the header has Cancel only, back to the Directory units tab', () => {
+    render(<ImportUnitsClient communityId={42} />);
+    const header = document.querySelector('[data-page-header]') as HTMLElement;
+    expect(within(header).getByRole('heading', { level: 1, name: 'Import units' })).toBeInTheDocument();
+    const links = within(header).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveTextContent('Cancel');
+    expect(links[0]).toHaveAttribute('href', '/dashboard/directory?communityId=42&tab=units');
+    expect(within(header).queryByRole('button')).toBeNull();
+    expect(document.querySelector('[data-page-template="form"]')).not.toBeNull();
+  });
+
+  it('previews five columns, with building and floor under the unit number', async () => {
+    await toReview(userEvent.setup());
+
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Unit', 'Beds', 'Baths', 'Sq ft', 'Occupancy']);
+    const [, first, second] = screen.getAllByRole('row');
+    const cells = within(first!).getAllByRole('cell');
+    expect(cells).toHaveLength(5);
+    expect(cells[0]!.querySelector('[data-unit]')).toHaveTextContent('101');
+    expect(cells[0]!.querySelector('[data-place]')).toHaveTextContent('Building A · Floor 1');
+    expect(cells.slice(1).map((c) => c.textContent)).toEqual(['2', '1', '900', 'Vacant']);
+    // Narrow boxes hide Beds, Baths and Sq ft; the unit cell carries them instead.
+    expect(cells[0]!.querySelector('[data-narrow]')).toHaveTextContent('2 bd · 1 ba · 900 sq ft');
+    expect(cells[0]!.querySelector('[data-narrow]')).toHaveClass('cq-sm:hidden');
+    // A unit with no building or floor has no second line.
+    expect(within(second!).getAllByRole('cell')[0]!.querySelector('[data-place]')).toBeNull();
+  });
+
+  it('never cuts a unit label in the review table: it wraps', async () => {
+    const long = 'Penthouse-North-Tower-Level-42-Suite-4201-B';
+    mutateAsyncMock.mockResolvedValueOnce({ units: [{ ...unit, unitNumber: long, building: 'North Tower Annex Building' }], errors: [], importedCount: 0, skippedCount: 0, dryRun: true });
+    const user = userEvent.setup();
+    render(<ImportUnitsClient communityId={42} />);
+    await user.upload(screen.getByLabelText(/choose csv file/i), new File(['unit_number\n101\n'], 'units.csv', { type: 'text/csv' }));
+    await screen.findByText(/ready to import/);
+
+    const table = screen.getByRole('table');
+    const unitCell = within(within(table).getAllByRole('row')[1]!).getAllByRole('cell')[0]!;
+    expect(unitCell.querySelector('[data-unit]')).toHaveTextContent(long);
+    expect(unitCell.querySelector('[data-unit]')).toHaveClass('break-words');
+    expect(unitCell.querySelector('[data-place]')).toHaveTextContent('Building North Tower Annex Building · Floor 1');
+    expect(unitCell.querySelectorAll('.truncate, .line-clamp-1, .overflow-hidden')).toHaveLength(0);
+  });
+
+  it('Back from the review returns to the file chooser', async () => {
+    const user = userEvent.setup();
+    await toReview(user);
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByLabelText(/choose csv file/i)).toBeInTheDocument();
+    expect(screen.queryByRole('table')).toBeNull();
   });
 });

@@ -219,7 +219,7 @@ describe('ImportResidentsClient — import + results', () => {
     expect(importMutation.reset).toHaveBeenCalledTimes(1);
     // Shown as done — not as a row to fix, and not in the rows-to-fix download.
     expect(screen.getByText('1 already a member')).toBeInTheDocument();
-    expect(screen.getByText('Already in this community — nothing to import')).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Already in this community — nothing to import' })).toBeInTheDocument();
     expect(screen.queryByText(/need(s)? fixing/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Download rows to fix' })).not.toBeInTheDocument();
   });
@@ -273,7 +273,7 @@ describe('ImportResidentsClient — import failures (audit F2)', () => {
 });
 
 describe('ImportResidentsClient — reset', () => {
-  it('Cancel from preview resets both mutations and returns to upload', async () => {
+  it('Back from the review resets both mutations and returns to upload', async () => {
     renderClient();
     uploadCsv();
     await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
@@ -285,7 +285,7 @@ describe('ImportResidentsClient — reset', () => {
       expect(screen.getByText('1 ready to import')).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(dryRunMutation.reset).toHaveBeenCalledTimes(1);
     expect(importMutation.reset).toHaveBeenCalledTimes(1);
@@ -334,9 +334,25 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     (opts as { onSuccess: (d: unknown) => void }).onSuccess(response);
   }
 
+  // One entry per body row, read from the five columns: Status (line number
+  // beneath), Resident (email beneath), Role, Unit, Details.
   function bodyRows() {
     const [, ...rows] = screen.getAllByRole('row'); // drop the header row
-    return rows.map((row) => within(row).getAllByRole('cell').map((c) => c.textContent));
+    return rows.map((row) => {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells).toHaveLength(5);
+      const [status, resident, role, unit, details] = cells as [HTMLElement, HTMLElement, HTMLElement, HTMLElement, HTMLElement];
+      const line = status.querySelector('[data-line]')!.textContent!;
+      return {
+        line: line.replace('Line ', ''),
+        status: status.textContent!.replace(line, ''),
+        name: resident.querySelector('[data-name]')!.textContent,
+        email: resident.querySelector('[data-email]')!.textContent,
+        role: role.textContent,
+        unit: unit.textContent,
+        details: details.textContent,
+      };
+    });
   }
 
   beforeEach(() => saveCsvFileMock.mockReset());
@@ -347,11 +363,76 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
 
     const rows = bodyRows();
     // The blank line 4 is skipped; nothing is renumbered and nothing is hidden.
-    expect(rows.map((r) => r[0])).toEqual(['2', '3', '5', '6']);
+    expect(rows.map((r) => r.line)).toEqual(['2', '3', '5', '6']);
     // Each problem names its column (audit F10), so the reader knows which field to fix.
-    expect(rows[1]).toEqual(['3', 'Fix', '-', 'bad', 'owner', '102', 'name: Name is required; email: Invalid email address']);
-    expect(rows[2]![6]).toBe("unit_number: Unit '999' not found");
-    expect(rows[3]![6]).toBe('Existing account — will be added to this community');
+    expect(rows[1]).toEqual({
+      line: '3',
+      status: 'Fix',
+      name: '-',
+      email: 'bad',
+      role: 'owner',
+      unit: '102',
+      details: 'name: Name is required; email: Invalid email address',
+    });
+    expect(rows[2]!.details).toBe("unit_number: Unit '999' not found");
+    expect(rows[3]!.details).toBe('Existing account — will be added to this community');
+  });
+
+  it('has five columns: the line number sits under the status and the email under the name', async () => {
+    await previewOf(MIXED, MIXED_RESPONSE);
+    await waitFor(() => expect(screen.getByText('2 ready to import')).toBeInTheDocument());
+
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'Status',
+      'Resident',
+      'Role',
+      'Unit',
+      'Details',
+    ]);
+    const [, firstRow] = screen.getAllByRole('row');
+    const [status, resident] = within(firstRow!).getAllByRole('cell');
+    expect(status).toHaveTextContent('Ready');
+    expect(within(status!).getByText('Line 2')).toBeInTheDocument();
+    expect(within(resident!).getByText('Ann')).toBeInTheDocument();
+    expect(within(resident!).getByText('ann@x.com')).toBeInTheDocument();
+  });
+
+  it('never cuts a value in the review table: long names, emails and units wrap', async () => {
+    const email = 'a.very.long.resident.email.address.for.checking@a-long-management-company-domain.example.com';
+    const unit = 'Penthouse-North-Tower-Level-42-Suite-4201-B';
+    const name = 'Maximiliana Alexandrina Featherstonehaugh-Cholmondeley';
+    await previewOf(`name,email,role,unit_number\n${name},${email},owner,${unit}`, {
+      data: {
+        preview: [{ name, email, role: 'owner', unit_number: unit, rowNumber: 2, existingAccount: false }],
+        errors: [],
+        header: ['name', 'email', 'role', 'unit_number'],
+      },
+    });
+    await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
+
+    const table = screen.getByRole('table');
+    const [, row] = within(table).getAllByRole('row');
+    const cells = within(row!).getAllByRole('cell');
+    expect(cells[1]!.querySelector('[data-name]')).toHaveTextContent(name);
+    expect(cells[1]!.querySelector('[data-email]')).toHaveTextContent(email);
+    expect(cells[3]).toHaveTextContent(unit);
+    // Wrapping, not clipping: a clipped value cannot be checked.
+    expect(cells[1]!.querySelector('[data-name]')).toHaveClass('break-words');
+    expect(cells[1]!.querySelector('[data-email]')).toHaveClass('break-all');
+    expect(cells[3]).toHaveClass('break-words');
+    const clipped = table.querySelectorAll('tbody .truncate, tbody .whitespace-nowrap, tbody .line-clamp-1, tbody .overflow-hidden');
+    expect(clipped).toHaveLength(0);
+  });
+
+  it('carries role, unit and details under the name for a narrow box, where those columns are hidden', async () => {
+    await previewOf(MIXED, MIXED_RESPONSE);
+    await waitFor(() => expect(screen.getByText('2 ready to import')).toBeInTheDocument());
+
+    const [, , fixRow] = screen.getAllByRole('row');
+    const narrow = within(fixRow!).getAllByRole('cell')[1]!.querySelector('[data-narrow]')!;
+    expect(narrow).toHaveClass('cq-md:hidden');
+    expect(narrow).toHaveTextContent('owner · Unit 102');
+    expect(narrow).toHaveTextContent('name: Name is required; email: Invalid email address');
   });
 
   it('counts rows that need fixing, not error messages', async () => {
@@ -408,8 +489,8 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
 
     const rows = bodyRows();
-    expect(rows[0]!.slice(2, 6)).toEqual(['Smith, Jo', 'jo@x.com', 'owner', '101']);
-    expect(rows[1]!.slice(2, 4)).toEqual(['Lee, Al', 'bad']);
+    expect(rows[0]).toMatchObject({ name: 'Smith, Jo', email: 'jo@x.com', role: 'owner', unit: '101' });
+    expect(rows[1]).toMatchObject({ name: 'Lee, Al', email: 'bad' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Download rows to fix' }));
     const [csv] = saveCsvFileMock.mock.calls[0]!;
@@ -436,9 +517,9 @@ describe('ImportResidentsClient — preview follows the file (audit F1)', () => 
     await waitFor(() => expect(screen.getByText('1 ready to import')).toBeInTheDocument());
     expect(screen.getByText('2 rows need fixing')).toBeInTheDocument();
     expect(screen.getByText('1 already a member')).toBeInTheDocument();
-    const row6 = bodyRows().find((r) => r[0] === '6')!;
-    expect(row6[1]).toBe('Member');
-    expect(row6[6]).toBe('Already in this community — nothing to import');
+    const row6 = bodyRows().find((r) => r.line === '6')!;
+    expect(row6.status).toBe('Member');
+    expect(row6.details).toBe('Already in this community — nothing to import');
 
     fireEvent.click(screen.getByRole('button', { name: 'Download rows to fix' }));
     const [csv] = saveCsvFileMock.mock.calls[0]!;
@@ -548,3 +629,79 @@ describe('ImportResidentsClient — accessibility (audit F10)', () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// Page kit: Form template with a step strip. The header has Cancel only; Back
+// and the step's action sit in the section footer.
+// ---------------------------------------------------------------------------
+describe('ImportResidentsClient — page kit', () => {
+  const READY = {
+    data: {
+      preview: [{ name: 'Jane', email: 'jane@x.com', role: 'owner', unit_number: '101', rowNumber: 2, existingAccount: false }],
+      errors: [],
+      header: ['name', 'email', 'role', 'unit_number'],
+    },
+  };
+
+  function currentStep() {
+    const strip = screen.getByRole('list', { name: 'Import steps' });
+    const items = within(strip).getAllByRole('listitem');
+    expect(items.map((li) => li.querySelector('[data-step-name]')!.textContent)).toEqual(['Upload', 'Review', 'Import', 'Done']);
+    const current = items.filter((li) => li.getAttribute('aria-current') === 'step');
+    expect(current).toHaveLength(1);
+    return current[0]!.querySelector('[data-step-name]')!.textContent;
+  }
+
+  it('the step strip follows the import: Upload, Review, Import, Done', async () => {
+    renderClient();
+    expect(currentStep()).toBe('Upload');
+
+    uploadCsv();
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    (dryRunMutation.mutate.mock.calls[0]![1] as { onSuccess: (d: unknown) => void }).onSuccess(READY);
+    await waitFor(() => expect(currentStep()).toBe('Review'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import 1 Resident' }));
+    await waitFor(() => expect(currentStep()).toBe('Import'));
+    expect(screen.getByText('Importing residents...')).toBeInTheDocument();
+
+    (importMutation.mutate.mock.calls[0]![1] as { onSuccess: (d: unknown) => void }).onSuccess({
+      data: { importedCount: 1, skippedCount: 0, errors: [] },
+    });
+    await waitFor(() => expect(currentStep()).toBe('Done'));
+  });
+
+  it('the header has Cancel only, back to the Directory residents tab', () => {
+    renderClient();
+    const header = document.querySelector('[data-page-header]') as HTMLElement;
+    expect(within(header).getByRole('heading', { level: 1, name: 'Import Residents' })).toBeInTheDocument();
+    const links = within(header).getAllByRole('link');
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveTextContent('Cancel');
+    expect(links[0]).toHaveAttribute('href', '/dashboard/directory?communityId=42&tab=residents');
+    expect(within(header).queryByRole('button')).toBeNull();
+  });
+
+  it('is on the Form template', () => {
+    renderClient();
+    expect(document.querySelector('[data-page-template="form"]')).not.toBeNull();
+  });
+
+  it('keeps what the first-run e2e looks for (onboarding-first-run.spec.ts)', async () => {
+    renderClient();
+    expect(screen.getByRole('button', { name: 'Download CSV template' })).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"][accept=".csv"]')).not.toBeNull();
+
+    uploadCsv();
+    await waitFor(() => expect(dryRunMutation.mutate).toHaveBeenCalled());
+    (dryRunMutation.mutate.mock.calls[0]![1] as { onSuccess: (d: unknown) => void }).onSuccess(READY);
+    // The e2e matches /^Import 1 Residents?$/, so nothing else may be in the name.
+    const importButton = await screen.findByRole('button', { name: /^Import 1 Residents?$/ });
+
+    fireEvent.click(importButton);
+    (importMutation.mutate.mock.calls[0]![1] as { onSuccess: (d: unknown) => void }).onSuccess({
+      data: { importedCount: 1, skippedCount: 0, errors: [] },
+    });
+    expect(await screen.findByText(/1 resident(s)? imported successfully/)).toBeInTheDocument();
+  });
+});
