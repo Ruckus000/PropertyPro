@@ -65,6 +65,29 @@ describe('RosterTable', () => {
     expect(screen.getByRole('button', { name: 'Open Unit 201' })).toBeDefined();
   });
 
+  it('no column header wraps, and Resident takes the spare width', () => {
+    setup();
+    const headers = [...document.querySelectorAll<HTMLElement>('thead th')];
+    expect(headers.map((h) => h.textContent)).toEqual(['Unit', 'Resident', 'Status', 'Lease end', 'Rent', 'Renewal']);
+    for (const h of headers) {
+      expect(h.className).toContain(h.textContent === 'Resident' ? 'w-full' : 'whitespace-nowrap');
+    }
+  });
+
+  it('only the Resident cell may shrink; no other cell wraps its lines', () => {
+    setup();
+    const cells = [...screen.getByRole('button', { name: 'Open Unit 102' }).closest('tr')!.children] as HTMLElement[];
+    expect(cells).toHaveLength(6);
+    cells.forEach((cell, i) => {
+      if (i === 1) {
+        expect(cell.className).toContain('max-w-0');
+        expect(cell.className).not.toContain('whitespace-nowrap');
+      } else {
+        expect(cell.className).toContain('whitespace-nowrap');
+      }
+    });
+  });
+
   it('only attention states get a badge; Leased reads as plain text', () => {
     setup();
     expect(screen.getByText('Leased')).toBeDefined();

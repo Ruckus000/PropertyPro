@@ -21,7 +21,6 @@
   "apps/web/src/app/(authenticated)/contracts/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/apartment/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/claim-root/page.tsx",
-  "apps/web/src/app/(authenticated)/dashboard/leases/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/overview/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/page.tsx",
   "apps/web/src/app/(authenticated)/documents/[id]/page.tsx",
