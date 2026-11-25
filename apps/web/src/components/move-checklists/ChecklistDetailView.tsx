@@ -1,46 +1,104 @@
 'use client';
 
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+/**
+ * One move-in or move-out checklist on the page kit (`template="detail"`).
+ * Shown by `ChecklistListPage` when the address carries `?checklist=<id>`.
+ */
+import { useEffect, useId, type ReactNode } from 'react';
+import { ClipboardCheck } from 'lucide-react';
+import { PageLayout } from '@propertypro/ui/components/shared/page-layout';
+import { Section, SectionError, SectionHeader } from '@propertypro/ui/components/shared/section';
+import { StatusGlyph } from '@propertypro/ui/components/shared/status-glyph';
 import {
   useMoveChecklist,
   useUpdateChecklistStep,
   useTriggerStepAction,
 } from '@/hooks/use-move-checklists';
 import { ChecklistStepper } from '@/components/shared/checklist-stepper';
-import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/shared/page-header';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  MOVE_IN_STEPS,
-  MOVE_OUT_STEPS,
-  STEP_LABELS,
-  ACTIONABLE_STEPS,
-} from '@propertypro/db/constants';
+import { STEP_LABELS, ACTIONABLE_STEPS, MOVE_IN_STEPS, MOVE_OUT_STEPS } from '@propertypro/db/constants';
+import { checklistProgress, ProgressBar, progressText } from './checklist-progress';
 
 interface Props {
   communityId: number;
   checklistId: number;
   onBack: () => void;
+  /** True when a card on this page opened the checklist: focus goes to the title. */
+  focusTitle?: boolean;
 }
 
-export function ChecklistDetailView({ communityId, checklistId, onBack }: Props) {
-  const { data: checklist, isLoading } = useMoveChecklist(communityId, checklistId);
+/** Puts keyboard focus on the `<h1>` of the PageHeader carrying this id. */
+export function focusPageTitle(headerId: string): void {
+  const title = document.getElementById(headerId)?.querySelector('h1');
+  if (!title) return;
+  title.tabIndex = -1;
+  title.focus();
+}
+
+export function ChecklistDetailView({ communityId, checklistId, onBack, focusTitle }: Props) {
+  const { data: checklist, isLoading, isError, refetch } = useMoveChecklist(communityId, checklistId);
   const updateStep = useUpdateChecklistStep(communityId, checklistId);
   const triggerAction = useTriggerStepAction(communityId, checklistId);
 
-  if (isLoading || !checklist) {
+  const headerId = useId();
+
+  // The card that had focus is gone; without this focus falls to <body>.
+  // The same <h1> element stays mounted from loading to loaded.
+  useEffect(() => {
+    if (focusTitle) focusPageTitle(headerId);
+  }, [focusTitle, headerId]);
+
+  const backButton = (
+    <Button variant="outline" onClick={onBack}>
+      Back to checklists
+    </Button>
+  );
+
+  function frame(title: string, body: ReactNode) {
     return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-4 w-32" />
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-16" />
-        ))}
-      </div>
+      <PageLayout
+        template="detail"
+        header={
+          <PageHeader id={headerId} title={title} icon={<ClipboardCheck />} actions={backButton} />
+        }
+      >
+        {body}
+      </PageLayout>
     );
   }
 
-  const stepKeys = checklist.type === 'move_in' ? MOVE_IN_STEPS : MOVE_OUT_STEPS;
-  const completedCount = stepKeys.filter((s) => checklist.checklistData[s]?.completed).length;
+  if (isError || (!isLoading && !checklist)) {
+    return frame(
+      'Checklist',
+      <Section>
+        <SectionError
+          message="We couldn't load this checklist. Please try again."
+          onRetry={() => void refetch()}
+        />
+      </Section>,
+    );
+  }
+
+  if (!checklist) {
+    return frame(
+      'Checklist',
+      <Section aria-busy="true">
+        <SectionHeader title="Steps" />
+        <div className="flex flex-col gap-4 px-4 py-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-10" />
+          ))}
+        </div>
+      </Section>,
+    );
+  }
+
+  const isMoveIn = checklist.type === 'move_in';
+  const stepKeys = isMoveIn ? MOVE_IN_STEPS : MOVE_OUT_STEPS;
+  const { completed, total, kind, word } = checklistProgress(checklist);
+  const unit = checklist.unitLabel ?? `Unit #${checklist.unitId}`;
 
   const steps = stepKeys.map((key) => {
     const stepData = checklist.checklistData[key] ?? { completed: false };
@@ -64,58 +122,67 @@ export function ChecklistDetailView({ communityId, checklistId, onBack }: Props)
   });
 
   return (
-    <div className="space-y-6">
-      <div>
-        <button
-          onClick={onBack}
-          className="mb-4 flex items-center gap-1 text-sm text-content-tertiary hover:text-content"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to checklists
-        </button>
-
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-content">
-            {checklist.type === 'move_in' ? 'Move-In' : 'Move-Out'} Checklist
-          </h2>
-          <Badge variant={checklist.type === 'move_in' ? 'default' : 'secondary'}>
-            {checklist.type === 'move_in' ? 'Move In' : 'Move Out'}
-          </Badge>
-          {checklist.completedAt && (
-            <Badge variant="outline" className="text-status-success">
-              <CheckCircle2 className="mr-1 h-3 w-3" />
-              Complete
-            </Badge>
-          )}
-        </div>
-
-        <p className="mt-1 text-sm text-content-tertiary">
-          {checklist.unitLabel ?? `Unit #${checklist.unitId}`} — Lease #{checklist.leaseId} —{' '}
-          {completedCount}/{stepKeys.length} steps complete
-        </p>
-
-        <div className="mt-3 h-2 w-full max-w-md rounded-full bg-surface-muted">
-          <div
-            className="h-2 rounded-full bg-interactive transition-all"
-            style={{ width: `${Math.round((completedCount / stepKeys.length) * 100)}%` }}
+    <PageLayout
+      template="detail"
+      header={
+        <PageHeader
+          id={headerId}
+          title={isMoveIn ? 'Move-in checklist' : 'Move-out checklist'}
+          icon={<ClipboardCheck />}
+          status={<StatusGlyph kind={kind} label={word} />}
+          description={`${unit} — Lease #${checklist.leaseId}`}
+          actions={backButton}
+        />
+      }
+      panel={{
+        template: 'detail',
+        details: (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm text-content">{progressText(completed, total)}</p>
+              <ProgressBar completed={completed} total={total} />
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+              <dt className="text-content-secondary">Type</dt>
+              <dd className="text-content">{isMoveIn ? 'Move in' : 'Move out'}</dd>
+              <dt className="text-content-secondary">Unit</dt>
+              <dd className="text-content">{unit}</dd>
+              <dt className="text-content-secondary">Lease</dt>
+              <dd className="text-content">#{checklist.leaseId}</dd>
+              <dt className="text-content-secondary">Created</dt>
+              <dd className="text-content">{new Date(checklist.createdAt).toLocaleDateString()}</dd>
+              {checklist.completedAt ? (
+                <>
+                  <dt className="text-content-secondary">Completed</dt>
+                  <dd className="text-content">
+                    {new Date(checklist.completedAt).toLocaleDateString()}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+          </div>
+        ),
+      }}
+    >
+      <Section>
+        <SectionHeader title="Steps" description={progressText(completed, total)} />
+        <div className="px-4 py-4">
+          <ChecklistStepper
+            steps={steps}
+            onStepToggle={(stepKey, stepCompleted) =>
+              updateStep.mutate({ stepKey, completed: stepCompleted })
+            }
+            onStepNotesChange={(stepKey, notes) =>
+              updateStep.mutate({
+                stepKey,
+                completed: checklist.checklistData[stepKey]?.completed ?? false,
+                notes,
+              })
+            }
+            disabled={!!checklist.completedAt}
           />
         </div>
-      </div>
-
-      <ChecklistStepper
-        steps={steps}
-        onStepToggle={(stepKey, completed) =>
-          updateStep.mutate({ stepKey, completed })
-        }
-        onStepNotesChange={(stepKey, notes) =>
-          updateStep.mutate({
-            stepKey,
-            completed: checklist.checklistData[stepKey]?.completed ?? false,
-            notes,
-          })
-        }
-        disabled={!!checklist.completedAt}
-      />
-    </div>
+      </Section>
+    </PageLayout>
   );
 }

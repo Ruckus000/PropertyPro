@@ -9,10 +9,10 @@
       "route": "/dashboard/move-in-out?communityId={cid}",
       "role": "site_manager",
       "community": "apartment",
-      "actions": [{ "type": "waitFor", "selector": "button:has-text(\"Lease #\")" }],
+      "actions": [{ "type": "waitFor", "selector": "a:has-text(\"Lease #\")" }],
       "clipTo": [
         "div:has(> button[aria-pressed])",
-        "div.grid:has(> button:has-text(\"Lease #\"))"
+        "[data-testid=\"checklist-cards\"]"
       ]
     },
     {
@@ -22,8 +22,8 @@
       "role": "site_manager",
       "community": "apartment",
       "actions": [
-        { "type": "waitFor", "selector": "button:has-text(\"Lease #\")" },
-        { "type": "click", "selector": "button:has-text(\"Lease #\") >> nth=0" },
+        { "type": "waitFor", "selector": "a:has-text(\"Lease #\")" },
+        { "type": "click", "selector": "a:has-text(\"Lease #\") >> nth=0" },
         { "type": "waitFor", "selector": "text=Back to checklists" },
         { "type": "waitFor", "selector": "label[for^=\"step-\"]" }
       ],

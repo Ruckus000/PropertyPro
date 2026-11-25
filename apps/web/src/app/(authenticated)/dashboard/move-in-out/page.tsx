@@ -1,10 +1,10 @@
+// page-template: delegated to apps/web/src/components/move-checklists/ChecklistListPage.tsx, apps/web/src/components/move-checklists/ChecklistDetailView.tsx
 import { redirect } from 'next/navigation';
 import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
 import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
 import { isAdminRole, getFeaturesForCommunity } from '@propertypro/shared';
 import { FeatureGate } from '@/components/billing/feature-gate';
 import { ChecklistListPage } from '@/components/move-checklists/ChecklistListPage';
-import { PageHeader } from '@/components/shared/page-header';
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -37,7 +37,6 @@ export default async function MoveInOutPage({ searchParams }: PageProps) {
 
   return (
     <FeatureGate feature="hasLeaseTracking" communityId={communityId}>
-      <PageHeader title="Move In/Out" />
       <ChecklistListPage communityId={communityId} />
     </FeatureGate>
   );
