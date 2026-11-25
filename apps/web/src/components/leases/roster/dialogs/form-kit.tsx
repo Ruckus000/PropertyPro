@@ -59,13 +59,7 @@ export function moneyError(raw: string, label: string, required: boolean): strin
   return null;
 }
 
-/** `"1500.00"` → `"$1,500.00"`. */
-export function formatMoney(value: string | null | undefined): string {
-  if (value == null || value === '') return '—';
-  const n = Number(value);
-  if (Number.isNaN(n)) return value;
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
+export { formatMoney } from '@/lib/utils/format-money';
 
 /** A stored money string as an editable default (`"1500.00"` stays as is). */
 export function moneyInput(value: string | null | undefined): string {

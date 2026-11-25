@@ -9,6 +9,9 @@
  * - Count: how many routine entries the Important view hid.
  * - Names: item titles for the rows on a page, and the label of a scope.
  *
+ * Every row either read returns has already been through `sealBidEntries`:
+ * what a bid said is withheld until its contract's bidding closes.
+ *
  * Every path shares one filter pushdown (`buildAuditTrailWhere`). The view
  * rules ("Important", "Deleted", …) live in `lib/audit/audit-catalog.ts` so
  * the page and this query agree on what each choice means.
@@ -16,6 +19,7 @@
 import {
   announcements,
   complianceAuditLog,
+  contracts,
   createScopedClient,
   documents,
   logAuditEvent,
@@ -35,7 +39,15 @@ import {
   type AuditView,
 } from '@/lib/audit/audit-catalog';
 import { resourceKey, type AuditLogEntry, type AuditResourceInfo, type AuditScope } from '@/lib/audit/types';
-import { auditUserIds, coerceAuditRow, toRedactedEntry } from '@/lib/audit/redact';
+import {
+  auditUserIds,
+  bidAuditContractIds,
+  BID_AUDIT_RESOURCE_TYPE,
+  coerceAuditRow,
+  sealBidAuditRows,
+  toRedactedEntry,
+  type BidParentContract,
+} from '@/lib/audit/redact';
 import { itemName, knownUserName } from '@/lib/audit/describe-event';
 import { resolveUserDisplayNames } from '@/lib/utils/resolve-users';
 
@@ -145,6 +157,34 @@ function buildAuditTrailWhere(filters: AuditTrailFilters): SQL | undefined {
 }
 
 /**
+ * Seal the bid entries among rows just read: the ONE place audit rows pass on
+ * their way out of this service, whichever read fetched them. A `contract_bid`
+ * entry carries the bid's vendor and amount; until its contract's bidding
+ * closes, those are withheld from managers here exactly as the contract's own
+ * page withholds them (`sealBidAuditRows`, same predicate).
+ *
+ * One lookup for all the bid entries on the page, and none when there are no
+ * bid entries.
+ */
+async function sealBidEntries<T extends Record<string, unknown>>(
+  scoped: ReturnType<typeof createScopedClient>,
+  rows: T[],
+  now: Date = new Date(),
+): Promise<T[]> {
+  if (!rows.some((row) => row['resourceType'] === BID_AUDIT_RESOURCE_TYPE)) return rows;
+  const ids = bidAuditContractIds(rows);
+  const found =
+    ids.length === 0
+      ? []
+      : ((await scoped.selectFrom(
+          contracts,
+          { id: contracts.id, title: contracts.title, biddingClosesAt: contracts.biddingClosesAt },
+          inArray(contracts.id, ids),
+        )) as unknown as Array<{ id: number } & BidParentContract>);
+  return sealBidAuditRows(rows, new Map(found.map((c) => [c.id, c])), now);
+}
+
+/**
  * Cursor-paginated audit log read for the JSON viewer path.
  *
  * AUTHZ: tenant-scoped — caller MUST have already verified the actor's
@@ -158,12 +198,13 @@ export async function paginateAuditTrail(params: {
 }) {
   const where = buildAuditTrailWhere(params.filters);
   const scoped = createScopedClient(params.communityId);
-  return paginate(
+  const page = await paginate(
     scoped,
     complianceAuditLog,
     { cursor: params.cursor, pageSize: params.pageSize },
     { where },
   );
+  return { ...page, data: await sealBidEntries(scoped, page.data as Record<string, unknown>[]) };
 }
 
 /**
@@ -181,10 +222,11 @@ export async function fetchAuditTrailForCsvExport(params: {
 }): Promise<Record<string, unknown>[]> {
   const where = buildAuditTrailWhere(params.filters);
   const scoped = createScopedClient(params.communityId);
-  return (await scoped
+  const rows = (await scoped
     .selectFrom(complianceAuditLog, {}, where)
     .orderBy(desc(complianceAuditLog.createdAt), desc(complianceAuditLog.id))
     .limit(params.limit)) as unknown as Record<string, unknown>[];
+  return sealBidEntries(scoped, rows);
 }
 
 /**

@@ -1,58 +1,44 @@
+// page-template: delegated to apps/web/src/components/contracts/contracts-list-page.tsx
 /**
- * P3-52: Contract & Vendor Tracking page.
+ * P3-52: Contracts & Vendors — the list.
  *
  * Route: /contracts?communityId=X
- * Auth: isAdminRole(membership.role) — the v3 admin tier, property_manager or
- *        root_manager. Board designation grants no access (ADR-006).
- * Feature gate: hasCompliance must be true (condo/HOA only).
+ * Gate (lib/contracts/page-gate.ts): signed in, a member, a condo or HOA
+ * (`hasCompliance`), and `contracts:read` — the same permission the API checks.
+ * Only the manager row has it; board designation grants nothing (ADR-006).
  */
 import { redirect } from 'next/navigation';
-import type { SearchParams } from 'next/dist/server/request/search-params';
-import { requirePageAuthenticatedUserId as requireAuthenticatedUserId } from '@/lib/request/page-auth-context';
-import { requirePageCommunityMembership as requireCommunityMembership } from '@/lib/request/page-community-context';
-import { isAdminRole } from '@propertypro/shared';
-import { getEffectiveFeaturesForPage } from '@/lib/middleware/plan-guard';
-import { ContractTableContainer } from '@/components/contracts/contract-table-container';
-import { PageHeader } from '@/components/shared/page-header';
+import { checkPermissionV2 } from '@/lib/db/access-control';
+import { describeAccess } from '@/lib/access/describe-access';
+import {
+  requireContractsPageAccess,
+  resolveContractsCommunityId,
+  type PageSearchParams,
+} from '@/lib/contracts/page-gate';
+import { ContractsListPage } from '@/components/contracts/contracts-list-page';
 
 interface PageProps {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<PageSearchParams>;
 }
 
 export default async function ContractsPage({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const rawId = Number(params['communityId']);
-
-  if (!Number.isInteger(rawId) || rawId <= 0) {
+  const communityId = await resolveContractsCommunityId(await searchParams);
+  if (!communityId) {
     redirect('/dashboard?reason=invalid-selection');
   }
 
-  const communityId = rawId;
-  let userId: string;
-
-  try {
-    userId = await requireAuthenticatedUserId();
-  } catch {
-    redirect('/auth/login');
-  }
-
-  const membership = await requireCommunityMembership(communityId, userId);
-
-  // Feature gate: compliance communities only
-  const features = await getEffectiveFeaturesForPage(communityId, membership.communityType);
-  if (!features.hasCompliance) {
-    redirect('/dashboard?reason=feature-not-available');
-  }
-
-  if (!isAdminRole(membership.role)) {
-    redirect('/dashboard?reason=insufficient-permissions');
-  }
+  const { membership } = await requireContractsPageAccess(communityId, 'read');
+  const canWrite = checkPermissionV2(membership.role, membership.communityType, 'contracts', 'write', {
+    isUnitOwner: membership.isUnitOwner,
+  });
 
   return (
-    <>
-      <PageHeader title="Contracts & Vendors" />
-
-      <ContractTableContainer communityId={communityId} />
-    </>
+    <ContractsListPage
+      communityId={communityId}
+      timeZone={membership.timezone}
+      canWrite={canWrite}
+      // No resident can read contracts, so the scope names nobody.
+      about={describeAccess(membership.communityType, 'contracts', 'all')}
+    />
   );
 }

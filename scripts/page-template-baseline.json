@@ -18,7 +18,6 @@
   "apps/web/src/app/(authenticated)/communities/[id]/payments/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/reserves/page.tsx",
   "apps/web/src/app/(authenticated)/communities/[id]/storm-damage/page.tsx",
-  "apps/web/src/app/(authenticated)/contracts/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/apartment/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/claim-root/page.tsx",
   "apps/web/src/app/(authenticated)/dashboard/overview/page.tsx",

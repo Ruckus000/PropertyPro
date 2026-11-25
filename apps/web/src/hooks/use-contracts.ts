@@ -4,12 +4,12 @@ import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestJson } from '@/lib/api/request-json';
 import type { ContractRecord, ExpirationAlert } from '@/components/contracts/types';
+import type { ContractStatus } from '@/lib/contracts/contract-rules';
 
 /**
- * TanStack-Query hooks for the contracts API. Replaces the previous
- * `useState + useEffect + fetch + fetchContracts()` pattern in
- * `ContractTable.tsx`, plus the inline POST/PATCH `fetch` calls in
- * `ContractForm.tsx` and `BidTracker.tsx`.
+ * TanStack-Query hooks for the contracts API: the list read for `/contracts`,
+ * and the create, update and add-bid writes that the form and the contract's
+ * own page use.
  *
  * The GET /api/v1/contracts response is the canonical `{ data: ... }`
  * envelope with BOTH the contract list and the expiration alerts folded
@@ -85,11 +85,14 @@ export interface CreateContractInput {
   endDate?: string | null;
   biddingClosesAt?: string | null;
   conflictOfInterest?: boolean;
+  conflictOfInterestNote?: string | null;
+  status?: ContractStatus;
   documentId?: number | null;
   complianceChecklistItemId?: number | null;
 }
 
-export type UpdateContractInput = CreateContractInput & { id: number };
+/** Only the fields being changed: the API updates, and audits, exactly what it is sent. */
+export type UpdateContractInput = Partial<CreateContractInput> & { id: number };
 
 export interface AddBidInput {
   contractId: number;

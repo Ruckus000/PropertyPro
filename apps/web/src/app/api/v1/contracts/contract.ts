@@ -79,8 +79,18 @@
  * (`packages/shared/src/rbac-matrix.ts`).
  */
 import { defineRoute, z } from '@propertypro/api-contract';
+import { CONTRACT_STATUSES, contractAmountIssue } from '@/lib/contracts/contract-rules';
 
-const contractStatusValues = ['draft', 'active', 'expired', 'terminated'] as const;
+/**
+ * A money amount as numeric(12,2) can hold it. Shared by the PATCH body here
+ * and the two POST bodies in the route, so all three refuse the same values
+ * (commas, symbols, more than ten whole digits) in the same words.
+ */
+export const contractAmountSchema = z.string().superRefine((value, ctx) => {
+  const issue = contractAmountIssue(value);
+  if (issue) ctx.addIssue({ code: 'custom', message: issue });
+});
+
 
 /**
  * PATCH body — preserved field-for-field from the pre-migration
@@ -93,11 +103,7 @@ export const updateContractBodySchema = z.object({
   title: z.string().min(1).max(500).optional(),
   vendorName: z.string().min(1).max(500).optional(),
   description: z.string().nullable().optional(),
-  contractValue: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/)
-    .nullable()
-    .optional(),
+  contractValue: contractAmountSchema.nullable().optional(),
   startDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -112,7 +118,7 @@ export const updateContractBodySchema = z.object({
   biddingClosesAt: z.string().datetime().nullable().optional(),
   conflictOfInterest: z.boolean().optional(),
   conflictOfInterestNote: z.string().nullable().optional(),
-  status: z.enum(contractStatusValues).optional(),
+  status: z.enum(CONTRACT_STATUSES).optional(),
 });
 
 export const contractsListContract = defineRoute({

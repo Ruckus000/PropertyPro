@@ -12,10 +12,10 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "text=Expiration Alerts"
+          "selector": "role=heading[name=\"Expiration Alerts\"]"
         }
       ],
-      "clipTo": "div:has(> h3:text-is(\"Expiration Alerts\"))"
+      "clipTo": "section:has(h2:text-is(\"Expiration Alerts\"))"
     },
     {
       "name": "ct-add",
@@ -26,29 +26,21 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Add Contract\"]"
+          "selector": "role=link[name=\"Add contract\"]"
         }
       ],
-      "clipTo": "role=button[name=\"Add Contract\"]",
+      "clipTo": "role=link[name=\"Add contract\"]",
       "pad": 48,
-      "highlight": "role=button[name=\"Add Contract\"]",
+      "highlight": "role=link[name=\"Add contract\"]",
       "step": 1
     },
     {
       "name": "ct-form",
       "kind": "still",
-      "route": "/contracts?communityId={cid}",
+      "route": "/contracts/new?communityId={cid}",
       "role": "cam",
       "community": "condo",
       "actions": [
-        {
-          "type": "waitFor",
-          "selector": "role=button[name=\"Add Contract\"]"
-        },
-        {
-          "type": "click",
-          "selector": "role=button[name=\"Add Contract\"]"
-        },
         {
           "type": "waitFor",
           "selector": "#contract-title"
@@ -67,21 +59,22 @@
       "actions": [
         {
           "type": "waitFor",
-          "selector": "role=button[name=\"Bids\"s] >> nth=0"
+          "selector": "role=table[name=\"Contracts\"] >> role=link >> nth=0"
         },
         {
           "type": "click",
-          "selector": "role=button[name=\"Bids\"s] >> nth=0"
+          "selector": "role=table[name=\"Contracts\"] >> role=link >> nth=0"
         },
         {
           "type": "waitFor",
-          "selector": "role=heading[name=/^Bids for:/]"
+          "selector": "role=heading[name=\"Bids\"]"
+        },
+        {
+          "type": "waitFor",
+          "selector": "role=button[name=\"Add bid\"]"
         }
       ],
-      "clipTo": [
-        "role=heading[name=/^Bids for:/]",
-        "role=button[name=\"+ Add Bid\"]"
-      ]
+      "clipTo": "section:has(h2:text-is(\"Bids\"))"
     }
   ]
 }

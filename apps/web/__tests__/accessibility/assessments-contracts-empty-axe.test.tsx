@@ -38,17 +38,19 @@ describe('first-run heroes — axe', () => {
   });
 
   it('Contracts & Vendors hero has no violations', async () => {
-    const { container } = render(<ContractsFirstRun communityId={1} onAdd={() => {}} />);
+    const { container } = render(<ContractsFirstRun communityId={1} />);
     expect(
       screen.getByRole('heading', { level: 2, name: 'Keep every vendor agreement in one place' }),
     ).toBeTruthy();
     expect(screen.getByRole('heading', { level: 3, name: 'What a contract has' })).toBeTruthy();
+    // The hero's one action is a link to the New contract page.
+    expect(screen.getByRole('link', { name: 'Add contract' }).getAttribute('href')).toBe('/contracts/new?communityId=1');
     expect(container.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     expect(await axe(container)).toHaveNoViolations();
   });
 
   it('probe: Contracts & Vendors — an unnamed button in the context column is caught', async () => {
-    const { container } = render(<ContractsFirstRun communityId={1} onAdd={() => {}} />);
+    const { container } = render(<ContractsFirstRun communityId={1} />);
     expect(await ruleIds(plantUnnamedButton(container, 'Expiration Alerts'))).toContain('button-name');
   });
 });

@@ -6,7 +6,7 @@
  * controllable mutation objects and drive the wizard state machine
  * (upload → preview → import → results), error states, and reset.
  *
- * Mirrors apps/web/__tests__/contracts/contract-table.test.tsx.
+ * Mirrors apps/web/__tests__/contracts/contracts-list-page.test.tsx.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';

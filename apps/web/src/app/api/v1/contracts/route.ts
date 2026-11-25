@@ -8,7 +8,9 @@
  * - createScopedClient for tenant isolation (AGENTS #13)
  * - logAuditEvent on every mutation
  * - Compliance-community-only feature gate via hasCompliance (AGENTS #34)
- * - Bid embargo enforced server-side: bid details hidden until biddingClosesAt
+ * - Bid embargo enforced server-side: bid details hidden until biddingClosesAt.
+ *   The rule itself is `applyBidEmbargo` in contract-service, the one copy the
+ *   contract's own page uses too.
  *
  * Wire-shape notes:
  * - GET: pre-migration returned a bespoke flat `{ data, alerts }` envelope.
@@ -33,6 +35,8 @@ import { requirePermission } from '@/lib/db/access-control';
 import { assertNotDemoGrace } from '@/lib/middleware/demo-grace-guard';
 import { requireEntitledForAdminRead } from '@/lib/middleware/read-entitlement-guard';
 import {
+  type ContractAuditBuilder,
+  applyBidEmbargo,
   createContractBidForCommunity,
   createContractForCommunity,
   getContractById,
@@ -41,8 +45,18 @@ import {
   listContractBidsForCommunity,
   listContractsForCommunity,
   updateContractById,
+  updateContractGuardingSealedBids,
 } from '@/lib/services/contract-service';
+import { CLOSING_TIME_LOCKED_MESSAGE } from '@/lib/contracts/bid-sealing';
 import {
+  CONTRACT_END_BEFORE_START_MESSAGE,
+  CONTRACT_STATUSES,
+  CONTRACT_TITLE_REQUIRED_MESSAGE,
+  CONTRACT_VENDOR_REQUIRED_MESSAGE,
+  isEndBeforeStart,
+} from '@/lib/contracts/contract-rules';
+import {
+  contractAmountSchema,
   contractsCreateContract,
   contractsListContract,
   contractsUpdateContract,
@@ -52,18 +66,12 @@ import {
 // Validation schemas (POST body branches; PATCH body lives in ./contract.ts)
 // ---------------------------------------------------------------------------
 
-const contractStatusValues = ['draft', 'active', 'expired', 'terminated'] as const;
-
 const createContractSchema = z.object({
   communityId: z.number().int().positive(),
   title: z.string().min(1, 'Title is required').max(500),
   vendorName: z.string().min(1, 'Vendor name is required').max(500),
   description: z.string().nullable().optional(),
-  contractValue: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 decimal places')
-    .nullable()
-    .optional(),
+  contractValue: contractAmountSchema.nullable().optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Must be YYYY-MM-DD format'),
   endDate: z
     .string()
@@ -75,22 +83,43 @@ const createContractSchema = z.object({
   biddingClosesAt: z.string().datetime().nullable().optional(),
   conflictOfInterest: z.boolean().optional(),
   conflictOfInterestNote: z.string().nullable().optional(),
-  status: z.enum(contractStatusValues).optional(),
+  status: z.enum(CONTRACT_STATUSES).optional(),
 });
 
 const createBidSchema = z.object({
   communityId: z.number().int().positive(),
   contractId: z.number().int().positive(),
   vendorName: z.string().min(1, 'Vendor name is required').max(500),
-  bidAmount: z
-    .string()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Must be a decimal with up to 2 decimal places'),
+  bidAmount: contractAmountSchema,
   notes: z.string().nullable().optional(),
 });
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** A contract cannot end before it starts. Both are 'YYYY-MM-DD'. */
+function requireEndNotBeforeStart(startDate: string, endDate: string | null | undefined): void {
+  if (isEndBeforeStart(startDate, endDate)) {
+    throw new ValidationError(CONTRACT_END_BEFORE_START_MESSAGE, {
+      fields: [{ field: 'endDate', message: CONTRACT_END_BEFORE_START_MESSAGE }],
+    });
+  }
+}
+
+/**
+ * A name with the spaces around it removed. One made only of spaces passes the
+ * schema's `min(1)` and would be stored as blank, so it is refused here, with a
+ * message that names the field.
+ */
+function requireName(value: string, field: 'title' | 'vendorName'): string {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    const message = field === 'title' ? CONTRACT_TITLE_REQUIRED_MESSAGE : CONTRACT_VENDOR_REQUIRED_MESSAGE;
+    throw new ValidationError(message, { fields: [{ field, message }] });
+  }
+  return trimmed;
+}
 
 function requireComplianceCommunity(communityType: CommunityType): void {
   const features = getFeaturesForCommunity(communityType);
@@ -141,34 +170,6 @@ function coerceContractRow(row: Record<string, unknown>): ContractRow {
   };
 }
 
-/**
- * Apply bid embargo: if biddingClosesAt is in the future, redact bid details
- * and only return a sealed summary (count + close date).
- */
-function applyBidEmbargo(
-  contract: ContractRow,
-  bids: Record<string, unknown>[],
-): { bids: Record<string, unknown>[]; embargoed: boolean; bidCount: number; biddingClosesAt: Date | null } {
-  const now = new Date();
-  const isEmbargoed = contract.biddingClosesAt !== null && contract.biddingClosesAt > now;
-
-  if (isEmbargoed) {
-    return {
-      bids: [],
-      embargoed: true,
-      bidCount: bids.length,
-      biddingClosesAt: contract.biddingClosesAt,
-    };
-  }
-
-  return {
-    bids,
-    embargoed: false,
-    bidCount: bids.length,
-    biddingClosesAt: contract.biddingClosesAt,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // GET — List contracts with expiration alerts and bid info
 // ---------------------------------------------------------------------------
@@ -184,6 +185,9 @@ export const GET = withErrorHandler(
     await requireEntitledForAdminRead(communityId, membership);
 
     const scoped = createScopedClient(communityId);
+    // ponytail: every contract and every bid in the community is loaded, only to
+    // count bids per contract; fine at tens of contracts. Trigger: a community
+    // passes 200 contracts, or this request takes over one second.
     const contractRows = await listContractsForCommunity(scoped);
     const bidRows = await listContractBidsForCommunity(scoped);
     const contractRecords = contractRows.map(coerceContractRow);
@@ -251,12 +255,26 @@ export const PATCH = withErrorHandler(
     const membership = await requireCommunityMembership(communityId, actorUserId);
     requireComplianceCommunity(membership.communityType);
     requirePermission(membership, 'contracts', 'write');
+    // After the gates: a caller who may not write is refused as such, not told
+    // what is wrong with a field they were never allowed to send.
+    if (fields.title !== undefined) fields.title = requireName(fields.title, 'title');
+    if (fields.vendorName !== undefined) fields.vendorName = requireName(fields.vendorName, 'vendorName');
 
     const scoped = createScopedClient(communityId);
 
     const existing = await getContractById(scoped, id);
     if (!existing) {
       throw new NotFoundError('Contract not found');
+    }
+
+    // Checked when either date is sent, against the dates as they will be after
+    // this update: the one that is not sent keeps its stored value. An update
+    // that touches neither date is not refused for dates it did not set.
+    if (fields.startDate !== undefined || fields.endDate !== undefined) {
+      requireEndNotBeforeStart(
+        fields.startDate ?? (existing['startDate'] as string),
+        fields.endDate !== undefined ? fields.endDate : (existing['endDate'] as string | null),
+      );
     }
 
     // Validate documentId belongs to this community if provided
@@ -279,13 +297,13 @@ export const PATCH = withErrorHandler(
     }
 
     const updateData: Record<string, unknown> = {};
-    const oldValues: Record<string, unknown> = {};
     const newValues: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(fields)) {
       if (value !== undefined) {
-        updateData[key] = value;
-        oldValues[key] = existing[key];
+        // The column takes a Date; the body carries ISO text (as create converts it).
+        updateData[key] =
+          key === 'biddingClosesAt' && typeof value === 'string' ? new Date(value) : value;
         newValues[key] = value;
       }
     }
@@ -294,17 +312,43 @@ export const PATCH = withErrorHandler(
       throw new ValidationError('No fields to update');
     }
 
-    const updated = await updateContractById(scoped, id, updateData);
+    // The audit entry is written inside the update's own transaction, with the
+    // old values taken from the row as it stood under the row lock, not from the
+    // unlocked read above (which another update may have outdated).
+    const audit: ContractAuditBuilder = (before) => {
+      const oldValues: Record<string, unknown> = {};
+      for (const key of Object.keys(newValues)) oldValues[key] = before[key];
+      return {
+        userId: actorUserId,
+        action: 'update',
+        resourceType: 'contract',
+        resourceId: String(id),
+        oldValues,
+        newValues,
+      };
+    };
 
-    await logAuditEvent({
-      userId: actorUserId,
-      action: 'update',
-      resourceType: 'contract',
-      resourceId: String(id),
-      communityId,
-      oldValues,
-      newValues,
-    });
+    let updated: Record<string, unknown> | undefined;
+    if ('biddingClosesAt' in updateData) {
+      // A change to the closing time goes through the guarded update: while the
+      // contract is sealed and has bids, the time can move later but not be
+      // cleared or brought forward (owner decision, 2026-11-24). The check and
+      // the write share one transaction and the contract's row lock, which
+      // adding a bid also takes, so they cannot race.
+      const result = await updateContractGuardingSealedBids(scoped, id, updateData, new Date(), audit);
+      if (result.status === 'not_found') {
+        throw new NotFoundError('Contract not found');
+      }
+      if (result.status === 'closing_time_locked') {
+        throw new ValidationError(CLOSING_TIME_LOCKED_MESSAGE, {
+          fields: [{ field: 'biddingClosesAt', message: CLOSING_TIME_LOCKED_MESSAGE }],
+        });
+      }
+      updated = result.row;
+    } else {
+      updated = await updateContractById(scoped, id, updateData, audit);
+      if (!updated) throw new NotFoundError('Contract not found');
+    }
 
     return updated;
   }),
@@ -327,6 +371,9 @@ async function handleCreateContract(
   }
 
   const payload = parseResult.data;
+  payload.title = requireName(payload.title, 'title');
+  payload.vendorName = requireName(payload.vendorName, 'vendorName');
+  requireEndNotBeforeStart(payload.startDate, payload.endDate);
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -403,6 +450,7 @@ async function handleCreateBid(
   }
 
   const payload = parseResult.data;
+  payload.vendorName = requireName(payload.vendorName, 'vendorName');
   const communityId = resolveEffectiveCommunityId(req, payload.communityId);
   await assertNotDemoGrace(communityId);
   const membership = await requireCommunityMembership(communityId, actorUserId);
@@ -417,30 +465,32 @@ async function handleCreateBid(
     throw new NotFoundError('Contract not found in this community');
   }
 
-  const created = await createContractBidForCommunity(scoped, {
-    contractId: payload.contractId,
-    vendorName: payload.vendorName,
-    bidAmount: payload.bidAmount,
-    notes: payload.notes ?? null,
-    createdBy: actorUserId,
-  });
+  // The audit entry commits with the bid, in the same transaction.
+  const created = await createContractBidForCommunity(
+    scoped,
+    {
+      contractId: payload.contractId,
+      vendorName: payload.vendorName,
+      bidAmount: payload.bidAmount,
+      notes: payload.notes ?? null,
+      createdBy: actorUserId,
+    },
+    (bid) => ({
+      userId: actorUserId,
+      action: 'create',
+      resourceType: 'contract_bid',
+      resourceId: String(bid['id']),
+      newValues: {
+        contractId: payload.contractId,
+        vendorName: payload.vendorName,
+        bidAmount: payload.bidAmount,
+      },
+    }),
+  );
 
   if (!created) {
     throw new ValidationError('Failed to create bid');
   }
-
-  await logAuditEvent({
-    userId: actorUserId,
-    action: 'create',
-    resourceType: 'contract_bid',
-    resourceId: String(created['id']),
-    communityId,
-    newValues: {
-      contractId: payload.contractId,
-      vendorName: payload.vendorName,
-      bidAmount: payload.bidAmount,
-    },
-  });
 
   return created;
 }
